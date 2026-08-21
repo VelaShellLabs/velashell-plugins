@@ -42,7 +42,9 @@ jobs:
         shell: pwsh
         run: |
           & ./scripts/Set-Version.ps1 '${{ steps.version.outputs.version }}' -Check
-          if ($LASTEXITCODE -ne 0) { exit 1 }
+          # if ($LASTEXITCODE) 而不是 -ne 0:.ps1 不调用 exit 时**不会设置** $LASTEXITCODE,
+          # 那时它是 $null —— 而 `$null -ne 0` 为真,会把一次成功判成失败。
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Test
         shell: pwsh
