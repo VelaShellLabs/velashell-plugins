@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>VelaShell Telnet 插件:RFC 854 Telnet 终端(选项协商 + NAWS + TERMINAL-TYPE + 8 位透明),以终端协议能力接入宿主的终端标签。</Description>
+    <!-- 与 plugin.json 的 id 一致;驱动构建后复制到应用输出的 plugins/<目录名>/。 -->
+    <VelaPluginId>velashell.telnet</VelaPluginId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 零第三方依赖:只用 TcpClient + SDK 契约。插件工程的最小形态就是这一行。 -->
+    <PackageReference Include="VelaShell.PluginSdk.Build" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单测直接驱动协商状态机与会话(内部类型)。 -->
+    <InternalsVisibleTo Include="VelaShell.Plugin.Telnet.Tests" />
+  </ItemGroup>
+
+</Project>

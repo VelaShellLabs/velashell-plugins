@@ -1,0 +1,55 @@
+<Project>
+  <!--
+    中央包版本管理(CPM)。本仓库所有工程的 NuGet 版本号只在这一处出现 ——
+    五个插件 + 五个测试工程,谁也不许在 csproj 里写 Version=。
+
+    为什么值得:插件之间会共用同一个包(AWSSDK.S3 在 S3 插件与它的测试里各一份、
+    Avalonia 在测试工程里五处),版本散在各 csproj 时"改了一处忘了另一处"没有任何
+    东西会报错 —— 直到运行期才以类型加载失败的形式冒出来。集中之后这类漂移在语法上
+    就不可能发生。
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- 传递依赖被直接引用时报错,免得哪天某个包不再传递它就悄悄断了。 -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="VelaShell 插件 SDK(源码在 joesdu/velashell-plugin-toolchain)">
+    <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
+         plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
+         所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
+    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="$(VelaSdkVersion)" />
+    <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
+    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="$(VelaSdkVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Avalonia(仅测试工程用:测试宿主扮演装载方,要提供运行时那份)">
+    <!-- 一律取 Directory.Build.props 的 VelaAvaloniaVersion —— 它由
+         Directory.Build.targets 的 VerifyAvaloniaMatchesSdk 与 SDK 锁的值核对过。
+         插件工程**不该**出现在这里:Avalonia 由 VelaShell.PluginSdk.Build 用精确区间锁给它们。 -->
+    <PackageVersion Include="Avalonia" Version="$(VelaAvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Headless" Version="$(VelaAvaloniaVersion)" />
+    <!-- 菜单等控件的模板由主题提供:没有它 MenuItem 无模板、不可命中,真实点击测不了。 -->
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(VelaAvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Redis 插件">
+    <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
+    <PackageVersion Include="StackExchange.Redis" Version="3.1.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="S3 插件">
+    <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
+         测试工程也要引它(环回服务器要按收到的原始请求行重算 SigV4),
+         集中管版本正是为了这两处永远一致。 -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="测试框架">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="4.3.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.3.3" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+  </ItemGroup>
+</Project>

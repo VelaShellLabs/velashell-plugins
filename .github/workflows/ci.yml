@@ -1,0 +1,83 @@
+# 日常验证。发布不走这里(见 release.yml),但**发布会做的事这里基本都做一遍** ——
+# 尤其是插件分发包与 .vpx:主仓库的发布链路依赖分发包的布局,布局在这里坏掉的话,
+# 发现的时机应该是现在,而不是主程序发版当天。
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $props = Get-Content -Raw Directory.Build.props
+          $version = [regex]::Match($props, '<VelaPluginsVersion[^>]*>([^<]+)</VelaPluginsVersion>').Groups[1].Value
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            Write-Error "Could not read VelaPluginsVersion from Directory.Build.props"
+            exit 1
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Validating version $version"
+
+      # 版本号同步体检。发版时由 release.yml 自动写(scripts/Set-Version.ps1),但仓库自己
+      # 也得保持诚实:有人手改了 Directory.Build.props 却没动 README 的版本横幅,
+      # 或者发版那次的版本同步 PR 一直没合 —— 两种情况都在这里显形,
+      # 而不是等到下次有人照着过期文档抄版本号。
+      - name: Version consistency check
+        shell: pwsh
+        run: |
+          & ./scripts/Set-Version.ps1 '${{ steps.version.outputs.version }}' -Check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Test
+        shell: pwsh
+        run: |
+          dotnet test VelaShell.Plugins.slnx -c Debug --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # 插件分发包:布局就是安装包 plugins/ 那一层,主仓库按它解包。
+      # 空集会直接失败(见 build/PluginBundle.proj),不会悄悄出一个"插件系统看着在、
+      # 实则没插件"的发行包。
+      - name: Build plugin bundle
+        shell: pwsh
+        run: |
+          dotnet build build/PluginBundle.proj -c Release -t:Bundle -p:BundleDir="$PWD/artifacts/plugins-bundle" --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem artifacts/plugins-bundle | Select-Object -ExpandProperty Name
+
+      # .vpx 也在 CI 里出一遍:打包器来自 SDK 包,格式坏了要在这里撞上,
+      # 而不是等用户手工安装时才发现。
+      - name: Pack .vpx
+        shell: pwsh
+        run: |
+          dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem artifacts/vpx | Select-Object Name, Length
+
+      # 共享程序集绝不能落进插件目录 —— 落了就说明 SDK 包的 exclude=Runtime 链路断了。
+      # 这条在插件侧再验一遍(工具链仓库的 CI 只在模板生成的空工程上验过),
+      # 因为真实插件才有第三方依赖,才可能把 Avalonia 从别的包里拖回来。
+      - name: Assert no shared assemblies leaked
+        shell: pwsh
+        run: |
+          $leaked = Get-ChildItem artifacts/plugins-bundle -Recurse -Filter '*.dll' |
+            Where-Object { $_.Name -like 'Avalonia*' -or $_.Name -eq 'VelaShell.PluginSdk.dll' }
+          if ($leaked) {
+            throw "Shared assemblies leaked into the plugin bundle: $(($leaked | ForEach-Object FullName) -join ', ')"
+          }
+          Write-Host "OK: no shared assemblies in the bundle."

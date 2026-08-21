@@ -1,0 +1,38 @@
+<Solution>
+  <Folder Name="/.github/">
+    <File Path=".github/dependabot.yml" />
+  </Folder>
+  <Folder Name="/.github/workflows/">
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/release.yml" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="nuget.config" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="build/PluginBundle.proj" />
+    <File Path="scripts/Set-Version.ps1" />
+  </Folder>
+  <Folder Name="/plugins/">
+    <File Path="plugins/Directory.Build.props" />
+    <File Path="plugins/Directory.Build.targets" />
+    <File Path="plugins/README.md" />
+    <Project Path="plugins/VelaShell.Plugin.HelloWorld/VelaShell.Plugin.HelloWorld.csproj" />
+    <Project Path="plugins/VelaShell.Plugin.Redis/VelaShell.Plugin.Redis.csproj" />
+    <Project Path="plugins/VelaShell.Plugin.S3/VelaShell.Plugin.S3.csproj" />
+    <Project Path="plugins/VelaShell.Plugin.Telnet/VelaShell.Plugin.Telnet.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <File Path="tests/Directory.Build.props" />
+    <File Path="tests/Directory.Build.targets" />
+    <File Path="tests/velashell.runsettings" />
+    <Project Path="tests/VelaShell.Plugin.HelloWorld.Tests/VelaShell.Plugin.HelloWorld.Tests.csproj" />
+    <Project Path="tests/VelaShell.Plugin.Redis.Tests/VelaShell.Plugin.Redis.Tests.csproj" />
+    <Project Path="tests/VelaShell.Plugin.S3.Tests/VelaShell.Plugin.S3.Tests.csproj" />
+    <Project Path="tests/VelaShell.Plugin.Telnet.Tests/VelaShell.Plugin.Telnet.Tests.csproj" />
+  </Folder>
+</Solution>

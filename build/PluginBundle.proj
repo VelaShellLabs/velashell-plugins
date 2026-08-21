@@ -1,0 +1,68 @@
+<Project DefaultTargets="Bundle">
+
+  <!--
+    第一方插件的分发包。
+
+    VelaShell 主程序的安装包里带着 plugins/<目录名>/ 一层 —— 拆库之前那是主仓库 publish 时
+    直接 MSBuild 调用各插件工程的 GetVelaPluginPayload 现拼出来的。插件搬到本仓库之后主仓库
+    调不到了,于是改成:**本仓库产出一个 plugins 包(zip),主仓库发版时按 pin 的版本下载解开**。
+
+    包内布局就是安装包里 plugins/ 底下的样子,一比一:
+      velashell-ai/VelaShell.Plugin.Ai.dll
+      velashell-ai/plugin.json
+      velashell-redis/...
+    因此主仓库那边只是"解压到发布目录的 plugins/",不需要再懂插件的任何事。
+
+    插件是纯托管、无 RID 的构建产物(EnableDynamicLoading,按 deps.json 由插件 ALC 解析),
+    所以一个包吃遍五个平台,不必按 RID 分。
+
+    哪个插件进包看它 csproj 的 <VelaPluginShip>(示例插件 velashell.hello-world 设为 false,
+    只作开发范例不进产物)。一个都收不到时直接失败,不会悄悄出一个空包。
+
+    用法:
+      dotnet build build/PluginBundle.proj -c Release -p:BundleDir=<输出目录>
+  -->
+
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <BundleDir Condition="'$(BundleDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\plugins-bundle</BundleDir>
+  </PropertyGroup>
+
+  <Target Name="Bundle">
+    <ItemGroup>
+      <_VelaPluginProject Include="$(MSBuildThisFileDirectory)..\plugins\*\*.csproj" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_VelaPluginProject)"
+             Targets="GetVelaPluginPayload"
+             Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_VelaPluginPayload" />
+    </MSBuild>
+
+    <!-- 空集意味着两种事故:插件工程一个都没枚举到,或者 VelaPluginShip 全关了。
+         两种都会悄无声息地出一个"插件系统看着在、实则没插件"的发行包。 -->
+    <Error Condition="'@(_VelaPluginPayload)' == ''"
+           Text="没有收集到任何可分发插件:请检查 plugins/ 下是否有 &lt;VelaPluginShip&gt;true&lt;/VelaPluginShip&gt; 的插件工程。" />
+
+    <RemoveDir Directories="$(BundleDir)" />
+    <Copy SourceFiles="@(_VelaPluginPayload)"
+          DestinationFiles="@(_VelaPluginPayload->'$(BundleDir)\%(VelaPluginRelativePath)')" />
+
+    <Message Importance="high" Text="Plugin bundle staged at $(BundleDir) (@(_VelaPluginPayload->Count()) files)." />
+  </Target>
+
+  <!-- 顺带给每个可分发插件出一份 .vpx,挂到 Release 上供用户手工安装 / 做插件市场的源。 -->
+  <Target Name="PackAllVpx">
+    <ItemGroup>
+      <_VelaPluginProject Include="$(MSBuildThisFileDirectory)..\plugins\*\*.csproj" />
+    </ItemGroup>
+    <PropertyGroup>
+      <VpxDir Condition="'$(VpxDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\vpx</VpxDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(VpxDir)" />
+    <MSBuild Projects="@(_VelaPluginProject)"
+             Targets="PackVpx"
+             Properties="Configuration=$(Configuration);VelaVpxOutputDirectory=$(VpxDir)\" />
+  </Target>
+
+</Project>

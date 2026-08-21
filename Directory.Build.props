@@ -1,0 +1,93 @@
+<Project>
+  <PropertyGroup>
+	<TargetFramework>net11.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- 定义 Linux -->
+  <PropertyGroup>
+  	<IsLinux Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' == 'true'">true</IsLinux>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsLinux)' == 'true'">
+  	<DefineConstants>$(DefineConstants);LINUX</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- ── 本仓库的发行版本号 ─────────────────────────────────────────────────
+         第一方插件分发包(velashell-plugins-<版本>.zip)与本仓库所有插件程序集共用它。
+         VelaShell 主仓库按 Directory.Build.props 的 VelaPluginsBundleVersion pin 这个号,
+         从本仓库的 Release 资产里取那一版。
+         CI 发版时用 -p:VelaPluginsVersion= 覆盖(取自 Release 标签)。
+
+         ⚠️ 它**不是** SDK 版本(见下面的 VelaSdkVersion),也**不是**单个插件的版本 ——
+         后者写在各插件的 plugin.json 里,决定 .vpx 文件名与宿主看到的插件版本,
+         各插件各自演进,互不牵连。这里这个号只回答"这一批插件是哪次发布出去的"。 -->
+    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">1.4.0</VelaPluginsVersion>
+    <!-- 去掉预发布后缀的数字版(AssemblyVersion/FileVersion 不接受后缀)。 -->
+    <VelaPluginsVersionCore>$([System.Text.RegularExpressions.Regex]::Replace($(VelaPluginsVersion), '-.*$', ''))</VelaPluginsVersionCore>
+    <Version>$(VelaPluginsVersion)</Version>
+    <AssemblyVersion>$(VelaPluginsVersionCore)</AssemblyVersion>
+    <FileVersion>$(VelaPluginsVersionCore)</FileVersion>
+    <!-- 不把 git 提交哈希拼进 InformationalVersion(默认会加 +sha 后缀)。 -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- ── 插件 SDK 的版本 ────────────────────────────────────────────────────
+         本仓库的插件与第三方插件走**完全同一条路径**:从 nuget.org 引用
+         VelaShell.PluginSdk.Build(契约程序集 + 与宿主一致的 Avalonia + AXAML 编译器 +
+         plugin.json 处理 + 清单校验 + `-t:PackVpx`)。第一方插件因此天然是 SDK 包的
+         第一个用户 —— 包坏了我们自己先撞上,而不是等插件作者来报。
+
+         源码在 joesdu/velashell-plugin-toolchain,那个仓库只管 SDK 与工具链,不再放插件。
+
+         本地联调未发布的 SDK:在工具链仓库跑
+           dotnet pack plugin-sdk/... -o artifacts/nuget -p:VelaSdkVersion=1.5.0-dev
+         然后在本仓库
+           dotnet build -p:VelaSdkVersion=1.5.0-dev
+         nuget.config 里已经预留了指向工具链 artifacts/nuget 的本地源(默认注释掉)。 -->
+    <VelaSdkVersion Condition="'$(VelaSdkVersion)' == ''">1.4.0</VelaSdkVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- 插件与宿主必须用同一版本的 Avalonia:装载器强制让 Avalonia* 回落到宿主那一套
+         (见宿主的 PluginAssemblyLoadContext),版本不一致时表现为跨 ALC 的控件类型对不上。
+
+         **这个版本号的权威在工具链仓库**:VelaShell.PluginSdk.Build 用精确区间 [x.y.z]
+         把它锁给所有插件工程,所以插件工程根本不需要自己写 Avalonia 的 PackageReference。
+         这里留这两个属性只为**测试工程**用 —— 测试宿主要扮演"装载方",得显式提供
+         运行时那份 Avalonia,版本必须与 SDK 锁的一致。升 SDK 时这两处要跟着核对
+         (Directory.Build.targets 的 VerifyAvaloniaMatchesSdk 会在构建期替你比一遍)。 -->
+    <VelaAvaloniaVersion>12.1.1</VelaAvaloniaVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+  	<Authors>joesdu</Authors>
+  	<RepositoryType>git</RepositoryType>
+  	<RepositoryUrl>https://github.com/joesdu/velashell-plugins</RepositoryUrl>
+  	<GenerateAssemblyConfigurationAttribute>True</GenerateAssemblyConfigurationAttribute>
+  	<GenerateAssemblyCompanyAttribute>True</GenerateAssemblyCompanyAttribute>
+  	<GenerateAssemblyProductAttribute>True</GenerateAssemblyProductAttribute>
+  	<GenerateDocumentationFile>True</GenerateDocumentationFile>
+  	<!-- 本仓库不出 NuGet 包:插件的分发形态是 .vpx 与随应用分发的 plugins/ 目录。 -->
+  	<IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+  	<EnablePreviewFeatures>true</EnablePreviewFeatures>
+  	<Features>$(Features);runtime-async=on</Features>
+  	<NoWarn>$(NoWarn);CA2252;SYSLIB5007;</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+  	<LangVersion>preview</LangVersion>
+  	<Nullable>enable</Nullable>
+  	<ImplicitUsings>enable</ImplicitUsings>
+  	<NoWarn>$(NoWarn);IDE0047;</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <VelaRepoRoot>$(MSBuildThisFileDirectory)</VelaRepoRoot>
+    <VelaArtifactsDir Condition="'$(VelaArtifactsDir)' == ''">$(VelaRepoRoot)artifacts</VelaArtifactsDir>
+  </PropertyGroup>
+</Project>

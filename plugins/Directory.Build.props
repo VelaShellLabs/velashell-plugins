@@ -1,0 +1,22 @@
+<Project>
+	<Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+	<PropertyGroup>
+		<!-- 是否随应用分发。true(默认)= 发布时进安装包的 plugins/<目录名>/;
+		     false = 只留在仓库和开发构建里(F5 仍能装载),不进任何发行产物 ——
+		     示例插件用它:代码是给人读的范例,不是给用户装的功能。
+		     取值见 Directory.Build.targets 的 GetVelaPluginPayload。 -->
+		<VelaPluginShip Condition="'$(VelaPluginShip)' == ''">true</VelaPluginShip>
+
+		<!-- 编译绑定是插件工程的默认姿势(AXAML 里的 {Binding} 一律走编译期绑定)。
+		     以前这条写在每个插件的 csproj 里,搬库时收拢到这里。 -->
+		<AvaloniaUseCompiledBindingsByDefault Condition="'$(AvaloniaUseCompiledBindingsByDefault)' == ''">true</AvaloniaUseCompiledBindingsByDefault>
+	</PropertyGroup>
+
+	<!--
+	  注:EnableDynamicLoading 与 plugin.json 进输出目录这两件事,**不在这里做**。
+	  它们由 VelaShell.PluginSdk.Build 包的 build/VelaShell.PluginSdk.Build.props 提供 ——
+	  拆库之前本仓库有 SDK 源码,这里自己铺;现在第一方插件与第三方插件走同一个包,
+	  重复声明 plugin.json 的 None 项还会直接撞出重复项错误。
+	-->
+</Project>
