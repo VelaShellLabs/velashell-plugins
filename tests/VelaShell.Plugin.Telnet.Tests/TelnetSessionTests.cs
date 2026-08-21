@@ -84,12 +84,23 @@ public sealed class TelnetSessionTests
         }
 
         /// <summary>等到服务端收到的字节里出现某个子序列(协商是异步的,不能靠 sleep 赌)。</summary>
-        public async Task WaitForBytesAsync(byte[] needle, string because)
+        /// <param name="needle">要等的字节序列。</param>
+        /// <param name="because">等不到时的失败说明。</param>
+        /// <param name="occurrences">
+        /// 要等到第几次出现,默认 1。
+        /// **需要它的场合不是假想的**:客户端的初始握手里本来就带着 IAC DO ECHO
+        /// (<c>BuildInitialRequests</c> 主动请求过对端回显)。"等对端 WILL ECHO 之后的
+        /// DO ECHO"若只等第一次出现,会被握手里那一份**立刻**满足 —— 断言变成空的,
+        /// 用例转而赌"读泵此刻已经处理完 WILL",在 CI 上偶发失败(2026-08-22 撞上)。
+        /// 用次数而不是"从某个偏移之后找",是因为取偏移那一刻握手不一定已经到齐,
+        /// 那样只是把同一个时序假设挪了个地方。
+        /// </param>
+        public async Task WaitForBytesAsync(byte[] needle, string because, int occurrences = 1)
         {
             DateTime deadline = DateTime.UtcNow.AddSeconds(5);
             while (DateTime.UtcNow < deadline)
             {
-                if (IndexOf(Received, needle) >= 0)
+                if (CountOf(Received, needle) >= occurrences)
                 {
                     return;
                 }
@@ -98,16 +109,21 @@ public sealed class TelnetSessionTests
             Assert.Fail($"{because};实际收到:{BitConverter.ToString(Received)}");
         }
 
-        public static int IndexOf(byte[] haystack, byte[] needle)
+        /// <summary>子序列出现的次数(不重叠计数,协商字节里不会有自重叠的模式)。</summary>
+        public static int CountOf(byte[] haystack, byte[] needle)
         {
-            for (int index = 0; index + needle.Length <= haystack.Length; index++)
+            int count = 0;
+            for (int index = 0; index + needle.Length <= haystack.Length;)
             {
                 if (haystack.AsSpan(index, needle.Length).SequenceEqual(needle))
                 {
-                    return index;
+                    count++;
+                    index += needle.Length;
+                    continue;
                 }
+                index++;
             }
-            return -1;
+            return count;
         }
 
         public async ValueTask DisposeAsync()
@@ -213,8 +229,13 @@ public sealed class TelnetSessionTests
         await server.WaitForClientAsync();
 
         // 对端 WILL ECHO 之后本地不能再回显,否则用户看到的是双份字符("llss")。
+        //
+        // 等**第二份** IAC DO ECHO:第一份在握手里(BuildInitialRequests 主动请求过对端回显),
+        // 只等第一份等于什么都没等,写入就成了在赌"读泵已经处理完 WILL"。第二份是对这次 WILL
+        // 的应答,而应答是在 Negotiate() 里 _remoteEnabled.Add(ECHO) **之后**才生成的 ——
+        // 所以它到达即意味着 RemoteEcho 已翻转、本地回显已关,下面的写入不会再被本地回显。
         await server.SendAsync(255, 251, 1);
-        await server.WaitForBytesAsync([255, 253, 1], "对端 WILL ECHO 后应回 DO ECHO");
+        await server.WaitForBytesAsync([255, 253, 1], "对端 WILL ECHO 后应回 DO ECHO", occurrences: 2);
         await session.WriteAsync(Encoding.ASCII.GetBytes("ls"), TestContext.CancellationToken);
 
         await server.SendAsync("X"u8.ToArray());

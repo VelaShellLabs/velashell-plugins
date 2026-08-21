@@ -60,14 +60,37 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Get-ChildItem artifacts/plugins-bundle | Select-Object -ExpandProperty Name
 
+      # 签名密钥。**可选**:来自 fork 的 PR 拿不到仓库机密(GitHub 的既定行为),
+      # 此时不签名继续跑 —— 这条路径要验的是"包能不能打出来、布局对不对",与签名无关。
+      # 而仓库自己的 push/PR 拿得到,于是签名链路在**发版之前**就跑过了:
+      # 密钥格式不对、vela-plugin 读不了这把钥匙,这类问题会在这里显形,
+      # 而不是等发 Release 那天在最不该出错的时刻。
+      - name: Restore signing key (optional)
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:KEY_PEM_B64)) {
+            Write-Host "::notice::KEY_PEM_FILE unavailable (fork PR); packing .vpx without a signature."
+            "VELA_SIGN_ARGS=" >> $env:GITHUB_ENV
+          } else {
+            [IO.File]::WriteAllBytes("$PWD/velashell-signing.pem", [Convert]::FromBase64String($env:KEY_PEM_B64))
+            "VELA_SIGN_ARGS=-p:VelaSigningKey=$PWD/velashell-signing.pem" >> $env:GITHUB_ENV
+          }
+        env:
+          KEY_PEM_B64: ${{ secrets.KEY_PEM_FILE }}
+
       # .vpx 也在 CI 里出一遍:打包器来自 SDK 包,格式坏了要在这里撞上,
       # 而不是等用户手工安装时才发现。
       - name: Pack .vpx
         shell: pwsh
         run: |
-          dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" --nologo
+          dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" --nologo $env:VELA_SIGN_ARGS
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Get-ChildItem artifacts/vpx | Select-Object Name, Length
+
+      - name: Remove signing key
+        if: always()
+        shell: pwsh
+        run: Remove-Item velashell-signing.pem -Force -ErrorAction SilentlyContinue
 
       # 共享程序集绝不能落进插件目录 —— 落了就说明 SDK 包的 exclude=Runtime 链路断了。
       # 这条在插件侧再验一遍(工具链仓库的 CI 只在模板生成的空工程上验过),
