@@ -35,7 +35,7 @@
 
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
-    <PackageVersion Include="StackExchange.Redis" Version="3.1.13" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.1.31" />
   </ItemGroup>
 
   <ItemGroup Label="S3 插件">
