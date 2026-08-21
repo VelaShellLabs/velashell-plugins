@@ -4,14 +4,19 @@
     把本仓库的发行版本号写进所有落点。
 
 .DESCRIPTION
-    这里说的"版本"是**这一批第一方插件的发行版本**(VelaPluginsVersion),不是 SDK 版本,
-    也不是任何单个插件的版本:
+    这里说的"版本"是**这一批第一方插件的发行版本**,不是 SDK 版本。本仓库是一趟
+    **统一发布列车**:一次 Release,所有插件同上一个版本号。落点有三类:
 
-      Directory.Build.props   <VelaPluginsVersion>   —— 程序集版本 + 分发包文件名的默认值
+      Directory.Build.props   <VelaPluginsVersion>   —— 程序集版本 + 分发包文件名
       README.md               版本横幅                —— 给人看的,过期了会被照着抄
+      plugins/*/plugin.json    "version"              —— **.vpx 文件名与宿主看到的插件版本**
 
-    单个插件的版本在各自的 plugin.json 里,各自演进,本脚本**不碰** —— Redis 发 0.2.0
-    与 Telnet 无关,把它们绑在一起只会逼出一堆无意义的空版本。
+    最后那一类最容易被忘:打包器出的是 <id>-<plugin.json 的 version>.vpx,
+    与 MSBuild 那边的 VelaPluginsVersion 毫无关系 —— 不写它,发 1.4.0 出来的仍旧是
+    velashell.redis-0.1.0.vpx(2026-08-22 就是这么发出去的)。
+
+    统一列车的代价是没改过的插件也跟着涨版本,用户那边会看到一次"更新";
+    换来的是"这台机器上装的是哪一批插件"只有一个答案,排查时不必逐个去问版本。
 
     发版流水线在解析出 Release 标签之后**第一件事**就是跑本脚本
     (见 .github/workflows/release.yml),因此产物永远与标签一致,与仓库里当时提交了
@@ -63,6 +68,30 @@ $targets = @(
         What        = 'README 版本横幅'
     }
 )
+
+# 每个插件的 plugin.json。**这是 .vpx 文件名与宿主看到的插件版本的唯一来源** ——
+# 打包器出的是 <id>-<plugin.json 的 version>.vpx,与 MSBuild 的 VelaPluginsVersion
+# 毫无关系。不把它一起写,发 1.4.0 出来的仍旧是 velashell.redis-0.1.0.vpx。
+#
+# 于是本仓库是一趟**统一发布列车**:一次 Release,所有插件同上一个版本号。
+# 代价是没改过的插件也会跟着涨版本(用户那边会看到一次"更新"),换来的是
+# "这台机器上装的是哪一批插件"永远只有一个答案 —— 排查问题时不必逐个去问版本。
+#
+# 动态枚举而不是写死四条:新增插件时没人会记得回来改这个脚本,
+# 而漏掉的后果是那个插件的 .vpx 永远停在它初始的版本号上,且不会有任何报错。
+foreach ($manifest in Get-ChildItem (Join-Path $root 'plugins') -Directory |
+                      ForEach-Object { Join-Path $_.FullName 'plugin.json' } |
+                      Where-Object { Test-Path $_ } | Sort-Object) {
+    $relative = [IO.Path]::GetRelativePath($root, $manifest).Replace('\', '/')
+    $targets += @{
+        Path = $relative
+        # 只认顶层的 "version" 键。带引号前缀天然排除了 minSdkVersion 这类
+        # 以 Version 结尾的键名(它们里面没有 `"version` 这个子串)。
+        Pattern     = '(?<pre>"version"\s*:\s*")[^"]+(?<post>")'
+        Replacement = "`${pre}$Version`${post}"
+        What        = 'plugin.json 的 version(决定 .vpx 文件名)'
+    }
+}
 
 $drift = @()
 foreach ($target in $targets) {

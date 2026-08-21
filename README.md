@@ -1,6 +1,6 @@
 # VelaShell 第一方插件
 
-> 当前版本 **1.0.0** · SDK **1.4.0**
+> 当前版本 **1.4.0** · SDK **1.4.0**
 
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
 Redis、S3、Telnet,外加示例插件 HelloWorld。
@@ -71,15 +71,28 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 然后打开本仓库 [`nuget.config`](nuget.config) 里那条注释掉的本地源,再
 `dotnet build -p:VelaSdkVersion=1.5.0-dev`。用完记得把本地源注释回去再提交。
 
-## 两个版本号,别混
+## 版本号:一趟统一列车
 
-- **插件自己的版本**在各自的 `plugin.json` 里,各插件独立演进,决定 `.vpx` 文件名
-  与宿主看到的插件版本。
-- **本仓库的发行版本**(`Directory.Build.props` 的 `VelaPluginsVersion`)只回答
-  "这一批插件是哪次发布出去的"。主仓库按它 pin(`VelaPluginsBundleVersion`),
-  从本仓库的 Release 资产里取那一版 zip。
+本仓库的插件**同上同下** —— 一次 Release,所有插件都是那个版本号。Release 标签是唯一
+的输入,`scripts/Set-Version.ps1` 把它写进三处:
 
-它与 SDK 版本(`VelaSdkVersion`)也是两回事:SDK 发 1.5.0 不代表插件必须跟着发,
+| 落点 | 决定什么 |
+| --- | --- |
+| `Directory.Build.props` 的 `VelaPluginsVersion` | 程序集版本、`velashell-plugins-<版本>.zip` 的文件名 |
+| `README.md` 版本横幅 | 给人看的 |
+| 各 `plugins/*/plugin.json` 的 `version` | **`.vpx` 文件名与宿主里显示的插件版本** |
+
+最后那一处最容易漏:打包器出的是 `<id>-<plugin.json 的 version>.vpx`,与 MSBuild 那边的
+`VelaPluginsVersion` **毫无关系** —— 只改前者的话,发 1.4.0 出来的仍旧叫
+`velashell.redis-0.1.0.vpx`。脚本会动态枚举 `plugins/` 下的每个 `plugin.json`,
+新增插件时不用回来改它。
+
+统一列车的代价是没改过的插件也跟着涨版本,用户那边会看到一次"更新";换来的是
+"这台机器上装的是哪一批插件"只有一个答案 —— 排查问题时不必逐个去问版本。
+
+主仓库按 `VelaPluginsBundleVersion` pin 这个号,从本仓库的 Release 资产里取那一版 zip。
+
+它与 SDK 版本(`VelaSdkVersion`)是两回事:SDK 发 1.5.0 不代表插件必须跟着发,
 插件发 1.4.1 也不代表契约动了。
 
 ## 发布
