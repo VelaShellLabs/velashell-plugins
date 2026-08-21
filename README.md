@@ -28,7 +28,7 @@ Redis、S3、Telnet,外加示例插件 HelloWorld。
 | --- | --- |
 | `plugins/` | 四个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
 | `tests/` | 每个插件一个测试工程(MSTest + `VelaShell.PluginSdk.Testing` 替身) |
-| `build/PluginBundle.proj` | 发布期把可分发插件收成 `velashell-plugins-<版本>.zip`,并批量出 `.vpx` |
+| `build/PluginBundle.proj` | 批量出 `.vpx`;并把可分发插件收成 `plugins/` 布局(只用于 CI 体检) |
 | `scripts/Set-Version.ps1` | 把发行版本号写进仓库里所有落点(发版时由流水线自动跑) |
 | `Directory.Packages.props` | **中央包管理**:所有 NuGet 版本只在这一处 |
 
@@ -78,7 +78,7 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 
 | 落点 | 决定什么 |
 | --- | --- |
-| `Directory.Build.props` 的 `VelaPluginsVersion` | 程序集版本、`velashell-plugins-<版本>.zip` 的文件名 |
+| `Directory.Build.props` 的 `VelaPluginsVersion` | 程序集版本 |
 | `README.md` 版本横幅 | 给人看的 |
 | 各 `plugins/*/plugin.json` 的 `version` | **`.vpx` 文件名与宿主里显示的插件版本** |
 
@@ -90,7 +90,8 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 统一列车的代价是没改过的插件也跟着涨版本,用户那边会看到一次"更新";换来的是
 "这台机器上装的是哪一批插件"只有一个答案 —— 排查问题时不必逐个去问版本。
 
-主仓库按 `VelaPluginsBundleVersion` pin 这个号,从本仓库的 Release 资产里取那一版 zip。
+这个号只回答"这一批插件是哪次发布出去的";发出去的资产是每个插件各自的 `.vpx`,
+不再有整批打包的 zip。
 
 它与 SDK 版本(`VelaSdkVersion`)是两回事:SDK 发 1.5.0 不代表插件必须跟着发,
 插件发 1.4.1 也不代表契约动了。
@@ -103,7 +104,6 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 2. 全量测试 + 构建;
 3. 打包并**逐个核对签名**(未签名或签名不自洽就直接失败,不会挂上去);
 4. 产出并挂到该 Release 的下载列表:
-   - `velashell-plugins-<版本>.zip` —— 包内布局就是安装包 `plugins/` 那一层,主仓库下载解开即可;
    - **每个插件一份 `.vpx`(已签名)** —— 从 Release 下载后即可手工安装,或推进插件商店;
    - `SHA256SUMS.txt`;
 5. 开一个 `chore/version-<版本>` 的 PR 把版本号回写 `main`,等你手动合。

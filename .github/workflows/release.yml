@@ -2,11 +2,11 @@
 #
 # 产出全部挂到该 Release 上,共用标签里的那个版本号:
 #
-#   velashell-plugins-<版本>.zip  主程序安装包里 plugins/ 那一层的一比一布局。
-#                                 VelaShell 主仓库发版时按 pin 的版本下载它、解进发布目录
-#                                 (见主仓库 Directory.Build.props 的 VelaPluginsBundleVersion)。
 #   *.vpx                         每个插件一份,**已签名**,供用户手工安装 / 推进插件商店。
 #   SHA256SUMS.txt                以上全部的校验和。
+#
+# 分发形态只有 .vpx 这一种:曾经还挂过一个 velashell-plugins-<版本>.zip(安装包 plugins/
+# 那一层的一比一布局,供主仓库发版时下载解开),现已不再产出。
 #
 # 本仓库**不推 nuget.org**:插件的分发形态是 .vpx 与随应用分发的 plugins/ 目录,
 # 不是 NuGet 包。要发 SDK 包请去工具链仓库 joesdu/velashell-plugin-toolchain。
@@ -70,8 +70,8 @@ jobs:
           $tag = '${{ github.event.release.tag_name || inputs.tag }}'
           if ([string]::IsNullOrWhiteSpace($tag)) { Write-Error "No release tag available."; exit 1 }
           $version = $tag.TrimStart('v')
-          # 打错标签(比如 "release-2")的话,资产文件名会变成一个谁也想不到的样子,
-          # 而主仓库是按 velashell-plugins-<版本>.zip 这个确定名字去取的。
+          # 打错标签(比如 "release-2")的话,这个版本会被 Set-Version.ps1 原样写进每个
+          # plugin.json,.vpx 的文件名与宿主里显示的插件版本跟着变成一个谁也想不到的样子。
           if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
             Write-Error "Release tag '$tag' does not resolve to a SemVer version (got '$version'). Use e.g. v1.4.0 or v1.4.0-preview.1."
             exit 1
@@ -130,11 +130,11 @@ jobs:
       - name: Build release assets
         shell: pwsh
         run: |
-          $version = '${{ steps.version.outputs.version }}'
           New-Item -ItemType Directory -Force artifacts/release | Out-Null
+          # plugins-bundle 不再打成 zip、也不再挂上 Release —— 它只留给下面那步
+          # "共享程序集有没有漏进去"的体检:那条检查要看的是插件目录的真实布局。
           dotnet build build/PluginBundle.proj -c Release -t:Bundle -p:BundleDir="$PWD/artifacts/plugins-bundle" --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          Compress-Archive -Path artifacts/plugins-bundle/* -DestinationPath "artifacts/release/velashell-plugins-$version.zip" -Force
           # -p:VelaSigningKey 会经 MSBuild 的全局属性继承传到每个插件工程的 PackVpx 目标,
           # 由随 SDK 包分发的 vela-plugin 在打包时签名(见 PluginBundle.proj 的 PackAllVpx)。
           dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" -p:VelaSigningKey="$PWD/velashell-signing.pem" --nologo
@@ -202,7 +202,7 @@ jobs:
           path: artifacts/release/*
           if-no-files-found: error
 
-      # 主仓库按固定地址取 zip:releases/download/<tag>/velashell-plugins-<版本>.zip
+      # 挂上去的只有 .vpx 与 SHA256SUMS.txt。
       - name: Upload assets to release
         if: ${{ !inputs.dryRun }}
         shell: pwsh
