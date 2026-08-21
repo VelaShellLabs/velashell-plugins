@@ -5,13 +5,19 @@
 #   velashell-plugins-<版本>.zip  主程序安装包里 plugins/ 那一层的一比一布局。
 #                                 VelaShell 主仓库发版时按 pin 的版本下载它、解进发布目录
 #                                 (见主仓库 Directory.Build.props 的 VelaPluginsBundleVersion)。
-#   *.vpx                         每个插件一份,供用户手工安装 / 作插件市场的源。
+#   *.vpx                         每个插件一份,**已签名**,供用户手工安装 / 推进插件商店。
 #   SHA256SUMS.txt                以上全部的校验和。
 #
 # 本仓库**不推 nuget.org**:插件的分发形态是 .vpx 与随应用分发的 plugins/ 目录,
 # 不是 NuGet 包。要发 SDK 包请去工具链仓库 joesdu/velashell-plugin-toolchain。
-# 也**不需要强名称密钥**:签名是 SDK 契约程序集的要求(宿主已签名,不能引用未签名程序集),
-# 插件是被动态装载的,不参与那条约束。
+#
+# 🔑 需要的仓库机密(只此一个):
+#   KEY_PEM_FILE   .vpx 签名私钥(P-256 PKCS#8 PEM)的 base64。缺了它发布**直接失败** ——
+#                  未签名的 .vpx 与签过的看起来一模一样,不能让它悄悄发出去。
+#                  怎么生成这个 base64 见 README 的"发布"一节。
+#
+#   注意它与**强名称密钥**(工具链仓库的 STRONG_NAME_KEY)是两回事:那把钥匙签的是 SDK
+#   契约程序集(宿主已签名,不能引用未签名程序集),本仓库不产出程序集包,不参与那条约束。
 #
 # 📌 版本号不用手工改:标签解析出来之后,流水线**第一件事**就是跑
 #    scripts/Set-Version.ps1 把该版本写进 Directory.Build.props 与 README 版本横幅。
@@ -88,6 +94,34 @@ jobs:
           dotnet test VelaShell.Plugins.slnx -c Debug --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      # ── 签名密钥 ────────────────────────────────────────────────────────────
+      # .vpx 的签名密钥(P-256,vela-plugin keygen 生成的 PKCS#8 PEM)。仓库机密
+      # KEY_PEM_FILE 里存的是这份 PEM 的 base64,这里还原成文件。
+      #
+      # 为什么必须签:.vpx 是用户手工安装、以及插件商店分发的形态 —— 没有签名,
+      # "这个包确实来自我们"就无从谈起,宿主与商店都只能当匿名包处理。
+      # 所以缺密钥时**直接失败**,而不是悄悄出一批未签名的包挂到 Release 上:
+      # 那种包看起来和签过的一模一样,等发现时它已经在用户机器上了。
+      #
+      # 密钥落在工作区根目录,.gitignore 里 *.pem 已排除;末尾有一步 always() 删掉它。
+      - name: Restore signing key
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:KEY_PEM_B64)) {
+            Write-Error "KEY_PEM_FILE secret is missing. The .vpx packages must be signed; add the base64 of your P-256 PEM private key as the KEY_PEM_FILE repository secret."
+            exit 1
+          }
+          [IO.File]::WriteAllBytes("$PWD/velashell-signing.pem", [Convert]::FromBase64String($env:KEY_PEM_B64))
+          # 只确认它确实是一份 PEM 私钥 —— 不打印任何内容。
+          $head = (Get-Content velashell-signing.pem -TotalCount 1)
+          if ($head -notmatch 'BEGIN .*PRIVATE KEY') {
+            Write-Error "KEY_PEM_FILE did not decode to a PEM private key (first line: '$head'). Re-encode the .pem file itself, not its path or a text fragment."
+            exit 1
+          }
+          Write-Host "Signing key restored."
+        env:
+          KEY_PEM_B64: ${{ secrets.KEY_PEM_FILE }}
+
       # 插件是纯托管、无 RID 的构建产物(EnableDynamicLoading,按 deps.json 由插件 ALC 解析),
       # 所以一个包吃遍五个平台,不必按 RID 分。
       - name: Build release assets
@@ -98,7 +132,9 @@ jobs:
           dotnet build build/PluginBundle.proj -c Release -t:Bundle -p:BundleDir="$PWD/artifacts/plugins-bundle" --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Compress-Archive -Path artifacts/plugins-bundle/* -DestinationPath "artifacts/release/velashell-plugins-$version.zip" -Force
-          dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" --nologo
+          # -p:VelaSigningKey 会经 MSBuild 的全局属性继承传到每个插件工程的 PackVpx 目标,
+          # 由随 SDK 包分发的 vela-plugin 在打包时签名(见 PluginBundle.proj 的 PackAllVpx)。
+          dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" -p:VelaSigningKey="$PWD/velashell-signing.pem" --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item artifacts/vpx/*.vpx artifacts/release/
           Get-ChildItem artifacts/release | Select-Object Name, Length
@@ -114,6 +150,38 @@ jobs:
             throw "Shared assemblies leaked into the plugin bundle: $(($leaked | ForEach-Object FullName) -join ', ')"
           }
           Write-Host "OK: no shared assemblies in the bundle."
+
+      # 签名核对。不是形式,是有具体失败模式要拦:
+      #
+      # 密钥**路径**写错会响亮失败(vela-plugin 报 "Key file not found",MSBuild 跟着红),
+      # 那条不需要这一步。真正危险的是**属性名**对不上 —— 比如哪天有人把
+      # -p:VelaSigningKey 敲成别的名字,或者 PluginBundle.proj 的 PackAllVpx 不再把它
+      # 转发下去:MSBuild 会把不认识的全局属性照单全收,构建 0 错误通过,
+      # 产出的却是 `flags Masked` / `signature Unsigned` 的包 —— 与签过的包在文件名、
+      # 大小、构建日志上都看不出区别(2026-08-22 实测确认过这条路)。
+      #
+      # 所以这里逐个把包读回来,确认 flags 里确实有 Signed 且签名自洽 —— 挂上 Release
+      # 之前是最后一道能拦住它的地方。顺带把公钥指纹打进日志:插件商店登记用的就是它。
+      - name: Verify every .vpx is signed
+        shell: pwsh
+        run: |
+          $sdk = [regex]::Match((Get-Content -Raw Directory.Build.props), '<VelaSdkVersion[^>]*>([^<]+)</VelaSdkVersion>').Groups[1].Value
+          if ([string]::IsNullOrWhiteSpace($sdk)) { throw "Could not read VelaSdkVersion from Directory.Build.props" }
+          # 打包器随 VelaShell.PluginSdk.Build 包分发,上一步刚还原过,直接从包缓存里取,
+          # 免得为了读一次包再装一个全局工具(版本还可能与打包用的那份不一致)。
+          $cli = Join-Path $env:USERPROFILE ".nuget/packages/velashell.pluginsdk.build/$sdk/tools/net11.0/VelaShell.Plugin.Cli.dll"
+          if (-not (Test-Path $cli)) { throw "vela-plugin not found at $cli" }
+
+          $packages = @(Get-ChildItem artifacts/release/*.vpx)
+          if ($packages.Count -eq 0) { throw "No .vpx found in artifacts/release." }
+          foreach ($package in $packages) {
+            $info = dotnet $cli info $package.FullName 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "vela-plugin info failed for $($package.Name):`n$info" }
+            if ($info -notmatch 'flags\s+.*Signed') { throw "$($package.Name) is NOT signed:`n$info" }
+            if ($info -notmatch 'signature\s+Valid') { throw "$($package.Name) has an invalid signature:`n$info" }
+            $fingerprint = [regex]::Match($info, 'signature\s+Valid \((SHA256:[0-9a-f]+)\)').Groups[1].Value
+            Write-Host "$($package.Name)  signed  $fingerprint"
+          }
 
       - name: Generate SHA256SUMS.txt
         shell: pwsh
@@ -141,6 +209,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # 密钥不该在 runner 上多留一秒。always():上面任何一步失败也要删 ——
+      # 失败路径恰恰是最容易把中间产物连同它一起打包上传的路径。
+      - name: Remove signing key
+        if: always()
+        shell: pwsh
+        run: Remove-Item velashell-signing.pem -Force -ErrorAction SilentlyContinue
 
   # ── 把版本号回写 main(以 PR 的形式)────────────────────────────────────────
   # 上面那个 Stamp 步骤只改了 runner 上的工作区 —— 资产已经挂上去了,但仓库里的

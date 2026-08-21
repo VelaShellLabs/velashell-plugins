@@ -39,8 +39,9 @@ dotnet build VelaShell.Plugins.slnx
 dotnet test  VelaShell.Plugins.slnx -c Debug
 ```
 
-本仓库不出 NuGet 包、不做强名称签名(那是工具链仓库的事),所以 Release 构建
-不需要任何密钥,`-c Debug` 也只是跑测试的习惯而非硬性要求。
+本仓库不出 NuGet 包、不做强名称签名(那是工具链仓库的事),本地构建不需要任何密钥,
+`-c Debug` 也只是跑测试的习惯而非硬性要求。唯一用到密钥的地方是给 `.vpx` 签名
+(见下面的[签名密钥](#签名密钥)),不传就是未签名包,本地开发够用。
 
 ### 改插件时立刻在真实宿主里看到效果
 
@@ -87,11 +88,12 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 
 1. 把版本号写进仓库(`scripts/Set-Version.ps1`),因此产物永远与标签一致;
 2. 全量测试 + 构建;
-3. 产出并挂到该 Release:
+3. 打包并**逐个核对签名**(未签名或签名不自洽就直接失败,不会挂上去);
+4. 产出并挂到该 Release 的下载列表:
    - `velashell-plugins-<版本>.zip` —— 包内布局就是安装包 `plugins/` 那一层,主仓库下载解开即可;
-   - 每个插件一份 `.vpx` —— 供用户手工安装 / 作插件市场的源;
+   - **每个插件一份 `.vpx`(已签名)** —— 从 Release 下载后即可手工安装,或推进插件商店;
    - `SHA256SUMS.txt`;
-4. 开一个 `chore/version-<版本>` 的 PR 把版本号回写 `main`,等你手动合。
+5. 开一个 `chore/version-<版本>` 的 PR 把版本号回写 `main`,等你手动合。
 
 本地也可以先跑一遍:
 
@@ -99,6 +101,42 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 pwsh scripts/Set-Version.ps1 1.5.0            # 落盘
 pwsh scripts/Set-Version.ps1 1.5.0 -Check     # 只报告(CI 每次 push/PR 都跑这个)
 ```
+
+### 签名密钥
+
+`.vpx` 一律签名 —— 它是用户手工安装与插件商店分发的形态,没有签名,"这个包确实来自我们"
+就无从谈起。密钥是 `vela-plugin keygen` 生成的 P-256 PKCS#8 PEM 私钥。
+
+仓库机密 **`KEY_PEM_FILE`** 里存这份 PEM 的 **base64**。生成它(PowerShell,直接进剪贴板,
+不落文件也不进终端回滚):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('C:\Users\Joe\OneDrive\文件\密码\velashell.pem')) | Set-Clipboard
+```
+
+然后 GitHub → Settings → Secrets and variables → Actions → New repository secret,
+名字填 `KEY_PEM_FILE`,内容直接粘贴(是一整行,没有换行)。
+
+粘之前想确认没贴错,可以就地验一次往返 —— 解出来的第一行应当是 `-----BEGIN PRIVATE KEY-----`:
+
+```powershell
+[Text.Encoding]::ASCII.GetString([Convert]::FromBase64String((Get-Clipboard))).Split("`n")[0]
+```
+
+> ⚠️ 别用 `certutil -encode`:它产出的是带页眉页脚与换行的 PEM 式 base64,
+> 流水线里的 `[Convert]::FromBase64String` 读不了。要的是**裸 base64,单行**。
+
+缺这个机密时发布会**直接失败**并给出这段说明 —— 未签名的 `.vpx` 与签过的在文件名、大小、
+构建日志上都看不出区别,不能让它悄悄发出去。CI(`ci.yml`)则是**可选**:仓库自己的
+push/PR 拿得到机密就顺带签一次,验证签名链路;来自 fork 的 PR 拿不到,不签名照常跑。
+
+本地想出签名包:
+
+```bash
+dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=<你的 key.pem>
+```
+
+不传 `-p:VelaSigningKey` 就是未签名包,本地开发够用。
 
 ## 与宿主的硬约束
 

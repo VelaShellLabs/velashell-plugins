@@ -60,9 +60,14 @@
       <VpxDir Condition="'$(VpxDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\vpx</VpxDir>
     </PropertyGroup>
     <MakeDir Directories="$(VpxDir)" />
+    <!-- VelaSigningKey 显式转发,而不是只靠全局属性继承:继承确实管用,但它是隐式的,
+         哪天有人给这个 MSBuild 任务加一条 RemoveProperties、或改成别的调用方式,
+         签名就会**无声无息**地掉 —— 构建照样 0 错误,产出的却是未签名包
+         (release.yml 的 "Verify every .vpx is signed" 就是为这种情况兜底的)。
+         写在这里,至少这条链路在代码里看得见。空值 = 不签名,与本地开发一致。 -->
     <MSBuild Projects="@(_VelaPluginProject)"
              Targets="PackVpx"
-             Properties="Configuration=$(Configuration);VelaVpxOutputDirectory=$(VpxDir)\" />
+             Properties="Configuration=$(Configuration);VelaVpxOutputDirectory=$(VpxDir)\;VelaSigningKey=$(VelaSigningKey)" />
   </Target>
 
 </Project>

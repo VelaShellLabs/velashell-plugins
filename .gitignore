@@ -242,8 +242,14 @@ orleans.codegen.cs
 
 # Including strong name files can present a security risk
 # (https://github.com/github/gitignore/pull/2483#issue-259490424)
-# CI 通过 STRONG_NAME_KEY secret 注入仓库根的 VelaShell.snk(见 Directory.Build.props 的 VelaStrongNameKey),不入库。
+# 强名称密钥。本仓库不产出需要签名的程序集(那是工具链仓库的事),这里留着纯属防御:
+# 谁也不该把一把私钥提交进来。
 *.snk
+
+# .vpx 签名私钥。CI 从 KEY_PEM_FILE secret 还原到仓库根的 velashell-signing.pem
+# (见 .github/workflows/release.yml),用完即删。本地签名用的私钥也一律不入库 ——
+# 它一旦进了 git 历史,轮换成本就从"换个 secret"变成"通知所有装过插件的人"。
+*.pem
 
 # Since there are multiple workflows, uncomment next line to ignore bower_components
 # (https://github.com/github/gitignore/pull/1529#issuecomment-104372622)
