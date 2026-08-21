@@ -14,10 +14,7 @@
 
   <PropertyGroup>
     <!-- ── 本仓库的发行版本号 ─────────────────────────────────────────────────
-         第一方插件分发包(velashell-plugins-<版本>.zip)与本仓库所有插件程序集共用它。
-         VelaShell 主仓库按 Directory.Build.props 的 VelaPluginsBundleVersion pin 这个号,
-         从本仓库的 Release 资产里取那一版。
-         CI 发版时用 -p:VelaPluginsVersion= 覆盖(取自 Release 标签)。
+         本仓库所有插件程序集共用它。CI 发版时用 -p:VelaPluginsVersion= 覆盖(取自 Release 标签)。
 
          ⚠️ 它**不是** SDK 版本(见下面的 VelaSdkVersion),也**不是**单个插件的版本 ——
          后者写在各插件的 plugin.json 里,决定 .vpx 文件名与宿主看到的插件版本,

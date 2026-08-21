@@ -56,12 +56,13 @@ Telnet 同理。
 
 "随包分发"由 csproj 的 `<VelaPluginShip>` 控制(默认 `true`)。示例插件设 `false`:
 本机构建仍会镜像到 `artifacts/plugins/`(以及 `VELASHELL_DEV_APP_DIR` 指定的应用目录),
-装载起来验证插件系统没问题,但它不会进 `velashell-plugins-<版本>.zip` ——
+装载起来验证插件系统没问题,但它不会被收进分发布局 ——
 它是给开发者读的范例,不是给用户装的功能。
 
-发版时由 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 把 `VelaPluginShip=true`
-的插件收成一个 zip 挂到 Release,主仓库发版时下载解进安装包的 `plugins/`。
-一个可分发插件都收不到时直接失败,不会悄悄出一个空包。
+[`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`
+的插件收成安装包 `plugins/` 那一层的布局:它不再作为 Release 资产上传,只在 CI 与发布流水线里
+用来体检布局(尤其是共享程序集有没有漏进去)。一个可分发插件都收不到时直接失败,
+不会悄悄放过一个空布局。发出去的是每个插件各自的 `.vpx`。
 
 ## 版本号:别手改 plugin.json 的 version
 
