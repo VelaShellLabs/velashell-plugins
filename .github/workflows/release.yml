@@ -20,13 +20,14 @@
 #   契约程序集(宿主已签名,不能引用未签名程序集),本仓库不产出程序集包,不参与那条约束。
 #
 # 📌 版本号不用手工改:标签解析出来之后,流水线**第一件事**就是跑
-#    scripts/Set-Version.ps1 把该版本写进 Directory.Build.props 与 README 版本横幅。
-#    发布成功后由 sync-main 任务开一个 PR 把这些改动回写 main(等你手动合)。
-#    所以发版只剩两步:合进 main → 在 GitHub 上发 Release,标签填 v<版本>。
+#    scripts/Set-Version.ps1,把该版本写进 Directory.Build.props、README 版本横幅,
+#    以及**每个 plugins/*/plugin.json 的 version**。发布成功后由 sync-main 任务开一个
+#    PR 把这些改动回写 main(等你手动合)。所以发版只剩两步:
+#    合进 main → 在 GitHub 上发 Release,标签填 v<版本>。
 #
-# ⚠️ 单个插件的版本在各自的 plugin.json 里,本流水线**不碰**。要发新版 Redis,
-#    改 plugins/VelaShell.Plugin.Redis/plugin.json 的 version 并合进 main,
-#    下一次 Release 出的 velashell.redis-*.vpx 自然就是新版本号。
+# ⚠️ 本仓库是一趟**统一发布列车**:一次 Release,所有插件同上一个版本号,没有
+#    "只发新版 Redis"这回事。plugin.json 的 version 决定 .vpx 文件名与宿主里显示的
+#    插件版本,它由本流水线覆盖 —— 手改它没有意义,下次发版会被标签里的版本盖回去。
 name: Release
 
 on:

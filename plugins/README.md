@@ -63,13 +63,19 @@ Telnet 同理。
 的插件收成一个 zip 挂到 Release,主仓库发版时下载解进安装包的 `plugins/`。
 一个可分发插件都收不到时直接失败,不会悄悄出一个空包。
 
-## 版本号:两个,别混
+## 版本号:别手改 plugin.json 的 version
 
-- **插件自己的版本**写在各自的 `plugin.json` 里,决定 `.vpx` 文件名与宿主看到的版本。
-  各插件各自演进 —— Redis 发 0.2.0 与 Telnet 没有关系。
-- **本仓库的发行版本**(根 `Directory.Build.props` 的 `VelaPluginsVersion`)只回答
-  "这一批插件是哪次发布出去的",用于 `velashell-plugins-<版本>.zip` 的文件名与
-  程序集版本;主仓库按它 pin(`VelaPluginsBundleVersion`)。
+本仓库是一趟**统一发布列车** —— 一次 Release,所有插件同上一个版本号,由
+[`scripts/Set-Version.ps1`](../scripts/Set-Version.ps1) 从 Release 标签写进
+`Directory.Build.props`、README 横幅,以及**每个 `plugin.json` 的 `version`**。
+
+所以新增插件时 `plugin.json` 里那个 `version` 填什么都行(填 `0.1.0` 即可),
+下一次发版会被覆盖掉;**别为了"发个新版 Redis"去手改它** —— 改了也只会在下次发版时
+被标签里的版本盖回去,徒增一次无意义的 diff。
+
+要点在于:`.vpx` 的文件名是 `<id>-<plugin.json 的 version>.vpx`,
+与 MSBuild 的 `VelaPluginsVersion` 毫无关系。两处必须一起写,只写一处就会出现
+"发了 1.4.0,包却叫 velashell.redis-0.1.0.vpx"。
 
 ## 规划中(尚未创建)
 
