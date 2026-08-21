@@ -22,7 +22,7 @@
          ⚠️ 它**不是** SDK 版本(见下面的 VelaSdkVersion),也**不是**单个插件的版本 ——
          后者写在各插件的 plugin.json 里,决定 .vpx 文件名与宿主看到的插件版本,
          各插件各自演进,互不牵连。这里这个号只回答"这一批插件是哪次发布出去的"。 -->
-    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">1.4.0</VelaPluginsVersion>
+    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">1.0.0</VelaPluginsVersion>
     <!-- 去掉预发布后缀的数字版(AssemblyVersion/FileVersion 不接受后缀)。 -->
     <VelaPluginsVersionCore>$([System.Text.RegularExpressions.Regex]::Replace($(VelaPluginsVersion), '-.*$', ''))</VelaPluginsVersionCore>
     <Version>$(VelaPluginsVersion)</Version>

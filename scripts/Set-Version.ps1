@@ -102,3 +102,12 @@ if ($Check) {
 }
 
 Write-Host "完成:$($drift.Count) 处已同步到 $Version。"
+
+# 显式 exit 0,别靠"脚本正常结束"隐含成功。
+# 调用方是 `& ./scripts/Set-Version.ps1 ...` 后面跟一句 if ($LASTEXITCODE) —— 而 .ps1
+# **不调用 exit 就根本不会设置 $LASTEXITCODE**,它会原样保留调用方进程里的旧值。
+# GitHub 的每个 pwsh 步骤都是全新进程,那里的旧值是 $null,于是 `$LASTEXITCODE -ne 0`
+# 求值为真 —— 脚本明明改好了文件,步骤却报 exit code 1。
+# 2026-08-22 发 1.0.0 时就是这么红的(此前每次发版 main 已经是目标版本,
+# 走的是上面那条 exit 0 的分支,所以一直没露面)。
+exit 0
