@@ -42,7 +42,7 @@
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
          测试工程也要引它(环回服务器要按收到的原始请求行重算 SigV4),
          集中管版本正是为了这两处永远一致。 -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.4" />
   </ItemGroup>
 
   <ItemGroup Label="测试框架">
