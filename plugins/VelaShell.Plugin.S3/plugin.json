@@ -1,6 +1,6 @@
 {
   "id": "velashell.s3",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "displayName": "S3 Object Storage",
   "description": "S3 兼容对象存储(Amazon S3 / MinIO / Ceph RGW / OSS / COS / R2):文件管理器、桶管理器与对象检视器。",
   "publisher": "velashell",

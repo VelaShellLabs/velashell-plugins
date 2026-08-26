@@ -1,6 +1,6 @@
 {
   "id": "velashell.redis",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "displayName": "Redis Client",
   "description": "Redis / Valkey 界面客户端:键空间浏览器、类型编辑器、命令控制台与服务器概览。",
   "publisher": "velashell",
