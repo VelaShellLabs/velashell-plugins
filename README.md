@@ -3,7 +3,7 @@
 > 当前版本 **1.4.0** · SDK **1.4.0**
 
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
-Redis、S3、Telnet,外加示例插件 HelloWorld。
+Redis、S3、Telnet、串口,外加示例插件 HelloWorld。
 
 三个仓库各管一摊,别串:
 
@@ -26,7 +26,7 @@ Redis、S3、Telnet,外加示例插件 HelloWorld。
 
 | 目录 | 内容 |
 | --- | --- |
-| `plugins/` | 四个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
+| `plugins/` | 五个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
 | `tests/` | 每个插件一个测试工程(MSTest + `VelaShell.PluginSdk.Testing` 替身) |
 | `build/PluginBundle.proj` | 批量出 `.vpx`;并把可分发插件收成 `plugins/` 布局(只用于 CI 体检) |
 | `scripts/Set-Version.ps1` | 把发行版本号写进仓库里所有落点(发版时由流水线自动跑) |

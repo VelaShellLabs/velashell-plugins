@@ -13,7 +13,6 @@
     <!-- 传递依赖被直接引用时报错,免得哪天某个包不再传递它就悄悄断了。 -->
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-
   <ItemGroup Label="VelaShell 插件 SDK(源码在 joesdu/velashell-plugin-toolchain)">
     <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
          plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
@@ -22,7 +21,6 @@
     <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
     <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="$(VelaSdkVersion)" />
   </ItemGroup>
-
   <ItemGroup Label="Avalonia(仅测试工程用:测试宿主扮演装载方,要提供运行时那份)">
     <!-- 一律取 Directory.Build.props 的 VelaAvaloniaVersion —— 它由
          Directory.Build.targets 的 VerifyAvaloniaMatchesSdk 与 SDK 锁的值核对过。
@@ -32,19 +30,26 @@
     <!-- 菜单等控件的模板由主题提供:没有它 MenuItem 无模板、不可命中,真实点击测不了。 -->
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(VelaAvaloniaVersion)" />
   </ItemGroup>
-
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
     <PackageVersion Include="StackExchange.Redis" Version="3.1.31" />
   </ItemGroup>
-
   <ItemGroup Label="S3 插件">
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
          测试工程也要引它(环回服务器要按收到的原始请求行重算 SigV4),
          集中管版本正是为了这两处永远一致。 -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.4" />
   </ItemGroup>
-
+  <ItemGroup Label="串口插件">
+    <!-- MIT,微软自家维护,Windows / Linux / macOS 的 RID 原生包齐全。
+         选型取证见宿主仓库 docs/Telnet与串口可行性调研.md §4.1
+         (备选 RJCP.SerialPortStream 是 MS-PL 弱 copyleft,与本仓库的商业授权要另行合规;
+          SerialPort.Net 2021 年即停维护)。
+         注意:这个包带 runtimes/<rid>/native/,插件目录里必须**有那一层** ——
+         没有的话 Linux/macOS 上是运行期 PlatformNotSupportedException,
+         而在 Windows 开发机上永远测不出来(调研文档 §五.2 记的正是这条)。 -->
+    <PackageVersion Include="System.IO.Ports" Version="11.0.0-preview.7.26381.103" />
+  </ItemGroup>
   <ItemGroup Label="测试框架">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.3.3" />

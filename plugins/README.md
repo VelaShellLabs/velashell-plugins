@@ -12,13 +12,21 @@ SDK 契约与开发文档在工具链仓库
 | [VelaShell.Plugin.HelloWorld](VelaShell.Plugin.HelloWorld/) | `velashell.hello-world` | 否 | 隔离进程 | 官方示例:SDK 各能力的最小用法 |
 | [VelaShell.Plugin.Redis](VelaShell.Plugin.Redis/) | `velashell.redis` | 是 | 进程内 | Redis 客户端:键浏览、类型化查看与编辑、命令执行 |
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
+| [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
 | [VelaShell.Plugin.Telnet](VelaShell.Plugin.Telnet/) | `velashell.telnet` | 是 | 进程内 | RFC 854 Telnet 终端:选项协商 + NAWS + 8 位透明(**终端**协议能力的首个使用者) |
 
 装载模式由 `plugin.json` 的 `hostMode` 决定(`isolated` / `inProcess`,默认进程内)。
 隔离插件跑在独立的 `VelaShell.PluginHost` 进程里(实现在主仓库),崩溃不波及宿主;
 S3 与 Redis 因为**协议能力只在进程内可用**必须进程内装载 —— 协议是宿主反向调用插件的
 高频通道,隔离进程的 RPC 只承载插件→宿主方向(清单校验会直接拒绝 protocols + isolated 的组合);
-Telnet 同理。
+Telnet 与串口同理。
+
+> **串口插件要 SDK ≥ 1.5.0**。它是连接表单三件新面的驱动者与首个使用者:
+> `ProtocolFeatures.NoEndpoint`(收起端口栏)、`ProtocolSettingKind.DynamicChoice` +
+> `IProtocolChoiceSource`(候选项在表单打开时现取 —— USB 转串口是热插拔设备)、
+> 以及 `AllowsCustomValue` / `HostKind`(可编辑下拉;主机那一栏也能做成下拉)。
+> 它的 `plugin.json` 里因此有一条 `minSdkVersion`:老宿主上这些成员根本不存在,
+> 不声明就是运行期 `MissingMethodException`。
 
 > **AI 插件不在这里**:`velashell.ai` 住在主仓库 [joesdu/VelaShell](https://github.com/joesdu/VelaShell)
 > 的 `plugins/` 下,随主程序同仓构建、同版发布。理由见那边的 `plugins/README.md` ——

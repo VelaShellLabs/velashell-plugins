@@ -43,7 +43,7 @@
          然后在本仓库
            dotnet build -p:VelaSdkVersion=1.5.0-dev
          nuget.config 里已经预留了指向工具链 artifacts/nuget 的本地源(默认注释掉)。 -->
-    <VelaSdkVersion Condition="'$(VelaSdkVersion)' == ''">1.4.0</VelaSdkVersion>
+    <VelaSdkVersion Condition="'$(VelaSdkVersion)' == ''">1.5.0</VelaSdkVersion>
   </PropertyGroup>
 
   <PropertyGroup>
