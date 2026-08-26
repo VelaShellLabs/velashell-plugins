@@ -381,3 +381,4 @@ FodyWeavers.xsd
 # MSIX 打包中间产物与产出(build/msix/Build-Msix.ps1)
 dist/
 out/
+**/Properties/*

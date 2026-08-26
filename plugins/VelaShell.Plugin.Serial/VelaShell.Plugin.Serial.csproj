@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>VelaShell 串口插件:RS-232 / USB 转串口终端(端口热插拔枚举、波特率/校验/流控制、换行归一化、本地回显、发送节流、Break 与 DTR/RTS 控制),以终端协议能力接入宿主的终端标签。</Description>
+    <!-- 与 plugin.json 的 id 一致;驱动构建后复制到应用输出的 plugins/<目录名>/。 -->
+    <VelaPluginId>velashell.serial</VelaPluginId>
+    <!-- SetupAPI 的互操作声明用 [LibraryImport],它的源生成器产出的封送代码带 unsafe。
+         仅此一处需要;本插件自己的代码里没有一个 unsafe 块。 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 唯一的第三方依赖:MIT,微软自家维护,三平台 RID 原生包齐全。
+         选型取证见宿主仓库 docs/Telnet与串口可行性调研.md §4.1。
+         注:Windows 上的**端口友好名**不走这个包也不走 WMI —— 见 WindowsSerialPortNames.cs,
+         那里直接 P/Invoke SetupAPI,免得为一行"USB-SERIAL CH340"把 System.Management
+         整条 COM 依赖塞进插件目录。 -->
+    <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="VelaShell.PluginSdk.Build" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单测直接驱动换行状态机、端口枚举的纯函数与会话(内部类型)。 -->
+    <InternalsVisibleTo Include="VelaShell.Plugin.Serial.Tests" />
+  </ItemGroup>
+
+</Project>

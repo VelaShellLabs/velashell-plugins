@@ -1,0 +1,38 @@
+{
+  "id": "velashell.serial",
+  "version": "1.5.0",
+  "displayName": "Serial",
+  "description": "RS-232 / USB 转串口终端:端口热插拔枚举、波特率与校验/流控制、换行归一化、本地回显、发送节流,以及 Break 与 DTR/RTS 控制。",
+  "publisher": "velashell",
+  "entry": "VelaShell.Plugin.Serial.dll",
+  "apiLevel": 1,
+  // 用到 SDK 1.5 的协议表单新面(NoEndpoint / DynamicChoice / IProtocolChoiceSource /
+  // HostKind)。不声明的话,在 1.4 宿主上是**运行期** MissingMethodException ——
+  // 而且要等用户点开串口页签那一刻才炸。
+  "minSdkVersion": "1.5.0",
+  "license": "MIT",
+  "homepage": "https://github.com/joesdu/VelaShell",
+  // 协议贡献:连接配置页在**不装载本程序集**的前提下就能画出「Serial」页签,
+  // 用户点到它(或打开一条串口会话)才触发下面的惰性激活 —— 于是 System.IO.Ports
+  // 与它的三平台原生件,在用不到串口的机器上一行都不会被读进内存。
+  //
+  // displayName 这里刻意留英文:清单是静态 JSON,翻不了;页签的本地化名字由激活后
+  // 注册的 ProtocolDescriptor 给(见 SerialPlugin.BuildDescriptor)。
+  //
+  // defaultPort 只是走个过场:描述符声明了 ProtocolFeatures.NoEndpoint,端口那一栏
+  // 在界面上是收起的。清单校验要求它落在 1–65535,给个 22 即可。
+  //
+  // Break / DTR / RTS 三条命令**不在这里声明**:声明式命令在发现期就进命令面板,
+  // 而它们只有在已经开着一条串口会话时才有意义。留到 ActivateAsync 里注册,
+  // 于是它们出现在面板上的时机正好是"能用"的时机(激活即由串口会话触发)。
+  "contributes": {
+    "protocols": [
+      { "id": "velashell.serial", "displayName": "Serial", "defaultPort": 22 }
+    ]
+  },
+  "activationEvents": [
+    "onProtocol:velashell.serial"
+  ]
+  // hostMode 必须是默认的 inProcess:协议是宿主反向调用插件的高频通道
+  // (终端每一次读写都要过去),隔离进程的 RPC 只承载插件→宿主方向。
+}
