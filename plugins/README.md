@@ -2,7 +2,7 @@
 
 本目录存放官方维护的插件,每个插件一个子目录(独立 csproj)。
 SDK 契约与开发文档在工具链仓库
-[joesdu/velashell-plugin-toolchain](https://github.com/joesdu/velashell-plugin-toolchain)
+[VelaShellLabs/velashell-plugin-cli](https://github.com/VelaShellLabs/velashell-plugin-cli)
 ([开发指南](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/dev-guide.md)、[SDK 参考](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/sdk/sdk-reference.md))。
 
 ## 现有插件
