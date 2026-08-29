@@ -42,7 +42,7 @@
   </ItemGroup>
   <ItemGroup Label="串口插件">
     <!-- MIT,微软自家维护,Windows / Linux / macOS 的 RID 原生包齐全。
-         选型取证见宿主仓库 docs/Telnet与串口可行性调研.md §4.1
+         选型取证见 velashell-docs 的 zh/host/Telnet与串口可行性调研.md §4.1
          (备选 RJCP.SerialPortStream 是 MS-PL 弱 copyleft,与本仓库的商业授权要另行合规;
           SerialPort.Net 2021 年即停维护)。
          注意:这个包带 runtimes/<rid>/native/,插件目录里必须**有那一层** ——

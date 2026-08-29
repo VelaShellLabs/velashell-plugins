@@ -20,7 +20,7 @@ VT 引擎、回滚、搜索、会话日志、会话录制、ZMODEM 全部是宿�
 面向 MUD 且自述不提供 VT 仿真,`TentacleSoftware.Telnet` 已废弃。
 而 RFC 854 的协议面很小,本仓库又**已经有完整的 VT 引擎**,缺的只是协商层 ——
 为几百行代码引一个 MUD 导向的依赖不划算。取证见
-[docs/Telnet与串口可行性调研.md](../../docs/Telnet与串口可行性调研.md) §4.2。
+[Telnet 与串口可行性调研](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Telnet与串口可行性调研.md) §4.2。
 
 ## 协商集
 
