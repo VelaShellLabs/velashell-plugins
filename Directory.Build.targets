@@ -10,21 +10,28 @@
 	<!--
 	  Avalonia 版本与 SDK 锁的一致性核对。
 
-	  拆库之后 Avalonia 版本的**权威在工具链仓库** —— VelaShell.PluginSdk.Build 用精确区间
-	  [x.y.z] 锁给插件工程,VelaShell.PluginSdk 再把同一个值经 buildTransitive 导出成
-	  $(VelaSdkPinnedAvaloniaVersion)。本仓库的 VelaAvaloniaVersion 只服务于**测试工程**
-	  (测试宿主要扮演装载方,得显式提供运行时那份 Avalonia)。
+	  拆库之后 Avalonia 版本的**权威在 velashell-plugin-sdk** —— VelaShell.PluginSdk.Build
+	  用精确区间 [x.y.z] 锁给插件工程,VelaShell.PluginSdk 再把同一个值经 buildTransitive
+	  导出成 $(VelaSdkPinnedAvaloniaVersion)。本仓库 Directory.Packages.props 里的
+	  Avalonia* 只服务于**测试工程**(测试宿主要扮演装载方,得显式提供运行时那份)。
 
 	  两边漂了会怎样:测试里 Avalonia 是 A 版、插件编译期看到的是 B 版,headless 会话里
 	  控件类型对不上 —— 而这个现象与"插件装进真宿主后炸掉"长得一模一样,排查时很容易
 	  怀疑到插件代码上去。所以在构建期直接拦住,给一句人话。
 
-	  升 SDK 的动作因此是两步:改 VelaSdkVersion,然后按这里的报错把 VelaAvaloniaVersion 跟上。
+	  升 SDK 的动作因此是两步:在 VS 的 NuGet 包管理器里升 VelaShell.PluginSdk.Build,
+	  然后按这里的报错把 Directory.Packages.props 的三个 Avalonia* 跟上。
+
+	  ⚠️ 基准直接从 CPM 的 PackageVersion 上读回来,不再在 Directory.Build.props 里
+	     另存一份属性副本 —— Version="$(...)" 会让包管理器认不出这条依赖。
 	-->
 	<Target Name="VerifyAvaloniaMatchesSdk" BeforeTargets="BeforeBuild"
-	        Condition="'$(VelaSdkPinnedAvaloniaVersion)' != '' and '$(VelaAvaloniaVersion)' != ''">
-		<Error Condition="'$(VelaSdkPinnedAvaloniaVersion)' != '$(VelaAvaloniaVersion)'"
+	        Condition="'$(VelaSdkPinnedAvaloniaVersion)' != ''">
+		<PropertyGroup>
+			<_VelaAvaloniaPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia')->'%(Version)')</_VelaAvaloniaPin>
+		</PropertyGroup>
+		<Error Condition="'$(_VelaAvaloniaPin)' != '' and '$(VelaSdkPinnedAvaloniaVersion)' != '$(_VelaAvaloniaPin)'"
 		       Code="VELAP1000"
-		       Text="Avalonia 版本与 SDK 锁的不一致:VelaShell.PluginSdk $(VelaSdkVersion) 锁的是 $(VelaSdkPinnedAvaloniaVersion),而本仓库 Directory.Build.props 的 VelaAvaloniaVersion 是 $(VelaAvaloniaVersion)。把后者改成 $(VelaSdkPinnedAvaloniaVersion)(Directory.Packages.props 里的 Avalonia* 版本取的就是它)。" />
+		       Text="Avalonia 版本与 SDK 锁的不一致:VelaShell.PluginSdk $(VelaSdkPackageVersion) 锁的是 $(VelaSdkPinnedAvaloniaVersion),而本仓库 Directory.Packages.props 里的 Avalonia 是 $(_VelaAvaloniaPin)。把 Directory.Packages.props 里三个 Avalonia* 都改成 $(VelaSdkPinnedAvaloniaVersion)。" />
 	</Target>
 </Project>

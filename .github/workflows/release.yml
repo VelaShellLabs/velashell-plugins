@@ -9,7 +9,7 @@
 # 那一层的一比一布局,供主仓库发版时下载解开),现已不再产出。
 #
 # 本仓库**不推 nuget.org**:插件的分发形态是 .vpx 与随应用分发的 plugins/ 目录,
-# 不是 NuGet 包。要发 SDK 包请去工具链仓库 joesdu/velashell-plugin-toolchain。
+# 不是 NuGet 包。要发 SDK 包请去 VelaShellLabs/velashell-plugin-sdk 或 velashell-plugin-cli。
 #
 # 🔑 需要的仓库机密(只此一个):
 #   KEY_PEM_FILE   .vpx 签名私钥(P-256 PKCS#8 PEM)的 base64。缺了它发布**直接失败** ——

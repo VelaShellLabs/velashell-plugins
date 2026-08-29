@@ -10,7 +10,9 @@ Redis、S3、Telnet、串口,外加示例插件 HelloWorld。
 | 仓库 | 管什么 |
 | --- | --- |
 | [joesdu/VelaShell](https://github.com/joesdu/VelaShell) | 主程序(宿主) |
-| [joesdu/velashell-plugin-toolchain](https://github.com/joesdu/velashell-plugin-toolchain) | 插件 SDK 与工具链:契约程序集、测试替身、构建包、`vela-plugin`、`dotnet new` 模板 |
+| [VelaShellLabs/velashell-plugin-sdk](https://github.com/VelaShellLabs/velashell-plugin-sdk) | 契约程序集与测试替身:`VelaShell.PluginSdk`、`VelaShell.PluginSdk.Testing` |
+| [VelaShellLabs/velashell-plugin-cli](https://github.com/VelaShellLabs/velashell-plugin-cli) | 构建包与命令行:`VelaShell.PluginSdk.Build`、`vela-plugin` |
+| [VelaShellLabs/velashell-plugin-templates](https://github.com/VelaShellLabs/velashell-plugin-templates) | `dotnet new` 模板:`VelaShell.Plugin.Templates` |
 | **本仓库** | 第一方插件本身(AI 插件除外,见下) |
 
 本仓库的插件与第三方插件走**完全同一条路径** —— 从 nuget.org 引用

@@ -29,39 +29,25 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <!-- ── 插件 SDK 的版本 ────────────────────────────────────────────────────
-         本仓库的插件与第三方插件走**完全同一条路径**:从 nuget.org 引用
-         VelaShell.PluginSdk.Build(契约程序集 + 与宿主一致的 Avalonia + AXAML 编译器 +
-         plugin.json 处理 + 清单校验 + `-t:PackVpx`)。第一方插件因此天然是 SDK 包的
-         第一个用户 —— 包坏了我们自己先撞上,而不是等插件作者来报。
+  <!--
+    ⚠️ NuGet 依赖的版本号**一律不在这里定义**。本仓库启用了 CPM,全部写在
+    Directory.Packages.props 的 PackageVersion 上,用 VS 的 NuGet 包管理器直接升即可。
 
-         源码在 joesdu/velashell-plugin-toolchain,那个仓库只管 SDK 与工具链,不再放插件。
+    两条相关纪律:
+      · 插件工程只引 VelaShell.PluginSdk.Build 一个包(契约 + 与宿主一致的 Avalonia +
+        AXAML 编译器 + plugin.json 处理 + 清单校验 + -t:PackVpx 全随它到位),
+        本仓库的第一方插件与第三方插件走**完全同一条路径**;
+      · Avalonia 只出现在**测试工程**(测试宿主扮演装载方,得提供运行时那份),
+        版本必须与 SDK 锁的一致 —— Directory.Build.targets 的 VerifyAvaloniaMatchesSdk
+        在构建期核对(VELAP1000)。
 
-         本地联调未发布的 SDK:在工具链仓库跑
-           dotnet pack plugin-sdk/... -o artifacts/nuget -p:VelaSdkVersion=1.5.0-dev
-         然后在本仓库
-           dotnet build -p:VelaSdkVersion=1.5.0-dev
-         nuget.config 里已经预留了指向工具链 artifacts/nuget 的本地源(默认注释掉)。 -->
-    <VelaSdkVersion Condition="'$(VelaSdkVersion)' == ''">1.5.0</VelaSdkVersion>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <!-- 插件与宿主必须用同一版本的 Avalonia:装载器强制让 Avalonia* 回落到宿主那一套
-         (见宿主的 PluginAssemblyLoadContext),版本不一致时表现为跨 ALC 的控件类型对不上。
-
-         **这个版本号的权威在工具链仓库**:VelaShell.PluginSdk.Build 用精确区间 [x.y.z]
-         把它锁给所有插件工程,所以插件工程根本不需要自己写 Avalonia 的 PackageReference。
-         这里留这两个属性只为**测试工程**用 —— 测试宿主要扮演"装载方",得显式提供
-         运行时那份 Avalonia,版本必须与 SDK 锁的一致。升 SDK 时这两处要跟着核对
-         (Directory.Build.targets 的 VerifyAvaloniaMatchesSdk 会在构建期替你比一遍)。 -->
-    <VelaAvaloniaVersion>12.1.1</VelaAvaloniaVersion>
-  </PropertyGroup>
+    本地联调一版还没发布的 SDK:见 nuget.config 里那条注释掉的本地源。
+  -->
 
   <PropertyGroup>
   	<Authors>joesdu</Authors>
   	<RepositoryType>git</RepositoryType>
-  	<RepositoryUrl>https://github.com/joesdu/velashell-plugins</RepositoryUrl>
+  	<RepositoryUrl>https://github.com/VelaShellLabs/velashell-plugins</RepositoryUrl>
   	<GenerateAssemblyConfigurationAttribute>True</GenerateAssemblyConfigurationAttribute>
   	<GenerateAssemblyCompanyAttribute>True</GenerateAssemblyCompanyAttribute>
   	<GenerateAssemblyProductAttribute>True</GenerateAssemblyProductAttribute>
