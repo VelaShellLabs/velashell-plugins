@@ -4,7 +4,7 @@ Redis / Valkey 的完整界面客户端。以**工作台连接类型**(`contribu
 在连接配置页里与 SSH/SFTP/FTP 同为一等公民,而连接对话框、凭据加密落盘、登录弹窗、
 云同步、会话树与最近连接全部由宿主复用。
 
-设计与取舍见 [`docs/Redis客户端插件化调研与设计.md`](../../docs/Redis客户端插件化调研与设计.md)。
+设计与取舍见 [Redis 客户端插件化调研与设计](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Redis客户端插件化调研与设计.md)。
 
 ---
 

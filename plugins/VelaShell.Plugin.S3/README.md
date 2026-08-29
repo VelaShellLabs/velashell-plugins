@@ -2,8 +2,8 @@
 
 S3 兼容对象存储的官方插件:Amazon S3、MinIO、Ceph RGW、阿里云 OSS、腾讯云 COS、Cloudflare R2 等。
 
-- 设计与取舍:[`docs/S3协议插件化设计.md`](../../docs/S3协议插件化设计.md)
-- 协议能力域用法:[`docs/plugins/dev-guide.md`](../../docs/plugins/dev-guide.md) §5.13
+- 设计与取舍:[S3 协议插件化设计](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/S3协议插件化设计.md)
+- 协议能力域用法:[开发指南](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/dev-guide.md) §5.13
 
 ## 它做了什么
 
