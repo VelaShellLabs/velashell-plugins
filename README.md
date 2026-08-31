@@ -1,6 +1,6 @@
 # VelaShell 第一方插件
 
-> 当前版本 **1.5.0** · SDK **1.5.0**
+> 当前版本 **2.0.0** · SDK **2.0.0**
 
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
 Redis、S3、Telnet、串口,外加示例插件 HelloWorld。
