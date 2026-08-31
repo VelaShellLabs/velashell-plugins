@@ -16,7 +16,8 @@
     <!-- ── 本仓库的发行版本号 ─────────────────────────────────────────────────
          本仓库所有插件程序集共用它。CI 发版时用 -p:VelaPluginsVersion= 覆盖(取自 Release 标签)。
 
-         ⚠️ 它**不是** SDK 版本(见下面的 VelaSdkVersion),也**不是**单个插件的版本 ——
+         ⚠️ 它**不是** SDK 版本(那个在 Directory.Packages.props 的 PackageVersion 上,
+         本文件里没有 VelaSdkVersion),也**不是**单个插件的版本 ——
          后者写在各插件的 plugin.json 里,决定 .vpx 文件名与宿主看到的插件版本,
          各插件各自演进,互不牵连。这里这个号只回答"这一批插件是哪次发布出去的"。 -->
     <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">1.5.0</VelaPluginsVersion>

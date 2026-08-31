@@ -168,12 +168,17 @@ jobs:
       - name: Verify every .vpx is signed
         shell: pwsh
         run: |
-          $sdk = [regex]::Match((Get-Content -Raw Directory.Build.props), '<VelaSdkVersion[^>]*>([^<]+)</VelaSdkVersion>').Groups[1].Value
-          if ([string]::IsNullOrWhiteSpace($sdk)) { throw "Could not read VelaSdkVersion from Directory.Build.props" }
+          # 版本号读的是 Directory.Packages.props,不是 Directory.Build.props ——
+          # 本仓库启用了 CPM,NuGet 依赖的版本一律写在 PackageVersion 上。
+          # (旧写法从 Directory.Build.props 读 <VelaSdkVersion>,那个属性在改用 CPM 时
+          #  已经删掉了,于是这一步在发版当天才炸 "Could not read VelaSdkVersion"。)
+          $packagesProps = Get-Content -Raw Directory.Packages.props
+          $build = [regex]::Match($packagesProps, '<PackageVersion[^>]*Include="VelaShell\.PluginSdk\.Build"[^>]*Version="([^"]+)"').Groups[1].Value
+          if ([string]::IsNullOrWhiteSpace($build)) { throw "Could not read the VelaShell.PluginSdk.Build PackageVersion from Directory.Packages.props" }
           # 打包器随 VelaShell.PluginSdk.Build 包分发,上一步刚还原过,直接从包缓存里取,
           # 免得为了读一次包再装一个全局工具(版本还可能与打包用的那份不一致)。
-          $cli = Join-Path $env:USERPROFILE ".nuget/packages/velashell.pluginsdk.build/$sdk/tools/net11.0/VelaShell.Plugin.Cli.dll"
-          if (-not (Test-Path $cli)) { throw "vela-plugin not found at $cli" }
+          $cli = Join-Path $env:USERPROFILE ".nuget/packages/velashell.pluginsdk.build/$build/tools/net11.0/VelaShell.Plugin.Cli.dll"
+          if (-not (Test-Path $cli)) { throw "vela-plugin not found at $cli (VelaShell.PluginSdk.Build $build)" }
 
           $packages = @(Get-ChildItem artifacts/release/*.vpx)
           if ($packages.Count -eq 0) { throw "No .vpx found in artifacts/release." }
