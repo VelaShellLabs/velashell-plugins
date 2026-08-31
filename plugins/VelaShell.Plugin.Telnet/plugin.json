@@ -1,11 +1,11 @@
 {
   "id": "velashell.telnet",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "displayName": "Telnet",
   "description": "RFC 854 Telnet 终端:选项协商(ECHO / SGA / TERMINAL-TYPE / NAWS / BINARY)、窗口尺寸上报与 8 位透明传输。",
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.Telnet.dll",
-  "apiLevel": 1,
+  "apiLevel": 2,
   "license": "MIT",
   "homepage": "https://github.com/joesdu/VelaShell",
   // 协议贡献:连接配置页在**不装载本程序集**的前提下就能画出 Telnet 页签,
