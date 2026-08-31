@@ -16,11 +16,17 @@
     <!-- ── 本仓库的发行版本号 ─────────────────────────────────────────────────
          本仓库所有插件程序集共用它。CI 发版时用 -p:VelaPluginsVersion= 覆盖(取自 Release 标签)。
 
-         ⚠️ 它**不是** SDK 版本(那个在 Directory.Packages.props 的 PackageVersion 上,
-         本文件里没有 VelaSdkVersion),也**不是**单个插件的版本 ——
-         后者写在各插件的 plugin.json 里,决定 .vpx 文件名与宿主看到的插件版本,
-         各插件各自演进,互不牵连。这里这个号只回答"这一批插件是哪次发布出去的"。 -->
-    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">1.5.0</VelaPluginsVersion>
+         ⚠️ 它**不是** SDK 版本 —— 那个在 Directory.Packages.props 的 PackageVersion 上
+         (本文件里没有 VelaSdkVersion,别再往这里加)。两条版本线各走各的:
+         SDK 发 2.0.0 不要求这批插件跟着发。
+
+         ⚠️ 但它**就是**各插件 plugin.json 里的 version —— 本仓库是**统一发布列车**:
+         一次 Release,所有插件同上一个版本号(2026-08-22 起,见 bcddcde)。
+         plugin.json 的 version 决定 .vpx 文件名与宿主里显示的插件版本,由
+         scripts/Set-Version.ps1 统一写,**不要手改**:手改了 CI 的版本同步体检就红,
+         而且那个红灯只会告诉你"和 VelaPluginsVersion 不一致",不会告诉你是谁改错了哪边。
+         要发新版本就跑 `pwsh scripts/Set-Version.ps1 <版本>`,三类落点一起动。 -->
+    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">2.0.0</VelaPluginsVersion>
     <!-- 去掉预发布后缀的数字版(AssemblyVersion/FileVersion 不接受后缀)。 -->
     <VelaPluginsVersionCore>$([System.Text.RegularExpressions.Regex]::Replace($(VelaPluginsVersion), '-.*$', ''))</VelaPluginsVersionCore>
     <Version>$(VelaPluginsVersion)</Version>
