@@ -1,11 +1,11 @@
 {
   "id": "velashell.serial",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "displayName": "Serial",
   "description": "RS-232 / USB 转串口终端:端口热插拔枚举、波特率与校验/流控制、换行归一化、本地回显、发送节流,以及 Break 与 DTR/RTS 控制。",
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.Serial.dll",
-  "apiLevel": 1,
+  "apiLevel": 2,
   // 用到 SDK 1.5 的协议表单新面(NoEndpoint / DynamicChoice / IProtocolChoiceSource /
   // HostKind)。不声明的话,在 1.4 宿主上是**运行期** MissingMethodException ——
   // 而且要等用户点开串口页签那一刻才炸。
