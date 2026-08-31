@@ -19,7 +19,7 @@
          所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
     <PackageVersion Include="VelaShell.PluginSdk.Build" Version="1.5.0" />
     <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="1.5.0" />
+    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="1.5.1" />
   </ItemGroup>
   <ItemGroup Label="Avalonia(仅测试工程用:测试宿主扮演装载方,要提供运行时那份)">
     <!-- ⚠️ 必须与 VelaShell.PluginSdk.Build 锁给插件工程的那一版**完全相同** ——
