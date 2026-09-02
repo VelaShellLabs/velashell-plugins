@@ -17,19 +17,19 @@
     <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
          plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
          所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.0.1" />
+    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.0.2" />
     <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.0.0" />
+    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.0.2" />
   </ItemGroup>
   <ItemGroup Label="Avalonia(仅测试工程用:测试宿主扮演装载方,要提供运行时那份)">
     <!-- ⚠️ 必须与 VelaShell.PluginSdk.Build 锁给插件工程的那一版**完全相同** ——
          Directory.Build.targets 的 VerifyAvaloniaMatchesSdk 在构建期拿 SDK 包导出的
          权威值核对这里(VELAP1000),漂了就红。升 SDK 之后按它的报错把这三行跟上。
          插件工程**不该**出现在这里:Avalonia 由 VelaShell.PluginSdk.Build 用精确区间锁给它们。 -->
-    <PackageVersion Include="Avalonia" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Headless" Version="12.1.1" />
+    <PackageVersion Include="Avalonia" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.2" />
     <!-- 菜单等控件的模板由主题提供:没有它 MenuItem 无模板、不可命中,真实点击测不了。 -->
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
   </ItemGroup>
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
