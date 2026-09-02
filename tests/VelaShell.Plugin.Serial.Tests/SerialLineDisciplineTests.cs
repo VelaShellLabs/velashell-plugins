@@ -33,7 +33,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, (byte)'a', Cr, (byte)'b', Lf);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Cr, (byte)'b', Lf }, result);
+        Assert.AreSequenceEqual([(byte)'a', Cr, (byte)'b', Lf], result);
     }
 
     [TestMethod]
@@ -44,7 +44,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, (byte)'a', Cr, (byte)'b');
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Cr, Lf, (byte)'b' }, result);
+        Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
 
     [TestMethod]
@@ -54,7 +54,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, (byte)'a', Cr, Lf, (byte)'b');
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Cr, Lf, (byte)'b' }, result);
+        Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
 
     [TestMethod]
@@ -65,7 +65,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, Cr, Cr, (byte)'x');
 
-        CollectionAssert.AreEqual(new byte[] { Cr, Lf, Cr, Lf, (byte)'x' }, result);
+        Assert.AreSequenceEqual([Cr, Lf, Cr, Lf, (byte)'x'], result);
     }
 
     [TestMethod]
@@ -77,7 +77,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, (byte)'h', Cr);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'h', Cr, Lf }, result);
+        Assert.AreSequenceEqual([(byte)'h', Cr, Lf], result);
     }
 
     [TestMethod]
@@ -90,8 +90,8 @@ public sealed class SerialLineDisciplineTests
         byte[] first = Receive(discipline, (byte)'h', Cr);
         byte[] second = Receive(discipline, Lf, (byte)'i');
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'h', Cr, Lf }, first);
-        CollectionAssert.AreEqual(new byte[] { (byte)'i' }, second);
+        Assert.AreSequenceEqual([(byte)'h', Cr, Lf], first);
+        Assert.AreSequenceEqual([(byte)'i'], second);
     }
 
     [TestMethod]
@@ -103,8 +103,7 @@ public sealed class SerialLineDisciplineTests
         Receive(discipline, Cr);
         byte[] second = Receive(discipline, (byte)'x', Lf);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'x', Lf }, second,
-            "上一块末尾那个 CR 已经结清,第二块开头不该再补 LF;而这里的裸 LF 也不该被吞");
+        Assert.AreSequenceEqual([(byte)'x', Lf], second, "上一块末尾那个 CR 已经结清,第二块开头不该再补 LF;而这里的裸 LF 也不该被吞");
     }
 
     [TestMethod]
@@ -115,7 +114,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, (byte)'a', Lf, (byte)'b');
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Cr, Lf, (byte)'b' }, result);
+        Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
 
     [TestMethod]
@@ -125,7 +124,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, Cr, Lf);
 
-        CollectionAssert.AreEqual(new byte[] { Cr, Lf }, result);
+        Assert.AreSequenceEqual([Cr, Lf], result);
     }
 
     [TestMethod]
@@ -136,8 +135,7 @@ public sealed class SerialLineDisciplineTests
         Receive(discipline, (byte)'a', Cr);
         byte[] second = Receive(discipline, Lf, (byte)'b');
 
-        CollectionAssert.AreEqual(new byte[] { Lf, (byte)'b' }, second,
-            "上一块以 CR 收尾,这个 LF 就是它的另一半,不该再补一个 CR");
+        Assert.AreSequenceEqual([Lf, (byte)'b'], second, "上一块以 CR 收尾,这个 LF 就是它的另一半,不该再补一个 CR");
     }
 
     // ── 出方向 ──────────────────────────────────────────────────────────────
@@ -149,7 +147,7 @@ public sealed class SerialLineDisciplineTests
         var discipline = new SerialLineDiscipline(Config());
         byte[] payload = [0x00, 0xFF, Cr, Lf, 0x18];
 
-        CollectionAssert.AreEqual(payload, discipline.Transmit(payload).ToArray());
+        Assert.AreSequenceEqual(payload, discipline.Transmit(payload).ToArray());
     }
 
     [TestMethod]
@@ -159,7 +157,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = discipline.Transmit(new byte[] { (byte)'l', (byte)'s', Cr }).ToArray();
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'l', (byte)'s', Cr, Lf }, result);
+        Assert.AreSequenceEqual([(byte)'l', (byte)'s', Cr, Lf], result);
     }
 
     [TestMethod]
@@ -170,7 +168,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = discipline.Transmit(new byte[] { (byte)'a', Cr, Lf, (byte)'b' }).ToArray();
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Cr, Lf, (byte)'b' }, result);
+        Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
 
     [TestMethod]
@@ -178,10 +176,8 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(enterMode: SerialEnterMode.Lf));
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Lf },
-            discipline.Transmit(new byte[] { (byte)'a', Cr }).ToArray());
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', Lf },
-            discipline.Transmit(new byte[] { (byte)'a', Cr, Lf }).ToArray());
+        Assert.AreSequenceEqual([(byte)'a', Lf], discipline.Transmit(new byte[] { (byte)'a', Cr }).ToArray());
+        Assert.AreSequenceEqual([(byte)'a', Lf], discipline.Transmit(new byte[] { (byte)'a', Cr, Lf }).ToArray());
     }
 
     // ── 本地回显 ────────────────────────────────────────────────────────────
@@ -192,7 +188,7 @@ public sealed class SerialLineDisciplineTests
         // 屏幕上的"回车"必须同时回行首并下移;只回不移的话用户敲的下一行会盖住上一行。
         byte[] echo = SerialLineDiscipline.BuildEcho(new byte[] { (byte)'h', (byte)'i', Cr }).ToArray();
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'h', (byte)'i', Cr, Lf }, echo);
+        Assert.AreSequenceEqual([(byte)'h', (byte)'i', Cr, Lf], echo);
     }
 
     [TestMethod]
@@ -200,7 +196,7 @@ public sealed class SerialLineDisciplineTests
     {
         byte[] echo = SerialLineDiscipline.BuildEcho(new byte[] { Cr, Lf }).ToArray();
 
-        CollectionAssert.AreEqual(new byte[] { Cr, Lf }, echo);
+        Assert.AreSequenceEqual([Cr, Lf], echo);
     }
 
     [TestMethod]
@@ -213,7 +209,7 @@ public sealed class SerialLineDisciplineTests
 
         byte[] result = Receive(discipline, payload);
 
-        CollectionAssert.AreEqual(payload, result);
+        Assert.AreSequenceEqual(payload, result);
     }
 
     [TestMethod]
@@ -227,6 +223,6 @@ public sealed class SerialLineDisciplineTests
         byte[] first = Receive(discipline, utf8[..3]);
         byte[] second = Receive(discipline, utf8[3..]);
 
-        CollectionAssert.AreEqual(utf8, first.Concat(second).ToArray());
+        Assert.AreSequenceEqual(utf8, [.. first, .. second]);
     }
 }

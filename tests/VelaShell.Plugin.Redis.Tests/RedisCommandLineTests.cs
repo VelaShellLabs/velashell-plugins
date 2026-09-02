@@ -16,26 +16,26 @@ public sealed class RedisCommandLineTests
     [TestMethod]
     public void Whitespace_SeparatesArguments()
     {
-        CollectionAssert.AreEqual(new[] { "SET", "a", "1" }, Split("SET a 1").ToArray());
+        Assert.AreSequenceEqual(["SET", "a", "1"], [.. Split("SET a 1")]);
     }
 
     [TestMethod]
     public void RepeatedWhitespace_DoesNotProduceEmptyArguments()
     {
-        CollectionAssert.AreEqual(new[] { "SET", "a", "1" }, Split("  SET   a \t 1  ").ToArray());
+        Assert.AreSequenceEqual(["SET", "a", "1"], [.. Split("  SET   a \t 1  ")]);
     }
 
     [TestMethod]
     public void DoubleQuotes_KeepSpacesTogether()
     {
-        CollectionAssert.AreEqual(new[] { "SET", "my key", "hello world" }, Split("SET \"my key\" \"hello world\"").ToArray());
+        Assert.AreSequenceEqual(["SET", "my key", "hello world"], [.. Split("SET \"my key\" \"hello world\"")]);
     }
 
     [TestMethod]
     public void SingleQuotes_AreLiteral()
     {
         // 单引号内不认转义 —— 与 redis-cli 一致。
-        CollectionAssert.AreEqual(new[] { "SET", "a", @"a\nb" }, Split(@"SET a 'a\nb'").ToArray());
+        Assert.AreSequenceEqual(["SET", "a", @"a\nb"], [.. Split(@"SET a 'a\nb'")]);
     }
 
     [TestMethod]

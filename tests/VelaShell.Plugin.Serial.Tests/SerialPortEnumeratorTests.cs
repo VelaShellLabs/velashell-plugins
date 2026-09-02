@@ -17,31 +17,28 @@ public sealed class SerialPortEnumeratorTests
     {
         // 微软的文档明写 GetPortNames 的返回顺序未定义,而字符串序下 COM10 排在 COM2 前面。
         // 插了十来个适配器的机器上,不自己排就是一个乱序下拉。
-        CollectionAssert.AreEqual(
-            new[] { "COM1", "COM2", "COM10", "COM11" },
-            SortNames("COM11", "COM2", "COM10", "COM1"));
+        Assert.AreSequenceEqual(
+            ["COM1", "COM2", "COM10", "COM11"], SortNames("COM11", "COM2", "COM10", "COM1"));
     }
 
     [TestMethod]
     public void Sort_HandlesUnixDeviceNames()
     {
-        CollectionAssert.AreEqual(
-            new[] { "/dev/ttyS0", "/dev/ttyUSB0", "/dev/ttyUSB2", "/dev/ttyUSB10" },
-            SortNames("/dev/ttyUSB10", "/dev/ttyUSB2", "/dev/ttyS0", "/dev/ttyUSB0"));
+        Assert.AreSequenceEqual(
+            ["/dev/ttyS0", "/dev/ttyUSB0", "/dev/ttyUSB2", "/dev/ttyUSB10"], SortNames("/dev/ttyUSB10", "/dev/ttyUSB2", "/dev/ttyS0", "/dev/ttyUSB0"));
     }
 
     [TestMethod]
     public void Sort_IgnoresLeadingZeroes()
     {
-        CollectionAssert.AreEqual(new[] { "COM007", "COM8" }, SortNames("COM8", "COM007"));
+        Assert.AreSequenceEqual(["COM007", "COM8"], SortNames("COM8", "COM007"));
     }
 
     [TestMethod]
     public void Sort_IsStableForNamesWithoutDigits()
     {
-        CollectionAssert.AreEqual(
-            new[] { "/dev/cu.Bluetooth-Incoming-Port", "/dev/cu.SLAB_USBtoUART" },
-            SortNames("/dev/cu.SLAB_USBtoUART", "/dev/cu.Bluetooth-Incoming-Port"));
+        Assert.AreSequenceEqual(
+            ["/dev/cu.Bluetooth-Incoming-Port", "/dev/cu.SLAB_USBtoUART"], SortNames("/dev/cu.SLAB_USBtoUART", "/dev/cu.Bluetooth-Incoming-Port"));
     }
 
     // ── Linux / macOS 的友好名 ──────────────────────────────────────────────

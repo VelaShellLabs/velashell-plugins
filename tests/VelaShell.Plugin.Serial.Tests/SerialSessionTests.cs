@@ -63,7 +63,7 @@ public sealed class SerialSessionTests
 
         byte[] got = await ReadExactAsync(session, 4);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'a', 0x0D, 0x0A, (byte)'b' }, got);
+        Assert.AreSequenceEqual(new byte[] { (byte)'a', 0x0D, 0x0A, (byte)'b' }, got);
     }
 
     [TestMethod]
@@ -159,7 +159,7 @@ public sealed class SerialSessionTests
 
         await session.WriteAsync(new byte[] { (byte)'l', (byte)'s', 0x0D }, CancellationToken.None);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'l', (byte)'s', 0x0D }, port.Written);
+        Assert.AreSequenceEqual(new byte[] { (byte)'l', (byte)'s', 0x0D }, port.Written);
     }
 
     [TestMethod]
@@ -170,7 +170,7 @@ public sealed class SerialSessionTests
 
         await session.WriteAsync(new byte[] { (byte)'x', 0x0D }, CancellationToken.None);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'x', 0x0D, 0x0A }, port.Written);
+        Assert.AreSequenceEqual(new byte[] { (byte)'x', 0x0D, 0x0A }, port.Written);
     }
 
     [TestMethod]
@@ -183,9 +183,8 @@ public sealed class SerialSessionTests
         await session.WriteAsync(new byte[] { (byte)'A', 0x0D }, CancellationToken.None);
         byte[] echoed = await ReadExactAsync(session, 3);
 
-        CollectionAssert.AreEqual(new byte[] { (byte)'A', 0x0D, 0x0A }, echoed);
-        CollectionAssert.AreEqual(new byte[] { (byte)'A', 0x0D }, port.Written,
-            "回显只影响屏幕:线上不该多出那个补显用的 LF");
+        Assert.AreSequenceEqual(new byte[] { (byte)'A', 0x0D, 0x0A }, echoed);
+        Assert.AreSequenceEqual(new byte[] { (byte)'A', 0x0D }, port.Written, "回显只影响屏幕:线上不该多出那个补显用的 LF");
     }
 
     [TestMethod]
@@ -261,7 +260,7 @@ public sealed class SerialSessionTests
 
         Assert.IsTrue(await session.SendBreakAsync(CancellationToken.None));
 
-        CollectionAssert.AreEqual(new[] { true, false }, port.BreakStates);
+        Assert.AreSequenceEqual([true, false], port.BreakStates);
     }
 
     [TestMethod]

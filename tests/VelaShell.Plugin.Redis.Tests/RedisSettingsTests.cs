@@ -166,11 +166,11 @@ public sealed class RedisSettingsTests
 
         ProtocolSettingVisibility master = fields.Single(f => f.Key == "masterName").VisibleWhen!;
         Assert.AreEqual("mode", master.Key);
-        CollectionAssert.AreEquivalent(new[] { "sentinel" }, master.Values.ToArray());
+        Assert.AreSequenceEqual(["sentinel"], [.. master.Values], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
 
         ProtocolSettingVisibility database = fields.Single(f => f.Key == "database").VisibleWhen!;
         Assert.AreEqual("mode", database.Key);
-        CollectionAssert.AreEquivalent(new[] { "standalone", "sentinel" }, database.Values.ToArray());
+        Assert.AreSequenceEqual(["standalone", "sentinel"], [.. database.Values], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
 
         // 每一条条件指向的键都必须是同一张表里真实存在的字段。
         foreach (ProtocolSettingField declared in fields.Where(f => f.VisibleWhen is not null))

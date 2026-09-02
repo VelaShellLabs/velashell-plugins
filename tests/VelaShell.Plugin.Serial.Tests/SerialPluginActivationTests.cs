@@ -88,9 +88,8 @@ public sealed class SerialPluginActivationTests
         ProtocolDescriptor descriptor = await ActivateAsync(context);
 
         string[] mainForm = [.. descriptor.Fields.Where(field => !field.IsAdvanced).Select(field => field.Key)];
-        CollectionAssert.AreEquivalent(
-            new[] { "baudRate", "dataBits", "stopBits", "parity", "flowControl", "enterMode" },
-            mainForm);
+        Assert.AreSequenceEqual(
+            ["baudRate", "dataBits", "stopBits", "parity", "flowControl", "enterMode"], mainForm, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -116,15 +115,13 @@ public sealed class SerialPluginActivationTests
         await ActivateAsync(context);
 
         string[] ids = [.. context.RecordingCommands.Registered.Select(command => command.Id)];
-        CollectionAssert.AreEquivalent(
-            new[]
-            {
+        Assert.AreSequenceEqual(
+            [
                 "velashell.serial.break",
                 "velashell.serial.resetBoard",
                 "velashell.serial.toggleDtr",
                 "velashell.serial.toggleRts"
-            },
-            ids);
+            ], ids, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]

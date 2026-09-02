@@ -22,10 +22,8 @@ public sealed class RedisStoreTests
         await store.SaveFavoritesAsync("redis.example:6379", ["user:1", "lock:a"]);
         await store.SaveFavoritesAsync("10.0.0.2:6379", ["other:1"]);
 
-        CollectionAssert.AreEqual(new[] { "user:1", "lock:a" },
-            (await store.LoadFavoritesAsync("redis.example:6379")).ToArray());
-        CollectionAssert.AreEqual(new[] { "other:1" },
-            (await store.LoadFavoritesAsync("10.0.0.2:6379")).ToArray());
+        Assert.AreSequenceEqual(["user:1", "lock:a"], [.. (await store.LoadFavoritesAsync("redis.example:6379"))]);
+        Assert.AreSequenceEqual(["other:1"], [.. (await store.LoadFavoritesAsync("10.0.0.2:6379"))]);
     }
 
     [TestMethod]
@@ -48,9 +46,8 @@ public sealed class RedisStoreTests
         await store.AppendHistoryAsync("host:6379", "GET a");
         await store.AppendHistoryAsync("host:6379", "GET b");
 
-        CollectionAssert.AreEqual(
-            new[] { "PING", "GET a", "GET b" },
-            (await store.LoadHistoryAsync("host:6379")).ToArray());
+        Assert.AreSequenceEqual(
+            ["PING", "GET a", "GET b"], [.. (await store.LoadHistoryAsync("host:6379"))]);
     }
 
     [TestMethod]
@@ -62,8 +59,8 @@ public sealed class RedisStoreTests
         await store.AppendHistoryAsync("a:6379", "PING");
         await store.AppendHistoryAsync("b:6379", "INFO");
 
-        CollectionAssert.AreEqual(new[] { "PING" }, (await store.LoadHistoryAsync("a:6379")).ToArray());
-        CollectionAssert.AreEqual(new[] { "INFO" }, (await store.LoadHistoryAsync("b:6379")).ToArray());
+        Assert.AreSequenceEqual(["PING"], [.. (await store.LoadHistoryAsync("a:6379"))]);
+        Assert.AreSequenceEqual(["INFO"], [.. (await store.LoadHistoryAsync("b:6379"))]);
     }
 
     [TestMethod]

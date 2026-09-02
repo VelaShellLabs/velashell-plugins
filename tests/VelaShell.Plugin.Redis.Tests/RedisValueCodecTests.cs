@@ -28,7 +28,7 @@ public sealed class RedisValueCodecTests
                 $"{codec} 压缩失败:{packError}");
             Assert.IsTrue(RedisValueCodec.TryDecompress(packed, codec, out byte[] back, out string? unpackError),
                 $"{codec} 解压失败:{unpackError}");
-            CollectionAssert.AreEqual(Json, back, $"{codec} 往返丢字节。");
+            Assert.AreSequenceEqual(Json, back, $"{codec} 往返丢字节。");
             Assert.IsTrue(RedisValueCodec.IsReversible(codec), $"{codec} 两个方向都做得到,应判为可逆。");
         }
     }
@@ -38,7 +38,7 @@ public sealed class RedisValueCodecTests
     public void None_IsIdentityAndReversible()
     {
         Assert.IsTrue(RedisValueCodec.TryDecompress(Json, RedisCompression.None, out byte[] same, out _));
-        CollectionAssert.AreEqual(Json, same);
+        Assert.AreSequenceEqual(Json, same);
         Assert.IsTrue(RedisValueCodec.IsReversible(RedisCompression.None));
     }
 
