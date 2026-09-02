@@ -151,7 +151,9 @@ public sealed class Loc(string locale)
         ["Redis_Delete"] = "Delete",
         ["Redis_SetTtl"] = "Change TTL",
         ["Redis_Persist"] = "Remove expiry",
-        ["Redis_TtlPlaceholder"] = "900 · 15m · 2h30m · 2026-08-20 12:00",
+        // 输入框里只放"不填会怎样";**格式清单放不进 180px**,它属于右边的回显位。
+        ["Redis_TtlPlaceholder"] = "Leave TTL unchanged",
+        ["Redis_TtlFormatHint"] = "Empty leaves it alone; accepts 900 / 15m / 2h30m / an absolute time",
         ["Redis_TtlPreview"] = "Expires {0} (in {1})",
         ["Redis_TtlInvalid"] = "Cannot read that as a duration or a point in time",
         ["Redis_NewFieldPlaceholder"] = "field",
@@ -162,6 +164,8 @@ public sealed class Loc(string locale)
         ["Redis_RenameExistsTitle"] = "{0} already exists",
         ["Redis_RenameExistsBody"] =
             "RENAME would overwrite it silently — that is a data loss you cannot undo. Overwrite anyway?",
+        // 工具条上那句是**说明**,不是问句 —— 问句属于确认框(RenameExistsBody)。
+        ["Redis_RenameNote"] = "Uses RENAMENX, never a silent overwrite — it stops and asks if the target exists",
         ["Redis_Overwrite"] = "Overwrite",
         ["Redis_DeleteKeyTitle"] = "Delete {0}?",
         ["Redis_DeleteKeyBody"] = "The key and its value are gone for good. Redis has no undo.",
@@ -265,6 +269,171 @@ public sealed class Loc(string locale)
             "This server reports itself as a cluster, but the connection is set to Standalone. Switch 部署形态 to Cluster — otherwise the key tree stays empty.",
         ["Redis_ModeMismatchStandalone"] =
             "This server is not a cluster, but the connection is set to Cluster. Switch 部署形态 to Standalone.",
+
+        // ── 文档头 / 键空间工具条 ──
+        ["Redis_AutoRefreshEvery"] = "Auto refresh {0}s",
+        ["Redis_AutoRefreshHint"] =
+            "Refreshes the open drawer tab and the selected key. It never re-sweeps the keyspace — that is what Rescan is for. "
+            + "While you have unsaved edits it leaves the key detail alone, so a background refresh cannot overwrite what you are typing.",
+        ["Redis_AutoRefreshHeldNotice"] =
+            "Auto refresh is holding the key detail: you have unsaved edits. Save or discard them and it resumes.",
+        ["Redis_Import"] = "Import",
+        ["Redis_Export"] = "Export",
+        ["Redis_DbKeyCount"] = "{0} keys",
+        ["Redis_DbSize"] = "DBSIZE {0}",
+        ["Redis_NewKey"] = "New key",
+        ["Redis_Rescan"] = "Rescan",
+        ["Redis_MultiSelect"] = "Multi-select",
+        ["Redis_ScanCursor"] = "cursor {0}",
+        ["Redis_ScannedCountShort"] = "scanned {0}",
+        ["Redis_ScanNotDone"] = "not finished (the count is what has been scanned)",
+        ["Redis_ScanCursorZero"] = "cursor is back to 0 — this prefix is fully scanned",
+
+        // ── 批量 ──
+        ["Redis_BatchSelected"] = "{0} keys selected",
+        ["Redis_BatchCopyNames"] = "Copy key names",
+        ["Redis_BatchDelete"] = "Delete selected",
+        ["Redis_BatchDeleteTitle"] = "Delete {0} keys?",
+        ["Redis_BatchDeleteBody"] =
+            "This is the “dangerous” tier — one confirmation, no typed phrase. UNLINK is used rather than DEL: deleting a million-element collection with DEL blocks the whole instance, while UNLINK hands the reclaim to a background thread.",
+        ["Redis_BatchDeleted"] = "Deleted {0} keys",
+        ["Redis_BatchCopied"] = "Copied {0} key names",
+        ["Redis_BatchNothing"] = "No keys selected",
+
+        // ── 键详情头 ──
+        ["Redis_CopyKeyName"] = "Copy key name",
+        ["Redis_Reload"] = "Reload",
+        ["Redis_DeleteUnlink"] = "Delete (UNLINK)",
+        ["Redis_MemoryUsage"] = "MEMORY USAGE {0}",
+        ["Redis_IdleFor"] = "idle {0}",
+
+        // ── 解码链 ──
+        ["Redis_ViewGroup"] = "View",
+        ["Redis_DecompressGroup"] = "Decompress",
+        ["Redis_DeserializeGroup"] = "Deserialize",
+        ["Redis_CodecNone"] = "None",
+        ["Redis_ValueFormatJson"] = "JSON",
+        ["Redis_ChainReversible"] = "chain is reversible · editable",
+        ["Redis_ChainReadOnly"] = "chain is not reversible · read-only",
+        ["Redis_ChainExplain"] =
+            "Every step of the current chain ({0}) is reversible, so saving pushes the value back through the same chain. The moment one step is not, saving is disabled and this line names that step.",
+        ["Redis_ChainBlocked"] = "Step “{0}” cannot be reversed: {1}. This value is read-only.",
+        ["Redis_CodecNotBundled"] =
+            "The {0} decoder is not bundled — it needs an extra third-party dependency. The magic bytes are recognised; the bytes are not decoded, and nothing is guessed.",
+        ["Redis_CodecFailed"] = "{0} decoding failed: {1}",
+        ["Redis_CodecDetected"] = "detected {0}",
+        ["Redis_JsonInvalid"] = "not valid JSON: {0}",
+
+        // ── 成员表 ──
+        ["Redis_MemberFilterPlaceholder"] = "{0} MATCH * — filter members",
+        ["Redis_MemberFilterFallback"] = "Lists and streams have no MATCH; this filter runs client-side",
+        ["Redis_SortByLabel"] = "Sort by name",
+        ["Redis_SortByScoreDesc"] = "Sort by score, descending",
+        ["Redis_PrevPage"] = "Previous",
+        ["Redis_NextPage"] = "Next",
+        ["Redis_PageSize"] = "{0} per page",
+        ["Redis_MemberRange"] = "{0}–{1} of {2}",
+        ["Redis_ColumnRank"] = "Rank",
+        ["Redis_ColumnDelta"] = "Δ to previous",
+        ["Redis_ScoreRange"] = "Score range",
+        ["Redis_ScoreMin"] = "min",
+        ["Redis_ScoreMax"] = "max",
+        ["Redis_ColumnShare"] = "Share",
+        ["Redis_CursorZeroLoaded"] = "cursor back to 0 · all {0} entries loaded",
+        ["Redis_CursorMore"] = "cursor {0} · {1} of {2} loaded",
+        ["Redis_TruncationHint"] =
+            "Values over {0} are truncated for display; you are told before editing, and a truncated value is never written back",
+        ["Redis_ScorePrecision"] =
+            "Scores are doubles: past 2^53 precision is lost — what the server returned is shown verbatim",
+        ["Redis_FormatValue"] = "Format",
+        ["Redis_CopyValue"] = "Copy value",
+        ["Redis_SaveKeepTtl"] = "Save (SET KEEPTTL)",
+
+        // ── 状态条 ──
+        ["Redis_LastCommand"] = "Last command {0} · {1}",
+        ["Redis_NoError"] = "No errors",
+
+        // ── 抽屉:监视 / 集群 ──
+        ["Redis_TabMonitor"] = "Monitor",
+        ["Redis_TabCluster"] = "Cluster",
+        ["Redis_MonitorTitle"] = "MONITOR cannot run on this connection",
+        ["Redis_MonitorBody"] =
+            "The client library multiplexes: commands are dispatched to whichever physical connection is free, while MONITOR is connection-level state — once started it owns the whole connection and takes over every reply. So the command is refused honestly before you press Enter, instead of letting you send it and then hang, time out, and blame the network.",
+        ["Redis_MonitorWaySlowlog"] = "Use the slow log instead",
+        ["Redis_MonitorWayKeyspace"] = "Subscribe to __keyevent@0__:*",
+        ["Redis_MonitorWayTerminal"] = "Run redis-cli monitor in a VelaShell terminal",
+        ["Redis_ClusterNotClustered"] = "This server is not a cluster — that is its shape, not an error.",
+        ["Redis_ClusterSummary"] = "{0} · {1} nodes · {2} slots assigned",
+        ["Redis_ClusterNote"] =
+            "A cluster has no multiple databases, so the database picker is locked to db0 with the reason spelled out. The key list SCANs each node separately and merges the pages; MOVED/ASK redirects are handled by the client library.",
+        ["Redis_ColumnNode"] = "Node ID",
+        ["Redis_ColumnRole"] = "Role",
+        ["Redis_ColumnSlots"] = "Slots",
+        ["Redis_ColumnState"] = "State",
+        ["Redis_ClusterOnlyMasters"] = "Masters only",
+        ["Redis_ClusterSortBySlot"] = "Sort by slot",
+        ["Redis_ClusterCopyTopology"] = "Copy topology",
+
+        // ── 抽屉:概览 / 慢日志 / 客户端 / 订阅 / 内存 ──
+        ["Redis_OverviewThroughput"] = "Command throughput · last {0}s (instantaneous_ops_per_sec, sampled once a second)",
+        ["Redis_Now"] = "now",
+        ["Redis_OverviewChartStats"] = "peak {0} · mean {1} · now {2}",
+        ["Redis_OverviewNoSamples"] = "No samples yet — the chart fills in once a second while this drawer is open.",
+        ["Redis_SlowlogThreshold"] = "threshold {0} µs",
+        ["Redis_SlowlogTake"] = "latest {0} entries",
+        ["Redis_SlowlogNote"] =
+            "The slow log is a server-side ring buffer holding only the most recent entries — nothing is kept locally, so resetting it loses the history for everyone.",
+        ["Redis_ClientsFilter"] = "Filter by name",
+        ["Redis_ClientsBusyOnly"] = "Busy only",
+        ["Redis_ClientsSummary"] = "{0} connections",
+        ["Redis_ClientsNote"] =
+            "Rows marked ● are this plugin's own connections and the disconnect button is disabled for them — a client killing itself and then reporting “connection lost” is a silly but common bug.",
+        ["Redis_ColumnSubs"] = "Subs",
+        ["Redis_PubSubPause"] = "Pause",
+        ["Redis_PubSubResume"] = "Resume",
+        ["Redis_PubSubClear"] = "Clear",
+        ["Redis_PubSubAutoScroll"] = "Auto-scroll",
+        ["Redis_PubSubCount"] = "{0} received · ring buffer capped at {1}, oldest dropped",
+        ["Redis_MemorySampleSize"] = "sample {0} keys",
+        ["Redis_MemoryGrouping"] = "group by {0} prefix segment(s)",
+        ["Redis_DownloadValue"] = "Save to file",
+        ["Redis_ValueSaved"] = "Saved {0} ({1}) to {2}",
+
+        // ── 新建键 ──
+        ["Redis_NewKeyTitle"] = "New key",
+        ["Redis_NewKeyName"] = "Key",
+        ["Redis_NewKeyType"] = "Type",
+        ["Redis_NewKeyValue"] = "Value",
+        ["Redis_NewKeyField"] = "Field / score",
+        ["Redis_NewKeyCreate"] = "Create",
+        ["Redis_NewKeyExists"] =
+            "{0} already exists. Creation goes through SET NX and never overwrites — delete it first, or use Save on the detail pane.",
+        ["Redis_NewKeyCreated"] = "Created {0}",
+        ["Redis_NewKeyTtlHint"] = "Empty = no expiry. Accepts 900 / 15m / 2h30m / an absolute timestamp.",
+        ["Redis_NewKeyNamePlaceholder"] = "Key name (binary-safe, \\xNN escapes accepted)",
+        ["Redis_NewKeyFieldPlaceholder"] = "hash field name, or the score for a sorted set",
+
+        // ── 导入 / 导出 ──
+        ["Redis_ExportTitle"] = "Export the selected keys",
+        ["Redis_ImportTitle"] = "Replay a command file",
+        ["Redis_ExportFormat"] = "Format",
+        ["Redis_ExportScope"] = "Scope",
+        ["Redis_ExportPath"] = "File",
+        ["Redis_ExportScopeSelected"] = "the {0} selected keys",
+        ["Redis_ExportScopeScanned"] = "all {0} keys scanned so far",
+        ["Redis_ExportNote"] =
+            "DUMP + RESTORE keeps the serialized bytes together with the encoding and the TTL — the safest thing to replay across versions. JSONL is for humans; binary values are \\xNN-escaped. Streams only travel through DUMP: replaying XADD would hand you new entry ids, which is no longer the same data.",
+        ["Redis_ExportDone"] = "Exported {0} keys · {1} · {2}",
+        ["Redis_ExportSkipped"] = "{0} skipped (expired, deleted, or not expressible in this format)",
+        ["Redis_ImportNote"] =
+            "Replayed line by line into the current database. Every line passes the same three-tier guard, so read-only mode stops the whole run.",
+        ["Redis_ImportDone"] = "Replayed {0} lines · {1} failed",
+        ["Redis_ImportConfirmTitle"] = "Replay {0} into {1}?",
+        ["Redis_ImportConfirmBody"] =
+            "Every line in the file is sent to the server as a command. This is not a transaction: a failure part-way through does not roll back what has already been written.",
+        ["Redis_FileMissing"] = "No such file: {0}",
+        ["Redis_PathRequired"] = "Enter a path first",
+        ["Redis_Close"] = "Close",
     };
 
     private static readonly Dictionary<string, string> Chinese = new(StringComparer.Ordinal)
@@ -371,7 +540,9 @@ public sealed class Loc(string locale)
         ["Redis_Delete"] = "删除",
         ["Redis_SetTtl"] = "改 TTL",
         ["Redis_Persist"] = "去掉过期时间",
-        ["Redis_TtlPlaceholder"] = "900 · 15m · 2h30m · 2026-08-20 12:00",
+        // 输入框里只放"不填会怎样";**格式清单放不进 180px**,它属于右边的回显位。
+        ["Redis_TtlPlaceholder"] = "不修改 TTL",
+        ["Redis_TtlFormatHint"] = "留空即不改;支持 900 / 15m / 2h30m / 绝对时间点",
         ["Redis_TtlPreview"] = "将于 {0} 过期(还剩 {1})",
         ["Redis_TtlInvalid"] = "读不出这是一段时长还是一个时间点",
         ["Redis_NewFieldPlaceholder"] = "字段",
@@ -381,6 +552,8 @@ public sealed class Loc(string locale)
         ["Redis_RenameTo"] = "新键名",
         ["Redis_RenameExistsTitle"] = "{0} 已存在",
         ["Redis_RenameExistsBody"] = "RENAME 会静默覆盖它 —— 那是一次没法撤销的数据丢失。仍要覆盖吗?",
+        // 工具条上那句是**说明**,不是问句 —— 问句属于确认框(RenameExistsBody)。
+        ["Redis_RenameNote"] = "走 RENAMENX,绝不静默覆盖 —— 目标已存在时会停下来问你",
         ["Redis_Overwrite"] = "覆盖",
         ["Redis_DeleteKeyTitle"] = "删除 {0}?",
         ["Redis_DeleteKeyBody"] = "键和它的值就此没了。Redis 没有撤销。",
@@ -473,5 +646,165 @@ public sealed class Loc(string locale)
         ["Redis_ClusterNoDatabases"] = "集群模式只有 db0",
         ["Redis_ModeMismatchCluster"] = "这台服务器自报是集群,而连接配置选的是「独立」。请把部署形态改成「集群」—— 否则键树会一直是空的。",
         ["Redis_ModeMismatchStandalone"] = "这台服务器不是集群,而连接配置选的是「集群」。请把部署形态改成「独立」。",
+
+        // ── 文档头 / 键空间工具条 ──
+        ["Redis_AutoRefreshEvery"] = "自动刷新 {0}s",
+        ["Redis_AutoRefreshHint"] = "刷的是当前抽屉页与选中的键。**不重扫整个键空间** —— 那是「重扫」按钮的事。"
+                                    + "有未保存的编辑时不动键详情,后台刷新不会盖掉你正在打的字。",
+        ["Redis_AutoRefreshHeldNotice"] = "有未保存的编辑,自动刷新暂时不动键详情。保存或撤销后自动恢复。",
+        ["Redis_Import"] = "导入",
+        ["Redis_Export"] = "导出",
+        ["Redis_DbKeyCount"] = "{0} 个键",
+        ["Redis_DbSize"] = "DBSIZE {0}",
+        ["Redis_NewKey"] = "新建键",
+        ["Redis_Rescan"] = "重扫",
+        ["Redis_MultiSelect"] = "多选",
+        ["Redis_ScanCursor"] = "游标 {0}",
+        ["Redis_ScannedCountShort"] = "已扫 {0}",
+        ["Redis_ScanNotDone"] = "尚未扫完(计数是已扫到的)",
+        ["Redis_ScanCursorZero"] = "游标已归零 · 本前缀已扫完",
+
+        // ── 批量 ──
+        ["Redis_BatchSelected"] = "已选 {0} 个键",
+        ["Redis_BatchCopyNames"] = "复制键名",
+        ["Redis_BatchDelete"] = "批量删除",
+        ["Redis_BatchDeleteTitle"] = "删除 {0} 个键?",
+        ["Redis_BatchDeleteBody"] =
+            "这一档是「危」—— 逐次确认即可,不要求手打确认串。用 UNLINK 而不是 DEL:删一个百万元素的集合,DEL 会阻塞整个实例,UNLINK 把回收挪到后台线程。",
+        ["Redis_BatchDeleted"] = "已删除 {0} 个键",
+        ["Redis_BatchCopied"] = "已复制 {0} 个键名",
+        ["Redis_BatchNothing"] = "没有选中任何键",
+
+        // ── 键详情头 ──
+        ["Redis_CopyKeyName"] = "复制键名",
+        ["Redis_Reload"] = "重载",
+        ["Redis_DeleteUnlink"] = "删除 UNLINK",
+        ["Redis_MemoryUsage"] = "MEMORY USAGE {0}",
+        ["Redis_IdleFor"] = "空闲 {0}",
+
+        // ── 解码链 ──
+        ["Redis_ViewGroup"] = "视图",
+        ["Redis_DecompressGroup"] = "解压",
+        ["Redis_DeserializeGroup"] = "反序列化",
+        ["Redis_CodecNone"] = "无",
+        ["Redis_ValueFormatJson"] = "JSON",
+        ["Redis_ChainReversible"] = "链可逆 · 可写回",
+        ["Redis_ChainReadOnly"] = "链不可逆 · 只读",
+        ["Redis_ChainExplain"] =
+            "当前解码链({0})每一步都可逆,所以保存时按同一条链原样压回;链里一旦出现不可逆的一步,保存会被禁用,并由这行字写明是哪一步。",
+        ["Redis_ChainBlocked"] = "「{0}」这一步不可逆:{1}。这个值现在是只读的。",
+        ["Redis_CodecNotBundled"] =
+            "本插件未内置 {0} 解码器 —— 它需要一个额外的第三方依赖。魔数认得出来,但不假装解得开,也不猜。",
+        ["Redis_CodecFailed"] = "{0} 解码失败:{1}",
+        ["Redis_CodecDetected"] = "识别到 {0}",
+        ["Redis_JsonInvalid"] = "不是合法 JSON:{0}",
+
+        // ── 成员表 ──
+        ["Redis_MemberFilterPlaceholder"] = "{0} MATCH * 在成员中过滤",
+        ["Redis_MemberFilterFallback"] = "列表与流没有 MATCH,这一栏退回客户端逐行筛",
+        ["Redis_SortByLabel"] = "按名称排序",
+        ["Redis_SortByScoreDesc"] = "按分数倒序",
+        ["Redis_PrevPage"] = "上一页",
+        ["Redis_NextPage"] = "下一页",
+        ["Redis_PageSize"] = "每页 {0}",
+        ["Redis_MemberRange"] = "第 {0}–{1} 项 · 共 {2}",
+        ["Redis_ColumnRank"] = "排名",
+        ["Redis_ColumnDelta"] = "与上一名之差",
+        ["Redis_ScoreRange"] = "分数区间",
+        ["Redis_ScoreMin"] = "下界",
+        ["Redis_ScoreMax"] = "上界",
+        ["Redis_ColumnShare"] = "占比",
+        ["Redis_CursorZeroLoaded"] = "游标已归零 · {0} 项全部载入",
+        ["Redis_CursorMore"] = "游标 {0} · 已载入 {1} / {2}",
+        ["Redis_TruncationHint"] = "单值超过 {0} 自动截断显示;编辑前会提示,绝不把截断结果写回",
+        ["Redis_ScorePrecision"] = "分数是双精度浮点:超过 2^53 会丢精度,这里如实显示服务端返回的值",
+        ["Redis_FormatValue"] = "格式化",
+        ["Redis_CopyValue"] = "复制值",
+        ["Redis_SaveKeepTtl"] = "保存 SET KEEPTTL",
+
+        // ── 状态条 ──
+        ["Redis_LastCommand"] = "上一条命令 {0} · {1}",
+        ["Redis_NoError"] = "错误:无",
+
+        // ── 抽屉:监视 / 集群 ──
+        ["Redis_TabMonitor"] = "监视 MONITOR",
+        ["Redis_TabCluster"] = "集群",
+        ["Redis_MonitorTitle"] = "MONITOR 在这条连接上跑不了",
+        ["Redis_MonitorBody"] =
+            "客户端库用的是多路复用连接:命令会被派到任意一条物理连接上,而 MONITOR 是连接级状态 —— 一旦开启就独占整条连接并接管所有回复。所以这条命令在你按下回车之前就被如实拒绝,而不是让你敲下去然后卡住、超时、以为是网络问题。",
+        ["Redis_MonitorWaySlowlog"] = "改看慢日志 SLOWLOG",
+        ["Redis_MonitorWayKeyspace"] = "订阅 __keyevent@0__:*",
+        ["Redis_MonitorWayTerminal"] = "在 VelaShell 终端跑 redis-cli monitor",
+        ["Redis_ClusterNotClustered"] = "这台服务器不是集群 —— 这是它的形态,不是错误。",
+        ["Redis_ClusterSummary"] = "{0} · {1} 个节点 · 已分配 {2} 槽",
+        ["Redis_ClusterNote"] =
+            "集群没有多库概念,数据库下拉会被锁在 db0 并写明原因;键列表按节点分别 SCAN 再合并,MOVED/ASK 重定向由客户端库处理。",
+        ["Redis_ColumnNode"] = "节点 ID",
+        ["Redis_ColumnRole"] = "角色",
+        ["Redis_ColumnSlots"] = "槽位",
+        ["Redis_ColumnState"] = "状态",
+        ["Redis_ClusterOnlyMasters"] = "只看主节点",
+        ["Redis_ClusterSortBySlot"] = "按槽位排序",
+        ["Redis_ClusterCopyTopology"] = "复制拓扑",
+
+        // ── 抽屉:概览 / 慢日志 / 客户端 / 订阅 / 内存 ──
+        ["Redis_OverviewThroughput"] = "命令吞吐 · 近 {0} 秒(instantaneous_ops_per_sec,每秒采样)",
+        ["Redis_Now"] = "现在",
+        ["Redis_OverviewChartStats"] = "峰值 {0} · 均值 {1} · 现在 {2}",
+        ["Redis_OverviewNoSamples"] = "还没有采到样本 —— 抽屉开着时,图表每秒填一格。",
+        ["Redis_SlowlogThreshold"] = "阈值 {0} µs",
+        ["Redis_SlowlogTake"] = "取最近 {0} 条",
+        ["Redis_SlowlogNote"] =
+            "慢日志是服务端的环形缓冲,只保留最近若干条;本地不留存,所以清空是对所有人清空。",
+        ["Redis_ClientsFilter"] = "按名称过滤",
+        ["Redis_ClientsBusyOnly"] = "只看非空闲",
+        ["Redis_ClientsSummary"] = "{0} 个连接",
+        ["Redis_ClientsNote"] =
+            "标 ● 的是本插件自己的连接,断开按钮对它们禁用 —— 一个客户端把自己 kill 掉再报「连接丢失」,是很蠢但很常见的 bug。",
+        ["Redis_ColumnSubs"] = "订阅",
+        ["Redis_PubSubPause"] = "暂停",
+        ["Redis_PubSubResume"] = "继续",
+        ["Redis_PubSubClear"] = "清空",
+        ["Redis_PubSubAutoScroll"] = "自动滚动",
+        ["Redis_PubSubCount"] = "已收 {0} 条 · 环形缓冲上限 {1},超出丢最旧",
+        ["Redis_MemorySampleSize"] = "抽样 {0} 键",
+        ["Redis_MemoryGrouping"] = "按前缀聚合({0} 段)",
+        ["Redis_DownloadValue"] = "下载为文件",
+        ["Redis_ValueSaved"] = "已把 {0}({1})写到 {2}",
+
+        // ── 新建键 ──
+        ["Redis_NewKeyTitle"] = "新建键",
+        ["Redis_NewKeyName"] = "键名",
+        ["Redis_NewKeyType"] = "类型",
+        ["Redis_NewKeyValue"] = "初始值",
+        ["Redis_NewKeyField"] = "字段 / 分值",
+        ["Redis_NewKeyCreate"] = "创建",
+        ["Redis_NewKeyExists"] =
+            "{0} 已存在。创建走 SET NX,不会覆盖 —— 要覆盖得先删掉它,或改用键详情里的「保存」。",
+        ["Redis_NewKeyCreated"] = "已创建 {0}",
+        ["Redis_NewKeyTtlHint"] = "留空 = 不过期;支持 900 / 15m / 2h30m / 绝对时间点。",
+        ["Redis_NewKeyNamePlaceholder"] = "键名(二进制安全,可用 \\xNN 转义)",
+        ["Redis_NewKeyFieldPlaceholder"] = "哈希的字段名,或有序集合的分值",
+
+        // ── 导入 / 导出 ──
+        ["Redis_ExportTitle"] = "导出选中的键",
+        ["Redis_ImportTitle"] = "重放命令文件",
+        ["Redis_ExportFormat"] = "格式",
+        ["Redis_ExportScope"] = "范围",
+        ["Redis_ExportPath"] = "路径",
+        ["Redis_ExportScopeSelected"] = "选中的 {0} 个键",
+        ["Redis_ExportScopeScanned"] = "已扫到的全部 {0} 个键",
+        ["Redis_ExportNote"] =
+            "DUMP + RESTORE 保的是序列化后的原始字节,连编码和 TTL 一起带走,跨版本回灌最稳;JSONL 只适合人看,二进制值按 \\xNN 转义。流只有 DUMP 这一条路 —— 用 XADD 重放会拿到新的条目 id,那已经不是同一份数据。",
+        ["Redis_ExportDone"] = "已导出 {0} 个键 · {1} · {2}",
+        ["Redis_ExportSkipped"] = "跳过 {0} 个(过期、被删,或这个格式表达不了)",
+        ["Redis_ImportNote"] = "逐行重放进当前库,每一行都过一次同样的三档护栏 —— 只读模式下整条被拦。",
+        ["Redis_ImportDone"] = "已重放 {0} 行 · 失败 {1} 行",
+        ["Redis_ImportConfirmTitle"] = "把 {0} 重放进 {1}?",
+        ["Redis_ImportConfirmBody"] =
+            "文件里的每一行都会当成一条命令发给服务器。这不是一次事务:中途失败不会回滚已经写进去的那些。",
+        ["Redis_FileMissing"] = "找不到文件:{0}",
+        ["Redis_PathRequired"] = "先填一个路径",
+        ["Redis_Close"] = "关闭",
     };
 }

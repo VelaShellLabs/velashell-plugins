@@ -169,6 +169,20 @@ public sealed class RedisKeyRow : ObservableObject
         set => SetProperty(ref field, value);
     }
 
+    /// <summary>
+    /// 多选模式下这一行被勾上了。
+    /// <para>
+    /// **真相不在这里** —— 勾选集按键名存在视图模型上,这个属性只是它在当前这批行上的投影。
+    /// 列表每来一页 SCAN 就整份重排,把勾挂在行对象上会让它在重排时莫名消失。
+    /// 因此 <see cref="AdoptFrom" /> 刻意**不搬**这一项:新算出来的行不知道谁被勾过。
+    /// </para>
+    /// </summary>
+    public bool IsChecked
+    {
+        get;
+        set => SetProperty(ref field, value);
+    }
+
     /// <summary>造一个键行。</summary>
     /// <param name="key">键名。</param>
     /// <param name="depth">缩进层级。</param>

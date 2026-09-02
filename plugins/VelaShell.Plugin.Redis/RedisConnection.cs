@@ -30,6 +30,17 @@ internal sealed partial class RedisConnection : IAsyncDisposable
     /// </summary>
     private bool? _scanTypeSupported;
 
+    /// <summary>
+    /// 这台服务器是否开着集群支持。null = 还没问过。
+    /// <para>
+    /// 与 <see cref="_scanTypeSupported" /> 同一条纪律,但多一层:<b>已经知道答案就不要再问</b>。
+    /// 单机实例上 <c>CLUSTER NODES</c> 每次都回一句 "This instance has cluster support disabled" ——
+    /// 结果被 <see cref="ReadClusterAsync" /> 吃掉了,界面上什么都看不出来,可调试器里
+    /// 每刷新一次运维抽屉就多两条首发异常。记住这一次拒绝,后面直接走空状态。
+    /// </para>
+    /// </summary>
+    private bool? _clusterAvailable;
+
     private RedisConnection(ConnectionMultiplexer mux, RedisSettings settings, RedisServerInfo info)
     {
         _mux = mux;
@@ -408,12 +419,19 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         }
         long length = await LengthAsync(db, redisKey, type).ConfigureAwait(false);
         long memory = -1;
+        long idle = -1;
         if (includeMemory)
         {
-            RedisResult usage = await TryExecuteAsync(db, "MEMORY", "USAGE", redisKey).ConfigureAwait(false);
-            memory = usage.IsNull ? -1 : (long?)usage ?? -1;
+            // 两条一起打包:一个往返。MEMORY USAGE 对大键并不便宜,所以只有详情页才问它。
+            Task<RedisResult> usageTask = TryExecuteAsync(db, "MEMORY", "USAGE", redisKey);
+            Task<RedisResult> idleTask = TryExecuteAsync(db, "OBJECT", "IDLETIME", redisKey);
+            await Task.WhenAll(usageTask, idleTask).ConfigureAwait(false);
+            memory = usageTask.Result.IsNull ? -1 : (long?)usageTask.Result ?? -1;
+            // LFU 策略下服务器只给 FREQ,IDLETIME 会报错 —— TryExecuteAsync 已经把它变成 nil,
+            // 于是这里自然落到 -1(界面据此留空,而不是显示"空闲 0 秒")。
+            idle = idleTask.Result.IsNull ? -1 : (long?)idleTask.Result ?? -1;
         }
-        return new(key, typeName, ttlTask.Result, AsString(encodingTask.Result), length, memory);
+        return new(key, typeName, ttlTask.Result, AsString(encodingTask.Result), length, memory, idle);
     }
 
     /// <summary>读字符串值(超过上限只取前 N 字节,并如实报出完整长度)。</summary>
@@ -447,6 +465,11 @@ internal sealed partial class RedisConnection : IAsyncDisposable
     /// <param name="type">类型名。</param>
     /// <param name="cursor">上一轮游标;首轮传 <c>"0"</c>。</param>
     /// <param name="pageSize">每页行数。</param>
+    /// <param name="match">
+    /// 成员过滤模式(通配)。哈希 / 集合 / 有序集合交给服务端的 <c>MATCH</c>;
+    /// 列表与流没有这个选项,退回客户端逐行筛 —— 口径与键列表上"老服务器没有 SCAN TYPE"
+    /// 时的回落完全一致:<b>界面上写着在过滤,就必须真的在过滤</b>。
+    /// </param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>一页行。</returns>
     public async Task<RedisElementPage> ReadElementsAsync(
@@ -454,6 +477,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         string type,
         string cursor,
         int pageSize,
+        string? match = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -461,15 +485,123 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         IDatabase db = Db();
         var redisKey = key.ToRedisKey();
         string start = string.IsNullOrEmpty(cursor) ? "0" : cursor;
-        return type switch
+        string? pattern = string.IsNullOrWhiteSpace(match) ? null : match;
+        RedisElementPage page = type switch
         {
-            "hash" => await ScanPairsAsync(db, "HSCAN", redisKey, start, pageSize, hasValue: true).ConfigureAwait(false),
-            "set" => await ScanPairsAsync(db, "SSCAN", redisKey, start, pageSize, hasValue: false).ConfigureAwait(false),
-            "zset" => await ScanPairsAsync(db, "ZSCAN", redisKey, start, pageSize, hasValue: true, isScore: true).ConfigureAwait(false),
+            "hash" => await ScanPairsAsync(db, "HSCAN", redisKey, start, pageSize, hasValue: true, match: pattern)
+                .ConfigureAwait(false),
+            "set" => await ScanPairsAsync(db, "SSCAN", redisKey, start, pageSize, hasValue: false, match: pattern)
+                .ConfigureAwait(false),
+            "zset" => await ScanPairsAsync(db, "ZSCAN", redisKey, start, pageSize, hasValue: true, isScore: true, match: pattern)
+                .ConfigureAwait(false),
             "list" => await ReadListWindowAsync(db, redisKey, start, pageSize).ConfigureAwait(false),
             "stream" => await ReadStreamWindowAsync(db, redisKey, start, pageSize).ConfigureAwait(false),
             _ => new([], "0", -1)
         };
+        return pattern is null || type is "hash" or "set" or "zset"
+            ? page
+            : page with { Rows = [.. page.Rows.Where(row => GlobMatch(pattern, row.Label) || GlobMatch(pattern, row.Value))] };
+    }
+
+    /// <summary>
+    /// 按**分数区间**读有序集合的一页(<c>ZRANGEBYSCORE</c> / <c>ZREVRANGEBYSCORE</c>)。
+    /// <para>
+    /// 与 <c>ZSCAN</c> 那条路的区别不只是过滤:<c>ZSCAN</c> <b>不保证顺序</b>,所以它给不出
+    /// 真正的名次;按分数区间读走的是索引分页(<c>LIMIT offset count</c>),顺序由服务端保证,
+    /// 于是"第几名"这一列才是全局的、而不是"这一页里的第几行"。
+    /// </para>
+    /// <para>游标字段在这里放的是**下一页的偏移量**,调用方对两种分页方式因此无感。</para>
+    /// </summary>
+    /// <param name="key">键名。</param>
+    /// <param name="min">下界;空串表示 <c>-inf</c>。</param>
+    /// <param name="max">上界;空串表示 <c>+inf</c>。</param>
+    /// <param name="cursor">上一轮游标(偏移量);首轮传 <c>"0"</c>。</param>
+    /// <param name="pageSize">每页行数。</param>
+    /// <param name="descending">按分数倒序。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>一页行;<c>Total</c> 是**区间内**的成员数。</returns>
+    public async Task<RedisElementPage> ReadSortedSetByScoreAsync(
+        RedisKeyName key,
+        string min,
+        string max,
+        string cursor,
+        int pageSize,
+        bool descending,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        cancellationToken.ThrowIfCancellationRequested();
+        IDatabase db = Db();
+        RedisKey redisKey = key.ToRedisKey();
+        double start = ParseBound(min, double.NegativeInfinity);
+        double stop = ParseBound(max, double.PositiveInfinity);
+        if (start > stop)
+        {
+            // 上下界填反了不该变成一片空白:换过来,并让界面照常显示结果。
+            (start, stop) = (stop, start);
+        }
+        long offset = long.TryParse(cursor, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed)
+                      && parsed > 0
+            ? parsed
+            : 0;
+        long total = await db.SortedSetLengthAsync(redisKey, start, stop).ConfigureAwait(false);
+        SortedSetEntry[] entries = await db.SortedSetRangeByScoreWithScoresAsync(
+            redisKey, start, stop, Exclude.None,
+            descending ? Order.Descending : Order.Ascending,
+            offset, pageSize).ConfigureAwait(false);
+        var rows = new List<RedisElement>(entries.Length);
+        foreach (SortedSetEntry entry in entries)
+        {
+            rows.Add(new(Display(entry.Element), FormatScore(entry.Score), entry.Score));
+        }
+        long next = offset + entries.Length;
+        return new(rows, next >= total || entries.Length == 0 ? "0" : next.ToString(CultureInfo.InvariantCulture), total);
+    }
+
+    /// <summary>把区间端点解析成分数;空串或认不出的写法一律回落到 ±∞(而不是 0)。</summary>
+    private static double ParseBound(string? text, double fallback) =>
+        string.IsNullOrWhiteSpace(text)
+            ? fallback
+            : double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
+                ? value
+                : fallback;
+
+    /// <summary>
+    /// Redis 口径的通配匹配(<c>*</c> / <c>?</c>)。客户端回落路径用 ——
+    /// 服务端的 <c>MATCH</c> 还支持 <c>[abc]</c> 字符类,这里刻意只做两个最常用的元字符,
+    /// 因为**做一半的字符类比不做更坏**:用户会以为它生效了。界面上的成员搜索框
+    /// 只承诺 <c>*</c> 与 <c>?</c>。
+    /// </summary>
+    private static bool GlobMatch(string pattern, string text)
+    {
+        int p = 0, t = 0, star = -1, mark = 0;
+        while (t < text.Length)
+        {
+            if (p < pattern.Length && (pattern[p] == '?' || pattern[p] == text[t]))
+            {
+                p++;
+                t++;
+            }
+            else if (p < pattern.Length && pattern[p] == '*')
+            {
+                star = p++;
+                mark = t;
+            }
+            else if (star >= 0)
+            {
+                p = star + 1;
+                t = ++mark;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        while (p < pattern.Length && pattern[p] == '*')
+        {
+            p++;
+        }
+        return p == pattern.Length;
     }
 
     /// <inheritdoc />
@@ -662,9 +794,18 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         string cursor,
         int pageSize,
         bool hasValue,
-        bool isScore = false)
+        bool isScore = false,
+        string? match = null)
     {
-        RedisResult result = await db.ExecuteAsync(command, [key, cursor, "COUNT", pageSize]).ConfigureAwait(false);
+        var args = new List<object> { key, cursor };
+        if (match is { Length: > 0 })
+        {
+            args.Add("MATCH");
+            args.Add(match);
+        }
+        args.Add("COUNT");
+        args.Add(pageSize);
+        RedisResult result = await db.ExecuteAsync(command, args).ConfigureAwait(false);
         var rows = new List<RedisElement>();
         string next = "0";
         if (!result.IsNull && result.Resp2Type == ResultType.Array)
@@ -905,6 +1046,33 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         {
             Trace.WriteLine($"[Redis] '{command}' unavailable: {ex.Message}");
             return RedisResult.Create(RedisValue.Null);
+        }
+    }
+
+    /// <summary>
+    /// 把一批已经发出去、但不打算再读结果的流水线任务收干净(从 <paramref name="start" /> 起)。
+    /// <para>
+    /// 流水线是"先整批发出,再逐个 await"。一旦中途放弃逐个 await(某条命令报错、
+    /// 于是整条路判定不可用),余下那些任务的异常就没人观察 —— 它们不会消失,只会挪到
+    /// 终结器线程上,以一条与现场对不上号的 <c>UnobservedTaskException</c> 的形式冒出来。
+    /// 这里等它们跑完并吞掉异常:<b>它们的结果我们本来就不要了,要的只是别把垃圾留在身后</b>。
+    /// </para>
+    /// </summary>
+    /// <param name="pending">整批任务。</param>
+    /// <param name="start">从第几个开始收。</param>
+    /// <returns>表示异步操作的任务。</returns>
+    private static async Task ObserveAsync(Task[] pending, int start)
+    {
+        for (int i = start; i < pending.Length; i++)
+        {
+            try
+            {
+                await pending[i].ConfigureAwait(false);
+            }
+            catch
+            {
+                // 故意吞掉:这一批已经判定失败,逐条重复上报只是噪音。
+            }
         }
     }
 

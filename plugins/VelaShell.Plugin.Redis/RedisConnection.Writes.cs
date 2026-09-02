@@ -274,9 +274,21 @@ internal sealed partial class RedisConnection
         {
             pending[i] = db.ExecuteAsync(command, [keys[i]]);
         }
-        foreach (Task<RedisResult> task in pending)
+        // 整批都发出去了,所以哪怕第一条就报错也要把余下的收完再抛 —— 老服务器不认 UNLINK 时
+        // 这一批会**整批**失败,直接让第一条的异常逃出去,剩下的就成了无人观察的失败任务
+        // (调用方还指望靠这个异常去探测 UNLINK,而那些任务的异常要到终结器线程才浮出来)。
+        for (int i = 0; i < pending.Length; i++)
         {
-            RedisResult result = await task.ConfigureAwait(false);
+            RedisResult result;
+            try
+            {
+                result = await pending[i].ConfigureAwait(false);
+            }
+            catch
+            {
+                await ObserveAsync(pending, i + 1).ConfigureAwait(false);
+                throw;
+            }
             total += result.IsNull ? 0 : (long?)result ?? 0;
         }
         return total;

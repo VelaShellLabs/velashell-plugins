@@ -110,8 +110,13 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         Console.DatabaseSelected += database => _ = FollowConsoleDatabaseAsync(database);
 
         InitializeEditing();
+        InitializeDecode();
+        InitializeMembers();
+        InitializeHeader();
         InitializeDrawer();
         InitializeFavorites();
+        InitializeBatch();
+        InitializeOverlays();
         BuildDatabases();
     }
 
@@ -412,12 +417,22 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         {
             SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasSelection));
+            RaisePropertyChanged(nameof(SelectedKeyText));
+            RaisePropertyChanged(nameof(SelectedTypeText));
             RaisePropertyChanged(nameof(SelectedTtlText));
             RaisePropertyChanged(nameof(SelectedMetaText));
+            RaisePropertyChanged(nameof(SelectedSizeText));
             RaisePropertyChanged(nameof(IsStringSelected));
             RaisePropertyChanged(nameof(IsCollectionSelected));
             RaisePropertyChanged(nameof(ShowsScore));
+            RaisePropertyChanged(nameof(ShowsRank));
+            RaisePropertyChanged(nameof(TrailingColumnHeader));
             RaisePropertyChanged(nameof(LabelColumnHeader));
+            RaisePropertyChanged(nameof(MemberFilterPlaceholder));
+            RaisePropertyChanged(nameof(SortLabel));
+            RaisePropertyChanged(nameof(ScorePrecisionHint));
+            CopyKeyNameCommand.RaiseCanExecuteChanged();
+            ReloadKeyCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -452,6 +467,16 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
                     : info.Type is "string"
                         ? $"{info.Length:N0} B"
                         : Loc.Format("Redis_Elements", info.Length.ToString("N0", CultureInfo.CurrentCulture)));
+            }
+            // 拿不到的两项**不占位置**:一句 "MEMORY USAGE —" 只会让人以为测出来是零。
+            if (info.MemoryBytes >= 0)
+            {
+                parts.Add(Loc.Format("Redis_MemoryUsage",
+                    info.MemoryBytes.ToString("N0", CultureInfo.CurrentCulture) + " B"));
+            }
+            if (info.IdleSeconds >= 0)
+            {
+                parts.Add(Loc.Format("Redis_IdleFor", RedisTtl.Describe(TimeSpan.FromSeconds(info.IdleSeconds))));
             }
             return string.Join("  ·  ", parts);
         }
@@ -509,10 +534,12 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
             SetProperty(ref field, value);
             RaisePropertyChanged(nameof(IsTextFormat));
             RaisePropertyChanged(nameof(IsEscapedFormat));
+            RaisePropertyChanged(nameof(IsJsonFormat));
             RaisePropertyChanged(nameof(IsHexFormat));
             RaisePropertyChanged(nameof(CanEditString));
             RaisePropertyChanged(nameof(ValueFormatNotice));
             RaisePropertyChanged(nameof(HasValueFormatNotice));
+            RaiseChainState();
             SaveStringCommand.RaiseCanExecuteChanged();
         }
     } = RedisValueFormat.Text;
@@ -546,11 +573,11 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         }
     } = true;
 
-    /// <summary>形态说明:值是二进制、或当前形态只读时给一行话。</summary>
-    public string ValueFormatNotice =>
-        IsHexFormat ? Loc["Redis_HexReadOnly"]
-        : CanUseTextFormat ? string.Empty
-        : Loc["Redis_BinaryValue"];
+    /// <summary>
+    /// 形态说明。整条解码链的结论都汇到这一行 —— 值是二进制、当前形态只读、
+    /// 某一步解不开、或者链是可逆的因此可以放心编辑,都在这儿说。
+    /// </summary>
+    public string ValueFormatNotice => ChainNotice;
 
     /// <summary>有没有形态说明要显示。</summary>
     public bool HasValueFormatNotice => ValueFormatNotice.Length > 0;
@@ -582,15 +609,16 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
             StatusMessage = Loc["Redis_BinaryValue"];
             return Task.CompletedTask;
         }
-        // 十六进制只读,草稿不可能被改过,直接从原始字节走。
-        byte[] bytes = _valueBytes;
+        // 十六进制只读,草稿不可能被改过,直接从解出来的明文字节走。
+        byte[] bytes = _plainBytes;
         if (!IsHexFormat && !TryEncodeDraft(out bytes))
         {
             return Task.CompletedTask;
         }
         ValueFormat = format;
-        StringValue = RedisValueText.Render(_valueBytes, format);
-        StringDraft = RedisValueText.Render(bytes, format);
+        // 服务端现值按新形态重渲染(顺带刷新说明行与可编辑性);草稿单独保住用户改到一半的内容。
+        RefreshDecodedValue(resetDraft: false);
+        StringDraft = _dumpText.Length > 0 ? _dumpText : RedisValueText.Render(bytes, format);
         RaisePropertyChanged(nameof(IsStringDirty));
         SaveStringCommand.RaiseCanExecuteChanged();
         return Task.CompletedTask;
@@ -660,7 +688,14 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
     public string StatusMessage
     {
         get;
-        private set => SetProperty(ref field, value);
+        private set
+        {
+            SetProperty(ref field, value);
+            // 状态条中间那格是它的派生:有错显示错,没错明说"没有" —— 一格空白读不出
+            // "系统正常"还是"这一格坏了"。
+            RaisePropertyChanged(nameof(ErrorSummary));
+            RaisePropertyChanged(nameof(HasError));
+        }
     } = string.Empty;
 
     /// <summary>
@@ -767,6 +802,10 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         _disposed = true;
         StopScan();
         StopSampling();
+        // 两个计时器都挂在 UI 调度器上:标签页关了还在跳,就是在对一条已经释放的连接发命令。
+        _autoRefreshTimer?.Stop();
+        _autoRefreshTimer = null;
+        StopThroughputSampling();
         // 有确认框正开着就当作取消:不解开那个 TaskCompletionSource,
         // 等在它上面的那条写操作会永远挂着(而它握着连接)。
         Confirmation.Dismiss();
@@ -827,6 +866,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
                     break;
                 }
                 RaisePropertyChanged(nameof(ScanStatus));
+                RaiseHeaderState();
             }
         }
         catch (OperationCanceledException)
@@ -846,6 +886,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
                 IsScanning = false;
                 RaisePropertyChanged(nameof(ScanStatus));
                 RaisePropertyChanged(nameof(IsEmpty));
+                RaiseHeaderState();
             }
         }
     }
@@ -923,6 +964,8 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
             }
         }
         RedisKeyLayout.Sync(Rows, desired);
+        // 勾选态按键名重新投影上去:重排换掉的是行的排布,不是用户勾过哪些键。
+        SyncCheckedFlags();
         UpdateBreadcrumb();
     }
 
@@ -1058,12 +1101,21 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
     private async Task LoadKeyAsync(RedisKeyName key)
     {
         IsLoadingDetail = true;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            RedisKeyInfo info = await _connection.DescribeAsync(key, includeMemory: false).ConfigureAwait(true);
+            // 详情页才问 MEMORY USAGE 与 OBJECT IDLETIME:它们对大键不便宜,
+            // 所以列表那一路(每页几百个键)坚决不带,这里一个键一次是划算的。
+            RedisKeyInfo info = await _connection.DescribeAsync(key, includeMemory: true).ConfigureAwait(true);
             Selected = info;
             Elements.Clear();
             _valueBytes = [];
+            _plainBytes = [];
+            _dumpText = string.Empty;
+            _detected = string.Empty;
+            Compression = RedisCompression.None;
+            Serialization = RedisSerialization.None;
+            ChainNotice = string.Empty;
             CanUseTextFormat = true;
             ValueFormat = RedisValueFormat.Text;
             StringValue = string.Empty;
@@ -1083,9 +1135,11 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
                 RedisStringValue value = await _connection.ReadStringAsync(key).ConfigureAwait(true);
                 // 原始字节留着 —— 它才是真相,界面上那段文本只是它的一种渲染。
                 _valueBytes = value.Bytes;
-                CanUseTextFormat = RedisValueText.IsTextSafe(_valueBytes);
-                ValueFormat = RedisValueText.Detect(_valueBytes);
-                StringValue = RedisValueText.Render(_valueBytes, ValueFormat);
+                // 按魔数试选一次解码链(只有真的解开了才作数),再按选中的链渲染。
+                AutoSelectCodec(_valueBytes);
+                ValueFormat = RedisValueText.Detect(
+                    RedisValueCodec.TryDecompress(_valueBytes, Compression, out byte[] plain, out _) ? plain : _valueBytes);
+                RefreshDecodedValue(resetDraft: true);
                 if (value.IsTruncated)
                 {
                     TruncationNotice = Loc.Format("Redis_Truncated",
@@ -1096,7 +1150,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
             }
             if (IsCollectionSelected)
             {
-                await LoadMoreElementsAsync().ConfigureAwait(true);
+                await ReloadElementsAsync().ConfigureAwait(true);
             }
             else
             {
@@ -1112,43 +1166,29 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         finally
         {
             IsLoadingDetail = false;
+            // 读也要回显:用户点一个键之后,状态条应该说得出刚才问了服务器什么。
+            if (Selected is { IsGone: false } loaded)
+            {
+                NoteCommand($"{ReadCommandFor(loaded.Type)} {key.Display}", Elapsed(started));
+            }
         }
     }
+
+    /// <summary>某个类型的"读它"用的是哪条命令(回显与「填进控制台」共用一份口径)。</summary>
+    private static string ReadCommandFor(string type) => type switch
+    {
+        "string" => "GET",
+        "hash" => "HGETALL",
+        "list" => "LRANGE",
+        "set" => "SMEMBERS",
+        "zset" => "ZRANGE",
+        "stream" => "XRANGE",
+        _ => "TYPE"
+    };
 
     private string _elementCursor = "0";
 
-    private async Task LoadMoreElementsAsync()
-    {
-        if (Selected is not { } info || info.IsGone || info.Key is null)
-        {
-            return;
-        }
-        IsLoadingDetail = true;
-        try
-        {
-            RedisElementPage page = await _connection
-                .ReadElementsAsync(info.Key, info.Type, _elementCursor, PageSize)
-                .ConfigureAwait(true);
-            foreach (RedisElement row in page.Rows)
-            {
-                Elements.Add(new(row));
-            }
-            _elementCursor = page.Cursor;
-            HasMoreElements = !page.IsComplete;
-            PageStatus = page.Total >= 0
-                ? Loc.Format("Redis_PageStatus", Elements.Count.ToString("N0", CultureInfo.CurrentCulture), Approx(page.Total))
-                : Elements.Count.ToString("N0", CultureInfo.CurrentCulture);
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = Loc.Format("Redis_Error", ex.Message);
-            _log.Error($"Reading elements of '{info.Key?.Display}' failed.", ex);
-        }
-        finally
-        {
-            IsLoadingDetail = false;
-        }
-    }
+    private Task LoadMoreElementsAsync() => LoadElementsAsync(_elementCursor, append: true);
 
     private async Task ApplyMatchModeAsync(RedisMatchMode mode)
     {
@@ -1228,7 +1268,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
 /// 而 <c>null</c> 分值在 XAML 里会渲染成空白还是 "0" 取决于转换器,不确定的东西不留给视图。
 /// </summary>
 /// <param name="element">领域模型行。</param>
-public sealed class RedisElementRow(RedisElement element)
+public sealed class RedisElementRow(RedisElement element) : ObservableObject
 {
     /// <summary>字段名 / 索引 / 成员 / 流条目 id。</summary>
     public string Label { get; } = element.Label;
@@ -1240,6 +1280,33 @@ public sealed class RedisElementRow(RedisElement element)
     public string ScoreText { get; } = element.Score is { } score
         ? score.ToString("0.############", CultureInfo.CurrentCulture)
         : string.Empty;
+
+    /// <summary>分值的数值形式(排序与差值计算用);非有序集合为 0。</summary>
+    public double Score { get; } = element.Score ?? 0;
+
+    /// <summary>这一行在整份结果里的序号(从 0 起)。由视图模型按当前页与排序算。</summary>
+    public long Ordinal
+    {
+        get;
+        set => SetProperty(ref field, value);
+    }
+
+    /// <summary>序号列的文案(有序集合是 <c>#1</c> 这样的名次,其余类型是下标)。</summary>
+    public string OrdinalText
+    {
+        get;
+        set => SetProperty(ref field, value);
+    } = string.Empty;
+
+    /// <summary>
+    /// 末列文案:有序集合给"与上一名之差",其余类型给这一行值的字节数。
+    /// <para>两者共用一列不是省地方 —— 它们回答的是同一个问题:这一行有多"重"。</para>
+    /// </summary>
+    public string TrailingText
+    {
+        get;
+        set => SetProperty(ref field, value);
+    } = string.Empty;
 }
 
 /// <summary>数据库下拉里的一项。带键数,省掉"逐个库点进去看有没有东西"的盲测。</summary>

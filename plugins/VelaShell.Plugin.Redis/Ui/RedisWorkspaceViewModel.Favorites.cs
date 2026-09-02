@@ -17,8 +17,25 @@ public sealed partial class RedisWorkspaceViewModel
     /// <summary>收藏的键名(显示形式)。</summary>
     public ObservableCollection<string> Favorites { get; } = [];
 
-    /// <summary>有收藏可选(界面据此显示那个下拉)。</summary>
+    /// <summary>有收藏可选。</summary>
     public bool HasFavorites => Favorites.Count > 0;
+
+    /// <summary>
+    /// 收藏下拉是否展开。
+    /// <para>做成显式开关而不是"有收藏就常驻":检索区上面已经排了过滤框、匹配方式、命令回显、
+    /// 面包屑四行,再常驻一个下拉,键列表就被挤掉一屏。工具条上那个「收藏」按钮管它。</para>
+    /// </summary>
+    public bool IsFavoritesOpen
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    }
+
+    /// <summary>收藏下拉此刻是否可见(要有收藏、且被展开)。</summary>
+    public bool ShowsFavorites => IsFavoritesOpen && HasFavorites;
+
+    /// <summary>展开/收起收藏下拉。</summary>
+    public AsyncCommand ToggleFavoritesCommand { get; private set; } = null!;
 
     /// <summary>
     /// 下拉里选中的收藏。选中即跳过去 —— 这个下拉的唯一用途就是跳转,
@@ -47,8 +64,16 @@ public sealed partial class RedisWorkspaceViewModel
     /// <summary>收藏 / 取消收藏当前键。</summary>
     public AsyncCommand ToggleFavoriteCommand { get; private set; } = null!;
 
-    private void InitializeFavorites() =>
+    private void InitializeFavorites()
+    {
         ToggleFavoriteCommand = new(ToggleFavoriteAsync, () => HasSelection);
+        ToggleFavoritesCommand = new(() =>
+        {
+            IsFavoritesOpen = !IsFavoritesOpen;
+            RaisePropertyChanged(nameof(ShowsFavorites));
+            return Task.CompletedTask;
+        });
+    }
 
     private async Task ToggleFavoriteAsync()
     {
@@ -102,6 +127,7 @@ public sealed partial class RedisWorkspaceViewModel
         RaisePropertyChanged(nameof(IsSelectedFavorite));
         RaisePropertyChanged(nameof(FavoriteLabel));
         RaisePropertyChanged(nameof(HasFavorites));
+        RaisePropertyChanged(nameof(ShowsFavorites));
     }
 
     /// <summary>面板首次加载:读回收藏与控制台历史(后端不可用时静默降级)。</summary>

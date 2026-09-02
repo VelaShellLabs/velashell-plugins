@@ -17,7 +17,7 @@
     <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
          plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
          所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.0.0" />
+    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.0.1" />
     <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
     <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.0.0" />
   </ItemGroup>

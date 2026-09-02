@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
+using Avalonia.Logging;
 using Avalonia.Threading;
 using StackExchange.Redis;
 using VelaShell.Plugin.Redis.Ui;
@@ -206,6 +208,283 @@ public sealed class RedisPanelUiTests
         if (!_serverAvailable)
         {
             Assert.Inconclusive($"没有可用的 Redis({Host}:{Port}),跳过面板 UI 测试。");
+        }
+    }
+
+    /// <summary>
+    /// 装载、选中、清空选中,全程不许有一条绑定报错。
+    /// <para>
+    /// 这一条守的是"日志要干净"。Avalonia 的绑定**不因父级不可见而停止求值**:详情头整块由
+    /// <c>HasSelection</c> 控制显隐,可只要 AXAML 里写的是 <c>{Binding Selected.Key.Display}</c>,
+    /// 没选中键时它就会在 <c>Selected</c> 这一环上断掉,每次清空选中都往日志里灌一条
+    /// "Value is null"。那不是崩溃,所以没人会为它开单子;它只是让日志变得没法读 ——
+    /// <b>而一份没法读的日志,等于没有日志</b>。摊平成视图模型属性即可,这里把闸门焊死。
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public void Panel_LogsNoBindingErrors_WhenSelectionComesAndGoes()
+    {
+        RequireServer();
+        var sink = new BindingLogSink();
+        ILogSink? previous = Logger.Sink;
+        Logger.Sink = sink;
+        try
+        {
+            OnUi(async () =>
+            {
+                // 装载时就没有选中:详情头此刻整块不可见,绑定却照样在求值。
+                (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
+                    await ShowAsync(_prefix);
+                try
+                {
+                    Assert.IsFalse(viewModel.HasSelection);
+                    Assert.IsEmpty(viewModel.SelectedKeyText);
+                    Assert.IsEmpty(viewModel.SelectedTypeText);
+
+                    viewModel.SelectedRow = Row(viewModel, $"{_prefix}:user:1:profile");
+                    await PumpAsync();
+
+                    Assert.AreEqual($"{_prefix}:user:1:profile", viewModel.SelectedKeyText);
+                    Assert.AreEqual("hash", viewModel.SelectedTypeText);
+
+                    // 再清空:回到"没选中"才是原先那条 Value is null 的现场。
+                    viewModel.SelectedRow = null;
+                    await PumpAsync();
+
+                    Assert.IsFalse(viewModel.HasSelection);
+                    Assert.IsEmpty(viewModel.SelectedKeyText);
+                    Assert.IsEmpty(viewModel.SelectedTypeText);
+                }
+                finally
+                {
+                    window.Close();
+                    await connection.DisposeAsync();
+                }
+            });
+        }
+        finally
+        {
+            Logger.Sink = previous;
+        }
+
+        Assert.IsEmpty(sink.Errors, $"面板不该有绑定报错,实际:{string.Join(" | ", sink.Errors)}");
+    }
+
+    /// <summary>
+    /// 自动刷新绝不吃掉没保存的编辑 —— 字符串草稿这一路。
+    /// <para>
+    /// 这是一条**丢数据**的回归:自动刷新每 5 秒重读选中的键,而重读会把编辑区重置回
+    /// 服务端的现值。于是"改了一半、还没按保存"的内容会被服务器的旧值悄悄盖掉,
+    /// 而且盖得毫无痕迹 —— 用户只会以为自己没输进去。
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public void AutoRefreshTick_KeepsTheUnsavedStringDraft()
+    {
+        RequireServer();
+        OnUi(async () =>
+        {
+            (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
+                await ShowAsync(_prefix);
+            try
+            {
+                viewModel.SelectedRow = Row(viewModel, $"{_prefix}:user:1:name");
+                await PumpAsync();
+                Assert.IsTrue(viewModel.IsStringSelected);
+                Assert.AreEqual("张三", viewModel.StringDraft);
+
+                viewModel.StringDraft = "改到一半还没保存";
+                Assert.IsTrue(viewModel.IsStringDirty);
+                Assert.IsTrue(viewModel.HasUnsavedEdits);
+
+                await viewModel.AutoRefreshTickAsync();
+                await PumpAsync();
+
+                Assert.AreEqual("改到一半还没保存", viewModel.StringDraft, "自动刷新把没保存的编辑盖掉了。");
+                Assert.IsTrue(viewModel.IsStringDirty, "草稿还在,脏标记就该还在 —— 否则保存按钮会消失。");
+                // 服务端的现值没被动过:让开的是覆盖那一步,不是把界面冻在过去。
+                Assert.AreEqual("张三", viewModel.StringValue);
+            }
+            finally
+            {
+                window.Close();
+                await connection.DisposeAsync();
+            }
+        });
+    }
+
+    /// <summary>
+    /// TTL / 重命名 / 新增行这些手打的框同样算未保存 —— 它们被清空一样是丢输入,
+    /// 只是丢得更不容易被发现(用户往往刚把一个长键名粘进去)。
+    /// </summary>
+    [TestMethod]
+    public void AutoRefreshTick_KeepsTheOtherDrafts_AndSaysWhyItIsHolding()
+    {
+        RequireServer();
+        OnUi(async () =>
+        {
+            (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
+                await ShowAsync(_prefix);
+            try
+            {
+                viewModel.SelectedRow = Row(viewModel, $"{_prefix}:user:1:profile");
+                await PumpAsync();
+                Assert.IsFalse(viewModel.HasUnsavedEdits, "刚选中,什么都没动过。");
+
+                viewModel.RenameDraft = $"{_prefix}:user:1:profile:v2";
+                viewModel.TtlDraft = "30m";
+                viewModel.NewLabel = "nickname";
+                viewModel.NewValue = "老张";
+                Assert.IsTrue(viewModel.HasUnsavedEdits);
+
+                // 开着自动刷新时,界面要说得出它为什么不动 —— 否则看着就像刷新坏了。
+                viewModel.ToggleAutoRefreshCommand.Execute(null);
+                await PumpAsync(10);
+                Assert.IsTrue(viewModel.IsAutoRefreshOn);
+                Assert.IsTrue(viewModel.IsAutoRefreshPaused);
+                Assert.IsNotEmpty(viewModel.AutoRefreshPausedNotice);
+
+                await viewModel.AutoRefreshTickAsync();
+                await PumpAsync();
+
+                Assert.AreEqual($"{_prefix}:user:1:profile:v2", viewModel.RenameDraft);
+                Assert.AreEqual("30m", viewModel.TtlDraft);
+                Assert.AreEqual("nickname", viewModel.NewLabel);
+                Assert.AreEqual("老张", viewModel.NewValue);
+
+                // 清空之后自动刷新恢复,说明也跟着消失。
+                viewModel.RenameDraft = string.Empty;
+                viewModel.TtlDraft = string.Empty;
+                viewModel.NewLabel = string.Empty;
+                viewModel.NewValue = string.Empty;
+                Assert.IsFalse(viewModel.HasUnsavedEdits);
+                Assert.IsFalse(viewModel.IsAutoRefreshPaused);
+                Assert.IsEmpty(viewModel.AutoRefreshPausedNotice);
+
+                await viewModel.AutoRefreshTickAsync();
+                await PumpAsync();
+                Assert.IsTrue(viewModel.HasSelection, "没有未保存的编辑时,自动刷新照旧重读。");
+            }
+            finally
+            {
+                window.Close();
+                await connection.DisposeAsync();
+            }
+        });
+    }
+
+    /// <summary>
+    /// 面板的几何要对得上设计稿:下拉框与同行的输入框同高、TTL 框放得下、
+    /// 值编辑区铺满整行、抽屉按设计稿的高度开、拖拽条抓得住。
+    /// <para>
+    /// 这几条全是"看一眼就知道不对、但没有断言就会一路漂回去"的量。设计稿在
+    /// <c>VelaShell.Plugin.Redis.pen</c>,数值取自那里的对应节点。
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public void Panel_Geometry_MatchesTheDesign()
+    {
+        RequireServer();
+        OnUi(async () =>
+        {
+            (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
+                await ShowAsync(_prefix);
+            try
+            {
+                viewModel.SelectedRow = Row(viewModel, $"{_prefix}:user:1:name");
+                await PumpAsync();
+
+                // 下拉框:Fluent 默认 32px,压到与 TextBox.field 同一档的 24px。
+                foreach (string name in new[] { "DatabaseBox", "TypeFilterBox" })
+                {
+                    ComboBox box = view.GetControl<ComboBox>(name);
+                    Assert.AreEqual(24d, box.Bounds.Height, $"{name} 应与同行的输入框同高。");
+                }
+
+                // TTL 输入框 180、重命名 300(设计稿 HtzFe / yampr 两行的输入宽度)。
+                Assert.AreEqual(180d, view.GetControl<TextBox>("TtlBox").Bounds.Width);
+                Assert.AreEqual(300d, view.GetControl<TextBox>("RenameBox").Bounds.Width);
+                // 占位符必须放得进 180px:格式清单属于右边的回显位,不是占位符。
+                Assert.IsFalse(view.GetControl<TextBox>("TtlBox").Watermark!.Contains("2h30m", StringComparison.Ordinal),
+                    "格式清单塞进占位符就会被截断,应放在 TtlPreview 那一格。");
+                Assert.Contains("2h30m", viewModel.TtlPreview, "TTL 框空着时,右边那一格要给出格式说明。");
+
+                // 右栏各行的高度直接照设计稿量(节点名见 .pen 的对应帧)。
+                foreach ((string name, double expected) in new (string, double)[]
+                         {
+                             ("KeyHeaderRow", 36),      // 键头 QTgjn
+                             ("KeyMetaRow", 26),        // 元信息 v5yO5
+                             ("KeyActionRow", 62),      // 键级动作条 w22A0
+                             ("DecodeToolbar", 36),     // 值工具条 GhQ8J
+                             ("KeyFooterRow", 30)       // 底部条 xc9er
+                         })
+                {
+                    Assert.AreEqual(expected, view.GetControl<Border>(name).Bounds.Height,
+                        $"{name} 与设计稿的高度对不上。");
+                }
+                // 左栏 420 + 分隔条 4(设计稿 Qf4Wh / pVk7j)。
+                Assert.AreEqual(4d, view.GetControl<Border>("ColumnSplitLine").Bounds.Width);
+
+                // 值编辑区铺满整行 —— 断言的是"和所在那一行一样大",不是某个像素数:
+                // 原先 ScrollViewer 给内容无限高度,TextBox 只按内容量到 MinHeight=120 就不长了,
+                // 于是一个短值在大片空白里浮着一个小框。窗口多大,这一格就该多大。
+                TextBox value = view.GetControl<TextBox>("StringValueBox");
+                var valueRow = (Control)value.Parent!;
+                Assert.AreEqual(valueRow.Bounds.Height, value.Bounds.Height, "值编辑区应铺满内容行的高度。");
+                Assert.AreEqual(valueRow.Bounds.Width, value.Bounds.Width, "值编辑区应铺满内容行的宽度。");
+                Assert.IsGreaterThan(200d, value.Bounds.Height, "内容行本身也不该塌掉。");
+
+                // 抽屉:默认高度 + 拖拽条抓得住。收起时那一行整个塌成 0 ——
+                // 一条拖不出东西来的拖拽条只会让人以为界面卡了,所以先展开再量。
+                Thumb resizer = view.GetControl<Thumb>("DrawerResizer");
+                Assert.AreEqual(0d, resizer.Bounds.Height, "抽屉收起时拖拽条不该占位置。");
+
+                viewModel.ToggleDrawerCommand.Execute(null);
+                await PumpAsync(20);
+
+                Assert.IsTrue(viewModel.IsDrawerOpen);
+                Assert.AreEqual(300d, viewModel.DrawerHeight);
+                Assert.IsGreaterThanOrEqualTo(7d, resizer.Bounds.Height, "抓取区太窄就等于拖不动。");
+                Assert.IsGreaterThan(0d, resizer.Bounds.Width);
+
+                // 拖上去 120px:抽屉长高,主体让位。
+                viewModel.ResizeDrawer(-120, window.Height);
+                Assert.AreEqual(420d, viewModel.DrawerHeight);
+                // 往下拖到底也不会塌掉:最小高度兜住。
+                viewModel.ResizeDrawer(9999, window.Height);
+                Assert.AreEqual(120d, viewModel.DrawerHeight);
+            }
+            finally
+            {
+                window.Close();
+                await connection.DisposeAsync();
+            }
+        });
+    }
+
+    /// <summary>只收绑定域的告警与报错 —— 其余日志与本用例无关,收进来只会挡住要看的那几条。</summary>
+    private sealed class BindingLogSink : ILogSink
+    {
+        public List<string> Errors { get; } = [];
+
+        public bool IsEnabled(LogEventLevel level, string area) =>
+            level >= LogEventLevel.Warning && area == LogArea.Binding;
+
+        public void Log(LogEventLevel level, string area, object? source, string messageTemplate)
+        {
+            if (IsEnabled(level, area))
+            {
+                Errors.Add(messageTemplate);
+            }
+        }
+
+        public void Log(LogEventLevel level, string area, object? source, string messageTemplate,
+            params object?[] propertyValues)
+        {
+            if (IsEnabled(level, area))
+            {
+                Errors.Add($"{messageTemplate} [{string.Join(", ", propertyValues)}]");
+            }
         }
     }
 
