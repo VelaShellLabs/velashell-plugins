@@ -67,6 +67,7 @@ public sealed partial class RedisWorkspaceViewModel
         {
             SetProperty(ref field, value);
             RaisePropertyChanged(nameof(IsStringDirty));
+            RaiseUnsavedState();
             SaveStringCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -75,13 +76,55 @@ public sealed partial class RedisWorkspaceViewModel
     public bool IsStringDirty => !string.Equals(StringDraft, StringValue, StringComparison.Ordinal);
 
     /// <summary>
+    /// 详情页里有还没落盘的编辑。
+    /// <para>
+    /// 这条状态只有一个用途,但那个用途是**不许丢用户的输入**:自动刷新每 5 秒会重读选中的键,
+    /// 而重读会把编辑区全部重置回服务端的现值(<see cref="ResetEditingForSelection" />)——
+    /// 于是"改了一半、还没按保存"的内容会在用户眼皮底下被服务器的旧值悄悄盖掉。
+    /// <b>后台刷新是为用户服务的,不该反过来吃掉他正在打的字</b>:有未保存的编辑时,
+    /// 自动刷新就跳过这一次重读(见 <c>AutoRefreshTickAsync</c>),并在界面上说明为什么停着。
+    /// </para>
+    /// <para>
+    /// 口径是"用户动过什么":字符串草稿与现值不同、选中行的三个框被改过、
+    /// 新增行/TTL/重命名任一框里有字。手打进去的东西一律算数 —— 判不准时宁可多留一拍,
+    /// 代价只是元信息晚 5 秒更新,而判错的代价是他刚敲的一段值没了。
+    /// </para>
+    /// </summary>
+    public bool HasUnsavedEdits =>
+        IsStringDirty
+        || IsElementDirty
+        || NewLabel.Length > 0
+        || NewValue.Length > 0
+        || NewScore.Length > 0
+        || TtlDraft.Length > 0
+        || RenameDraft.Length > 0;
+
+    /// <summary>选中行的编辑框被改过(三个框都是选中时从行上带过来的,所以逐个比回去即可)。</summary>
+    private bool IsElementDirty =>
+        SelectedElement is { } row
+        && (!string.Equals(EditLabel, row.Label, StringComparison.Ordinal)
+            || !string.Equals(EditValue, row.Value, StringComparison.Ordinal)
+            || !string.Equals(EditScore, row.ScoreText, StringComparison.Ordinal));
+
+    /// <summary>未保存状态变了 —— 自动刷新的停走与那条说明都挂在它上面。</summary>
+    private void RaiseUnsavedState()
+    {
+        RaisePropertyChanged(nameof(HasUnsavedEdits));
+        RaisePropertyChanged(nameof(AutoRefreshPausedNotice));
+        RaisePropertyChanged(nameof(IsAutoRefreshPaused));
+    }
+
+    /// <summary>
     /// 字符串值是否可编辑。**被截断的值一律只读** ——
     /// 让用户编辑"前 256 KB"再整体写回,等于用一次保存把后面几 MB 静默删掉。
     /// </summary>
     public bool CanEditString => IsStringSelected && CanWrite && TruncationNotice.Length == 0
                                  // 十六进制是**转储排版**(偏移 + ASCII 侧栏),不是可回写的表示。
                                  // 允许在上面编辑就得去猜哪些字符是数据、哪些是排版 —— 那是在赌。
-                                 && ValueFormat != RedisValueFormat.Hex;
+                                 && ValueFormat != RedisValueFormat.Hex
+                                 // 解码链里有不可逆的一步(反序列化 / 未内置的解压器)时同样只读:
+                                 // 把一段人类可读的转储"编码回去",猜的成分远大于确定的成分。
+                                 && IsChainReversible;
 
     /// <summary>保存字符串值。</summary>
     public AsyncCommand SaveStringCommand { get; private set; } = null!;
@@ -92,10 +135,10 @@ public sealed partial class RedisWorkspaceViewModel
         {
             return;
         }
-        if (!TryEncodeDraft(out byte[] bytes))
+        if (!TryEncodeForWrite(out byte[] bytes))
         {
-            // 转义写坏了:说清位置,**不写**。宁可让用户改一处笔误,也不要写进一段
-            // 谁也说不清的字节。
+            // 转义写坏了、或者这条链压不回去:说清原因,**不写**。宁可让用户改一处笔误,
+            // 也不要写进一段谁也说不清的字节。
             return;
         }
         await GuardedAsync("SET", async () =>
@@ -125,6 +168,7 @@ public sealed partial class RedisWorkspaceViewModel
             EditValue = field?.Value ?? string.Empty;
             EditScore = field?.ScoreText ?? string.Empty;
             RaisePropertyChanged(nameof(HasSelectedElement));
+            RaiseUnsavedState();
             SaveElementCommand.RaiseCanExecuteChanged();
             RemoveElementCommand.RaiseCanExecuteChanged();
         }
@@ -137,21 +181,33 @@ public sealed partial class RedisWorkspaceViewModel
     public string EditLabel
     {
         get;
-        set => SetProperty(ref field, value);
+        set
+        {
+            SetProperty(ref field, value);
+            RaiseUnsavedState();
+        }
     } = string.Empty;
 
     /// <summary>编辑条里的值。</summary>
     public string EditValue
     {
         get;
-        set => SetProperty(ref field, value);
+        set
+        {
+            SetProperty(ref field, value);
+            RaiseUnsavedState();
+        }
     } = string.Empty;
 
     /// <summary>编辑条里的分值(仅有序集合)。</summary>
     public string EditScore
     {
         get;
-        set => SetProperty(ref field, value);
+        set
+        {
+            SetProperty(ref field, value);
+            RaiseUnsavedState();
+        }
     } = string.Empty;
 
     /// <summary>新增行:标签。</summary>
@@ -161,6 +217,7 @@ public sealed partial class RedisWorkspaceViewModel
         set
         {
             SetProperty(ref field, value);
+            RaiseUnsavedState();
             AddElementCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -172,6 +229,7 @@ public sealed partial class RedisWorkspaceViewModel
         set
         {
             SetProperty(ref field, value);
+            RaiseUnsavedState();
             AddElementCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -183,6 +241,7 @@ public sealed partial class RedisWorkspaceViewModel
         set
         {
             SetProperty(ref field, value);
+            RaiseUnsavedState();
             AddElementCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -211,16 +270,8 @@ public sealed partial class RedisWorkspaceViewModel
         {
             return Task.CompletedTask;
         }
-        string command = info.Type switch
-        {
-            "string" => "GET",
-            "hash" => "HGETALL",
-            "list" => "LRANGE",
-            "set" => "SMEMBERS",
-            "zset" => "ZRANGE",
-            "stream" => "XRANGE",
-            _ => "TYPE"
-        };
+        // 与状态条回显共用同一份口径 —— 两处各写一个 switch,迟早会有一处忘了跟上。
+        string command = ReadCommandFor(info.Type);
         // 键名用转义形式并加引号:二进制键与带空格的键都能直接执行。
         string suffix = info.Type switch
         {
@@ -438,6 +489,7 @@ public sealed partial class RedisWorkspaceViewModel
         {
             SetProperty(ref field, value);
             RaisePropertyChanged(nameof(TtlPreview));
+            RaiseUnsavedState();
             ApplyTtlCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -452,7 +504,10 @@ public sealed partial class RedisWorkspaceViewModel
         {
             if (TtlDraft.Trim().Length == 0)
             {
-                return string.Empty;
+                // 空着的时候这一格不闲着:格式清单放在这儿,而不是塞进 180px 的输入框
+                // 当占位符 —— 那样它只会被截断成 "900 · 15m · 2h30m · 2026-0",
+                // 一句被切断的说明比没有说明更糟。
+                return Loc["Redis_TtlFormatHint"];
             }
             if (!RedisTtl.TryParse(TtlDraft, DateTimeOffset.Now, out TimeSpan ttl))
             {
@@ -507,6 +562,7 @@ public sealed partial class RedisWorkspaceViewModel
         set
         {
             SetProperty(ref field, value);
+            RaiseUnsavedState();
             RenameCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -622,7 +678,10 @@ public sealed partial class RedisWorkspaceViewModel
         try
         {
             StatusMessage = string.Empty;
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
             await action().ConfigureAwait(true);
+            // 状态条上那句"上一条命令":按了个按钮之后,这是唯一能核对**到底发了什么**的地方。
+            NoteCommand(command, Elapsed(started));
         }
         catch (Exception ex)
         {
@@ -630,6 +689,11 @@ public sealed partial class RedisWorkspaceViewModel
             _log.Error($"'{command}' failed.", ex);
         }
     }
+
+    /// <summary>把一段计时格式化成状态条那一格要的形状。</summary>
+    private static string Elapsed(long startedTimestamp) =>
+        $"{System.Diagnostics.Stopwatch.GetElapsedTime(startedTimestamp).TotalMilliseconds
+            .ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)} ms";
 
     /// <summary>写完之后重读一次当前键(元信息 + 内容),让界面反映服务端的真实状态。</summary>
     private async Task ReloadSelectedAsync()
@@ -672,6 +736,7 @@ public sealed partial class RedisWorkspaceViewModel
         NewScore = string.Empty;
         TtlDraft = string.Empty;
         RenameDraft = string.Empty;
+        ResetMembersForSelection();
         RaisePropertyChanged(nameof(CanEditString));
         RaisePropertyChanged(nameof(IsStringDirty));
         RaisePropertyChanged(nameof(ElementRemoveNote));

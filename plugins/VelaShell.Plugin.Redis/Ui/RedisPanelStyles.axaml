@@ -1,0 +1,379 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Redis 面板的一整套版式。
+       从面板视图里抽出来单放,理由有两条:
+       1. 它已经长到三百多行 —— 与结构混在一个文件里,改哪一处都要先滚半屏;
+       2. **可以脱离连接单独装载**。面板视图必须先有一条活的 Redis 连接才建得起来,
+          于是「样式本身写坏了没有」这件事只能等到真机测试才暴露;而样式表单独一个
+          avares 资源,headless 测试可以直接把它 Load 出来验(见 RedisPanelStylesTests)。
+       与 AI 插件的 DialogStyles.axaml 同一条路子。
+
+       几何与配色按宿主 DESIGN.md:36px 文档头 / 26px 列头 / 28px 行 / 24px 状态条,
+       颜色一律走 {DynamicResource VelaXxx} 令牌,明暗切换即时跟随。 -->
+    <Style Selector="TextBlock.col">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+    </Style>
+    <Style Selector="TextBlock.cell">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.meta">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 五分钟内就要过期:对着一个马上消失的键做操作是白做,这一列值得抢眼一点。 -->
+    <Style Selector="TextBlock.meta.soon">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+    <Style Selector="TextBlock.strong">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.warn">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="TextBlock.err">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="TextBlock.ok">
+      <Setter Property="Foreground" Value="{DynamicResource VelaStatusConnected}" />
+    </Style>
+    <Style Selector="TextBlock.info">
+      <Setter Property="Foreground" Value="{DynamicResource VelaInfo}" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize14}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.body">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="LineHeight" Value="18" />
+    </Style>
+
+    <!-- ── 键列表:整套几何与状态色对齐宿主的资源管理器 ────────────────────
+         容器自己不留内边距、不设最小高度 —— 行高由模板里的 Border 给
+         (分组行 30、键行 28,与资源管理器的分组行/会话行一致)。 -->
+    <Style Selector="ListBox.rows ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <!-- 悬停 VelaBgHover、选中 VelaBgActive:与资源管理器同一对令牌。
+         Fluent 主题自带的选中色是另一套,不压掉就会和宿主两个样。 -->
+    <Style Selector="ListBox.rows ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem:selected:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+    </Style>
+    <!-- 选中行的键名转 accent + Medium —— 资源管理器的活跃会话行就是这么标的。 -->
+    <Style Selector="ListBox.rows ListBoxItem:selected TextBlock.keyname">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <!-- 分组行的名字与计数:对齐资源管理器分组行的 FontSize12 Medium / FontSize10。 -->
+    <Style Selector="TextBlock.groupname">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize12}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.groupcount">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+
+    <Style Selector="Border.badge">
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.badge > TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize9}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <!-- 键列表的类型徽章按类型分色。整列同色等于没有信息 —— 四十个 string 排下来,
+         眼睛只能逐行读文字;分色之后这一列才真正可扫,混合类型的库一眼看得出结构。
+         底色一律取 12% 透明度:要的是可区分,不是抢戏。 -->
+    <Style Selector="Border.type"><Setter Property="Background" Value="#1F6272A4" /></Style>
+    <Style Selector="Border.type > TextBlock"><Setter Property="Foreground" Value="#6272A4" /></Style>
+    <Style Selector="Border.type.t-string"><Setter Property="Background" Value="#1F8BE9FD" /></Style>
+    <Style Selector="Border.type.t-string > TextBlock"><Setter Property="Foreground" Value="#8BE9FD" /></Style>
+    <Style Selector="Border.type.t-hash"><Setter Property="Background" Value="#1F50FA7B" /></Style>
+    <Style Selector="Border.type.t-hash > TextBlock"><Setter Property="Foreground" Value="#50FA7B" /></Style>
+    <Style Selector="Border.type.t-list"><Setter Property="Background" Value="#1FFFB86C" /></Style>
+    <Style Selector="Border.type.t-list > TextBlock"><Setter Property="Foreground" Value="#FFB86C" /></Style>
+    <Style Selector="Border.type.t-set"><Setter Property="Background" Value="#1FBD93F9" /></Style>
+    <Style Selector="Border.type.t-set > TextBlock"><Setter Property="Foreground" Value="#BD93F9" /></Style>
+    <Style Selector="Border.type.t-zset"><Setter Property="Background" Value="#1FFF79C6" /></Style>
+    <Style Selector="Border.type.t-zset > TextBlock"><Setter Property="Foreground" Value="#FF79C6" /></Style>
+    <Style Selector="Border.type.t-stream"><Setter Property="Background" Value="#1FF1FA8C" /></Style>
+    <Style Selector="Border.type.t-stream > TextBlock"><Setter Property="Foreground" Value="#F1FA8C" /></Style>
+
+    <!-- 分段控件:选中态用强调色底,未选中只是描边 —— 与宿主的高级选项分段同规格。 -->
+    <Style Selector="Button.seg">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.seg.on">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <!-- 未内置的解码器:点不动,并且**留在原地**。灰一个按钮不说原因,用户会以为是自己没配对;
+         整个藏起来,用户会以为这个客户端压根不认识 Zstd。原因在悬停提示里。 -->
+    <Style Selector="Button.seg:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+
+    <Style Selector="Button.link">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.link:disabled">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 带图标的动作按钮。图标走宿主的 lucide 资源(Icon.<名字>),挂在 Tag 上:
+         每个 chip 在 XAML 里因此只占一行,而不是六行 Viewbox/Path 的样板。
+         宿主主题没装载时 DynamicResource 解析为 null,Path 不画东西 —— 面板照常可用
+         (headless 测试正是这么跑的)。 -->
+    <Style Selector="Button.chip">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  Padding="{TemplateBinding Padding}">
+            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+              <Viewbox Width="11" Height="11" VerticalAlignment="Center">
+                <Path Width="24" Height="24" Data="{TemplateBinding Tag}"
+                      Stroke="{TemplateBinding Foreground}" StrokeThickness="2"
+                      StrokeLineCap="Round" StrokeJoin="Round" />
+              </Viewbox>
+              <ContentPresenter Content="{TemplateBinding Content}"
+                                Foreground="{TemplateBinding Foreground}"
+                                FontSize="{TemplateBinding FontSize}"
+                                VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.chip.on">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="Button.chip.danger">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Button.chip:disabled">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <!-- 底部抽屉的页签:选中态给一条顶部强调条,与 VelaDock 的标签同语言。 -->
+    <Style Selector="Button.tab">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+    <Style Selector="Button.tab.on">
+      <Setter Property="Background" Value="{DynamicResource VelaBgTerminal}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+      <Setter Property="BorderThickness" Value="0,2,0,0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 下拉框:Fluent 的默认 ComboBox 是 32px 高、留着触摸尺寸的内边距,而它旁边站着的是
+         18–19px 的 chip 与 24px 的输入框 —— 摆在 36px 的文档头里高出一大截,看着像另一套
+         控件混了进来。压到与 TextBox.field 同一档(24px / 3px 圆角 / 输入底色),
+         这样一行里的三种控件才是同一个家族。下拉项也一起压,否则展开后又是两套尺寸。 -->
+    <Style Selector="ComboBox.compact">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="7,0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="ComboBox.compact /template/ Border#Background">
+      <Setter Property="MinHeight" Value="24" />
+    </Style>
+    <Style Selector="ComboBox.compact /template/ ContentControl#ContentPresenter">
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ComboBox.compact ComboBoxItem">
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="7,2" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+    </Style>
+    <Style Selector="ComboBox.compact:disabled">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <Style Selector="TextBox.field">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- 嵌在一个自带边框的容器里的输入框:自己不再画一层框。 -->
+    <Style Selector="TextBox.bare">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- 扫描进度条。3px 一条细线:它报的是量级,不是精确进度,所以不该长得像一个
+         正在完成的任务条。 -->
+    <Style Selector="ProgressBar.scan">
+      <Setter Property="Height" Value="3" />
+      <Setter Property="MinHeight" Value="3" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Background" Value="{DynamicResource VelaBorderSecondary}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 生产标记是**唯一**允许改变主色的地方。 -->
+    <Style Selector="Border.badge.prod">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+    </Style>
+    <Style Selector="Border.badge.prod > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+    </Style>
+
+    <!-- 控制台输出按语义上色。用 class 绑定而不是值转换器:颜色必须来自
+         {DynamicResource Vela*} 才能跟着主题切换,而转换器解析不到动态资源。 -->
+    <Style Selector="TextBlock.reply">
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaInfo}" />
+    </Style>
+    <Style Selector="TextBlock.reply.cmd">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <Style Selector="TextBlock.reply.err">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="TextBlock.reply.note">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+    <Style Selector="TextBlock.reply.num">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="TextBlock.reply.nil">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+
+    <!-- 覆盖层的卡片:圆角 8、1px 描边、bg-surface,与确认闸门同一套。 -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderSecondary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.cardhead">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSidebar}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="16,0" />
+      <Setter Property="Height" Value="38" />
+    </Style>
+    <Style Selector="Border.cardfoot">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+      <Setter Property="Padding" Value="16,10" />
+    </Style>
+    <!-- 说明条:左侧 2px 的强调边 + 输入底色。信息/警示/成功三档只换那条边的颜色。 -->
+    <Style Selector="Border.notice">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaInfo}" />
+      <Setter Property="BorderThickness" Value="2,0,0,0" />
+      <Setter Property="CornerRadius" Value="0,3,3,0" />
+      <Setter Property="Padding" Value="8,5" />
+    </Style>
+    <Style Selector="Border.notice.warn">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Border.notice.ok">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaStatusConnected}" />
+    </Style>
+</Styles>

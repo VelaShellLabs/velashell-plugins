@@ -17,13 +17,19 @@ public sealed record RedisScanPage(string Cursor, IReadOnlyList<RedisKeyName> Ke
 /// <param name="Encoding"><c>OBJECT ENCODING</c>;服务器禁用 OBJECT 时为空串。</param>
 /// <param name="Length">元素个数 / 字符串字节数;未知时为 -1。</param>
 /// <param name="MemoryBytes"><c>MEMORY USAGE</c> 的**抽样估计**;未取或不可用时为 -1。</param>
+/// <param name="IdleSeconds">
+/// <c>OBJECT IDLETIME</c> 给的空闲秒数;未取、或 <c>maxmemory-policy</c> 是 LFU
+/// (那时服务器只给 <c>FREQ</c> 不给 <c>IDLETIME</c>)时为 -1。
+/// <b>拿不到就是 -1,不是 0</b> —— 0 会被读成"刚刚才被访问过"。
+/// </param>
 public sealed record RedisKeyInfo(
     RedisKeyName Key,
     string Type,
     TimeSpan? Ttl,
     string Encoding,
     long Length,
-    long MemoryBytes)
+    long MemoryBytes,
+    long IdleSeconds = -1)
 {
     /// <summary>键已不存在(查看期间过期或被删)。</summary>
     public bool IsGone => string.IsNullOrEmpty(Type) || Type is "none";

@@ -76,6 +76,18 @@ public sealed record RedisMemoryBucket(string Prefix, long Keys, long Bytes)
         < 1024L * 1024 * 1024 => $"{Bytes / (1024.0 * 1024):0.#} MB",
         _ => $"{Bytes / (1024.0 * 1024 * 1024):0.##} GB"
     };
+
+    /// <summary>
+    /// 这一桶占**本次抽样总量**的比例(0–1)。由视图模型在拿到整份结果后回填 ——
+    /// 分母是抽样总和,不是整库,所以它回答的是"抽到的这些键里谁最重",而不是"谁占了库的百分之几"。
+    /// </summary>
+    public double Share { get; set; }
+
+    /// <summary>占比条的像素宽度(条槽宽 200)。视图直接绑它,XAML 里不做算术。</summary>
+    public double BarWidth => Math.Max(1, Share * 200);
+
+    /// <summary>占比的百分数文案。</summary>
+    public string ShareText => Share.ToString("P1", CultureInfo.CurrentCulture);
 }
 
 /// <summary>一次内存抽样的结果。</summary>
@@ -339,11 +351,13 @@ internal sealed partial class RedisConnection
     /// </summary>
     /// <param name="sampleLimit">最多抽多少个键。</param>
     /// <param name="progress">进度回调(已抽样键数)。</param>
+    /// <param name="prefixSegments">按键名的前几段聚合(1 = <c>session:</c>,2 = <c>session:v2:</c>)。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>抽样结果。</returns>
     public async Task<RedisMemorySample> SampleMemoryAsync(
         int sampleLimit,
         Action<long>? progress = null,
+        int prefixSegments = 1,
         CancellationToken cancellationToken = default)
     {
         long estimatedTotal = await DatabaseSizeAsync().ConfigureAwait(false);
@@ -380,11 +394,15 @@ internal sealed partial class RedisConnection
                 catch (Exception ex) when (IsDeniedOrUnsupported(ex))
                 {
                     // MEMORY USAGE 是 4.0 才有的:整条路不可用,如实上报而不是给一堆 0。
+                    // 这一批余下的命令已经发出去了,直接 return 会把它们连同各自的异常一起丢掉 ——
+                    // 无人观察的失败任务要等到终结器线程才浮出来,那时它已经和这里对不上号了。
+                    // 先把它们收干净再走。
                     available = false;
+                    await ObserveAsync(pending, i + 1).ConfigureAwait(false);
                     return new([], [], sampled, estimatedTotal, Available: false);
                 }
                 RedisKeyName key = page.Keys[i];
-                string prefix = FirstSegment(key.Text);
+                string prefix = PrefixOf(key.Text, prefixSegments);
                 (long Keys, long Bytes) = byPrefix.GetValueOrDefault(prefix);
                 byPrefix[prefix] = (Keys + 1, Bytes + bytes);
                 topKeys.Add(new(key.Text, 1, bytes));
@@ -418,15 +436,60 @@ internal sealed partial class RedisConnection
         return fields;
     }
 
-    private string FirstSegment(string keyText)
+    /// <summary>
+    /// 取键名的前 <paramref name="segments" /> 段作为聚合前缀。
+    /// <para>
+    /// 一段(<c>session:</c>)看的是"哪一类键占了内存",两段(<c>session:v2:</c>)才分得出
+    /// "是 v1 还是 v2 在涨" —— 真实排查里这两个粒度都要,所以做成可切换的,而不是替用户定死。
+    /// </para>
+    /// </summary>
+    private string PrefixOf(string keyText, int segments)
     {
         string delimiter = _settings.Delimiter;
-        if (delimiter.Length == 0)
+        if (delimiter.Length == 0 || segments <= 0)
         {
             return keyText;
         }
-        int index = keyText.IndexOf(delimiter, StringComparison.Ordinal);
-        return index > 0 ? keyText[..index] : keyText;
+        int index = -1;
+        for (int taken = 0; taken < segments; taken++)
+        {
+            int next = keyText.IndexOf(delimiter, index + 1, StringComparison.Ordinal);
+            if (next < 0)
+            {
+                // 段数不够就整条键名当前缀 —— 截一半会把 user:1 和 user:2 归成两类。
+                return index > 0 ? keyText[..index] : keyText;
+            }
+            index = next;
+        }
+        return keyText[..index];
+    }
+
+    /// <summary>
+    /// 读慢日志的两个配置:阈值(微秒)与保留条数。
+    /// <para>托管服务常禁 <c>CONFIG</c>;拿不到就返回 -1,界面据此留空而不是显示一个假的默认值。</para>
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>(阈值微秒, 最大条数);任一项不可得为 -1。</returns>
+    public async Task<(long ThresholdMicros, long MaxLength)> ReadSlowlogConfigAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return (await ReadConfigNumberAsync("slowlog-log-slower-than").ConfigureAwait(false),
+                await ReadConfigNumberAsync("slowlog-max-len").ConfigureAwait(false));
+    }
+
+    private async Task<long> ReadConfigNumberAsync(string name)
+    {
+        RedisResult raw = await TryExecuteAsync(Db(), "CONFIG", "GET", name).ConfigureAwait(false);
+        if (raw.IsNull || raw.Resp2Type != ResultType.Array)
+        {
+            return -1;
+        }
+        var parts = (RedisResult[])raw!;
+        return parts.Length >= 2
+               && long.TryParse(AsString(parts[1]), NumberStyles.Integer, CultureInfo.InvariantCulture, out long value)
+            ? value
+            : -1;
     }
 
     private static string Field(IReadOnlyDictionary<string, string> fields, params string[] names)

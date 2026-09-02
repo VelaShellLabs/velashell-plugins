@@ -12,6 +12,13 @@ public enum RedisValueFormat
     /// <summary>redis-cli 口径的转义(<c>\xNN</c>)。**可逆**,因此二进制值也能安全编辑。</summary>
     Escaped,
 
+    /// <summary>
+    /// JSON 缩进排版。**可逆**:保存时把编辑框里的文本原样按 UTF-8 写回 ——
+    /// 用户看到什么形状,存进去就是什么形状(而不是被悄悄重排成另一种缩进)。
+    /// 不是合法 JSON 时退化成原样文本,由界面写明原因。
+    /// </summary>
+    Json,
+
     /// <summary>十六进制转储(带偏移与 ASCII 侧栏)。只读 —— 它是给人看的排版,不是可回写的表示。</summary>
     Hex
 }
@@ -196,6 +203,7 @@ public static class RedisValueText
         return format switch
         {
             RedisValueFormat.Text => Encoding.UTF8.GetString(raw),
+            RedisValueFormat.Json => RenderJson(raw),
             RedisValueFormat.Hex => HexDump(raw),
             _ => Escape(raw)
         };
@@ -210,4 +218,15 @@ public static class RedisValueText
     /// <returns>默认形态。</returns>
     public static RedisValueFormat Detect(byte[] raw) =>
         IsTextSafe(raw) ? RedisValueFormat.Text : RedisValueFormat.Escaped;
+
+    /// <summary>
+    /// JSON 视图:能排版就排版,不能就原样给文本。
+    /// <para>**不在这里报错** —— 判定与说明归界面(值工具条右侧那句话),
+    /// 渲染函数只负责给出一段能显示的文本。</para>
+    /// </summary>
+    private static string RenderJson(byte[] raw)
+    {
+        string text = Encoding.UTF8.GetString(raw);
+        return RedisValueCodec.TryPrettyJson(text, out string pretty, out _) ? pretty : text;
+    }
 }

@@ -22,6 +22,15 @@ public enum RedisDrawerTab
     /// <summary>订阅。</summary>
     PubSub,
 
+    /// <summary>
+    /// 实时监视。这一页**永远是空状态** —— 多路复用连接上跑不了 <c>MONITOR</c>,
+    /// 所以它的全部内容就是把这个结论、以及三条能走的路,说清楚。
+    /// </summary>
+    Monitor,
+
+    /// <summary>集群拓扑。</summary>
+    Cluster,
+
     /// <summary>内存抽样分析。</summary>
     Memory
 }
@@ -54,15 +63,57 @@ public sealed partial class RedisWorkspaceViewModel
         {
             SetProperty(ref field, value);
             RaisePropertyChanged(nameof(DrawerToggleLabel));
-            if (field)
-            {
-                _ = RefreshActiveTabAsync();
-            }
+            // 开着要刷一次;**合上也要走一趟** —— 那一趟负责把概览页每秒一次的采样器停掉。
+            _ = RefreshActiveTabAsync();
         }
     }
 
     /// <summary>展开/收起抽屉。</summary>
     public AsyncCommand ToggleDrawerCommand { get; private set; } = null!;
+
+    /// <summary>
+    /// 抽屉的高度(像素)。
+    /// <para>
+    /// 抽屉那一行是 <c>Auto</c>、正上方的主体是 <c>*</c>,所以"拖高抽屉"只需要改这一个数,
+    /// 主体会自动让位 —— 不必让 <c>GridSplitter</c> 去改行定义(它只认紧邻的两行,
+    /// 而抽屉与主体之间隔着状态条和页签条)。
+    /// </para>
+    /// </summary>
+    public double DrawerHeight
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    } = DefaultDrawerHeight;
+
+    /// <summary>
+    /// 抽屉的默认高度。
+    /// <para>
+    /// 设计稿画的是 260:那是按"每张指标卡 3 条指标"排的。真机上 <c>INFO</c> 给得出 4 条,
+    /// 卡片因此要高出一行(约 119px),再按设计稿的比例留给吞吐图 134px,
+    /// 一共就是 <c>10 + 119 + 10 + 134 + 10 ≈ 283</c>。取 300 收个整 ——
+    /// <b>宁可让图表宽裕一点,也不要一打开概览就得先拖一次</b>。
+    /// </para>
+    /// </summary>
+    private const double DefaultDrawerHeight = 300;
+
+    /// <summary>抽屉的最小高度:再矮下去控制台连一行输出加一行输入都放不下。</summary>
+    private const double MinDrawerHeight = 120;
+
+    /// <summary>
+    /// 拖动抽屉的上边缘。
+    /// <para>
+    /// 上界由**当前面板高度**决定而不是写死:面板可以被拖成任意大小,一个写死的上限
+    /// 在小窗口上会让抽屉吃掉整个键列表,在大窗口上又拖不开。这里给主体留 <paramref name="reserved" />。
+    /// </para>
+    /// </summary>
+    /// <param name="delta">指针的纵向位移(向上为负)。</param>
+    /// <param name="panelHeight">面板总高;为 0 或负时只按最小高度夹取。</param>
+    /// <param name="reserved">主体至少要留下的高度。</param>
+    public void ResizeDrawer(double delta, double panelHeight, double reserved = 220)
+    {
+        double max = panelHeight > 0 ? Math.Max(MinDrawerHeight, panelHeight - reserved) : double.MaxValue;
+        DrawerHeight = Math.Clamp(DrawerHeight - delta, MinDrawerHeight, max);
+    }
 
     /// <summary>抽屉开关按钮的文案(展开 / 收起)。</summary>
     public string DrawerToggleLabel => IsDrawerOpen ? Loc["Redis_Collapse"] : Loc["Redis_Expand"];
@@ -93,7 +144,8 @@ public sealed partial class RedisWorkspaceViewModel
     private static readonly string[] TabFlagNames =
     [
         nameof(IsConsoleTab), nameof(IsOverviewTab), nameof(IsSlowlogTab),
-        nameof(IsClientsTab), nameof(IsPubSubTab), nameof(IsMemoryTab)
+        nameof(IsClientsTab), nameof(IsPubSubTab), nameof(IsMonitorTab),
+        nameof(IsClusterTab), nameof(IsMemoryTab)
     ];
 
     /// <summary>页签选中态(XAML 里绑它上样式,视图里不写逻辑)。</summary>
@@ -283,7 +335,10 @@ public sealed partial class RedisWorkspaceViewModel
         ShowSlowlogCommand = new(() => SwitchTabAsync(RedisDrawerTab.Slowlog));
         ShowClientsCommand = new(() => SwitchTabAsync(RedisDrawerTab.Clients));
         ShowPubSubCommand = new(() => SwitchTabAsync(RedisDrawerTab.PubSub));
+        ShowMonitorCommand = new(() => SwitchTabAsync(RedisDrawerTab.Monitor));
+        ShowClusterCommand = new(() => SwitchTabAsync(RedisDrawerTab.Cluster));
         ShowMemoryCommand = new(() => SwitchTabAsync(RedisDrawerTab.Memory));
+        InitializeDrawerExtras();
         RefreshTabCommand = new(RefreshActiveTabAsync);
         ResetSlowlogCommand = new(ResetSlowlogAsync, () => CanWrite);
         KillClientCommand = new(KillClientAsync, () => SelectedClient is { IsSelf: false });
@@ -310,6 +365,9 @@ public sealed partial class RedisWorkspaceViewModel
     /// </summary>
     private async Task RefreshActiveTabAsync()
     {
+        // **先同步采样器再判早退**:抽屉合上时也会走到这里,而那正是要把每秒的
+        // INFO stats 停掉的时刻 —— 放在早退后面,合上的抽屉会在背景里一直问服务器。
+        SyncThroughputSampling();
         if (!IsDrawerOpen)
         {
             return;
@@ -325,8 +383,11 @@ public sealed partial class RedisWorkspaceViewModel
             case RedisDrawerTab.Clients:
                 await LoadClientsAsync().ConfigureAwait(true);
                 break;
+            case RedisDrawerTab.Cluster:
+                await LoadClusterAsync().ConfigureAwait(true);
+                break;
             default:
-                // 控制台 / 订阅 / 内存分析都是用户驱动的,没有"刷新"这回事。
+                // 控制台 / 订阅 / 监视 / 内存分析都是用户驱动的,没有"刷新"这回事。
                 break;
         }
     }
@@ -363,6 +424,8 @@ public sealed partial class RedisWorkspaceViewModel
     {
         try
         {
+            // 阈值与保留条数决定了这一页**看得见什么**,和条目一起取。
+            await LoadSlowlogConfigAsync().ConfigureAwait(true);
             IReadOnlyList<RedisSlowlogEntry>? entries = await _connection.ReadSlowlogAsync().ConfigureAwait(true);
             Slowlog.Clear();
             if (entries is null)
@@ -375,6 +438,7 @@ public sealed partial class RedisWorkspaceViewModel
             {
                 Slowlog.Add(entry);
             }
+            RaisePropertyChanged(nameof(SlowlogSummary));
         }
         catch (Exception ex)
         {
@@ -399,14 +463,16 @@ public sealed partial class RedisWorkspaceViewModel
             SelectedClient = null;
             if (entries is null)
             {
+                _allClients.Clear();
                 ClientsNotice = Loc.Format("Redis_Unavailable", "CLIENT LIST");
+                RaisePropertyChanged(nameof(ClientsSummary));
                 return;
             }
             ClientsNotice = string.Empty;
-            foreach (RedisClientEntry entry in entries)
-            {
-                Clients.Add(entry);
-            }
+            _allClients.Clear();
+            _allClients.AddRange(entries);
+            // 过滤在客户端做:CLIENT LIST 没有过滤参数,为了筛一下再拉一遍几百条连接是浪费。
+            ApplyClientFilter();
         }
         catch (Exception ex)
         {
@@ -439,14 +505,7 @@ public sealed partial class RedisWorkspaceViewModel
         {
             await _connection.SubscribeAsync(channel, (actual, payload) =>
                 // 库在自己的线程上回调:改集合必须封送回 UI 线程。
-                Dispatcher.UIThread.Post(() =>
-                {
-                    Messages.Insert(0, new(DateTimeOffset.Now, actual, payload));
-                    while (Messages.Count > MaxMessages)
-                    {
-                        Messages.RemoveAt(Messages.Count - 1);
-                    }
-                })).ConfigureAwait(true);
+                Dispatcher.UIThread.Post(() => OnMessageReceived(actual, payload))).ConfigureAwait(true);
             Subscriptions.Add(channel);
             ChannelDraft = string.Empty;
         }
@@ -491,6 +550,7 @@ public sealed partial class RedisWorkspaceViewModel
                 .SampleMemoryAsync(_connection.Settings.ScanBudget, sampled =>
                     Dispatcher.UIThread.Post(() => MemoryNotice = Loc.Format("Redis_MemorySampleNote",
                         sampled.ToString("N0", CultureInfo.CurrentCulture), "…")),
+                    MemoryPrefixSegments,
                     token)
                 .ConfigureAwait(true);
             if (!sample.Available)
@@ -498,8 +558,11 @@ public sealed partial class RedisWorkspaceViewModel
                 MemoryNotice = Loc["Redis_MemoryNeedsCommand"];
                 return;
             }
+            // 占比的分母是**本次抽样的总量**,不是整库 —— 它回答"抽到的这些键里谁最重"。
+            long sampledBytes = sample.Buckets.Sum(bucket => bucket.Bytes);
             foreach (RedisMemoryBucket bucket in sample.Buckets)
             {
+                bucket.Share = sampledBytes > 0 ? (double)bucket.Bytes / sampledBytes : 0;
                 MemoryByPrefix.Add(bucket);
             }
             foreach (RedisMemoryBucket bucket in sample.TopKeys)

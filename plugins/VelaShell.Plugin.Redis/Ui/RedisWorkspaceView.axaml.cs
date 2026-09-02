@@ -1,5 +1,7 @@
 ﻿using Avalonia.Controls;
 using Avalonia.Input;
+// SetTextAsync 在 Avalonia 12 里是 IClipboard 的扩展方法,住在这个命名空间。
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 
@@ -27,6 +29,26 @@ public sealed partial class RedisWorkspaceView : UserControl
         KeyList.Tapped += OnKeyListTapped;
         // 列表关了自动滚动(理由见 AXAML),所以"跳到收藏的键"要视图自己滚过去。
         viewModel.KeyRevealed += (_, row) => Dispatcher.UIThread.Post(() => KeyList.ScrollIntoView(row));
+        // 剪贴板挂在 TopLevel 上,视图模型够不着 —— 也不该够得着。它只发一个"请复制这段",
+        // 由视图去找当前窗口。找不到窗口(headless / 还没挂上)时静默跳过,而不是抛。
+        // 抽屉上边缘的拖拽。走 Thumb 的 DragDelta 而不是 GridSplitter:后者只会去改紧邻的
+        // 两个行定义,而抽屉与主体之间隔着状态条和页签条 —— 拖出来的会是那两行变形。
+        DrawerResizer.DragDelta += (_, e) => _viewModel.ResizeDrawer(e.Vector.Y, Bounds.Height);
+        // 订阅页的"自动滚动":最新一条插在表头,所以跟到最新 = 滚回第一行。
+        viewModel.MessagesScrollRequested += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (MessageList.ItemCount > 0)
+            {
+                MessageList.ScrollIntoView(0);
+            }
+        });
+        viewModel.CopyRequested += (_, text) => Dispatcher.UIThread.Post(() =>
+        {
+            if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            {
+                _ = clipboard.SetTextAsync(text);
+            }
+        });
     }
 
     /// <summary>
@@ -74,6 +96,17 @@ public sealed partial class RedisWorkspaceView : UserControl
             }
             return;
         }
+        // 两个覆盖层同理:Esc 先关最上面那一层,不往下传。
+        if (_viewModel.NewKey.IsOpen || _viewModel.Transfer.IsOpen)
+        {
+            if (e.Key == Key.Escape)
+            {
+                _viewModel.NewKey.IsOpen = false;
+                _viewModel.Transfer.IsOpen = false;
+                e.Handled = true;
+            }
+            return;
+        }
 
         if (ReferenceEquals(e.Source, ConsoleInput))
         {
@@ -110,6 +143,10 @@ public sealed partial class RedisWorkspaceView : UserControl
                 return;
             case Key.R when control:
                 _viewModel.RescanCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case Key.N when control:
+                _viewModel.NewKeyCommand.Execute(null);
                 e.Handled = true;
                 return;
             case Key.OemTilde when control:

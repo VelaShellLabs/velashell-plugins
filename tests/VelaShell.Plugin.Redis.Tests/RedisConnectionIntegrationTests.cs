@@ -323,6 +323,65 @@ public sealed class RedisConnectionIntegrationTests
         Assert.AreEqual(64d, page.Rows.Single(r => r.Label == "bob").Score);
     }
 
+    /// <summary>
+    /// 按分数区间读有序集合:顺序由服务端保证,所以这条路上的名次是**全局**的。
+    /// <para>
+    /// 这正是它存在的理由 —— <c>ZSCAN</c> 不保证顺序,那条路只能给出"这一页里的第几行"。
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public async Task ReadSortedSetByScoreAsync_OrdersByScore_AndReportsRangeTotal()
+    {
+        RedisElementPage page = await Require().ReadSortedSetByScoreAsync(
+            new($"{_prefix}:board"), string.Empty, string.Empty, "0", 100, descending: true);
+
+        Assert.AreEqual(2, page.Total);
+        CollectionAssert.AreEqual(
+            new[] { "alice", "bob" }, page.Rows.Select(r => r.Label).ToArray(),
+            "倒序:分数高的在前。");
+        Assert.IsTrue(page.IsComplete);
+    }
+
+    /// <summary>区间是**真的**在服务端收窄:总数报的是区间内的成员数,不是整个集合。</summary>
+    [TestMethod]
+    public async Task ReadSortedSetByScoreAsync_NarrowsToTheRange()
+    {
+        RedisElementPage page = await Require().ReadSortedSetByScoreAsync(
+            new($"{_prefix}:board"), "100", string.Empty, "0", 100, descending: true);
+
+        Assert.AreEqual(1, page.Total, "总数是区间内的,不是集合总数。");
+        Assert.AreEqual("alice", page.Rows.Single().Label);
+    }
+
+    /// <summary>上下界填反了不该变成一片空白 —— 换过来照常给结果。</summary>
+    [TestMethod]
+    public async Task ReadSortedSetByScoreAsync_SwappedBounds_StillReturnsTheRange()
+    {
+        RedisElementPage page = await Require().ReadSortedSetByScoreAsync(
+            new($"{_prefix}:board"), "200", "0", "0", 100, descending: false);
+
+        Assert.AreEqual(2, page.Total);
+        CollectionAssert.AreEqual(new[] { "bob", "alice" }, page.Rows.Select(r => r.Label).ToArray());
+    }
+
+    /// <summary>分页走的是 <c>LIMIT offset count</c>:游标字段里放的就是下一页的偏移量。</summary>
+    [TestMethod]
+    public async Task ReadSortedSetByScoreAsync_PagesByOffset()
+    {
+        RedisConnection connection = Require();
+        RedisElementPage first = await connection.ReadSortedSetByScoreAsync(
+            new($"{_prefix}:board"), string.Empty, string.Empty, "0", 1, descending: true);
+
+        Assert.AreEqual("alice", first.Rows.Single().Label);
+        Assert.IsFalse(first.IsComplete, "还有第二页,游标不该归零。");
+
+        RedisElementPage second = await connection.ReadSortedSetByScoreAsync(
+            new($"{_prefix}:board"), string.Empty, string.Empty, first.Cursor, 1, descending: true);
+
+        Assert.AreEqual("bob", second.Rows.Single().Label);
+        Assert.IsTrue(second.IsComplete, "取完了,游标归零。");
+    }
+
     [TestMethod]
     public async Task ReadElementsAsync_UnknownType_ReturnsAnEmptyPage()
     {
@@ -330,6 +389,62 @@ public sealed class RedisConnectionIntegrationTests
 
         Assert.IsEmpty(page.Rows);
         Assert.IsTrue(page.IsComplete);
+    }
+
+    /// <summary>
+    /// 单机实例上读集群拓扑,连 <c>CLUSTER NODES</c> 都不该发出去。
+    /// <para>
+    /// 只断言"返回不可用"是不够的 —— 老写法也返回不可用,代价是每刷新一次运维抽屉就往服务器
+    /// 送一条注定失败的命令(现场那台 8.4 上攒到了 878 次 <c>failed_calls</c>),
+    /// 客户端这边则是一串没人看得懂的首发异常。所以这里数的是**服务器的调用计数**:
+    /// 连接时的 <c>INFO server</c> 已经报过 <c>redis_mode</c>,答案早就有了,不必再问一遍。
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public async Task ReadClusterAsync_OnStandalone_DoesNotSendClusterNodes()
+    {
+        RedisConnection connection = Require();
+        if (connection.Info.Mode is "cluster")
+        {
+            Assert.Inconclusive("这台是集群实例,本用例针对的是单机形态。");
+        }
+
+        // 计数要从**同一条**连接上读:StackExchange.Redis 自己的握手也会发一次 CLUSTER NODES,
+        // 每次量一开新连接就凭空多记一笔,量的就成了测试自己。
+        using ConnectionMultiplexer meter = await ConnectionMultiplexer.ConnectAsync(
+            new ConfigurationOptions { EndPoints = { { Host, Port } }, AllowAdmin = true, AbortOnConnectFail = true });
+        long before = await ClusterNodesCallsAsync(meter);
+        RedisClusterView view = await connection.ReadClusterAsync();
+        // 抽屉会反复刷新,所以多叫几次:探测结果要记住,而不是每次都重新撞一遍墙。
+        await connection.ReadClusterAsync();
+        await connection.ReadClusterAsync();
+        long after = await ClusterNodesCallsAsync(meter);
+
+        Assert.IsFalse(view.Available, "单机实例上,不是集群是空状态,不是错误。");
+        Assert.IsEmpty(view.Nodes);
+        Assert.AreEqual(before, after, $"CLUSTER NODES 不该发出去,服务器却多记了 {after - before} 次调用。");
+    }
+
+    /// <summary>从 <c>INFO commandstats</c> 里读 <c>CLUSTER NODES</c> 的累计调用次数(没记过就是 0)。</summary>
+    private static async Task<long> ClusterNodesCallsAsync(ConnectionMultiplexer meter)
+    {
+        RedisResult raw = await meter.GetDatabase(Database).ExecuteAsync("INFO", "commandstats");
+        foreach (string line in ((string?)raw ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!line.StartsWith("cmdstat_cluster|nodes:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            foreach (string field in line[(line.IndexOf(':', StringComparison.Ordinal) + 1)..].Split(','))
+            {
+                if (field.StartsWith("calls=", StringComparison.Ordinal)
+                    && long.TryParse(field["calls=".Length..], out long calls))
+                {
+                    return calls;
+                }
+            }
+        }
+        return 0;
     }
 
     [TestMethod]
