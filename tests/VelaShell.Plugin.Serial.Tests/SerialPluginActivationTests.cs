@@ -169,7 +169,7 @@ public sealed class SerialPluginActivationTests
                 CancellationToken.None));
 
         // 不拦的话,用户看到的是 SerialPort 抛的那句英文 "PortName cannot be empty"。
-        StringAssert.Contains(error.Message, "串口设备");
+        Assert.Contains("串口设备", error.Message);
     }
 
     [TestMethod]

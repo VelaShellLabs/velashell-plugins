@@ -104,7 +104,7 @@ public sealed class S3InteropTests
 
         var certificate = translated as VelaS3CertificateException;
         Assert.IsNotNull(certificate);
-        StringAssert.Contains(certificate!.PolicyErrors, "RemoteCertificateNameMismatch");
+        Assert.Contains("RemoteCertificateNameMismatch", certificate!.PolicyErrors);
     }
 
     /// <summary>指纹已被信任时校验必须放行,否则自签的 MinIO 永远连不上。</summary>

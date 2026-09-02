@@ -409,7 +409,7 @@ public sealed class S3FileServiceIntegrationTests
                     () => _service.DownloadFileAsync(_session, "/test-bucket/public/asset.png", local));
 
             Assert.AreEqual("AccessDenied", error.ErrorCode);
-            StringAssert.Contains(error.Message, "/test-bucket/public/asset.png");
+            Assert.Contains("/test-bucket/public/asset.png", error.Message);
         }
         finally
         {
@@ -672,11 +672,11 @@ public sealed class S3FileServiceIntegrationTests
         Assert.AreEqual("127.0.0.1", parsed.Host, url);
         Assert.AreEqual(_server.Port, parsed.Port, url);
         Assert.AreEqual("/test-bucket/share/report.pdf", Uri.UnescapeDataString(parsed.AbsolutePath), url);
-        StringAssert.Contains(url, "X-Amz-Algorithm=AWS4-HMAC-SHA256", url);
-        StringAssert.Contains(url, "X-Amz-Expires=3600", url);
-        StringAssert.Contains(url, "X-Amz-SignedHeaders=host", url);
-        StringAssert.Contains(url, "X-Amz-Signature=", url);
-        StringAssert.Contains(url, "X-Amz-Credential=", url);
+        Assert.Contains("X-Amz-Algorithm=AWS4-HMAC-SHA256", url, url);
+        Assert.Contains("X-Amz-Expires=3600", url, url);
+        Assert.Contains("X-Amz-SignedHeaders=host", url, url);
+        Assert.Contains("X-Amz-Signature=", url, url);
+        Assert.Contains("X-Amz-Credential=", url, url);
     }
 
     /// <summary>预签名 URL 要求一个对象路径;对着桶或根要求它没有意义。</summary>
