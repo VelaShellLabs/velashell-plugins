@@ -41,9 +41,8 @@ public sealed class RedisKeyLayoutTests
     {
         List<RedisKeyRow> rows = RedisKeyLayout.Build(Demo(), Delimiter, threshold: 8);
 
-        CollectionAssert.AreEqual(
-            new[]
-            {
+        Assert.AreSequenceEqual(
+            [
                 "demo:config:rate-limit",
                 "demo:order:2026:*",
                 "demo:queue:email",
@@ -51,8 +50,7 @@ public sealed class RedisKeyLayoutTests
                 "demo:user:10086:lock",
                 "demo:user:10086:profile",
                 "demo:user:10086:sessions"
-            },
-            rows.Select(row => row.Display).ToArray());
+            ], [.. rows.Select(row => row.Display)]);
 
         RedisKeyRow group = rows.Single(row => row.IsGroup);
         Assert.AreEqual(40, group.Count);
@@ -98,9 +96,8 @@ public sealed class RedisKeyLayoutTests
         }
 
         List<RedisKeyRow> collapsed = RedisKeyLayout.Build(keys, Delimiter, threshold: 8);
-        CollectionAssert.AreEqual(
-            new[] { "app:cache:x", "app:session:*" },
-            collapsed.Select(row => row.Display).ToArray());
+        Assert.AreSequenceEqual(
+            ["app:cache:x", "app:session:*"], [.. collapsed.Select(row => row.Display)]);
         RedisKeyRow group = collapsed.Single(row => row.IsGroup);
         Assert.AreEqual(20, group.Count);
 
@@ -108,9 +105,8 @@ public sealed class RedisKeyLayoutTests
             keys, Delimiter, threshold: 8, new HashSet<string>(StringComparer.Ordinal) { group.Id });
 
         // 展开后不是甩出 20 行,而是继续收敛成两条子分组 —— 这正是递归套用规则的意义。
-        CollectionAssert.AreEqual(
-            new[] { "app:cache:x", "app:session:*", "app:session:abc:*", "app:session:def:*" },
-            expanded.Select(row => row.Display).ToArray());
+        Assert.AreSequenceEqual(
+            ["app:cache:x", "app:session:*", "app:session:abc:*", "app:session:def:*"], [.. expanded.Select(row => row.Display)]);
         Assert.IsTrue(expanded[1].IsExpanded);
         Assert.IsTrue(expanded[2].Depth == 1 && expanded[3].Depth == 1, "展开出来的成员要缩进一级。");
     }
@@ -145,9 +141,8 @@ public sealed class RedisKeyLayoutTests
 
         Assert.DoesNotContain(row => row.Display == "a:b:*", rows,
             "a:b 会被这条分组行错误地算进去。");
-        CollectionAssert.AreEqual(
-            new[] { "a:b", "a:b:c", "a:b:d" },
-            rows.Select(row => row.Display).ToArray());
+        Assert.AreSequenceEqual(
+            ["a:b", "a:b:c", "a:b:d"], [.. rows.Select(row => row.Display)]);
     }
 
     [TestMethod]
@@ -157,7 +152,7 @@ public sealed class RedisKeyLayoutTests
 
         List<RedisKeyRow> rows = RedisKeyLayout.Build(keys, delimiter: "", threshold: 2);
 
-        CollectionAssert.AreEqual(new[] { "a", "b", "c" }, rows.Select(row => row.Display).ToArray());
+        Assert.AreSequenceEqual(["a", "b", "c"], [.. rows.Select(row => row.Display)]);
     }
 
     /// <summary>阈值低于下限即"不折" —— 阈值 1 会让每个键都自成一组,那是纯粹的噪音。</summary>
@@ -177,12 +172,11 @@ public sealed class RedisKeyLayoutTests
     [TestMethod]
     public void Breadcrumb_IsTheSharedPrefixOfEverythingScanned()
     {
-        CollectionAssert.AreEqual(new[] { "demo" }, RedisKeyLayout.Breadcrumb(Demo(), Delimiter).ToArray());
+        Assert.AreSequenceEqual(["demo"], [.. RedisKeyLayout.Breadcrumb(Demo(), Delimiter)]);
 
         // 单个键:它自己那一段不算前缀,否则面包屑会把用户"带到"一个键上。
-        CollectionAssert.AreEqual(
-            new[] { "demo", "user", "10086" },
-            RedisKeyLayout.Breadcrumb([K("demo:user:10086:profile")], Delimiter).ToArray());
+        Assert.AreSequenceEqual(
+            ["demo", "user", "10086"], [.. RedisKeyLayout.Breadcrumb([K("demo:user:10086:profile")], Delimiter)]);
 
         Assert.IsEmpty(RedisKeyLayout.Breadcrumb([K("alpha:1"), K("beta:2")], Delimiter));
         Assert.IsEmpty(RedisKeyLayout.Breadcrumb([], Delimiter));

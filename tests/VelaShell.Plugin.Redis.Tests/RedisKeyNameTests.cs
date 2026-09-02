@@ -17,7 +17,7 @@ public sealed class RedisKeyNameTests
 
         var key = new RedisKeyName(raw);
 
-        CollectionAssert.AreEqual(raw, key.Raw.ToArray(), "原始字节必须一字不差地保留下来。");
+        Assert.AreSequenceEqual(raw, key.Raw.ToArray(), "原始字节必须一字不差地保留下来。");
     }
 
     [TestMethod]
@@ -79,7 +79,7 @@ public sealed class RedisKeyNameTests
     {
         var key = new RedisKeyName("user:10086:profile");
 
-        CollectionAssert.AreEqual(new[] { "user", "10086", "profile" }, key.Segments(":"));
+        Assert.AreSequenceEqual(["user", "10086", "profile"], key.Segments(":"));
     }
 
     [TestMethod]
@@ -87,7 +87,7 @@ public sealed class RedisKeyNameTests
     {
         var key = new RedisKeyName("lonely");
 
-        CollectionAssert.AreEqual(new[] { "lonely" }, key.Segments(":"));
+        Assert.AreSequenceEqual(["lonely"], key.Segments(":"));
     }
 
     [TestMethod]
@@ -95,7 +95,7 @@ public sealed class RedisKeyNameTests
     {
         var key = new RedisKeyName("a:b");
 
-        CollectionAssert.AreEqual(new[] { "a:b" }, key.Segments(string.Empty));
+        Assert.AreSequenceEqual(["a:b"], key.Segments(string.Empty));
     }
 
     [TestMethod]
@@ -120,7 +120,7 @@ public sealed class RedisKeyNameTests
 
         var redisKey = new RedisKeyName(raw).ToRedisKey();
 
-        CollectionAssert.AreEqual(raw, (byte[]?)redisKey);
+        Assert.AreSequenceEqual(raw, (byte[]?)redisKey);
     }
 
     [TestMethod]
@@ -128,6 +128,6 @@ public sealed class RedisKeyNameTests
     {
         var key = new RedisKeyName("中");
 
-        CollectionAssert.AreEqual(Encoding.UTF8.GetBytes("中"), key.Raw.ToArray());
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes("中"), key.Raw.ToArray());
     }
 }

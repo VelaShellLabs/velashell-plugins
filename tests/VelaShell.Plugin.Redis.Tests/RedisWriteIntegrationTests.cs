@@ -157,13 +157,12 @@ public sealed class RedisWriteIntegrationTests
         await connection.SetListItemAsync(key, 1, "A");
 
         RedisElementPage page = await connection.ReadElementsAsync(key, "list", "0", 100);
-        CollectionAssert.AreEqual(new[] { "z", "A", "b" }, page.Rows.Select(r => r.Value).ToArray());
+        Assert.AreSequenceEqual(["z", "A", "b"], [.. page.Rows.Select(r => r.Value)]);
 
         // 列表没有按索引删除的原语:删的是第一个等于该值的元素。
         Assert.AreEqual(1, await connection.RemoveListValueAsync(key, "A"));
-        CollectionAssert.AreEqual(
-            new[] { "z", "b" },
-            (await connection.ReadElementsAsync(key, "list", "0", 100)).Rows.Select(r => r.Value).ToArray());
+        Assert.AreSequenceEqual(
+            ["z", "b"], [.. (await connection.ReadElementsAsync(key, "list", "0", 100)).Rows.Select(r => r.Value)]);
     }
 
     [TestMethod]

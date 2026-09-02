@@ -193,7 +193,7 @@ public sealed class RedisConnectionIntegrationTests
         while (cursor is not "0");
 
         RedisKeyName binary = found.Single();
-        CollectionAssert.AreEqual(expected, binary.Raw.ToArray());
+        Assert.AreSequenceEqual(expected, binary.Raw.ToArray());
         Assert.IsFalse(binary.IsUtf8);
         Assert.AreEqual(binary.Display, binary.Text, "非法 UTF-8 的键名回落到转义形式显示。");
     }
@@ -214,7 +214,7 @@ public sealed class RedisConnectionIntegrationTests
 
         IReadOnlyList<string> types = await connection.TypesAsync(keys);
 
-        CollectionAssert.AreEqual(new[] { "string", "hash", "list", "set", "zset", "none" }, types.ToArray());
+        Assert.AreSequenceEqual(["string", "hash", "list", "set", "zset", "none"], [.. types]);
     }
 
     [TestMethod]
@@ -267,7 +267,7 @@ public sealed class RedisConnectionIntegrationTests
     {
         RedisStringValue value = await Require().ReadStringAsync(new($"{_prefix}:user:1:name"));
 
-        CollectionAssert.AreEqual(System.Text.Encoding.UTF8.GetBytes("张三"), value.Bytes);
+        Assert.AreSequenceEqual(System.Text.Encoding.UTF8.GetBytes("张三"), value.Bytes);
         Assert.AreEqual(6, value.TotalLength);
         Assert.IsFalse(value.IsTruncated);
     }
@@ -309,7 +309,7 @@ public sealed class RedisConnectionIntegrationTests
         RedisElementPage page = await Require().ReadElementsAsync(new($"{_prefix}:tags"), "set", "0", 100);
 
         Assert.AreEqual(2, page.Total);
-        CollectionAssert.AreEquivalent(new[] { "vip", "beta" }, page.Rows.Select(r => r.Label).ToArray());
+        Assert.AreSequenceEqual(["vip", "beta"], [.. page.Rows.Select(r => r.Label)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.IsTrue(page.Rows.All(r => r.Value.Length == 0), "集合只有成员,没有值 —— 值列该是空的。");
     }
 
@@ -336,9 +336,8 @@ public sealed class RedisConnectionIntegrationTests
             new($"{_prefix}:board"), string.Empty, string.Empty, "0", 100, descending: true);
 
         Assert.AreEqual(2, page.Total);
-        CollectionAssert.AreEqual(
-            new[] { "alice", "bob" }, page.Rows.Select(r => r.Label).ToArray(),
-            "倒序:分数高的在前。");
+        Assert.AreSequenceEqual(
+            ["alice", "bob"], [.. page.Rows.Select(r => r.Label)], "倒序:分数高的在前。");
         Assert.IsTrue(page.IsComplete);
     }
 
@@ -361,7 +360,7 @@ public sealed class RedisConnectionIntegrationTests
             new($"{_prefix}:board"), "200", "0", "0", 100, descending: false);
 
         Assert.AreEqual(2, page.Total);
-        CollectionAssert.AreEqual(new[] { "bob", "alice" }, page.Rows.Select(r => r.Label).ToArray());
+        Assert.AreSequenceEqual(["bob", "alice"], [.. page.Rows.Select(r => r.Label)]);
     }
 
     /// <summary>分页走的是 <c>LIMIT offset count</c>:游标字段里放的就是下一页的偏移量。</summary>

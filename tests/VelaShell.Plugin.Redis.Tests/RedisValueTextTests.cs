@@ -62,7 +62,7 @@ public sealed class RedisValueTextTests
         {
             string escaped = RedisValueText.Escape(raw);
             Assert.IsTrue(RedisValueText.TryUnescape(escaped, out byte[] back, out string? error), error);
-            CollectionAssert.AreEqual(raw, back, $"往返丢字节:{escaped}");
+            Assert.AreSequenceEqual(raw, back, $"往返丢字节:{escaped}");
         }
     }
 
@@ -80,7 +80,7 @@ public sealed class RedisValueTextTests
         CollectionAssert.AreNotEqual(Gzip, naive);
         // 正确的那条路必须还原原值。
         Assert.IsTrue(RedisValueText.TryUnescape(escaped, out byte[] correct, out _));
-        CollectionAssert.AreEqual(Gzip, correct);
+        Assert.AreSequenceEqual(Gzip, correct);
     }
 
     [TestMethod]
@@ -106,7 +106,7 @@ public sealed class RedisValueTextTests
     public void Unescape_LiteralNonAscii_EncodesAsUtf8()
     {
         Assert.IsTrue(RedisValueText.TryUnescape("中", out byte[] bytes, out _));
-        CollectionAssert.AreEqual(Encoding.UTF8.GetBytes("中"), bytes);
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes("中"), bytes);
     }
 
     [TestMethod]

@@ -29,6 +29,7 @@ public sealed class RedisPanelUiTests
     private static HeadlessUnitTestSession _session = null!;
     private static string _prefix = "";
     private static bool _serverAvailable;
+    private static readonly string[] stringArray = ["DatabaseBox", "TypeFilterBox"];
 
     [ClassInitialize]
     public static async Task InitAsync(TestContext _)
@@ -152,9 +153,8 @@ public sealed class RedisPanelUiTests
                 Assert.AreEqual(12, viewModel.MatchedCount);
 
                 // 10 个订单折成一行;2 个 user 键低于阈值,照旧平铺。
-                CollectionAssert.AreEqual(
-                    new[] { $"{_prefix}:order:2026:*", $"{_prefix}:user:1:name", $"{_prefix}:user:1:profile" },
-                    viewModel.Rows.Select(row => row.Display).ToArray());
+                Assert.AreSequenceEqual(
+                    [$"{_prefix}:order:2026:*", $"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(row => row.Display)]);
 
                 RedisKeyRow group = viewModel.Rows.Single(row => row.IsGroup);
                 Assert.AreEqual(10, group.Count);
@@ -395,7 +395,7 @@ public sealed class RedisPanelUiTests
                 await PumpAsync();
 
                 // 下拉框:Fluent 默认 32px,压到与 TextBox.field 同一档的 24px。
-                foreach (string name in new[] { "DatabaseBox", "TypeFilterBox" })
+                foreach (string name in stringArray)
                 {
                     ComboBox box = view.GetControl<ComboBox>(name);
                     Assert.AreEqual(24d, box.Bounds.Height, $"{name} 应与同行的输入框同高。");
@@ -405,7 +405,7 @@ public sealed class RedisPanelUiTests
                 Assert.AreEqual(180d, view.GetControl<TextBox>("TtlBox").Bounds.Width);
                 Assert.AreEqual(300d, view.GetControl<TextBox>("RenameBox").Bounds.Width);
                 // 占位符必须放得进 180px:格式清单属于右边的回显位,不是占位符。
-                Assert.IsFalse(view.GetControl<TextBox>("TtlBox").Watermark!.Contains("2h30m", StringComparison.Ordinal),
+                Assert.IsFalse(view.GetControl<TextBox>("TtlBox").PlaceholderText!.Contains("2h30m", StringComparison.Ordinal),
                     "格式清单塞进占位符就会被截断,应放在 TtlPreview 那一格。");
                 Assert.Contains("2h30m", viewModel.TtlPreview, "TTL 框空着时,右边那一格要给出格式说明。");
 
@@ -547,17 +547,15 @@ public sealed class RedisPanelUiTests
                 Assert.IsTrue(viewModel.IsScanComplete, "游标应已归零。");
                 Assert.AreEqual(2, viewModel.MatchedCount);
                 // 扁平列表:一行一个**完整键名**,两个键都在眼前,不必逐层点开。
-                CollectionAssert.AreEquivalent(
-                    new[] { $"{_prefix}:user:1:name", $"{_prefix}:user:1:profile" },
-                    viewModel.Rows.Select(row => row.Display).ToArray());
+                Assert.AreSequenceEqual(
+                    [$"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(row => row.Display)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
                 Assert.DoesNotContain(row => row.IsGroup, viewModel.Rows, "两个键远低于折叠阈值。");
                 Assert.AreEqual("string", viewModel.Rows.Single(row => row.Display.EndsWith(":name", StringComparison.Ordinal)).TypeName);
                 Assert.AreEqual("hash", viewModel.Rows.Single(row => row.Display.EndsWith(":profile", StringComparison.Ordinal)).TypeName);
 
                 // 面包屑 = 这批键的公共前缀,用户据此知道自己在哪一层。
-                CollectionAssert.AreEqual(
-                    new[] { _prefix, "user", "1" },
-                    viewModel.Breadcrumb.Select(segment => segment.Label).ToArray());
+                Assert.AreSequenceEqual(
+                    [_prefix, "user", "1"], [.. viewModel.Breadcrumb.Select(segment => segment.Label)]);
 
                 // **只有游标归零才敢说"全部"** —— 状态条的措辞是这条纪律的出口。
                 string status = view.GetControl<TextBlock>("ScanStatus").Text ?? "";

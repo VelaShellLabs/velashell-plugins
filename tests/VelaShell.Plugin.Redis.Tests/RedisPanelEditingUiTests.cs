@@ -670,9 +670,8 @@ public sealed class RedisPanelEditingUiTests
             await PumpAsync();
 
             byte[] stored = await ReadRawAsync("bin:blob");
-            CollectionAssert.AreEqual(
-                new byte[] { 0x1F, 0x8B, 0x08, 0x00, 0xC3, 0x28, 0x00, 0xFF }, stored,
-                "值被按文本写回去了 —— 这正是要杜绝的那次静默损坏。");
+            Assert.AreSequenceEqual(
+                new byte[] { 0x1F, 0x8B, 0x08, 0x00, 0xC3, 0x28, 0x00, 0xFF }, stored, "值被按文本写回去了 —— 这正是要杜绝的那次静默损坏。");
         });
     }
 
@@ -697,7 +696,7 @@ public sealed class RedisPanelEditingUiTests
             await PumpAsync();
 
             Assert.Contains("转义写坏了", vm.StatusMessage);
-            CollectionAssert.AreEqual(original, await ReadRawAsync("bad:blob"), "拒绝写入时服务端的值必须原封不动。");
+            Assert.AreSequenceEqual(original, await ReadRawAsync("bad:blob"), "拒绝写入时服务端的值必须原封不动。");
         });
     }
 
