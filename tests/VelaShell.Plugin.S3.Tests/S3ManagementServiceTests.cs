@@ -93,8 +93,8 @@ public sealed class S3ManagementServiceTests
 
         Assert.IsTrue(result.Exists);
         // 缩进会变,内容不变 —— 尤其是我们不认识的 "Vendor" 字段必须还在。
-        StringAssert.Contains(result.Json, "\"Vendor\"");
-        StringAssert.Contains(result.Json, "2012-10-17");
+        Assert.Contains("\"Vendor\"", result.Json);
+        Assert.Contains("2012-10-17", result.Json);
     }
 
     /// <summary>版本控制的读写映射。</summary>
@@ -105,7 +105,7 @@ public sealed class S3ManagementServiceTests
                .Returns(new GetBucketVersioningResponse { VersioningConfig = new() { Status = VersionStatus.Enabled } });
 
         S3ConfigResult result = await _service.GetBucketConfigAsync(_session, Bucket, S3ConfigKind.Versioning);
-        StringAssert.Contains(result.Json, "Enabled");
+        Assert.Contains("Enabled", result.Json);
 
         await _service.PutBucketConfigAsync(_session, Bucket, S3ConfigKind.Versioning, """{"Status":"Suspended"}""");
 

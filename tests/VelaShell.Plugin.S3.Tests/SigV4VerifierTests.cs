@@ -228,8 +228,8 @@ public sealed class SigV4VerifierTests
         };
         string canonicalRequest = SigV4Verifier.CreateCanonicalRequest(
             "GET", "/", string.Empty, headers, SigV4Verifier.EmptyPayloadHash, out _);
-        StringAssert.Contains(canonicalRequest, "host:example.com\n");
-        StringAssert.Contains(canonicalRequest, "x-amz-meta-note:a b\n");
+        Assert.Contains("host:example.com\n", canonicalRequest);
+        Assert.Contains("x-amz-meta-note:a b\n", canonicalRequest);
     }
 
     /// <summary>签名头名要按字节序排序(而不是按插入顺序或忽略大小写的顺序)。</summary>
