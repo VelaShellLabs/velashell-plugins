@@ -115,5 +115,20 @@ internal sealed class RedisWorkspaceProvider(IPluginContext context, Loc loc) : 
         return null;
     }
 
-    private static string Describe(Exception ex) => ex.Message.Trim();
+    /// <summary>
+    /// 库的异常消息 → 摆给用户看的一句话。
+    /// <para>
+    /// 连不上时 StackExchange.Redis 会在消息尾巴上附一段**写给开发者**的建议
+    /// ("…use abortConnect=false in your connection string or AbortOnConnectFail=false; in your code")。
+    /// 它出现在宿主的连接失败提示框里有两重坏处:一是用户根本没有"连接字符串"可改,
+    /// 二是那正是本插件<b>刻意不采纳</b>的做法(理由见 <see cref="RedisConnection.ConnectAsync" />)——
+    /// 照着做只会换来一个空的键树和一串各自超时的操作。所以在出口处剪掉。
+    /// </para>
+    /// </summary>
+    private static string Describe(Exception ex)
+    {
+        string message = ex.Message.Trim();
+        int advice = message.IndexOf("To allow this multiplexer", StringComparison.OrdinalIgnoreCase);
+        return advice < 0 ? message : message[..advice].TrimEnd();
+    }
 }
