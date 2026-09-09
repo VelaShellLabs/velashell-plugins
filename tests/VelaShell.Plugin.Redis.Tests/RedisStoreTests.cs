@@ -22,8 +22,10 @@ public sealed class RedisStoreTests
         await store.SaveFavoritesAsync("redis.example:6379", ["user:1", "lock:a"]);
         await store.SaveFavoritesAsync("10.0.0.2:6379", ["other:1"]);
 
-        Assert.AreSequenceEqual(["user:1", "lock:a"], [.. (await store.LoadFavoritesAsync("redis.example:6379"))]);
-        Assert.AreSequenceEqual(["other:1"], [.. (await store.LoadFavoritesAsync("10.0.0.2:6379"))]);
+        List<string> favorites = [.. await store.LoadFavoritesAsync("redis.example:6379")];
+        Assert.AreSequenceEqual(["user:1", "lock:a"], favorites);
+        List<string> otherFavorites = [.. await store.LoadFavoritesAsync("10.0.0.2:6379")];
+        Assert.AreSequenceEqual(["other:1"], otherFavorites);
     }
 
     [TestMethod]
@@ -59,8 +61,10 @@ public sealed class RedisStoreTests
         await store.AppendHistoryAsync("a:6379", "PING");
         await store.AppendHistoryAsync("b:6379", "INFO");
 
-        Assert.AreSequenceEqual(["PING"], [.. (await store.LoadHistoryAsync("a:6379"))]);
-        Assert.AreSequenceEqual(["INFO"], [.. (await store.LoadHistoryAsync("b:6379"))]);
+        List<string> first = [.. await store.LoadHistoryAsync("a:6379")];
+        Assert.AreSequenceEqual(["PING"], first);
+        List<string> second = [.. await store.LoadHistoryAsync("b:6379")];
+        Assert.AreSequenceEqual(["INFO"], second);
     }
 
     [TestMethod]

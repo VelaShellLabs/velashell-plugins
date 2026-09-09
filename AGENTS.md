@@ -74,3 +74,29 @@ Telnet / 串口见 [`zh/host/Telnet与串口可行性调研.md`](https://github.
 ### 留在本仓库的文档
 
 `README.md`、`LICENSE`,以及各插件目录下的 `README.md`(该插件自己的实现说明与偏离记录)。
+
+### 测试:不要把 `await` 写进带集合实参的断言里
+
+本仓库跑在 `net11.0` + `LangVersion preview`(C# 的 first-class span)。在这套语义下,
+`byte[]` / 集合表达式实参会**隐式转成 `ReadOnlySpan<T>`** 再传进
+`Assert.AreSequenceEqual`、`MemoryExtensions.SequenceEqual`、`StartsWith`、`IndexOf` 之类的重载。
+
+于是这一行是错的:
+
+```csharp
+Assert.AreSequenceEqual(content, await File.ReadAllBytesAsync(local));   // ❌
+```
+
+实参从左往右求值:`content` 先转成 `ReadOnlySpan<byte>`,然后在第二个实参的 `await` 处挂起。
+span 是 ref struct,跨不了挂起点 —— 恢复之后拿到的是**空 span**,断言无条件失败。
+编译器**不报错也不告警**,只有真正走异步(await 没同步完成)时才现形,
+表现为「单跑绿、一起跑红」「本地绿、CI 红」的假不稳定。
+
+正确写法是先把 `await` 落到局部变量:
+
+```csharp
+byte[] downloaded = await File.ReadAllBytesAsync(local);                 // ✅
+Assert.AreSequenceEqual(content, downloaded);
+```
+
+同一条规则适用于任何 span 接收者或 span 实参的调用:**调用的实参列表里不许出现 `await`**。

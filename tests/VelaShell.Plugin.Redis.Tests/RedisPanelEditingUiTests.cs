@@ -696,7 +696,8 @@ public sealed class RedisPanelEditingUiTests
             await PumpAsync();
 
             Assert.Contains("转义写坏了", vm.StatusMessage);
-            Assert.AreSequenceEqual(original, await ReadRawAsync("bad:blob"), "拒绝写入时服务端的值必须原封不动。");
+            byte[] stored = await ReadRawAsync("bad:blob");
+            Assert.AreSequenceEqual(original, stored, "拒绝写入时服务端的值必须原封不动。");
         });
     }
 

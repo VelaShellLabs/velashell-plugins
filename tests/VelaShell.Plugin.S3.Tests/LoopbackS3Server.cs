@@ -94,7 +94,7 @@ internal sealed class LoopbackS3Server : IDisposable
     public void AddObject(string bucket, string key, byte[] content)
     {
         AddBucket(bucket);
-        _buckets[bucket][key] = new([.. content], DateTimeOffset.UtcNow);
+        _buckets[bucket][key] = new(content, DateTimeOffset.UtcNow);
     }
 
     /// <summary>预置一个文本对象。</summary>
@@ -770,10 +770,7 @@ internal sealed class LoopbackS3Server : IDisposable
         return new()
         {
             Status = HttpStatusCode.OK,
-            // HttpListener may consume the response buffer while sending it.
-            // Never expose the stored object bytes to the transport layer: tests
-            // keep the same array as their expected content.
-            Body = [.. stored.Content],
+            Body = stored.Content,
             Headers = { ["ETag"] = $"\"{ETagOf(stored.Content)}\"" },
         };
     }
@@ -783,7 +780,7 @@ internal sealed class LoopbackS3Server : IDisposable
             ? new()
             {
                 Status = HttpStatusCode.OK,
-            Body = [.. stored.Content], // 只用于填 Content-Length,HEAD 不会真的写出去
+                Body = stored.Content, // 只用于填 Content-Length,HEAD 不会真的写出去
                 Headers =
                 {
                     ["ETag"] = $"\"{ETagOf(stored.Content)}\"",
