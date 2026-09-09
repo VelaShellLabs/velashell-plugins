@@ -298,6 +298,7 @@ public sealed class S3FileServiceIntegrationTests
     public async Task Download_WritesExactContent()
     {
         byte[] content = Encoding.UTF8.GetBytes(new string('x', 4096) + "tail");
+        byte[] expected = [.. content];
         _server.AddObject(Bucket, "data/blob.bin", content);
         string local = Path.Combine(Path.GetTempPath(), $"vela-s3-{Guid.NewGuid():N}");
         try
@@ -306,7 +307,7 @@ public sealed class S3FileServiceIntegrationTests
             await _service.DownloadFileAsync(_session, "/test-bucket/data/blob.bin", local,
                 new SynchronousProgress<RemoteTransferProgress>(progress.Add));
 
-            Assert.AreSequenceEqual(content, await File.ReadAllBytesAsync(local));
+            Assert.IsTrue(expected.SequenceEqual(await File.ReadAllBytesAsync(local)));
             Assert.AreEqual(progress[^1].TotalBytes, progress[^1].TransferredBytes, "最后一次上报必须是满进度。");
             AssertAllRequestsSigned();
         }
@@ -328,6 +329,7 @@ public sealed class S3FileServiceIntegrationTests
     public async Task Download_HeadDenied_StillDownloadsViaGet()
     {
         byte[] content = Encoding.UTF8.GetBytes(new string('z', 3000) + "end");
+        byte[] expected = [.. content];
         _server.AddObject(Bucket, "public/asset.png", content);
         _server.DeniedMethods.Add("HEAD");
         string local = Path.Combine(Path.GetTempPath(), $"vela-s3-{Guid.NewGuid():N}");
@@ -337,7 +339,7 @@ public sealed class S3FileServiceIntegrationTests
             await _service.DownloadFileAsync(_session, "/test-bucket/public/asset.png", local,
                 new SynchronousProgress<RemoteTransferProgress>(progress.Add));
 
-            Assert.AreSequenceEqual(content, await File.ReadAllBytesAsync(local));
+            Assert.IsTrue(expected.SequenceEqual(await File.ReadAllBytesAsync(local)));
             // 总长度只能来自 GET 响应,但进度依然要收在满格上。
             Assert.AreEqual(content.Length, progress[^1].TotalBytes);
             Assert.AreEqual(progress[^1].TotalBytes, progress[^1].TransferredBytes, "最后一次上报必须是满进度。");
@@ -356,6 +358,7 @@ public sealed class S3FileServiceIntegrationTests
     public async Task Download_DirectReadDenied_FallsBackToPresignedUrl()
     {
         byte[] content = Encoding.UTF8.GetBytes(new string('p', 5000) + "tail");
+        byte[] expected = [.. content];
         _server.AddObject(Bucket, "locked/asset.bin", content);
         _server.DenyDirectReads = true;
         string local = Path.Combine(Path.GetTempPath(), $"vela-s3-{Guid.NewGuid():N}");
@@ -365,7 +368,7 @@ public sealed class S3FileServiceIntegrationTests
             await _service.DownloadFileAsync(_session, "/test-bucket/locked/asset.bin", local,
                 new SynchronousProgress<RemoteTransferProgress>(progress.Add));
 
-            Assert.AreSequenceEqual(content, await File.ReadAllBytesAsync(local));
+            Assert.IsTrue(expected.SequenceEqual(await File.ReadAllBytesAsync(local)));
             Assert.AreEqual(content.Length, progress[^1].TotalBytes);
             Assert.AreEqual(progress[^1].TotalBytes, progress[^1].TransferredBytes, "最后一次上报必须是满进度。");
             // 预签名那次也必须是签对的:服务器重算签名,对不上会计入 SignatureFailures。
@@ -422,6 +425,7 @@ public sealed class S3FileServiceIntegrationTests
     public async Task Download_ResumesWithRangeRequest()
     {
         byte[] content = Encoding.UTF8.GetBytes(new string('a', 1000) + new string('b', 1000));
+        byte[] expected = [.. content];
         _server.AddObject(Bucket, "resume.bin", content);
         string local = Path.Combine(Path.GetTempPath(), $"vela-s3-{Guid.NewGuid():N}");
         try
@@ -430,7 +434,7 @@ public sealed class S3FileServiceIntegrationTests
 
             await _service.DownloadFileAsync(_session, "/test-bucket/resume.bin", local, resumeOffset: 1000);
 
-            Assert.AreSequenceEqual(content, await File.ReadAllBytesAsync(local));
+            Assert.IsTrue(expected.SequenceEqual(await File.ReadAllBytesAsync(local)));
             AssertAllRequestsSigned();
         }
         finally
