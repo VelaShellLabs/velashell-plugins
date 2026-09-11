@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- .env。形态就是"注释 + 键值",与 INI 同源(compose 的 .env 不认段落头,
+     但认了也无害 —— 写错的段落头被染成显眼的颜色,反倒帮用户看出问题)。
+     name 与调色板角色对齐,这里的颜色只是缺省:CodeEditor 会按当前主题重着色。 -->
+<SyntaxDefinition name="Docker.DotEnv" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+
+  <Color name="Comment"     foreground="#6272A4" />
+  <Color name="String"      foreground="#F1FA8C" />
+  <Color name="Key"         foreground="#50FA7B" />
+  <Color name="Section"     foreground="#8BE9FD" fontWeight="bold" />
+  <Color name="Constant"    foreground="#BD93F9" />
+  <Color name="Number"      foreground="#BD93F9" />
+  <Color name="Punctuation" foreground="#FF79C6" />
+
+  <RuleSet ignoreCase="true">
+
+    <!-- 三种注释风格都要认:# 是 unix 配置主流,; 是经典 ini,// 偶见于 toml 邻近格式。 -->
+    <Span color="Comment" begin="#" />
+    <Span color="Comment" begin=";" />
+
+    <!-- 段落头 [section] / [[array]] -->
+    <Rule color="Section">
+      ^\s*\[\[?[^\]]*\]\]?
+    </Rule>
+
+    <!-- 键:行首到 = 或 : 之前。也覆盖 sshd_config 那种"键 空格 值"的写法。 -->
+    <Rule color="Key">
+      ^\s*[A-Za-z_][A-Za-z0-9_.\-]*(?=\s*[=:])
+    </Rule>
+
+    <Span color="String" multiline="false">
+      <Begin>"</Begin>
+      <End>"</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <Span color="String" multiline="false">
+      <Begin>'</Begin>
+      <End>'</End>
+    </Span>
+
+    <Keywords color="Constant">
+      <Word>true</Word>
+      <Word>false</Word>
+      <Word>yes</Word>
+      <Word>no</Word>
+      <Word>on</Word>
+      <Word>off</Word>
+      <Word>none</Word>
+      <Word>null</Word>
+      <Word>enabled</Word>
+      <Word>disabled</Word>
+    </Keywords>
+
+    <Rule color="Number">
+      \b[0-9]+([.:][0-9]+)*\b
+    </Rule>
+
+    <Rule color="Punctuation">
+      [=:]
+    </Rule>
+
+  </RuleSet>
+</SyntaxDefinition>

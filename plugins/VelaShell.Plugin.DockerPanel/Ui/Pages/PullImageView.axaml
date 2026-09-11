@@ -1,0 +1,275 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.PullImageView"
+             x:DataType="pages:PullImageViewModel">
+
+  <!--
+    同一个对话框**原地换态**:填表 → 拉取中 → 完成。不弹第二层。
+    「转入后台」把进度移交给顶栏的任务中心,任务继续跑。
+  -->
+
+  <Border Width="440" CornerRadius="10"
+          Background="{DynamicResource VelaBgSurface}"
+          BorderBrush="{DynamicResource VelaBorderSecondary}" BorderThickness="1"
+          BoxShadow="{DynamicResource VelaShadowWindow}" ClipToBounds="True">
+    <StackPanel>
+
+      <Border Height="48" Padding="16,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+          <ui:Glyph Grid.Column="0" Key="Docker.arrow-down-to-line" Size="16" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaAccent}" />
+          <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="h2" Margin="9,0,0,0" />
+          <Border Grid.Column="2" Classes="chip" Margin="8,0,0,0"
+                  IsVisible="{Binding ChipText, Converter={x:Static ui:Converters.NotEmpty}}"
+                  Background="{DynamicResource VelaAccentDim}">
+            <TextBlock Text="{Binding ChipText}" FontSize="{DynamicResource VelaFontSize10}"
+                       Foreground="{DynamicResource VelaAccent}" VerticalAlignment="Center" />
+          </Border>
+          <Button Grid.Column="4" Theme="{StaticResource DockerIconButton}" Command="{Binding CloseCommand}">
+            <ui:Glyph Key="Icon.x" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- 目标主机。8 GB 拉到错的那台机器上,是这个对话框能造成的最贵的一次误操作。 -->
+      <Border Height="30" Padding="16,0" Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+          <ui:Glyph Key="Docker.server" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+          <TextBlock Text="{Binding HostName}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                     FontSize="{DynamicResource VelaFontSize11}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource VelaTextPrimary}" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding HostDetail}" Classes="meta" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer MaxHeight="460">
+        <StackPanel Margin="16,14" Spacing="12">
+
+          <!-- ── 填表 ────────────────────────────────────── -->
+          <StackPanel Spacing="12" IsVisible="{Binding IsForm}">
+            <StackPanel Spacing="5">
+              <TextBlock Text="镜像引用" Classes="h4" />
+              <Border Classes="input" Height="30">
+                <TextBox Classes="bare mono" Text="{Binding Reference}" PlaceholderText="ghcr.io/acme/api 或 nginx" />
+              </Border>
+            </StackPanel>
+            <Grid ColumnDefinitions="*,10,*">
+              <StackPanel Grid.Column="0" Spacing="5">
+                <TextBlock Text="标签" Classes="h4" />
+                <Border Classes="input" Height="30">
+                  <TextBox Classes="bare mono" Text="{Binding Tag}" PlaceholderText="latest" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="2" Spacing="5">
+                <TextBlock Text="平台" Classes="h4" />
+                <Border Classes="input" Height="30">
+                  <TextBox Classes="bare mono" Text="{Binding Platform}" PlaceholderText="留空用 daemon 默认" />
+                </Border>
+              </StackPanel>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*">
+              <ToggleButton Grid.Column="0" Theme="{StaticResource DockerSwitch}" VerticalAlignment="Top"
+                            Margin="0,2,0,0" IsChecked="{Binding AllTags}" />
+              <StackPanel Grid.Column="1" Margin="9,0" Spacing="2">
+                <TextBlock Text="拉取全部标签  --all-tags" FontFamily="{DynamicResource VelaUiMonoFont}"
+                           FontSize="{DynamicResource VelaFontSize11}"
+                           Foreground="{DynamicResource VelaTextPrimary}" />
+                <TextBlock Text="一个仓库的全部标签一起拉 —— 大仓库可能是几十个 GB。" Classes="hint"
+                           Foreground="{DynamicResource VelaWarning}" />
+              </StackPanel>
+            </Grid>
+
+            <!-- 仓库凭据:HTTP API 下必须由面板自己带上,daemon 不读 ~/.docker/config.json -->
+            <StackPanel Orientation="Horizontal" Spacing="7"
+                        IsVisible="{Binding AuthText, Converter={x:Static ui:Converters.NotEmpty}}">
+              <!-- 三档语气:已登录 / 不需要 = 绿;凭据在 credential helper 里(面板取不到)= 黄;
+                   压根没有凭据 = 红。原来只有"绿或红"两档,后两种长得一模一样。 -->
+              <ui:Glyph Size="13" Key="{Binding AuthTone, Converter={x:Static ui:Converters.ToneIcon}}"
+                        Brush="{Binding AuthTone, Converter={x:Static ui:Converters.ToneBrush}}" />
+              <TextBlock Text="{Binding AuthText}" FontSize="{DynamicResource VelaFontSize10}"
+                         TextWrapping="Wrap" MaxWidth="380">
+                <TextBlock.Foreground>
+                  <Binding Path="AuthTone" Converter="{x:Static ui:Converters.ToneBrush}" />
+                </TextBlock.Foreground>
+              </TextBlock>
+            </StackPanel>
+
+            <!-- 等效命令。视图模型上早就算好了这两行,却一直没有地方显示 ——
+                 而"我这一按到底发了什么请求"正是这个面板一贯给的交代。 -->
+            <Border CornerRadius="4" Padding="11,9" Background="{DynamicResource VelaBgTerminal}">
+              <StackPanel Spacing="3">
+                <TextBlock Text="{Binding CommandPreview}" Classes="code"
+                           FontSize="{DynamicResource VelaFontSize10}" LineHeight="15" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding CommandNote}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                           FontSize="{DynamicResource VelaFontSize9}" LineHeight="15"
+                           Foreground="{DynamicResource VelaTextTertiary}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <!-- ── 拉取中 ──────────────────────────────────── -->
+          <StackPanel Spacing="12" IsVisible="{Binding IsRunning}">
+            <TextBlock Text="{Binding FullReference}" Classes="cell"
+                       Foreground="{DynamicResource VelaTextPrimary}" />
+            <Border Classes="card" Padding="13,12">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                  <TextBlock Grid.Column="0" Text="{Binding PercentText}"
+                             FontSize="{DynamicResource VelaFontSize20}" FontWeight="SemiBold"
+                             Foreground="{DynamicResource VelaTextPrimary}" />
+                  <TextBlock Grid.Column="1" Text="{Binding BytesText}" Classes="meta"
+                             VerticalAlignment="Bottom" Margin="8,0,0,3" />
+                  <TextBlock Grid.Column="3" Text="{Binding SpeedText}" Classes="cell"
+                             VerticalAlignment="Bottom" Foreground="{DynamicResource VelaAccent}" />
+                </Grid>
+                <ProgressBar Height="8" Minimum="0" Maximum="1" Value="{Binding Progress}"
+                             Foreground="{DynamicResource VelaAccent}"
+                             Background="{DynamicResource VelaBgActive}" />
+                <TextBlock Text="{Binding SummaryText}" Classes="meta" />
+              </StackPanel>
+            </Border>
+
+            <!-- 复用的层折成一行 —— 一次命中缓存的拉取能有三十层 "Already exists" -->
+            <Border IsVisible="{Binding HasReused}" CornerRadius="4" Padding="10,0" Height="26"
+                    Background="{DynamicResource VelaBgContentHeader}">
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <ui:Glyph Key="Docker.check" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+                <TextBlock Text="{Binding ReusedText}" Classes="meta" />
+              </StackPanel>
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding ActiveLayers}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:PullLayerItem">
+                  <Grid ColumnDefinitions="76,74,*,84" Height="24" Margin="0,0,0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding Id}" Classes="meta" />
+                    <TextBlock Grid.Column="1" Text="{Binding Status}" Classes="meta"
+                               Foreground="{DynamicResource VelaAccent}" />
+                    <ProgressBar Grid.Column="2" Height="5" Minimum="0" Maximum="1" Value="{Binding Progress}"
+                                 VerticalAlignment="Center" Margin="0,0,8,0"
+                                 Foreground="{DynamicResource VelaAccent}"
+                                 Background="{DynamicResource VelaBgActive}" />
+                    <TextBlock Grid.Column="3" Text="{Binding SizeText}" Classes="meta" TextAlignment="Right" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- ── 完成 ────────────────────────────────────── -->
+          <StackPanel Spacing="12" IsVisible="{Binding IsDone}">
+            <Border CornerRadius="6" Padding="12,11" IsVisible="{Binding !HasError}"
+                    Background="{DynamicResource VelaShellGreenDim}">
+              <Grid ColumnDefinitions="Auto,*">
+                <ui:Glyph Grid.Column="0" Key="Docker.circle-check-big" Size="20" VerticalAlignment="Center"
+                          Brush="{DynamicResource VelaStatusConnected}" />
+                <StackPanel Grid.Column="1" Margin="10,0" Spacing="2">
+                  <TextBlock Text="{Binding FullReference}" Classes="cell" FontWeight="SemiBold"
+                             Foreground="{DynamicResource VelaTextPrimary}" TextWrapping="Wrap" />
+                  <TextBlock Classes="hint" Foreground="{DynamicResource VelaStatusConnected}">
+                    <TextBlock.Text>
+                      <MultiBinding StringFormat="{}用时 {0} · {1}">
+                        <Binding Path="DoneElapsed" />
+                        <Binding Path="DoneSize" />
+                      </MultiBinding>
+                    </TextBlock.Text>
+                  </TextBlock>
+                </StackPanel>
+              </Grid>
+            </Border>
+            <Border CornerRadius="6" Padding="12,11" IsVisible="{Binding HasError}"
+                    Background="{DynamicResource VelaShellRedDim}"
+                    BorderBrush="{DynamicResource VelaError}" BorderThickness="1">
+              <StackPanel Spacing="5">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <ui:Glyph Key="Docker.circle-x" Size="15" Brush="{DynamicResource VelaError}" />
+                  <TextBlock Text="拉取失败" FontSize="{DynamicResource VelaFontSize12}" FontWeight="SemiBold"
+                             Foreground="{DynamicResource VelaError}" />
+                </StackPanel>
+                <!-- 拉取失败时 HTTP 仍是 200,错误只在流末尾那一帧里 —— 这里报的就是它 -->
+                <TextBlock Text="{Binding Error}" FontSize="{DynamicResource VelaFontSize11}"
+                           Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- 等效命令 -->
+      <Border Padding="16,10" IsVisible="{Binding IsForm}"
+              Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <StackPanel Spacing="6">
+          <TextBlock Text="等效命令" Classes="label" />
+          <Border CornerRadius="4" Padding="10,8" Background="{DynamicResource VelaBgTerminal}">
+            <StackPanel Spacing="3">
+              <TextBlock Text="{Binding CommandPreview}" Classes="code" FontSize="10" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding CommandNote}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                         FontSize="{DynamicResource VelaFontSize9}"
+                         Foreground="{DynamicResource VelaTextTertiary}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Border>
+
+      <!-- 页脚:三态各有各的按钮 -->
+      <Border Height="56" Padding="16,0" Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+          <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                     Text="关闭对话框不会取消 —— 任务转入顶栏任务中心" />
+
+          <!-- 填表 -->
+          <Button Grid.Column="2" Theme="{StaticResource DockerToolButton}" Height="30" Margin="0,0,9,0"
+                  IsVisible="{Binding IsForm}" Command="{Binding CloseCommand}">
+            <TextBlock Text="取消" FontSize="{DynamicResource VelaFontSize12}"
+                       Foreground="{DynamicResource VelaTextSecondary}" />
+          </Button>
+          <Button Grid.Column="3" Theme="{StaticResource DockerToolButton}" Height="30"
+                  IsVisible="{Binding IsForm}" Background="{DynamicResource VelaAccent}"
+                  BorderBrush="Transparent" Command="{Binding StartCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Docker.arrow-down-to-line" Size="13"
+                        Brush="{DynamicResource VelaAccentForeground}" />
+              <TextBlock Text="开始拉取" FontSize="{DynamicResource VelaFontSize12}" FontWeight="Medium"
+                         Foreground="{DynamicResource VelaAccentForeground}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <!-- 拉取中 -->
+          <Button Grid.Column="2" Theme="{StaticResource DockerToolButton}" Height="30" Margin="0,0,9,0"
+                  IsVisible="{Binding IsRunning}" Command="{Binding BackgroundCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Docker.minimize-2" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+              <TextBlock Text="转入后台" FontSize="{DynamicResource VelaFontSize12}"
+                         Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="3" Theme="{StaticResource DockerToolButton}" Height="30"
+                  IsVisible="{Binding IsRunning}" Background="{DynamicResource VelaError}"
+                  BorderBrush="Transparent" Command="{Binding CancelCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Icon.x" Size="13" Brush="{DynamicResource VelaErrorForeground}" />
+              <TextBlock Text="取消拉取" FontSize="{DynamicResource VelaFontSize12}" FontWeight="Medium"
+                         Foreground="{DynamicResource VelaErrorForeground}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <!-- 完成 -->
+          <Button Grid.Column="3" Theme="{StaticResource DockerToolButton}" Height="30"
+                  IsVisible="{Binding IsDone}" Background="{DynamicResource VelaAccent}"
+                  BorderBrush="Transparent" Command="{Binding CloseCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Docker.check" Size="13" Brush="{DynamicResource VelaAccentForeground}" />
+              <TextBlock Text="完成" FontSize="{DynamicResource VelaFontSize12}" FontWeight="Medium"
+                         Foreground="{DynamicResource VelaAccentForeground}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </Border>
+    </StackPanel>
+  </Border>
+</UserControl>

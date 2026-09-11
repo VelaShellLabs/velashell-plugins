@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.ContainerTerminalView"
+             x:DataType="pages:ContainerTerminalViewModel">
+
+  <!--
+    真终端:exec + TTY,渲染借的是宿主的终端仿真器(SDK 1.3 的 TerminalView 能力)。
+    与用户在 SSH 标签里用的是同一个控件、同一份字体与配色 —— top / vim / less 都能跑。
+  -->
+
+  <DockPanel>
+    <!-- 这条工具条同样要在整屏和 440px 的抽屉里都成立:窄下来时先收标题与两颗
+         "换个会话"的按钮文字,再收按钮本身 —— 它们都是重开一个 exec 的入口,
+         而不是这一屏正在用的东西。 -->
+    <Border DockPanel.Dock="Top" Classes="toolbar" ClipToBounds="True">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <ui:Glyph Grid.Column="0" Key="Icon.terminal" Size="15" VerticalAlignment="Center"
+                  Brush="{DynamicResource VelaTextSecondary}" />
+        <TextBlock Grid.Column="1" Text="终端" Classes="h1" Margin="8,0,0,0"
+                   IsVisible="{Binding $parent[UserControl].Bounds.Width,
+                                       Converter={x:Static ui:Converters.WiderThan}, ConverterParameter=560}" />
+        <!-- "这条命令会以谁的身份、在哪个目录里跑" —— 终端里最要紧的一行小字。 -->
+        <!-- 坐在弹性列里而不是自己的 Auto 列里:窄下来时它该被省略号截断,
+             而不是把右边那一排按钮顶出去。 -->
+        <TextBlock Grid.Column="3" Text="{Binding HeaderText}" Classes="cell" Margin="9,0,9,0"
+                   ToolTip.Tip="{Binding HeaderText, Converter={x:Static ui:Converters.TipText}}"
+                   Foreground="{DynamicResource VelaTextTertiary}" />
+
+        <Border Grid.Column="4" Classes="chip" Margin="0,0,9,0"
+                Background="{Binding ConnectionTone, Converter={x:Static ui:Converters.ToneBrush}, ConverterParameter=dim}">
+          <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+            <Ellipse Width="5" Height="5" VerticalAlignment="Center"
+                     Fill="{Binding ConnectionTone, Converter={x:Static ui:Converters.ToneBrush}}" />
+            <TextBlock Text="{Binding Status}" FontSize="{DynamicResource VelaFontSize10}"
+                       Foreground="{Binding ConnectionTone, Converter={x:Static ui:Converters.ToneBrush}}"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Border>
+
+        <Button Grid.Column="5" Theme="{StaticResource DockerToolButton}" Height="22" Margin="0,0,6,0"
+                ToolTip.Tip="换用户或 shell —— exec 建好之后改不了,会重开一个会话"
+                Command="{Binding SwitchUserCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Docker.users" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+            <TextBlock Text="切换用户" FontSize="{DynamicResource VelaFontSize11}"
+                       IsVisible="{Binding $parent[UserControl].Bounds.Width, Converter={x:Static ui:Converters.WiderThan}, ConverterParameter=760}"
+                       Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="6" Theme="{StaticResource DockerToolButton}" Height="22" Margin="0,0,6,0"
+                ToolTip.Tip="换工作目录 —— 同样会重开一个会话"
+                Command="{Binding SwitchWorkingDirCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.folder" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+            <TextBlock Text="工作目录" FontSize="{DynamicResource VelaFontSize11}"
+                       IsVisible="{Binding $parent[UserControl].Bounds.Width, Converter={x:Static ui:Converters.WiderThan}, ConverterParameter=760}"
+                       Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Button Grid.Column="7" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                ToolTip.Tip="清屏" Command="{Binding ClearCommand}">
+          <ui:Glyph Key="Docker.eraser" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+        </Button>
+        <Button Grid.Column="8" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                ToolTip.Tip="复制屏幕文本" Command="{Binding CopyCommand}">
+          <ui:Glyph Key="Icon.copy" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+        </Button>
+        <Button Grid.Column="9" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                IsVisible="{Binding CanOpenInHostTerminal}"
+                ToolTip.Tip="在宿主的 SSH 终端里执行 docker exec -it(需要授权),会话跟着那个标签走"
+                Command="{Binding OpenInHostTerminalCommand}">
+          <ui:Glyph Key="Icon.external-link" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+        </Button>
+        <Button Grid.Column="10" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                ToolTip.Tip="结束这个 exec 会话" IsEnabled="{Binding Connected}"
+                Command="{Binding DisconnectCommand}">
+          <ui:Glyph Key="Docker.power" Size="14" Brush="{DynamicResource VelaError}" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <!-- 底部:与宿主终端标签同一套元信息 -->
+    <Border DockPanel.Dock="Bottom" Height="26" Padding="12,0" ClipToBounds="True"
+            Background="{DynamicResource VelaBgSurface}"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <ui:Glyph Grid.Column="0" Key="Icon.info" Size="12" VerticalAlignment="Center"
+                  Brush="{DynamicResource VelaTextTertiary}" />
+        <TextBlock Grid.Column="1" Text="命令与输出不写入宿主会话日志 · Ctrl+D 或关掉会话即结束 exec"
+                   IsVisible="{Binding $parent[UserControl].Bounds.Width, Converter={x:Static ui:Converters.WiderThan}, ConverterParameter=700}"
+                   Margin="6,0,0,0" FontSize="{DynamicResource VelaFontSize10}"
+                   Foreground="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+          <TextBlock Text="{Binding SizeText}" Classes="meta" />
+          <TextBlock Text="UTF-8" Classes="meta" />
+          <TextBlock Text="{Binding ShellName}" Classes="meta" />
+          <TextBlock Text="{Binding ExecIdText, StringFormat='exec {0}'}" Classes="meta" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- 终端本体。宿主交出来的是一个 Avalonia 控件,这里只负责给它一块地方 -->
+    <Border Classes="terminal" Padding="0">
+      <ContentControl Content="{Binding TerminalControl}" />
+    </Border>
+  </DockPanel>
+</UserControl>

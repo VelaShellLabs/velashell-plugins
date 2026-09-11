@@ -1,0 +1,316 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.PanelFormView"
+             x:DataType="ui:PanelForm">
+
+  <!--
+    表单弹窗的通用外壳:标题栏 → 主机条 → 字段 → 等效命令 → 页脚。
+    字段按类型走 DataTemplate,所以"新加一个表单"只需要在 C# 里拼字段,不用再写一份 XAML。
+  -->
+
+  <Border Width="480" CornerRadius="10"
+          Background="{DynamicResource VelaBgSurface}"
+          BorderBrush="{DynamicResource VelaBorderSecondary}" BorderThickness="1"
+          BoxShadow="{DynamicResource VelaShadowWindow}" ClipToBounds="True">
+    <StackPanel>
+
+      <Border Height="48" Padding="16,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <ui:Glyph Grid.Column="0" Key="{Binding Icon}" Size="16" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaAccent}" />
+          <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="h2" Margin="9,0,0,0" />
+          <Button Grid.Column="3" Theme="{StaticResource DockerIconButton}" Command="{Binding $parent[ui:DockerPanelView].((ui:DockerPanelViewModel)DataContext).FormCancelCommand}">
+            <ui:Glyph Key="Icon.x" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- 主机条:表单也不能省 —— 这条请求要发给谁,必须一眼看得见。 -->
+      <Border Height="30" Padding="16,0" Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+          <ui:Glyph Key="Docker.server" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+          <TextBlock Text="{Binding $parent[ui:DockerPanelView].((ui:DockerPanelViewModel)DataContext).EndpointName}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                     FontSize="{DynamicResource VelaFontSize11}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource VelaTextPrimary}" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding $parent[ui:DockerPanelView].((ui:DockerPanelViewModel)DataContext).EndpointDetail}" Classes="meta" />
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer MaxHeight="460">
+        <StackPanel Margin="16,14" Spacing="12">
+
+          <!-- 提醒:不是"这样填不行",而是"这样填可以,但会有一个你未必想要的后果"。
+               放在字段**之前** —— 说在动手之后就没有意义了。 -->
+          <Border IsVisible="{Binding HasNotice}" CornerRadius="6" Padding="11,9"
+                  Background="{DynamicResource VelaShellYellowDim}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="Icon.triangle-alert" Size="13" VerticalAlignment="Top" Margin="0,1,0,0"
+                        Brush="{DynamicResource VelaWarning}" />
+              <TextBlock Text="{Binding Notice}" FontSize="{DynamicResource VelaFontSize10}"
+                         LineHeight="16" TextWrapping="Wrap"
+                         Foreground="{DynamicResource VelaWarning}" />
+            </StackPanel>
+          </Border>
+
+          <ItemsControl ItemsSource="{Binding Fields}">
+            <ItemsControl.DataTemplates>
+
+              <!-- 文本 -->
+              <DataTemplate DataType="ui:TextField">
+                <StackPanel Spacing="5" Margin="0,0,0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <TextBlock Text="{Binding Label}" Classes="h3" />
+                    <TextBlock Text="{Binding Hint}" Classes="meta" />
+                  </StackPanel>
+                  <Border Classes="input" Height="30">
+                    <Border.Background>
+                      <Binding Path="ReadOnly">
+                        <Binding.Converter>
+                          <ui:ReadOnlyBackgroundConverter />
+                        </Binding.Converter>
+                      </Binding>
+                    </Border.Background>
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBox Grid.Column="0" Classes="bare mono" Text="{Binding Value}"
+                               PlaceholderText="{Binding Placeholder}" IsReadOnly="{Binding ReadOnly}" />
+                      <ui:Glyph Grid.Column="1" Key="Docker.lock" Size="11" IsVisible="{Binding ReadOnly}"
+                                Brush="{DynamicResource VelaTextTertiary}" />
+                    </Grid>
+                  </Border>
+                  <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+
+              <!-- 开关 -->
+              <DataTemplate DataType="ui:ToggleField">
+                <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                  <ToggleButton Grid.Column="0" Theme="{StaticResource DockerSwitch}" VerticalAlignment="Top"
+                                Margin="0,2,0,0" IsChecked="{Binding Value}" />
+                  <StackPanel Grid.Column="1" Margin="9,0" Spacing="2">
+                    <TextBlock Text="{Binding Label}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                               FontSize="{DynamicResource VelaFontSize11}"
+                               Foreground="{DynamicResource VelaTextPrimary}" />
+                    <TextBlock Text="{Binding Description}" Classes="hint">
+                      <TextBlock.Foreground>
+                        <Binding Path="Danger">
+                          <Binding.Converter>
+                            <ui:DangerTextConverter />
+                          </Binding.Converter>
+                        </Binding>
+                      </TextBlock.Foreground>
+                    </TextBlock>
+                  </StackPanel>
+                </Grid>
+              </DataTemplate>
+
+              <!-- 互斥选项 -->
+              <DataTemplate DataType="ui:ChoiceField">
+                <StackPanel Spacing="5">
+                  <TextBlock Text="{Binding Label}" Classes="h3" />
+                  <Border CornerRadius="4" Padding="2" BackgroundSizing="OuterBorderEdge" Background="{DynamicResource VelaBgInput}"
+                          BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1">
+                    <ItemsControl ItemsSource="{Binding Options}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <UniformGrid Rows="1" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:ChoiceOption">
+                          <!-- 选中的那一颗染强调色底:分段控件不亮起来,用户没有别的办法
+                               知道自己刚才点中了哪一个。 -->
+                          <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="22"
+                                  Classes.picked="{Binding Picked}"
+                                  HorizontalAlignment="Stretch" IsEnabled="{Binding Enabled}"
+                                  ToolTip.Tip="{Binding DisabledReason, Converter={x:Static ui:Converters.TipText}}"
+                                  Command="{Binding $parent[ItemsControl].((ui:ChoiceField)DataContext).SelectCommand}"
+                                  CommandParameter="{Binding}">
+                            <TextBlock Text="{Binding Label}" Classes="pick-label" FontSize="{DynamicResource VelaFontSize11}"
+                                       Foreground="{DynamicResource VelaTextSecondary}" />
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Border>
+                  <TextBlock Text="{Binding SelectedLabel}" Classes="meta" />
+                  <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+
+              <!-- 带说明的单选列表 -->
+              <DataTemplate DataType="ui:RadioListField">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding Label}" Classes="h3" />
+                  <ItemsControl ItemsSource="{Binding Options}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="ui:ChoiceOption">
+                        <!-- 选中的那一条:整条染强调色底 + 圆点填实。
+                             单选列表原来两者都没有 —— 点完之后界面上不留任何痕迹。 -->
+                        <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="NaN"
+                                Classes.picked="{Binding Picked}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Padding="11,9" Margin="0,0,0,5" CornerRadius="4"
+                                Command="{Binding $parent[ItemsControl].((ui:RadioListField)DataContext).SelectCommand}"
+                                CommandParameter="{Binding}">
+                          <Grid ColumnDefinitions="Auto,*">
+                            <Panel Grid.Column="0" VerticalAlignment="Top" Margin="0,2,0,0">
+                              <Ellipse Width="12" Height="12"
+                                       Stroke="{DynamicResource VelaBorderSecondary}" StrokeThickness="1" />
+                              <Ellipse Width="6" Height="6" IsVisible="{Binding Picked}"
+                                       Fill="{DynamicResource VelaAccent}" />
+                            </Panel>
+                            <StackPanel Grid.Column="1" Margin="9,0" Spacing="2">
+                              <TextBlock Text="{Binding Value}" Classes="pick-label" FontFamily="{DynamicResource VelaUiMonoFont}"
+                                         FontSize="{DynamicResource VelaFontSize11}" FontWeight="SemiBold"
+                                         Foreground="{DynamicResource VelaTextPrimary}" />
+                              <TextBlock Text="{Binding Description}" Classes="hint" />
+                            </StackPanel>
+                          </Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+
+              <!-- 键值列表(端口 / 卷 / 环境变量 / 驱动选项) -->
+              <DataTemplate DataType="ui:PairListField">
+                <StackPanel Spacing="5">
+                  <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="h3" />
+                    <TextBlock Grid.Column="1" Text="{Binding Hint}" Classes="meta" Margin="7,0,0,0" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="10">
+                      <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="18" Padding="0"
+                              IsVisible="{Binding CanImport}" Command="{Binding ImportCommand}">
+                        <TextBlock Text="{Binding ImportLabel}" FontSize="{DynamicResource VelaFontSize10}"
+                                   Foreground="{DynamicResource VelaAccent}" />
+                      </Button>
+                      <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="18" Padding="0"
+                              Command="{Binding AddCommand}">
+                        <TextBlock Text="{Binding AddLabel}" FontSize="{DynamicResource VelaFontSize10}"
+                                   Foreground="{DynamicResource VelaAccent}" />
+                      </Button>
+                    </StackPanel>
+                  </Grid>
+                  <TextBlock Text="{Binding ImportReport}" Classes="meta"
+                             IsVisible="{Binding ImportReport, Converter={x:Static ui:Converters.NotEmpty}}" />
+                  <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="ui:PairRow">
+                        <Grid ColumnDefinitions="*,Auto,*,Auto" Height="30" Margin="0,0,0,4">
+                          <Border Grid.Column="0" Classes="input" Height="26">
+                            <TextBox Classes="bare mono" Text="{Binding Key}" />
+                          </Border>
+                          <TextBlock Grid.Column="1" Margin="7,0" VerticalAlignment="Center" Classes="meta"
+                                     Text="{Binding $parent[ItemsControl].((ui:PairListField)DataContext).Separator}" />
+                          <Border Grid.Column="2" Classes="input" Height="26">
+                            <TextBox Classes="bare mono" Text="{Binding Value}" />
+                          </Border>
+                          <Button Grid.Column="3" Theme="{StaticResource DockerIconButton}" Width="22" Height="22"
+                                  Margin="5,0,0,0"
+                                  Command="{Binding $parent[ItemsControl].((ui:PairListField)DataContext).RemoveCommand}"
+                                  CommandParameter="{Binding}">
+                            <ui:Glyph Key="Icon.x" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                          </Button>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+
+              <!-- 带搜索的多选列表 -->
+              <DataTemplate DataType="ui:SelectListField">
+                <StackPanel Spacing="5">
+                  <TextBlock Text="{Binding Label}" Classes="h3" />
+                  <Border Classes="input" Height="28">
+                    <Grid ColumnDefinitions="Auto,*">
+                      <ui:Glyph Grid.Column="0" Key="Icon.search" Size="12"
+                                Brush="{DynamicResource VelaTextTertiary}" />
+                      <TextBox Grid.Column="1" Classes="bare" Margin="7,0,0,0" Text="{Binding Search}"
+                               PlaceholderText="{Binding Placeholder}" />
+                    </Grid>
+                  </Border>
+                  <Border CornerRadius="4" MaxHeight="180" Background="{DynamicResource VelaBgInput}"
+                          BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" ClipToBounds="True">
+                    <ScrollViewer>
+                      <ItemsControl ItemsSource="{Binding View}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:SelectItem">
+                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" Height="28" Margin="10,0"
+                                  IsEnabled="{Binding Enabled}">
+                              <CheckBox Grid.Column="0" Classes="compact" IsChecked="{Binding Selected}" />
+                              <TextBlock Grid.Column="1" Text="{Binding Label}" Classes="name" Margin="8,0,0,0" />
+                              <TextBlock Grid.Column="3" Text="{Binding Meta}" Classes="meta" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </Border>
+                  <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.DataTemplates>
+          </ItemsControl>
+
+          <TextBlock Text="{Binding FormError}" IsVisible="{Binding HasFormError}"
+                     FontSize="{DynamicResource VelaFontSize11}" Foreground="{DynamicResource VelaError}"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- 等效命令:让人能核对自己填的东西,也能直接复制到终端里验证 -->
+      <Border Padding="16,10" IsVisible="{Binding HasPreview}"
+              Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <StackPanel Spacing="6">
+          <TextBlock Text="等效命令" Classes="label" />
+          <Border CornerRadius="4" Padding="10,8" Background="{DynamicResource VelaBgTerminal}">
+            <StackPanel Spacing="3">
+              <TextBlock Text="{Binding CommandPreview}" Classes="code" FontSize="10"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="{Binding CommandNote}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                         FontSize="{DynamicResource VelaFontSize9}"
+                         Foreground="{DynamicResource VelaTextTertiary}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Border>
+
+      <Border Height="56" Padding="16,0" Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+          <TextBlock Grid.Column="0" Text="{Binding FooterHint}" Classes="meta" />
+          <Button Grid.Column="2" Theme="{StaticResource DockerToolButton}" Height="30" Margin="0,0,9,0"
+                  Command="{Binding $parent[ui:DockerPanelView].((ui:DockerPanelViewModel)DataContext).FormCancelCommand}">
+            <TextBlock Text="取消" FontSize="{DynamicResource VelaFontSize12}"
+                       Foreground="{DynamicResource VelaTextSecondary}" />
+          </Button>
+          <Button Grid.Column="3" Theme="{StaticResource DockerToolButton}" Height="30"
+                  Background="{DynamicResource VelaAccent}" BorderBrush="Transparent"
+                  Command="{Binding $parent[ui:DockerPanelView].((ui:DockerPanelViewModel)DataContext).FormConfirmCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="{Binding ConfirmIcon}" Size="13"
+                        Brush="{DynamicResource VelaAccentForeground}" />
+              <TextBlock Text="{Binding ConfirmLabel}" FontSize="{DynamicResource VelaFontSize12}"
+                         FontWeight="Medium" Foreground="{DynamicResource VelaAccentForeground}"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </Border>
+    </StackPanel>
+  </Border>
+</UserControl>

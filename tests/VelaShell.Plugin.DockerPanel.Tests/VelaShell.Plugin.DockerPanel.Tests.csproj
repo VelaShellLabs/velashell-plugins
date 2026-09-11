@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MSTest.TestAdapter" />
+    <PackageReference Include="MSTest.TestFramework" />
+    <PackageReference Include="VelaShell.PluginSdk.Testing" />
+    <!-- 插件工程对 Avalonia 是 compile-only(运行时由宿主提供同一套程序集),这份排除会沿
+         ProjectReference 传到这里 —— 于是测试输出目录里没有 Avalonia.Base.dll。
+         单测没有宿主可回落,所以这里**要**把运行时那份显式拉进来,
+         否则一碰到视图模型的类型就是 FileNotFoundException,而那与被测逻辑无关。 -->
+    <PackageReference Include="Avalonia" />
+    <!-- 面板视图要真的构造一遍(见 PanelLogicTests):控件需要 UI 线程与一个平台实现。 -->
+    <PackageReference Include="Avalonia.Headless" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\plugins\VelaShell.Plugin.DockerPanel\VelaShell.Plugin.DockerPanel.csproj" />
+  </ItemGroup>
+
+</Project>

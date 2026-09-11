@@ -34,4 +34,26 @@
 		       Code="VELAP1000"
 		       Text="Avalonia 版本与 SDK 锁的不一致:VelaShell.PluginSdk $(VelaSdkPackageVersion) 锁的是 $(VelaSdkPinnedAvaloniaVersion),而本仓库 Directory.Packages.props 里的 Avalonia 是 $(_VelaAvaloniaPin)。把 Directory.Packages.props 里三个 Avalonia* 都改成 $(VelaSdkPinnedAvaloniaVersion)。" />
 	</Target>
+
+	<!--
+	  AvaloniaEdit 版本与 SDK 锁的一致性核对(随 Docker 面板插件从独立仓库并入)。
+
+	  它走自己的版本线,由 SDK 单独导出一个权威值 $(VelaSdkPinnedAvaloniaEditVersion)。
+	  程序集名 AvaloniaEdit 同样命中宿主 PluginAssemblyLoadContext 的 SharedPrefixes("Avalonia"),
+	  运行时一律回落到宿主那份 —— 于是版本漂了**在本仓库一个测试都不会红**:
+	  要等用户装上插件、打开一个 compose.yaml 才炸,而那时离根因已经非常远。
+	  上面那条 VELAP1000 核的是测试工程的 Avalonia,拦不住这一路。
+
+	  没有插件引 AvaloniaEdit 时这一条为空、跳过 —— 那是合法状态(不同于 Avalonia:
+	  测试工程必须有它)。所以这里不像 VELAP1000 那样对"读不到"也判红。
+	-->
+	<Target Name="VerifyAvaloniaEditMatchesSdk" BeforeTargets="BeforeBuild"
+	        Condition="'$(VelaSdkPinnedAvaloniaEditVersion)' != ''">
+		<PropertyGroup>
+			<_VelaAvaloniaEditPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia.AvaloniaEdit')->'%(Version)')</_VelaAvaloniaEditPin>
+		</PropertyGroup>
+		<Error Condition="'$(_VelaAvaloniaEditPin)' != '' and '$(VelaSdkPinnedAvaloniaEditVersion)' != '$(_VelaAvaloniaEditPin)'"
+		       Code="VELAP1001"
+		       Text="AvaloniaEdit 版本与 SDK 锁的不一致:VelaShell.PluginSdk $(VelaSdkPackageVersion) 锁的是 $(VelaSdkPinnedAvaloniaEditVersion),而本仓库 Directory.Packages.props 里的 Avalonia.AvaloniaEdit 是 $(_VelaAvaloniaEditPin)。程序集名 AvaloniaEdit 命中装载器的 &quot;Avalonia&quot; 前缀,运行时一律回落到宿主那份 —— 版本漂了要等用户打开 compose.yaml 才炸。把它改成 $(VelaSdkPinnedAvaloniaEditVersion)。" />
+	</Target>
 </Project>

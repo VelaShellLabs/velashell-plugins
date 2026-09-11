@@ -31,6 +31,14 @@
     <!-- 菜单等控件的模板由主题提供:没有它 MenuItem 无模板、不可命中,真实点击测不了。 -->
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
   </ItemGroup>
+  <ItemGroup Label="Docker 面板插件">
+    <!-- MIT。**只在编译期** —— 程序集名 AvaloniaEdit 命中装载器的 "Avalonia" 前缀,
+         运行时一律回落到宿主那份,因此版本必须与宿主一致。权威值同样来自 SDK 包
+         (VelaSdkPinnedAvaloniaEditVersion),由 Directory.Build.targets 的
+         VerifyAvaloniaEditMatchesSdk 在构建期核对(VELAP1001)。
+         漂了**在本仓库一个测试都不会红**:要等用户装上插件、打开一个 compose.yaml 才炸。 -->
+    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
+  </ItemGroup>
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
     <PackageVersion Include="StackExchange.Redis" Version="3.2.0" />

@@ -1,0 +1,248 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.SystemPageView"
+             x:DataType="pages:SystemPageViewModel">
+
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="toolbar">
+      <!-- 那两行"df 说了什么"挪到「磁盘占用」的小节标题旁边去了 ——
+           40px 的工具条里叠两行小字,两行都读不清。 -->
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="系统" Classes="h1" />
+        <TextBlock Grid.Column="1" Text="{Binding HostDiskText}" Classes="cell" Margin="10,0,0,0"
+                   IsVisible="{Binding HostDiskText, Converter={x:Static ui:Converters.NotEmpty}}"
+                   Foreground="{DynamicResource VelaTextTertiary}" />
+        <Button Grid.Column="3" Theme="{StaticResource DockerToolButton}" Command="{Binding RefreshCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.refresh-cw" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+            <TextBlock Text="重新统计" FontSize="{DynamicResource VelaFontSize11}"
+                       Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+      </Grid>
+    </Border>
+
+    <ScrollViewer Background="{DynamicResource VelaBgDockDocument}">
+      <StackPanel Margin="16" Spacing="14">
+
+        <!-- 统计卡 -->
+        <ItemsControl ItemsSource="{Binding Stats}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Rows="1" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="pages:SystemStat">
+              <Border Classes="card" Padding="13,11" Margin="0,0,12,0">
+                <StackPanel Spacing="5">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ui:Glyph Key="{Binding Icon}" Size="12" VerticalAlignment="Center"
+                              Brush="{DynamicResource VelaTextTertiary}" />
+                    <TextBlock Text="{Binding Label}" Classes="label" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding Value}" FontSize="{DynamicResource VelaFontSize20}"
+                             FontWeight="SemiBold"
+                             Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                  <!-- 这一行才是这张卡的信息量:分母,或者"有多少能清掉" -->
+                  <TextBlock Text="{Binding Sub}" FontSize="{DynamicResource VelaFontSize10}"
+                             Foreground="{DynamicResource VelaTextTertiary}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- 磁盘占用 -->
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="Auto,Auto,*,Auto" Height="22">
+            <TextBlock Grid.Column="0" Text="磁盘占用" Classes="h3" />
+            <!-- 写清楚这些数字是谁给的:df 是一次实打实的远端统计,不是缓存 -->
+            <TextBlock Grid.Column="1" Text="{Binding DiskSubtitle}" Classes="meta" Margin="8,0,0,0" />
+            <TextBlock Grid.Column="3" Text="{Binding ReclaimableText, StringFormat='可回收 {0}'}"
+                       Classes="cell" Foreground="{DynamicResource VelaWarning}" />
+          </Grid>
+
+          <!--
+            堆叠占用条。用 Grid 的星形列宽而不是固定像素:面板宽度是用户拖出来的,
+            算好的像素在下一次拖动就错了。
+          -->
+          <Border Height="26" CornerRadius="4" ClipToBounds="True"
+                  Background="{DynamicResource VelaBgActive}">
+            <ItemsControl ItemsSource="{Binding Segments}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <ui:WeightedStackPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <!--
+                权重设在**容器**上,不能设在下面那块 Border 上:ItemsControl 会把每一项
+                包进一个 ContentPresenter,面板看到的孩子是 presenter,
+                模板里的 Tag 在它下面一层 —— 那样每一段都读成 0,整条不占宽,
+                界面上就是一条空槽,而数据其实完全正确。
+              -->
+              <ItemsControl.ItemContainerTheme>
+                <ControlTheme TargetType="ContentPresenter" x:DataType="pages:DiskSegment">
+                  <Setter Property="ui:WeightedStackPanel.Weight" Value="{Binding Weight}" />
+                </ControlTheme>
+              </ItemsControl.ItemContainerTheme>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:DiskSegment">
+                  <Border Height="26" ToolTip.Tip="{Binding Label, Converter={x:Static ui:Converters.TipText}}">
+                    <Border.Background>
+                      <Binding Path="Brush">
+                        <Binding.Converter>
+                          <ui:ResourceBrushConverter />
+                        </Binding.Converter>
+                      </Binding>
+                    </Border.Background>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Border>
+          <ItemsControl ItemsSource="{Binding Segments}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="16" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DiskSegment">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Border Width="9" Height="9" CornerRadius="2" VerticalAlignment="Center">
+                    <Border.Background>
+                      <Binding Path="Brush">
+                        <Binding.Converter>
+                          <ui:ResourceBrushConverter />
+                        </Binding.Converter>
+                      </Binding>
+                    </Border.Background>
+                  </Border>
+                  <TextBlock Text="{Binding Label}" Classes="meta" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="card" ClipToBounds="True">
+            <StackPanel>
+              <Border Height="28" Padding="12,0" Background="{DynamicResource VelaBgDockDocument}"
+                      BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="*,110,110,130,180">
+                  <TextBlock Grid.Column="0" Text="类型" Classes="col" />
+                  <TextBlock Grid.Column="1" Text="总数" Classes="col" />
+                  <TextBlock Grid.Column="2" Text="活跃" Classes="col" />
+                  <TextBlock Grid.Column="3" Text="占用" Classes="col" />
+                  <TextBlock Grid.Column="4" Text="可回收" Classes="col" />
+                </Grid>
+              </Border>
+              <ItemsControl ItemsSource="{Binding DiskRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="pages:DiskRow">
+                    <Grid Height="30" ColumnDefinitions="*,110,110,130,180" Margin="12,0">
+                      <TextBlock Grid.Column="0" Text="{Binding Kind}" Classes="name" />
+                      <TextBlock Grid.Column="1" Text="{Binding Total}" Classes="cell" />
+                      <TextBlock Grid.Column="2" Text="{Binding Active}" Classes="cell" />
+                      <TextBlock Grid.Column="3" Text="{Binding Size}" Classes="cell"
+                                 Foreground="{DynamicResource VelaTextPrimary}" />
+                      <TextBlock Grid.Column="4" Text="{Binding Reclaimable}" Classes="cell"
+                                 Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 回收 -->
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="Auto,Auto,*">
+            <TextBlock Grid.Column="0" Text="空间回收" Classes="h3" />
+            <TextBlock Grid.Column="1" Text="每一项都会先弹出面板内确认框,里面写清将要执行的动作与后果"
+                       Classes="meta" Margin="10,0,0,0" />
+          </Grid>
+          <ItemsControl ItemsSource="{Binding PruneCards}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Columns="3" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:PruneCard">
+                <Border Classes="card" Padding="13,12" Margin="0,0,12,12">
+                  <Border.BorderBrush>
+                    <Binding Path="Tone">
+                      <Binding.Converter>
+                        <ui:PruneBorderConverter />
+                      </Binding.Converter>
+                    </Binding>
+                  </Border.BorderBrush>
+                  <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                      <ui:Glyph Grid.Column="0" Key="{Binding Icon}" Size="13" VerticalAlignment="Center"
+                                Brush="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                      <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="name" Margin="7,0,0,0" />
+                      <Border Grid.Column="3" Classes="chip" Height="16"
+                              Background="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}, ConverterParameter=dim}">
+                        <TextBlock Text="{Binding Tag}" FontSize="{DynamicResource VelaFontSize9}"
+                                   Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}"
+                                   VerticalAlignment="Center" />
+                      </Border>
+                    </Grid>
+                    <TextBlock Text="{Binding Description}" Classes="hint" />
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding SizeText, StringFormat='可回收 {0}'}"
+                                 FontFamily="{DynamicResource VelaUiMonoFont}"
+                                 FontSize="{DynamicResource VelaFontSize11}" FontWeight="Medium"
+                                 VerticalAlignment="Center"
+                                 Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                      <Button Grid.Column="2" Theme="{StaticResource DockerToolButton}" Height="24"
+                              Command="{Binding Command}">
+                        <TextBlock Text="回收…" FontSize="{DynamicResource VelaFontSize11}"
+                                   Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                      </Button>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- 引擎信息 -->
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="Auto,Auto,*">
+            <TextBlock Grid.Column="0" Text="引擎信息" Classes="h3" />
+            <TextBlock Grid.Column="1" Text="GET /version · GET /info" Classes="meta" Margin="10,0,0,0" />
+          </Grid>
+          <Grid ColumnDefinitions="*,24,*">
+            <ItemsControl Grid.Column="0" ItemsSource="{Binding EngineLeft}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:DetailField">
+                  <Grid ColumnDefinitions="106,*" Height="22">
+                    <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl Grid.Column="2" ItemsSource="{Binding EngineRight}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:DetailField">
+                  <Grid ColumnDefinitions="106,*" Height="22">
+                    <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Grid>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

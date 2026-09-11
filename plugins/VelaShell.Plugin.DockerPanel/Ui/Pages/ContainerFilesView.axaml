@@ -1,0 +1,382 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.ContainerFilesView"
+             x:DataType="pages:ContainerFilesViewModel">
+
+  <!--
+    容器内文件浏览与在线编辑。三栏:常驻的文件树 / 编辑器 / 文件属性。
+    树常驻是这一页的关键 —— 改配置本来就是在几个相邻文件之间来回跳,
+    "打开文件就把目录顶掉"会让每一次跳转都要重走一遍目录。
+
+    列目录走 exec 跑 ls(Engine API 没有列目录这个端点,而 /archive 只能整包取走);
+    读写单个文件走 /archive 的 tar 流 —— 不经 shell,不受登录 shell 与引用规则影响。
+  -->
+
+  <!--
+    DragDrop.AllowDrop:拖文件进来 = 上传到当前目录(设计稿 04 号板那块拖放区)。
+
+    三栏是设计稿里整屏 1440px 的排法,而这一页也会出现在详情抽屉里 ——
+    抽屉窄下来时右栏(文件属性)整栏让位:它是"这个文件是什么"的旁注,
+    而编辑器是正文。列宽写成 Auto + 子元素定宽,收起时整列自然收成 0。
+  -->
+  <Grid DragDrop.AllowDrop="True">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="300" MinWidth="180" MaxWidth="560" />
+      <ColumnDefinition Width="5" />
+      <ColumnDefinition Width="*" MinWidth="200" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+
+    <!-- ── 左栏:文件树 ───────────────────────────────────────── -->
+    <DockPanel Grid.Column="0" Background="{DynamicResource VelaBgDockDocument}">
+      <Border DockPanel.Dock="Top" Height="36" Padding="11,0"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+          <ui:Glyph Grid.Column="0" Key="Icon.folder-tree" Size="13" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaTextSecondary}" />
+          <TextBlock Grid.Column="1" Text="{Binding TreeTitle}" Classes="h4" Margin="6,0,0,0"
+                     TextTrimming="CharacterEllipsis" />
+          <Button Grid.Column="3" Theme="{StaticResource DockerIconButton}" Width="22" Height="22"
+                  IsVisible="{Binding CanPickFiles}"
+                  ToolTip.Tip="上传本地文件到当前目录…" Command="{Binding UploadCommand}">
+            <ui:Glyph Key="Icon.upload" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+          <Button Grid.Column="4" Theme="{StaticResource DockerIconButton}" Width="22" Height="22"
+                  ToolTip.Tip="重新列一次" Command="{Binding RefreshCommand}">
+            <ui:Glyph Key="Icon.refresh-cw" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- 相对镜像的变更概览。「只看变更」是这一页最有用的一个开关:
+           一个跑了三个月的容器,人想看的永远是那七项,不是整棵 rootfs。 -->
+      <Border DockPanel.Dock="Top" Height="30" Padding="11,0"
+              Background="{DynamicResource VelaBgSurface}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <ui:Glyph Grid.Column="0" Key="Docker.git-compare" Size="12" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaWarning}" />
+          <TextBlock Grid.Column="1" Text="{Binding ChangeText}" Margin="6,0,0,0"
+                     FontSize="{DynamicResource VelaFontSize10}"
+                     Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          <CheckBox Grid.Column="3" Classes="compact" IsChecked="{Binding ChangedOnly}"
+                    ToolTip.Tip="只看相对镜像有变更的条目">
+            <TextBlock Text="只看变更" Classes="action" Margin="4,0,0,0" />
+          </CheckBox>
+        </Grid>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" IsVisible="{Binding HasError}" Padding="11,8"
+              Background="{DynamicResource VelaShellRedDim}">
+        <StackPanel Orientation="Horizontal" Spacing="7">
+          <ui:Glyph Key="Icon.triangle-alert" Size="13" Brush="{DynamicResource VelaError}" />
+          <TextBlock Text="{Binding Error}" FontSize="{DynamicResource VelaFontSize10}"
+                     Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Tree}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="pages:FileEntryItem">
+              <!-- 整行可点:目录展开 / 收起,文件在中间打开。 -->
+              <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="24" CornerRadius="0"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="11,0"
+                      Background="{Binding Current, Converter={x:Static ui:Converters.CurrentRowBackground}}"
+                      Command="{Binding $parent[ItemsControl].((pages:ContainerFilesViewModel)DataContext).OpenCommand}"
+                      CommandParameter="{Binding}">
+                <Grid ColumnDefinitions="Auto,11,Auto,Auto,*,Auto" VerticalAlignment="Center">
+                  <!-- 缩进用一格空白撑出来,而不是给整行加 Margin ——
+                       整行的悬停底色要从最左边开始,缩进的是内容不是行。 -->
+                  <Border Grid.Column="0" Width="{Binding Indent}" />
+                  <ui:Glyph Grid.Column="1" Key="{Binding CaretIcon}" Size="11"
+                            IsVisible="{Binding HasCaret}" VerticalAlignment="Center"
+                            Brush="{DynamicResource VelaTextTertiary}" />
+                  <ui:Glyph Grid.Column="2" Key="{Binding Icon}" Size="12" Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            Brush="{Binding IsDirectory, Converter={x:Static ui:Converters.FileIconBrush}}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Name}" Margin="6,0,0,0"
+                             FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}"
+                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                             ToolTip.Tip="{Binding Details, Converter={x:Static ui:Converters.TipText}}" />
+                  <!-- 软链接的目标:ls 早就解析出来了,却一直没画 ——
+                       一个指向别处的 /etc/localtime 和一个真文件在树里长得一模一样。 -->
+                  <TextBlock Grid.Column="4" Text="{Binding LinkText}" IsVisible="{Binding IsSymlink}"
+                             Margin="6,0,0,0" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize9}"
+                             Foreground="{DynamicResource VelaTextMuted}"
+                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <!-- A / C / D:相对镜像加了、改了、删了。这是文件树里唯一有颜色的东西。 -->
+                  <TextBlock Grid.Column="5" Text="{Binding ChangeMarker}" IsVisible="{Binding HasChange}"
+                             FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize9}" FontWeight="SemiBold"
+                             VerticalAlignment="Center"
+                             Foreground="{Binding ChangeTone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </DockPanel>
+
+    <!-- 栏与栏之间的分割条:5px 透明抓取区上画一条 1px 细线,与宿主同款。
+         文件树宽度是这一页最常要改的东西 —— 深目录的路径一长就撑不下。 -->
+    <Border Grid.Column="1" Width="1" HorizontalAlignment="Center"
+            Background="{DynamicResource VelaBorderPrimary}" />
+    <GridSplitter Grid.Column="1" Background="Transparent" ResizeDirection="Columns"
+                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                  ToolTip.Tip="拖动改文件树宽度" />
+
+    <!-- ── 中栏:编辑器 ───────────────────────────────────────── -->
+    <DockPanel Grid.Column="2" IsVisible="{Binding HasOpenFile}">
+      <Border DockPanel.Dock="Top" Classes="toolbar" Padding="14,0" ClipToBounds="True">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
+          <ui:Glyph Grid.Column="0" Key="Docker.file-code" Size="14" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaWarning}" />
+          <!-- 目录那一段封顶:深目录的路径能有半屏长,而它右边坐着保存与关闭 ——
+               让路径把主动作顶出可视区,是这一条上最不该发生的事。 -->
+          <TextBlock Grid.Column="1" Text="{Binding OpenFileDirectory}" Margin="8,0,0,0"
+                     MaxWidth="240" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding OpenFilePath, Converter={x:Static ui:Converters.TipText}}"
+                     FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize12}"
+                     Foreground="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="2" Text="{Binding OpenFileName}"
+                     FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize12}"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource VelaTextPrimary}" VerticalAlignment="Center" />
+          <Border Grid.Column="3" Classes="chip" Height="16" Margin="8,0,0,0"
+                  IsVisible="{Binding IsModified}" Background="{DynamicResource VelaShellYellowDim}">
+            <TextBlock Text="{Binding ModifiedText}" FontSize="{DynamicResource VelaFontSize9}"
+                       Foreground="{DynamicResource VelaWarning}" VerticalAlignment="Center" />
+          </Border>
+
+          <!-- 编辑 / 差异:差异比的是**这次编辑前后**,不是相对镜像 -->
+          <Border Grid.Column="5" CornerRadius="4" Padding="2" BackgroundSizing="OuterBorderEdge" Margin="0,0,9,0"
+                  Background="{DynamicResource VelaBgInput}"
+                  BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <RadioButton Theme="{StaticResource DockerSegmentButton}" GroupName="editmode"
+                           IsChecked="{Binding EditMode, Mode=OneWay}" Command="{Binding ShowEditCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ui:Glyph Key="Icon.pencil" Size="11" Brush="{Binding $parent[RadioButton].Foreground}" />
+                  <TextBlock Text="编辑" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{Binding $parent[RadioButton].Foreground}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Theme="{StaticResource DockerSegmentButton}" GroupName="editmode"
+                           IsChecked="{Binding DiffMode, Mode=OneWay}" Command="{Binding ShowDiffCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ui:Glyph Key="Docker.git-compare" Size="11" Brush="{Binding $parent[RadioButton].Foreground}" />
+                  <TextBlock Text="差异" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{Binding $parent[RadioButton].Foreground}" />
+                </StackPanel>
+              </RadioButton>
+            </StackPanel>
+          </Border>
+
+          <Button Grid.Column="6" Theme="{StaticResource DockerToolButton}" Margin="0,0,9,0"
+                  IsEnabled="{Binding IsModified}" Command="{Binding RevertCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Docker.undo-2" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+              <TextBlock Text="撤销" FontSize="{DynamicResource VelaFontSize11}"
+                         Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="7" Theme="{StaticResource DockerToolButton}" Classes="primary" Margin="0,0,4,0"
+                  IsEnabled="{Binding IsModified}" Command="{Binding SaveCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Icon.save" Size="13" Brush="{DynamicResource VelaAccentForeground}" />
+              <TextBlock Text="保存…" FontSize="{DynamicResource VelaFontSize11}" FontWeight="Medium"
+                         Foreground="{DynamicResource VelaAccentForeground}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="8" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                  ToolTip.Tip="关掉编辑器" Command="{Binding CloseFileCommand}">
+            <ui:Glyph Key="Icon.x" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- 页脚。警告与位置信息合在一条 26px 上:
+           两条页脚会把"这是个危险操作"稀释成"这里有很多小字"。 -->
+      <Border DockPanel.Dock="Bottom" Height="26" Padding="14,0"
+              Background="{DynamicResource VelaBgSurface}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <ui:Glyph Grid.Column="0" Key="Docker.shield-alert" Size="12" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaWarning}" />
+          <!-- 坐在弹性列里:窄下来时这句话该被省略号截断(闸门本身还在,不靠这句话把关),
+               而不是把右边那串位置信息顶出去。 -->
+          <TextBlock Grid.Column="2" Text="覆盖容器内文件属于会丢数据的操作 —— 保存需手打 save 确认"
+                     Margin="6,0,10,0" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="覆盖容器内文件属于会丢数据的操作 —— 保存需手打 save 确认"
+                     FontSize="{DynamicResource VelaFontSize10}"
+                     Foreground="{DynamicResource VelaWarning}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+            <TextBlock Text="{Binding CaretText}" Classes="meta" />
+            <TextBlock Text="{Binding ModifiedLinesText}" Classes="meta" />
+            <TextBlock Text="UTF-8" Classes="meta" />
+            <TextBlock Text="{Binding LineEnding}" Classes="meta" />
+            <TextBlock Text="{Binding Language}" Classes="meta" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- 正文:编辑态是可写的 TextBox,差异态是逐行标记的只读列表 -->
+      <Border Classes="terminal">
+        <Grid>
+          <TextBox Name="Editor" IsVisible="{Binding EditMode}"
+                   Text="{Binding EditorText}" AcceptsReturn="True" AcceptsTab="True"
+                   Background="Transparent" BorderThickness="0" Padding="12,8"
+                   FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize11}"
+                   Foreground="{DynamicResource VelaShellWhite}"
+                   CaretBrush="{DynamicResource VelaAccent}"
+                   SelectionBrush="{DynamicResource VelaAccentDim}"
+                   TextWrapping="NoWrap" />
+          <ScrollViewer IsVisible="{Binding DiffMode}">
+            <ItemsControl ItemsSource="{Binding DiffLines}" Margin="0,8">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:EditorLine">
+                  <Grid ColumnDefinitions="44,18,*" MinHeight="18"
+                        Background="{Binding Tone, Converter={x:Static ui:Converters.DiffBackground}}">
+                    <TextBlock Grid.Column="0" Text="{Binding Number}" TextAlignment="Right" Margin="0,0,8,0"
+                               FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="10"
+                               Foreground="{DynamicResource VelaTextMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Marker}" TextAlignment="Center"
+                               FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="10"
+                               VerticalAlignment="Center"
+                               Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                    <SelectableTextBlock Grid.Column="2" Text="{Binding Text}" Margin="6,0,12,0"
+                                         FontFamily="{DynamicResource VelaUiMonoFont}"
+                                         FontSize="{DynamicResource VelaFontSize11}" VerticalAlignment="Center"
+                                         Foreground="{DynamicResource VelaShellWhite}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </DockPanel>
+
+    <!-- 没打开文件时中栏不是一片黑,而是说清楚下一步在哪 -->
+    <StackPanel Grid.Column="2" IsVisible="{Binding !HasOpenFile}" Spacing="10"
+                VerticalAlignment="Center" HorizontalAlignment="Center" Width="320">
+      <ui:Glyph Key="Icon.folder-tree" Size="24" HorizontalAlignment="Center"
+                Brush="{DynamicResource VelaTextTertiary}" />
+      <TextBlock Text="在左边挑一个文件" Classes="h3" HorizontalAlignment="Center" />
+      <TextBlock Classes="hint" TextAlignment="Center"
+                 Text="带 A / C / D 标记的那些,是这个容器跑起来之后相对镜像动过的文件。" />
+    </StackPanel>
+
+    <!-- 两层 IsVisible 而不是一条 MultiBinding:外层管"有没有打开文件",
+         内层管"这块地方够不够宽"。内层收起来时,定宽的是内层,外层与那一列一起收成 0。 -->
+    <Border Grid.Column="3" IsVisible="{Binding HasOpenFile}">
+      <Border Width="1" Background="{DynamicResource VelaBorderPrimary}"
+              IsVisible="{Binding $parent[UserControl].Bounds.Width,
+                                  Converter={x:Static ui:Converters.WiderThan}, ConverterParameter=1000}" />
+    </Border>
+
+    <!-- ── 右栏:文件属性 / 写回方式 / 重载 / 写入历史 ──────────────
+         宽度不够时整栏收起 —— 右栏是旁注,编辑器才是正文,
+         不该由旁注把正文挤成一条缝。 -->
+    <Border Grid.Column="4" IsVisible="{Binding HasOpenFile}">
+      <Border Width="290" Background="{DynamicResource VelaBgContentHeader}"
+              IsVisible="{Binding $parent[UserControl].Bounds.Width,
+                                  Converter={x:Static ui:Converters.WiderThan}, ConverterParameter=1000}">
+        <ScrollViewer>
+          <StackPanel Margin="14,12" Spacing="10">
+            <Grid ColumnDefinitions="Auto,*" Height="24">
+              <TextBlock Grid.Column="0" Text="文件" Classes="h4" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding FileProperties}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:DetailField">
+                  <Grid ColumnDefinitions="90,*" Height="22">
+                    <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell" TextWrapping="Wrap"
+                               Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Classes="divider" />
+            <Grid ColumnDefinitions="Auto,*" Height="24">
+              <TextBlock Grid.Column="0" Text="写回方式" Classes="h4" />
+            </Grid>
+            <Border Classes="card" Padding="10,9">
+              <StackPanel Spacing="5">
+                <TextBlock Text="PUT /containers/{id}/archive"
+                           FontFamily="{DynamicResource VelaUiMonoFont}"
+                           FontSize="{DynamicResource VelaFontSize10}"
+                           Foreground="{DynamicResource VelaInfo}" TextWrapping="Wrap" />
+                <TextBlock Classes="hint" TextWrapping="Wrap"
+                           Text="整个文件以 tar 流写回容器可写层。不经过 shell,不受登录 shell 与引用规则影响。" />
+              </StackPanel>
+            </Border>
+
+            <!-- 猜得出重载命令才显示这一段:给一个会失败的默认命令比不给更糟 -->
+            <StackPanel Spacing="10" IsVisible="{Binding HasReloadCommand}">
+              <Border Classes="divider" />
+              <Grid ColumnDefinitions="Auto,*" Height="24">
+                <TextBlock Grid.Column="0" Text="保存后" Classes="h4" />
+              </Grid>
+              <Border CornerRadius="6" Padding="10,9" Background="{DynamicResource VelaShellYellowDim}">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="多数服务不会自动重载配置" FontSize="{DynamicResource VelaFontSize11}"
+                             FontWeight="Medium" Foreground="{DynamicResource VelaWarning}" TextWrapping="Wrap" />
+                  <TextBlock Text="写回去之后还得让它重新读一遍,或者重启容器。"
+                             FontSize="{DynamicResource VelaFontSize10}" LineHeight="16"
+                             Foreground="{DynamicResource VelaWarning}" TextWrapping="Wrap" />
+                  <CheckBox Classes="compact" IsChecked="{Binding ReloadAfterSave}">
+                    <TextBlock Text="{Binding ReloadCommand, StringFormat='保存后执行 {0}'}" Classes="cell"
+                               Margin="4,0,0,0" TextWrapping="Wrap" />
+                  </CheckBox>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="10" IsVisible="{Binding HasHistory}">
+              <Border Classes="divider" />
+              <Grid ColumnDefinitions="Auto,*" Height="24">
+                <TextBlock Grid.Column="0" Text="本面板写入历史" Classes="h4" />
+              </Grid>
+              <ItemsControl ItemsSource="{Binding History}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="pages:FileWriteRecord">
+                    <Grid ColumnDefinitions="74,8,*" Height="22">
+                      <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="meta" />
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" Classes="cell" FontSize="{DynamicResource VelaFontSize10}"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path, Converter={x:Static ui:Converters.TipText}}" />
+                        <TextBlock Text="·" Classes="meta" />
+                        <TextBlock Text="{Binding Summary}" Classes="meta" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <!-- 拖放区。设计稿把它钉在最底下 —— 它是"另一条路",不是这一栏的正文。 -->
+            <Border CornerRadius="6" Padding="10,14" Margin="0,6,0,0"
+                    BorderBrush="{DynamicResource VelaBorderSecondary}" BorderThickness="1">
+              <StackPanel Spacing="5" HorizontalAlignment="Center">
+                <ui:Glyph Key="Icon.upload" Size="16" HorizontalAlignment="Center"
+                          Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Text="拖入文件替换,或上传到当前目录" Classes="hint" TextAlignment="Center" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Border>
+  </Grid>
+</UserControl>

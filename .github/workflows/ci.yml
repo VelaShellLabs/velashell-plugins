@@ -113,11 +113,17 @@ jobs:
       # 共享程序集绝不能落进插件目录 —— 落了就说明 SDK 包的 exclude=Runtime 链路断了。
       # 这条在插件侧再验一遍(工具链仓库的 CI 只在模板生成的空工程上验过),
       # 因为真实插件才有第三方依赖,才可能把 Avalonia 从别的包里拖回来。
+      #
+      # MicroCom.Runtime 单列一条:它是 Avalonia 的依赖,但**不以 Avalonia 打头** ——
+      # 既躲过装载器的共享前缀判定(插件会加载自己那一份),也躲过上面那条按名字前缀的体检。
+      # 直接引 Avalonia.* 包的插件(DockerPanel 引了 Avalonia.AvaloniaEdit)一旦漏写
+      # ExcludeAssets="runtime",它就会静悄悄落进插件目录 —— 2026-09-11 并 DockerPanel 时
+      # 实测过这条路:构建 0 错 0 警告,包也照常打出来,只有肉眼逐个文件看才发现。
       - name: Assert no shared assemblies leaked
         shell: pwsh
         run: |
           $leaked = Get-ChildItem artifacts/plugins-bundle -Recurse -Filter '*.dll' |
-            Where-Object { $_.Name -like 'Avalonia*' -or $_.Name -eq 'VelaShell.PluginSdk.dll' }
+            Where-Object { $_.Name -like 'Avalonia*' -or $_.Name -eq 'VelaShell.PluginSdk.dll' -or $_.Name -eq 'MicroCom.Runtime.dll' }
           if ($leaked) {
             throw "Shared assemblies leaked into the plugin bundle: $(($leaked | ForEach-Object FullName) -join ', ')"
           }

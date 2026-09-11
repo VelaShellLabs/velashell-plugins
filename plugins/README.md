@@ -9,7 +9,7 @@ SDK 契约与开发文档在工具链仓库
 
 | 目录 | id | 随包分发 | 装载模式 | 说明 |
 | --- | --- | --- | --- | --- |
-| [VelaShell.Plugin.HelloWorld](VelaShell.Plugin.HelloWorld/) | `velashell.hello-world` | 否 | 隔离进程 | 官方示例:SDK 各能力的最小用法 |
+| [VelaShell.Plugin.DockerPanel](VelaShell.Plugin.DockerPanel/) | `velashell.dockerpanel` | 是 | 进程内 | 远端 Docker 管理面板:容器 / 镜像 / 卷 / 网络 / Compose,含实时统计、日志、容器内文件编辑与内置终端 |
 | [VelaShell.Plugin.Redis](VelaShell.Plugin.Redis/) | `velashell.redis` | 是 | 进程内 | Redis 客户端:键浏览、类型化查看与编辑、命令执行 |
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
 | [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
@@ -19,7 +19,20 @@ SDK 契约与开发文档在工具链仓库
 隔离插件跑在独立的 `VelaShell.PluginHost` 进程里(实现在主仓库),崩溃不波及宿主;
 S3 与 Redis 因为**协议能力只在进程内可用**必须进程内装载 —— 协议是宿主反向调用插件的
 高频通道,隔离进程的 RPC 只承载插件→宿主方向(清单校验会直接拒绝 protocols + isolated 的组合);
-Telnet 与串口同理。
+Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原生 Avalonia 控件挂进主窗口标签区
+(控件无法跨进程嵌入),而且 `IRemoteTunnelApi` 交给它的是一条**活的 `Stream`**,
+隔离进程里明确不可用。
+
+> **Docker 面板要 SDK ≥ 2.0.0**(`plugin.json` 里钉了 `minSdkVersion`)。它说的是
+> Docker Engine 的 HTTP API,而这条 API 的载体是远端的一个 unix socket ——
+> 要的是到那个 socket 的**裸字节双工流**(`IRemoteTunnelApi`)。SDK 1.1 的远程执行只有
+> "整段 UTF-8 解码"与"按 `\n` 切行"两种**文本**形态,承载不了分块传输、tar 归档流与
+> `exec` 的多路复用帧:UTF-8 解码把非法字节换成 U+FFFD(不可逆),按行切分在 `0x0A`
+> 处把一帧劈成两半 —— 那不是慢一点,是**数据静默损坏**。`apiLevel` 表达不了这一档
+> (它只在**破坏性**变更时才动),所以另钉 `minSdkVersion`。
+>
+> 它也是本仓库**唯一直接引 Avalonia.\* 包**的插件(`Avalonia.AvaloniaEdit`,用于
+> compose.yaml / .env 的语法高亮)。这一条有个反直觉的后果,见下一节最后那段。
 
 > **串口插件要 SDK ≥ 1.5.0**。它是连接表单三件新面的驱动者与首个使用者:
 > `ProtocolFeatures.NoEndpoint`(收起端口栏)、`ProtocolSettingKind.DynamicChoice` +
@@ -56,16 +69,36 @@ Telnet 与串口同理。
 `VelaExcludeSharedRuntimeAssets` 已经按装载器的判定口径(`VelaShell.PluginSdk`
 与 `Avalonia*` 前缀)把共享程序集的运行时资产排掉了。
 
+### 例外:确实需要某个 `Avalonia.*` 包时,`ExcludeAssets="runtime"` 必须自己写
+
+上一段那条"不要写 `ExcludeAssets`"的前提是**插件不直接引 Avalonia 包** ——
+前四个插件都不引,SDK 包处理它自己那条引用就够了。
+
+DockerPanel 要 `Avalonia.AvaloniaEdit` 做语法高亮,于是撞上了另一面:
+`VelaExcludeSharedRuntimeAssets` 排得掉 `Avalonia.AvaloniaEdit` 自己的运行时资产,
+**排不掉它带进来的传递依赖**。去掉那条 `ExcludeAssets`,
+`AvaloniaEdit → Avalonia → MicroCom.Runtime` 里的 `MicroCom.Runtime.dll`
+就会落进插件目录(2026-09-11 并库时实测,构建 0 错 0 警告,包照常打出来)。
+
+它不以 `Avalonia` 打头,因此**两道防线同时漏掉它**:装载器的共享前缀判定不认它
+(插件会加载自己那一份,与宿主的 Avalonia COM 互操作分属两个类型标识),
+CI 那条泄漏体检原本也只认 `Avalonia*` 与 `VelaShell.PluginSdk.dll`。
+体检已经把 `MicroCom.Runtime.dll` 补进去了,但**规矩仍然是显式写**:
+
+```xml
+<PackageReference Include="Avalonia.AvaloniaEdit" ExcludeAssets="runtime" />
+```
+
 本目录的 `Directory.Build.props/targets` 只额外做三件仓库自己的事:
 `VelaPluginShip`(是否随应用分发)、构建后镜像到 `artifacts/plugins/<目录名>/`
 与本机宿主、以及发布期的 `GetVelaPluginPayload`。
 
 ## 分发
 
-"随包分发"由 csproj 的 `<VelaPluginShip>` 控制(默认 `true`)。示例插件设 `false`:
+"随包分发"由 csproj 的 `<VelaPluginShip>` 控制(默认 `true`)。设成 `false` 的插件
 本机构建仍会镜像到 `artifacts/plugins/`(以及 `VELASHELL_DEV_APP_DIR` 指定的应用目录),
-装载起来验证插件系统没问题,但它不会被收进分发布局 ——
-它是给开发者读的范例,不是给用户装的功能。
+装载起来验证插件系统没问题,但它不会被收进分发布局 —— 给开发者读的范例用这一档。
+(当前五个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
 
 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`
 的插件收成安装包 `plugins/` 那一层的布局:它不再作为 Release 资产上传,只在 CI 与发布流水线里
@@ -86,17 +119,10 @@ Telnet 与串口同理。
 与 MSBuild 的 `VelaPluginsVersion` 毫无关系。两处必须一起写,只写一处就会出现
 "发了 1.4.0,包却叫 velashell.redis-0.1.0.vpx"。
 
-## 规划中(尚未创建)
-
-- **串口插件**(`velashell.serial`):与 Telnet 同为终端协议能力的使用者;
-  依赖 `System.IO.Ports`,要处理三平台端口枚举与 `Close()` 死锁。
-  连接对话框里的「串口」页签在它落地前保持禁用占位。
-- **容器管理插件**:基于远程执行能力封装 docker/podman 常用操作
-  (已有独立仓库原型 `joesdu/VelaShell.Plugin.DockerPanel`,尚未并入本仓库)。
-
 ## 新建插件
 
-1. 复制 `VelaShell.Plugin.HelloWorld/` 为新目录,改 csproj 中的 `<VelaPluginId>` 与 `plugin.json`;
+1. 挑一个形态最接近的现有插件复制成新目录(终端类看 Telnet,面板类看 DockerPanel),
+   改 csproj 中的 `<VelaPluginId>` 与 `plugin.json`;
 2. 新依赖的版本加进根 `Directory.Packages.props`(中央包管理,csproj 里不写 `Version=`);
 3. 把项目与它的测试工程加入 `VelaShell.Plugins.slnx` 的 `/plugins/`、`/tests/` 文件夹;
 4. `dotnet build plugins/VelaShell.Plugin.<名字>` —— 输出自动镜像到
