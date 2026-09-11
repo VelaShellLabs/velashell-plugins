@@ -12,6 +12,11 @@ VT 引擎、回滚、搜索、会话日志、会话录制、ZMODEM 全部是宿�
 | 装载模式 | 进程内(协议能力的硬性要求) |
 | 激活时机 | `onProtocol:velashell.telnet` —— 用户点到 Telnet 页签才装载 |
 | 依赖 | 无(只用 `TcpClient` + SDK) |
+| 标签页图标 | lucide `ethernet-port`(`ProtocolDescriptor.Icon`,描边、视框 24) |
+
+图标**刻意不用终端字形**:宿主给 SSH 标签画的就是 `square-terminal`,而标签上的图标只有
+12–16px,两个终端框并排等于没分。以太网口答的是"这条终端从哪儿接进去",与串口插件的
+`usb-c-port` 成对 —— 一个网口一个串口,一眼分得开。不自报图标则是所有插件共用的通用插头。
 
 ## 为什么自己实现协议
 

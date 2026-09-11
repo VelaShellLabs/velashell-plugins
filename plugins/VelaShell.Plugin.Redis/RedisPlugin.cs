@@ -151,6 +151,9 @@ public sealed class RedisPlugin : IVelaPlugin
         {
             Id = pluginId,
             DisplayName = "Redis",
+            // 会话标签页上的图标。不填的话宿主画通用插头 —— 同时开着 Redis、S3、串口三种
+            // 插件会话时,三条标签顶着同一个插头,图标那一格等于白占。路径数据见 RedisIcon。
+            Icon = RedisIcon.Tab,
             DefaultPort = 6379,
             HostLabel = loc["Redis_Host"],
             HostPlaceholder = "127.0.0.1",

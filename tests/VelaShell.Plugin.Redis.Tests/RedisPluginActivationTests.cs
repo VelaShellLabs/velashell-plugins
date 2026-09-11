@@ -1,3 +1,4 @@
+using VelaShell.PluginSdk;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Testing;
 using VelaShell.PluginSdk.Workspaces;
@@ -59,6 +60,24 @@ public sealed class RedisPluginActivationTests
         WorkspaceDescriptor descriptor = context.RecordingWorkspaces.Registered.Single();
         ProtocolSettingField field = descriptor.Fields.Single(f => f.Key == descriptor.TrustedThumbprintSettingKey);
         Assert.IsTrue(field.IsHidden);
+    }
+
+    [TestMethod]
+    public async Task Activate_GivesTheSessionTabTheRedisBrandMark()
+    {
+        using TestPluginContext context = NewContext();
+        var plugin = new RedisPlugin();
+
+        await plugin.ActivateAsync(context, CancellationToken.None);
+
+        PluginIcon? icon = context.RecordingWorkspaces.Registered.Single().Icon;
+        Assert.IsNotNull(icon, "不自报图标,标签上就是所有插件共用的那个通用插头。");
+        // 两位一起报才画得对:实心图形被 2px 圆头画笔描边会变成一圈轮廓线,
+        // 而视框留在 lucide 的 24 则等于把这张 1030 的图放大四十多倍,屏幕上什么也看不见。
+        Assert.IsTrue(icon.IsFilled, "品牌标是实心的。");
+        Assert.AreEqual(1030d, icon.ViewBoxSize, "原始 SVG 的 viewBox 是 0 0 1030 1024。");
+        // 路径本身在 RedisIconTests 里解析一遍:那才是"画出来是不是那个标"的验收。
+        Assert.AreEqual(RedisIcon.PathData, icon.PathData);
     }
 
     [TestMethod]

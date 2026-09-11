@@ -13,6 +13,11 @@ Break 与 DTR/RTS)。
 | 激活时机 | `onProtocol:velashell.serial` —— 用户点到串口页签才装载 |
 | 依赖 | `System.IO.Ports`(MIT) |
 | 最低 SDK | 1.5.0(用到 `NoEndpoint` / `DynamicChoice` / `HostKind`) |
+| 标签页图标 | lucide `usb-c-port`(`ProtocolDescriptor.Icon`,描边、视框 24) |
+
+图标与 Telnet 插件的 `ethernet-port` 成对:一个串口一个网口,答的都是"插的是哪一种口"。
+终端字形(`square-terminal`)归宿主的 SSH 标签,再拿它画串口就分不出来了。
+不自报图标则是所有插件共用的通用插头。
 
 ## 连接表单
 
