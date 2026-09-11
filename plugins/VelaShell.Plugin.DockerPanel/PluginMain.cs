@@ -73,7 +73,9 @@ public sealed class DockerPanelPlugin : IVelaPlugin
         try
         {
             _panel = await context.Ui.ShowPanelAsync(
-                new() { Title = "Docker", DisplayMode = PanelDisplayMode.Document },
+                // 图标不填的话,这条标签顶的是所有插件共用的那个通用插头 —— 与 Redis / S3 /
+                // 串口的标签并排时,图标那一格等于白占。路径数据与取舍见 DockerIcon。
+                new() { Title = "Docker", Icon = DockerIcon.Panel, DisplayMode = PanelDisplayMode.Document },
                 () => new DockerPanelView(viewModel),
                 context.Shutdown).ConfigureAwait(false);
             _panel.Closed += async () =>
