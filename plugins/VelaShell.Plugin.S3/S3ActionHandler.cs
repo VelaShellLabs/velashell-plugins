@@ -100,6 +100,10 @@ public sealed class S3ActionHandler(IPluginContext context) : IS3ActionHandler
             new PanelOptions
             {
                 Title = title,
+                // 标题栏上的图标:与会话标签页同一个实例 —— 桶管理器与对象检视器是同一个插件
+                // 开的两扇工具窗,认的是「这扇窗属于哪个插件」。宿主若还不给窗口画图标,
+                // 这一行也只是被忽略,不会出错。
+                Icon = S3Icon.Cloud,
                 // 独立窗口而不是停靠标签页:这两扇是「对着某个对象/桶做一串操作」的工具窗,
                 // 用户通常要一边看文件列表一边改配置,占掉一个标签位反而碍事。
                 DisplayMode = PanelDisplayMode.Window,

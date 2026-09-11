@@ -69,6 +69,12 @@ public sealed class TelnetPlugin : IVelaPlugin
         {
             Id = context.PluginId,
             DisplayName = "Telnet",
+            // 会话标签页上的图标:lucide 的 ethernet-port,描边、视框 24。
+            // **刻意不用终端字形**:宿主的 SSH 标签画的就是 square-terminal,而标签上的图标
+            // 只有 12–16px —— 两个终端框摆在一起等于没分。以太网口答的是「这条终端从哪儿接进去」,
+            // 与串口的 usb-c-port 成对:一个网口,一个串口,一眼分得开。
+            Icon = PluginIcon.Stroked(
+                "M15 20l3-3h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2l3 3Z M6 8v2 M10 8v2 M14 8v2 M18 8v2"),
             DefaultPort = 23,
             HostLabel = loc["Telnet_Host"],
             HostPlaceholder = loc["Telnet_HostPlaceholder"],

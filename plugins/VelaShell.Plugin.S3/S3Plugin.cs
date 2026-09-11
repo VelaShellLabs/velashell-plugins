@@ -79,6 +79,9 @@ public sealed class S3Plugin : IVelaPlugin
         {
             Id = context.PluginId,
             DisplayName = "S3",
+            // 会话标签页上的图标。不填的话宿主画通用插头 —— 而 S3 的标签与 SFTP / FTP 的
+            // 并排躺在同一条标签条上,那一格不说清是哪种连接就等于白占。取舍见 S3Icon。
+            Icon = S3Icon.Cloud,
             DefaultPort = S3Settings.DefaultPort,
             HostLabel = loc["S3_Endpoint"],
             HostPlaceholder = "s3.amazonaws.com",

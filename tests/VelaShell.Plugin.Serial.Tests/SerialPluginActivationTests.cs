@@ -1,3 +1,4 @@
+using VelaShell.PluginSdk;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Testing;
 
@@ -78,6 +79,21 @@ public sealed class SerialPluginActivationTests
         Assert.AreEqual("115200", baud.DefaultValue);
         Assert.IsTrue(baud.AllowsCustomValue, "250000(Marlin)与 76800 都不在标准表上,但驱动认");
         Assert.IsFalse(baud.IsAdvanced, "波特率是'连不连得上'的参数,不该收进高级选项");
+    }
+
+    [TestMethod]
+    public async Task Activate_GivesTheSessionTabTheUsbCPortGlyph()
+    {
+        using TestPluginContext context = NewContext();
+
+        ProtocolDescriptor descriptor = await ActivateAsync(context);
+
+        PluginIcon? icon = descriptor.Icon;
+        Assert.IsNotNull(icon, "不自报图标,标签上就是所有插件共用的那个通用插头。");
+        // lucide 那套的规格:描边、视框 24。报成实心会把这个描边字形填成一团色块。
+        Assert.IsFalse(icon.IsFilled);
+        Assert.AreEqual(24d, icon.ViewBoxSize);
+        Assert.AreEqual("M6 12h12 M6 8h12a4 4 0 0 1 0 8H6a4 4 0 0 1 0-8Z", icon.PathData);
     }
 
     [TestMethod]

@@ -127,6 +127,11 @@ public sealed class SerialPlugin : IVelaPlugin
         {
             Id = context.PluginId,
             DisplayName = loc["Serial_DisplayName"],
+            // 会话标签页上的图标:lucide 的 usb-c-port,描边、视框 24(那套字形的通用规格)。
+            // 认的是「插的是哪一种口」—— 与 Telnet 的以太网口图标正好成对,而终端字形
+            // (square-terminal)已经被宿主的 SSH 标签占着,再拿它画串口就分不出来了。
+            // 不填则是通用插头,与另外几个插件的标签撞在一起。
+            Icon = PluginIcon.Stroked("M6 12h12 M6 8h12a4 4 0 0 1 0 8H6a4 4 0 0 1 0-8Z"),
             // NoEndpoint:收起"端口"那一栏(串口的目标不是 host:port)。
             // NoCredentials:串口没有协议级凭据 —— 登录发生在带内(设备自己打印 login:)。
             Features = ProtocolFeatures.NoEndpoint | ProtocolFeatures.NoCredentials,
