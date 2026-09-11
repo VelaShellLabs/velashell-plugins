@@ -148,7 +148,7 @@ jobs:
         shell: pwsh
         run: |
           $leaked = Get-ChildItem artifacts/plugins-bundle -Recurse -Filter '*.dll' |
-            Where-Object { $_.Name -like 'Avalonia*' -or $_.Name -eq 'VelaShell.PluginSdk.dll' }
+            Where-Object { $_.Name -like 'Avalonia*' -or $_.Name -eq 'VelaShell.PluginSdk.dll' -or $_.Name -eq 'MicroCom.Runtime.dll' }
           if ($leaked) {
             throw "Shared assemblies leaked into the plugin bundle: $(($leaked | ForEach-Object FullName) -join ', ')"
           }

@@ -39,7 +39,7 @@ VelaShell 生态的**全部文档**集中在一个仓库:
 
 ## 三、本仓库:velashell-plugins(第一方插件)
 
-Redis / S3 / Telnet / 串口等第一方插件,以 Release 资产 `velashell-plugins-<版本>.zip` 交付。
+Redis / S3 / Telnet / 串口 / Docker 面板等第一方插件,以 Release 资产 `.vpx`(每插件一份,已签名)交付。
 
 ### 构建与打包
 
@@ -64,6 +64,13 @@ dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=
 S3 见 [`zh/host/S3协议插件化设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/S3协议插件化设计.md),
 Telnet / 串口见 [`zh/host/Telnet与串口可行性调研.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Telnet与串口可行性调研.md)。
 **改了这些插件的设计取舍,要回写对应那篇。**
+
+Docker 面板是个例外:它从独立仓库 `VelaShell.Plugin.DockerPanel` 并进来(2026-09-11),
+设计取证留在插件目录自己的 [`README.md`](plugins/VelaShell.Plugin.DockerPanel/README.md) 与
+[`plan.md`](plugins/VelaShell.Plugin.DockerPanel/plan.md)(后者是对着
+`VelaShell.Plugin.DockerPanel.pen` 的 19 个画板逐条核对的完成度快照)。
+这三份是上面第二节说的那类**例外**:它们服务的是"在这个目录里改这个插件",
+跟着代码走比搬进 velashell-docs 更有用。
 
 ### 视觉对齐宿主
 

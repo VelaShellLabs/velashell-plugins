@@ -1,0 +1,211 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.ConfirmGateView"
+             x:DataType="ui:ConfirmGate">
+
+  <!--
+    确认闸门。两档:
+      · 一般破坏性 —— 后果说明 + 危险色按钮,点一下就执行;
+      · 会丢数据   —— 红框 + 手打确认串,按钮在打完之前是灰的。
+
+    第二行永远是**目标主机**。同时开着生产与测试两台机器时,
+    一个不写清主机的「确定删除 3 个卷吗」是这个面板能犯的最贵的错误。
+  -->
+
+  <Border Width="560" CornerRadius="10"
+          Background="{DynamicResource VelaBgSurface}"
+          BorderThickness="1"
+          BoxShadow="{DynamicResource VelaShadowWindow}"
+          ClipToBounds="True">
+    <Border.BorderBrush>
+      <Binding Path="IsDataLoss">
+        <Binding.Converter>
+          <ui:DataLossBorderConverter />
+        </Binding.Converter>
+      </Binding>
+    </Border.BorderBrush>
+
+    <StackPanel>
+      <!-- 标题 -->
+      <Border Height="52" Padding="18,0" Background="{DynamicResource VelaShellRedDim}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+          <ui:Glyph Grid.Column="0" Key="{Binding Icon}" Size="17" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaError}" />
+          <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="10,0,0,0"
+                     FontSize="{DynamicResource VelaFontSize15}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource VelaTextPrimary}" VerticalAlignment="Center" />
+          <Border Grid.Column="2" Classes="chip" Margin="9,0,0,0" IsVisible="{Binding IsDataLoss}"
+                  Background="{DynamicResource VelaError}" Height="18">
+            <TextBlock Text="会丢数据" FontSize="{DynamicResource VelaFontSize10}" FontWeight="SemiBold"
+                       Foreground="{DynamicResource VelaErrorForeground}" VerticalAlignment="Center" />
+          </Border>
+          <Button Grid.Column="4" Theme="{StaticResource DockerIconButton}" Command="{Binding CancelCommand}">
+            <ui:Glyph Key="Icon.x" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- 目标主机 —— 一行都不能省 -->
+      <Border Height="34" Padding="18,0" Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <ui:Glyph Key="Docker.server" Size="13" Brush="{DynamicResource VelaStatusConnected}" />
+          <TextBlock Text="目标主机" Classes="label" />
+          <TextBlock Text="{Binding HostName}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                     FontSize="{DynamicResource VelaFontSize12}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource VelaTextPrimary}" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding HostDetail}" Classes="meta">
+            <TextBlock.Foreground>
+              <Binding Path="HostWarning">
+                <Binding.Converter>
+                  <ui:DangerTextConverter />
+                </Binding.Converter>
+              </Binding>
+            </TextBlock.Foreground>
+          </TextBlock>
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer MaxHeight="440">
+        <StackPanel Margin="18,16" Spacing="12">
+
+          <!-- 将要执行的**那几条真请求**,不是一句概括 -->
+          <TextBlock Text="将要执行" Classes="h4" />
+          <Border CornerRadius="4" Padding="12,10" Background="{DynamicResource VelaBgTerminal}">
+            <StackPanel Spacing="3">
+              <ItemsControl ItemsSource="{Binding Commands}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{Binding}" Classes="code" TextWrapping="Wrap" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="{Binding CommandNote}" IsVisible="{Binding HasCommandNote}"
+                         FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize10}"
+                         Foreground="{DynamicResource VelaTextTertiary}" TextWrapping="Wrap" Margin="0,3,0,0" />
+            </StackPanel>
+          </Border>
+
+          <!-- 目标列表 -->
+          <StackPanel Spacing="2" IsVisible="{Binding HasTargets}">
+            <TextBlock Text="目标" Classes="h4" />
+            <ItemsControl ItemsSource="{Binding Targets}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ui:ConfirmTarget">
+                  <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Height="26">
+                    <Ellipse Grid.Column="0" Width="6" Height="6" VerticalAlignment="Center"
+                             Fill="{Binding Running, Converter={x:Static ui:Converters.FeedbackBrush}, ConverterParameter=ok}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" Classes="name" Margin="8,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Meta}" Classes="meta" Margin="9,0,0,0" />
+                    <TextBlock Grid.Column="4" Text="{Binding Status}" Classes="meta" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- 后果说明 -->
+          <StackPanel Spacing="5" IsVisible="{Binding HasConsequences}">
+            <TextBlock Text="后果" Classes="h4" />
+            <ItemsControl ItemsSource="{Binding Consequences}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ui:ConfirmConsequence">
+                  <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,4">
+                    <ui:Glyph Grid.Column="0" Size="13" VerticalAlignment="Top" Margin="0,1,0,0"
+                              Key="{Binding Severity, Converter={x:Static ui:Converters.SeverityIcon}}"
+                              Brush="{Binding Severity, Converter={x:Static ui:Converters.SeverityBrush}}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Text}" Margin="9,0,0,0"
+                               FontSize="{DynamicResource VelaFontSize11}"
+                               Foreground="{DynamicResource VelaTextSecondary}"
+                               TextWrapping="Wrap" LineHeight="17" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- 会丢数据那一档:红框 + 逐条说明 -->
+          <Border IsVisible="{Binding IsDataLoss}" CornerRadius="6" Padding="14,12"
+                  Background="{DynamicResource VelaShellRedDim}"
+                  BorderBrush="{DynamicResource VelaError}" BorderThickness="1">
+            <StackPanel Spacing="6">
+              <StackPanel Orientation="Horizontal" Spacing="7">
+                <ui:Glyph Key="Docker.database" Size="14" Brush="{DynamicResource VelaError}" />
+                <TextBlock Text="{Binding DataLossHeadline}" FontSize="{DynamicResource VelaFontSize12}"
+                           FontWeight="SemiBold" Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding DataLossPoints}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{Binding}" FontSize="{DynamicResource VelaFontSize11}"
+                               Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" LineHeight="17"
+                               Margin="0,0,0,3" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- 「先做一件事再执行」:默认打开 —— 默认值该偏向不丢东西那一边 -->
+          <Border IsVisible="{Binding HasPrecaution}" CornerRadius="6" Padding="11,9"
+                  Background="{DynamicResource VelaShellGreenDim}"
+                  BorderBrush="{DynamicResource VelaStatusConnected}" BorderThickness="1">
+            <CheckBox Classes="compact" IsChecked="{Binding Precaution}">
+              <TextBlock Text="{Binding PrecautionLabel}" Classes="cell" TextWrapping="Wrap"
+                         Foreground="{DynamicResource VelaTextPrimary}" />
+            </CheckBox>
+          </Border>
+
+          <!-- 手打确认串 -->
+          <StackPanel Spacing="5" IsVisible="{Binding IsDataLoss}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="请输入" Classes="h4" />
+              <TextBlock Text="{Binding ConfirmWord}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                         FontSize="{DynamicResource VelaFontSize12}" FontWeight="SemiBold"
+                         Foreground="{DynamicResource VelaError}" VerticalAlignment="Center" />
+              <TextBlock Text="以确认" Classes="h4" />
+            </StackPanel>
+            <Border Classes="input" Height="34" BorderBrush="{DynamicResource VelaError}">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBox Grid.Column="0" Classes="bare mono" Text="{Binding TypedWord}"
+                         FontSize="{DynamicResource VelaFontSize13}" />
+                <TextBlock Grid.Column="1" Text="{Binding RemainingHint}" Classes="meta" />
+              </Grid>
+            </Border>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- 页脚 -->
+      <Border Height="56" Padding="18,0" Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+          <ui:Glyph Grid.Column="0" Key="Docker.keyboard" Size="13" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaTextTertiary}" />
+          <!-- 只有会丢数据那一档才需要说"回车不会触发" ——
+               一般破坏性那一档回车**是**确认,写反了比不写更糟。 -->
+          <TextBlock Grid.Column="1" Text="Esc 取消" Classes="meta" Margin="7,0,0,0"
+                     IsVisible="{Binding !IsDataLoss}" />
+          <TextBlock Grid.Column="1" Text="Esc 取消 · 回车不会触发" Classes="meta" Margin="7,0,0,0"
+                     IsVisible="{Binding IsDataLoss}" />
+          <Button Grid.Column="3" Theme="{StaticResource DockerToolButton}" Height="30" Margin="0,0,9,0"
+                  Command="{Binding CancelCommand}">
+            <TextBlock Text="取消" FontSize="{DynamicResource VelaFontSize12}"
+                       Foreground="{DynamicResource VelaTextSecondary}" />
+          </Button>
+          <Button Grid.Column="4" Theme="{StaticResource DockerToolButton}" Height="30"
+                  Background="{DynamicResource VelaError}" BorderBrush="Transparent"
+                  Command="{Binding ConfirmCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="{Binding ConfirmIcon}" Size="13" Brush="{DynamicResource VelaErrorForeground}" />
+              <TextBlock Text="{Binding ConfirmLabel}" FontSize="{DynamicResource VelaFontSize12}"
+                         FontWeight="Medium" Foreground="{DynamicResource VelaErrorForeground}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </Border>
+    </StackPanel>
+  </Border>
+</UserControl>

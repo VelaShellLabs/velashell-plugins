@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.CommandPaletteView"
+             x:DataType="ui:CommandPalette">
+
+  <!--
+    命令面板在**面板里**,不劫持宿主的 Ctrl+K:宿主那一个管会话、设置、插件,
+    这一个管当前这台 Docker 主机上的容器、镜像、卷。搜的是不同的东西。
+  -->
+
+  <!-- 底色走 VelaBgContentHeader(映射表里 bg-elevated 的那一档)。
+       原来写的 VelaBgElevated 宿主根本没有这个键 —— DynamicResource 查不到就不画,
+       于是整个命令面板是透明的,后面的卡片全透出来。 -->
+  <!--
+    ClipToBounds:底部那条页脚是**带底色**的,而它自己是方角。
+    不裁剪的话,页脚的两个方角会直接盖住外框的圆角 ——
+    看上去就是左下、右下两处圆角发毛、边线断掉。
+    确认闸门、表单、拉取对话框早就都裁了,只有这一处漏了。
+  -->
+  <Border Width="560" MaxHeight="480" CornerRadius="8" ClipToBounds="True"
+          Background="{DynamicResource VelaBgContentHeader}"
+          BorderBrush="{DynamicResource VelaBorderSecondary}" BorderThickness="1"
+          BoxShadow="{DynamicResource VelaShadowWindow}">
+    <DockPanel>
+      <!-- 输入行:主机名一并写出来 —— 命令作用在哪台机器上不能靠猜 -->
+      <Border DockPanel.Dock="Top" Height="46" Padding="14,0"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <ui:Glyph Grid.Column="0" Key="Icon.search" Size="15" VerticalAlignment="Center"
+                    Brush="{DynamicResource VelaTextTertiary}" />
+          <TextBox Grid.Column="1" Name="QueryBox" Classes="bare" Margin="10,0,0,0"
+                   FontSize="{DynamicResource VelaFontSize13}"
+                   Text="{Binding Query}" PlaceholderText="搜索容器、镜像、卷,或输入一个动作…" />
+          <Border Grid.Column="2" Classes="chip" Background="{DynamicResource VelaBgActive}">
+            <TextBlock Text="{Binding HostName}" FontSize="{DynamicResource VelaFontSize10}"
+                       Foreground="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- 脚注:键位说明 + 破坏性动作仍走闸门这件事要写在脸上 -->
+      <Border DockPanel.Dock="Bottom" Height="30" Padding="14,0"
+              Background="{DynamicResource VelaBgContentHeader}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <TextBlock Text="↑↓ 选择" Classes="meta" />
+            <TextBlock Text="⏎ 执行" Classes="meta" />
+            <TextBlock Text="Tab 补全" Classes="meta" />
+            <TextBlock Text="Esc 关闭" Classes="meta" />
+          </StackPanel>
+          <TextBlock Grid.Column="2" Text="破坏性命令带省略号,选中后仍走确认闸门" Classes="meta"
+                     VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+
+      <ScrollViewer>
+        <StackPanel Margin="0,6">
+          <TextBlock Text="没有匹配的命令 —— 换个词试试。" Classes="hint" Margin="14,10"
+                     IsVisible="{Binding IsEmpty}" />
+          <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:PaletteItem">
+                <StackPanel>
+                  <!-- 分组头:带这一组有几条 -->
+                  <Grid Height="24" Margin="14,4,14,0" ColumnDefinitions="Auto,*,Auto"
+                        IsVisible="{Binding ShowGroup}">
+                    <TextBlock Grid.Column="0" Text="{Binding Group}" Classes="label" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Text="{Binding GroupCount}" Classes="meta" VerticalAlignment="Center" />
+                  </Grid>
+                  <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="NaN" CornerRadius="0"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="14,0"
+                          Command="{Binding $parent[ItemsControl].((ui:CommandPalette)DataContext).RunCommand}"
+                          CommandParameter="{Binding}">
+                    <Border Height="32" CornerRadius="4"
+                            Background="{Binding Active, Converter={x:Static ui:Converters.ActiveBackground}}">
+                      <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0">
+                        <ui:Glyph Grid.Column="0" Key="{Binding Icon}" Size="13" VerticalAlignment="Center"
+                                  Brush="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="cell" Margin="9,0"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource VelaTextPrimary}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="meta"
+                                   VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </Button>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+</UserControl>

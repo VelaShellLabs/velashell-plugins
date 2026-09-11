@@ -1,0 +1,359 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.NetworksPageView"
+             x:DataType="pages:NetworksPageViewModel">
+
+  <!--
+    外层三列:列表 / 5px 分割条 / 抽屉。三列的宽度由 DrawerLayout 在开关、最大化、拖动时设,
+    与容器页、宿主侧栏是同一套。
+  -->
+  <Grid x:Name="Root" ColumnDefinitions="*,0,0">
+    <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" IsVisible="{Binding Drawer.ListVisible}">
+
+      <Border Grid.Row="0" Classes="toolbar">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+          <TextBlock Grid.Column="0" Text="网络" Classes="h1" />
+          <TextBlock Grid.Column="1" Text="{Binding TotalCount}" Classes="meta" Margin="8,0,0,0" />
+
+          <!-- 内置的 bridge / host / none 删不掉也改不了,却永远占着最前面三行;
+               来这一页多半是找自己建的那几个。计数早就有了,缺的只是这个开关。 -->
+          <ToggleButton Grid.Column="2" Theme="{StaticResource DockerChipToggle}" Margin="12,0,0,0"
+                        ToolTip.Tip="藏起 bridge / host / none 这三个内置网络"
+                        IsChecked="{Binding CustomOnly}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Docker.list-filter" Size="12" Brush="{Binding $parent[ToggleButton].Foreground}" />
+              <TextBlock Text="{Binding CustomCount, StringFormat='只看自定义 {0}'}"
+                         FontSize="{DynamicResource VelaFontSize11}" VerticalAlignment="Center"
+                         Foreground="{Binding $parent[ToggleButton].Foreground}" />
+            </StackPanel>
+          </ToggleButton>
+
+          <Border Grid.Column="3" Classes="input" Width="200" Height="26" Margin="12,0,0,0" HorizontalAlignment="Left">
+            <Grid ColumnDefinitions="Auto,*">
+              <ui:Glyph Grid.Column="0" Key="Icon.search" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBox Grid.Column="1" Classes="bare" Margin="7,0,0,0" Text="{Binding Search}"
+                       PlaceholderText="按名字、驱动或子网过滤…" />
+            </Grid>
+          </Border>
+          <Button Grid.Column="5" Theme="{StaticResource DockerToolButton}" Margin="0,0,8,0"
+                  Command="{Binding PruneCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Docker.broom" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+              <TextBlock Text="{Binding UnusedCount, StringFormat='清理未使用 ({0})'}"
+                         FontSize="{DynamicResource VelaFontSize11}"
+                         Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="6" Theme="{StaticResource DockerToolButton}" Classes="primary" Margin="0,0,9,0"
+                  Command="{Binding CreateCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Icon.plus" Size="13" Brush="{DynamicResource VelaAccentForeground}" />
+              <TextBlock Text="新建网络…" FontSize="{DynamicResource VelaFontSize11}" FontWeight="Medium"
+                         Foreground="{DynamicResource VelaAccentForeground}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="7" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                  ToolTip.Tip="刷新(F5)" Command="{Binding RefreshCommand}">
+            <ui:Glyph Key="Icon.refresh-cw" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!--
+        列头。列宽是一组 GridLength(Columns),列头与每一行的 ColumnDefinitions 绑同一份;
+        每列右边一条 6px 轨道 = 1px 细线 + 透明抓取区,拖动改列宽、双击按内容自适应。
+        默认宽度取自设计稿 08 号板的表头。
+      -->
+      <Border Grid.Row="1" Classes="header-row" ClipToBounds="True">
+        <Grid x:Name="HeaderGrid">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{Binding Columns.Name}" MinWidth="160" />
+            <ColumnDefinition Width="6" />
+            <ColumnDefinition Width="{Binding Columns.Driver}" MinWidth="70" />
+            <ColumnDefinition Width="6" />
+            <ColumnDefinition Width="{Binding Columns.Scope}" MinWidth="62" />
+            <ColumnDefinition Width="6" />
+            <ColumnDefinition Width="{Binding Columns.Subnet}" MinWidth="90" />
+            <ColumnDefinition Width="6" />
+            <ColumnDefinition Width="{Binding Columns.Attached}" MinWidth="70" />
+            <ColumnDefinition Width="6" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="104" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" Text="名称" Classes="col" Margin="12,0,6,0" />
+          <Border Grid.Column="1" Classes="colgrip" Tag="name">
+            <Border Classes="colline" />
+          </Border>
+          <TextBlock Grid.Column="2" Text="驱动" Classes="col" Margin="0,0,6,0" />
+          <Border Grid.Column="3" Classes="colgrip" Tag="driver">
+            <Border Classes="colline" />
+          </Border>
+          <TextBlock Grid.Column="4" Text="作用域" Classes="col" Margin="0,0,6,0" />
+          <Border Grid.Column="5" Classes="colgrip" Tag="scope">
+            <Border Classes="colline" />
+          </Border>
+          <TextBlock Grid.Column="6" Text="子网" Classes="col" Margin="0,0,6,0" />
+          <Border Grid.Column="7" Classes="colgrip" Tag="subnet">
+            <Border Classes="colline" />
+          </Border>
+          <TextBlock Grid.Column="8" Text="已接入" Classes="col" Margin="0,0,6,0" />
+          <Border Grid.Column="9" Classes="colgrip" Tag="attached">
+            <Border Classes="colline" />
+          </Border>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="2" Background="{DynamicResource VelaBgSurface}">
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding View}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ui:NetworkRow">
+              <Button Theme="{StaticResource DockerIconButton}" Width="NaN" Height="NaN" CornerRadius="0"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="0"
+                      Command="{Binding $parent[ItemsControl].((pages:NetworksPageViewModel)DataContext).SelectCommand}"
+                      CommandParameter="{Binding}">
+                <!-- 列定义与列头**逐字一致**,宽度回绑列头那份 Columns —— 两处必须一起改。
+                     6px 的那几列是列头上拖拽轨道的位置,行里只留出同样的空当。 -->
+                <Grid Height="32" ClipToBounds="True">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding Owner.Columns.Name}" MinWidth="160" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="{Binding Owner.Columns.Driver}" MinWidth="70" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="{Binding Owner.Columns.Scope}" MinWidth="62" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="{Binding Owner.Columns.Subnet}" MinWidth="90" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="{Binding Owner.Columns.Attached}" MinWidth="70" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="104" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="7" Margin="12,0,6,0"
+                              VerticalAlignment="Center" ClipToBounds="True">
+                    <ui:Glyph Key="Icon.network" Size="13"
+                              Brush="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                    <TextBlock Text="{Binding Name}" Classes="name" />
+                    <!-- 内置的三个删不掉,标出来,别让用户去撞一条 daemon 的错误 -->
+                    <Border Classes="chip" Height="15" IsVisible="{Binding IsPredefined}"
+                            Background="{DynamicResource VelaBgActive}">
+                      <TextBlock Text="内置" FontSize="{DynamicResource VelaFontSize9}"
+                                 Foreground="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+                    </Border>
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" Text="{Binding Driver}" Classes="cell" Margin="0,0,6,0" />
+                  <TextBlock Grid.Column="4" Text="{Binding Scope}" Classes="cell" Margin="0,0,6,0" />
+                  <TextBlock Grid.Column="6" Text="{Binding Subnet}" Classes="cell" Margin="0,0,6,0"
+                             Foreground="{DynamicResource VelaInfo}" />
+                  <TextBlock Grid.Column="8" Text="{Binding AttachedText}" Classes="cell" Margin="0,0,6,0"
+                             Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                  <!-- 行尾动作钉在最右:第 10 列是填充列,富余的宽度全归它 -->
+                  <StackPanel Grid.Column="11" Orientation="Horizontal" Spacing="1" HorizontalAlignment="Right"
+                              Margin="0,0,6,0" VerticalAlignment="Center">
+                    <Button Theme="{StaticResource DockerIconButton}" Width="22" Height="22" ToolTip.Tip="接入容器…"
+                            Command="{Binding $parent[ItemsControl].((pages:NetworksPageViewModel)DataContext).ConnectCommand}"
+                            CommandParameter="{Binding}">
+                      <ui:Glyph Key="Icon.plug" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+                    </Button>
+                    <Button Theme="{StaticResource DockerIconButton}" Width="22" Height="22" ToolTip.Tip="删除…"
+                            IsEnabled="{Binding !IsPredefined}"
+                            Command="{Binding $parent[ItemsControl].((pages:NetworksPageViewModel)DataContext).RemoveCommand}"
+                            CommandParameter="{Binding}">
+                      <ui:Glyph Key="Icon.trash-2" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+                    </Button>
+                  </StackPanel>
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <!-- 这一页原来一个空状态都没有:过滤没命中时是一片空白,
+           和"这台机器上真的一个网络都没有"长得一模一样。 -->
+      <StackPanel IsVisible="{Binding IsEmpty}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                  Spacing="10" MaxWidth="380">
+        <TextBlock Text="这台机器上还没有网络" Classes="h2" HorizontalAlignment="Center" />
+        <TextBlock Classes="hint" TextAlignment="Center"
+                   Text="连 bridge / host / none 这三个内置网络都没有 —— 多半是 daemon 刚起来还没建好,刷新一下再看。" />
+      </StackPanel>
+
+      <TextBlock IsVisible="{Binding NoMatch}" Classes="hint"
+                 VerticalAlignment="Center" HorizontalAlignment="Center"
+                 Text="没有匹配的网络 —— 换个词试试(名字、驱动、子网都能搜)。" />
+      </Grid>
+    </Grid>
+
+    <!-- 详情抽屉。与容器 / 镜像 / 卷同一副骨架:标题条 / 动作条 / 内容。 -->
+    <!-- 抽屉分割条:5px 透明抓取区上画一条 1px 细线 —— 与宿主侧栏、文件面板同款。 -->
+    <Border Grid.Column="1" Width="1" HorizontalAlignment="Center"
+            IsVisible="{Binding Drawer.CanResize}"
+            Background="{DynamicResource VelaBorderPrimary}" />
+    <GridSplitter Grid.Column="1" x:Name="DrawerSplitter" Background="Transparent"
+                  ResizeDirection="Columns" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                  IsVisible="{Binding Drawer.CanResize}" ToolTip.Tip="拖动改抽屉宽度" />
+
+    <Border Grid.Column="2" ClipToBounds="True" IsVisible="{Binding HasSelection}"
+            Background="{DynamicResource VelaBgContentHeader}"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+      <DockPanel>
+        <!-- 没选中时 Selected 是 null,IsVisible 只是不画、绑定照样求值;
+             交给 ContentControl,模板在 Content 为 null 时不实例化。 -->
+        <ContentControl DockPanel.Dock="Top" Content="{Binding Selected}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate DataType="ui:NetworkRow">
+              <Border Height="44" Padding="14,0"
+                      BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                  <ui:Glyph Grid.Column="0" Key="Icon.network" Size="15" VerticalAlignment="Center"
+                            Brush="{DynamicResource VelaAccent}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" Classes="h2" Margin="8,0,0,0" />
+                  <Border Grid.Column="2" Classes="chip" Margin="8,0,0,0"
+                          Background="{DynamicResource VelaAccentDim}">
+                    <TextBlock Text="{Binding Driver}" FontSize="{DynamicResource VelaFontSize10}"
+                               Foreground="{DynamicResource VelaAccent}" VerticalAlignment="Center" />
+                  </Border>
+                  <!-- 铺开 / 还原与关闭并排,位置与容器、镜像抽屉一致。 -->
+                  <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2">
+                    <Button Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                            ToolTip.Tip="最大化 / 还原"
+                            Command="{Binding $parent[UserControl].((pages:NetworksPageViewModel)DataContext).Drawer.ToggleMaximizeCommand}">
+                      <ui:Glyph Size="14" Brush="{DynamicResource VelaTextTertiary}"
+                                Key="{Binding $parent[UserControl].((pages:NetworksPageViewModel)DataContext).Drawer.Maximized, Converter={x:Static ui:Converters.MaximizeIcon}}" />
+                    </Button>
+                    <Button Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                            ToolTip.Tip="关闭"
+                            Command="{Binding $parent[UserControl].((pages:NetworksPageViewModel)DataContext).ClearSelectionCommand}">
+                      <ui:Glyph Key="Icon.x" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+                    </Button>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <Border DockPanel.Dock="Top" Height="42" Padding="14,0"
+                BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Theme="{StaticResource DockerToolButton}"
+                    Background="{DynamicResource VelaAccentDim}" BorderBrush="Transparent"
+                    Command="{Binding ConnectCommand}" CommandParameter="{Binding Selected}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Icon.plug" Size="13" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Text="接入容器…" FontSize="{DynamicResource VelaFontSize11}"
+                           Foreground="{DynamicResource VelaAccent}" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource DockerToolButton}" IsVisible="{Binding CanPickFiles}"
+                    ToolTip.Tip="把 inspect 原文存成本地 JSON(留档与比对用)"
+                    Command="{Binding ExportCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Docker.braces" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                <TextBlock Text="导出配置" FontSize="{DynamicResource VelaFontSize11}"
+                           Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Border>
+
+      <ScrollViewer>
+        <StackPanel Margin="14,12" Spacing="10">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Column="0" Text="基本信息" Classes="h4" />
+            <Button Grid.Column="2" Theme="{StaticResource DockerIconButton}" Width="NaN" Height="18" Padding="6,0"
+                    ToolTip.Tip="docker network inspect 的原文" Command="{Binding ShowRawCommand}">
+              <TextBlock Text="原始 JSON" FontSize="{DynamicResource VelaFontSize10}"
+                         Foreground="{DynamicResource VelaAccent}" />
+            </Button>
+          </Grid>
+          <Border IsVisible="{Binding HasRaw}" CornerRadius="4" Padding="10,8" MaxHeight="320"
+                  Background="{DynamicResource VelaBgTerminal}" ClipToBounds="True">
+            <ScrollViewer>
+              <SelectableTextBlock Text="{Binding RawInspect}" Classes="code" FontSize="10" />
+            </ScrollViewer>
+          </Border>
+          <ItemsControl ItemsSource="{Binding Basics}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DetailField">
+                <Grid ColumnDefinitions="106,*" Height="22">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                  <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" />
+          <TextBlock Text="IPAM" Classes="h4" />
+          <ItemsControl ItemsSource="{Binding Ipam}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DetailField">
+                <Grid ColumnDefinitions="106,*" Height="22">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                  <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell"
+                             Foreground="{DynamicResource VelaInfo}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" />
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Column="0" Text="已接入的容器" Classes="h4" />
+            <Button Grid.Column="2" Theme="{StaticResource DockerIconButton}" Width="NaN" Height="18" Padding="6,0"
+                    IsVisible="{Binding Attached.Count}" Command="{Binding DisconnectAllCommand}">
+              <TextBlock Text="全部摘除" FontSize="{DynamicResource VelaFontSize10}"
+                         Foreground="{DynamicResource VelaError}" />
+            </Button>
+          </Grid>
+          <ItemsControl ItemsSource="{Binding Attached}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:AttachedContainer">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Height="26">
+                  <Ellipse Grid.Column="0" Width="6" Height="6" VerticalAlignment="Center"
+                           Fill="{DynamicResource VelaStatusConnected}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" Classes="name" Margin="8,0" />
+                  <TextBlock Grid.Column="2" Text="{Binding Address}" Classes="meta"
+                             Foreground="{DynamicResource VelaInfo}" />
+                  <Button Grid.Column="3" Theme="{StaticResource DockerIconButton}" Width="20" Height="20"
+                          Margin="6,0,0,0" ToolTip.Tip="摘除"
+                          Command="{Binding $parent[ItemsControl].((pages:NetworksPageViewModel)DataContext).DisconnectCommand}"
+                          CommandParameter="{Binding}">
+                    <ui:Glyph Key="Icon.unplug" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                  </Button>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" />
+          <Border CornerRadius="6" Padding="12,10" Background="{DynamicResource VelaShellRedDim}"
+                  BorderBrush="{DynamicResource VelaError}" BorderThickness="1">
+            <StackPanel Spacing="7">
+              <StackPanel Orientation="Horizontal" Spacing="7">
+                <ui:Glyph Key="Icon.triangle-alert" Size="13" Brush="{DynamicResource VelaError}" />
+                <TextBlock Text="删除网络" FontSize="{DynamicResource VelaFontSize11}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource VelaError}" />
+              </StackPanel>
+              <TextBlock Text="{Binding RemoveHint}" FontSize="{DynamicResource VelaFontSize10}"
+                         Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" LineHeight="16" />
+              <Button Theme="{StaticResource DockerToolButton}" Height="26"
+                      BorderBrush="{DynamicResource VelaError}" IsEnabled="{Binding CanRemove}"
+                      Command="{Binding RemoveCommand}" CommandParameter="{Binding Selected}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Icon.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+                  <TextBlock Text="删除网络…" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaError}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

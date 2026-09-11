@@ -1,0 +1,377 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Docker 面板的私有资源:宿主没有的图标几何、宿主没有语义位的两三个颜色,
+    以及这个面板自己的控件主题。
+
+    配色一律走宿主的 Vela* 令牌 —— 强调色是 Dracula 的紫(#BD93F9),不是 Docker 蓝。
+    设计稿里那个 Docker 蓝只保留在左上角的品牌标上:面板本就该长得像宿主的一部分,
+    而不是一个贴上来的窗口。
+  -->
+
+  <ResourceDictionary.ThemeDictionaries>
+    <!--
+      这里**只剩品牌色**。
+
+      从前这两格里还有八支画刷:告警淡底,以及语法高亮的字符串/数字/键/注释/段落头/标点。
+      它们按 Dark / Light 各写死一套 —— Dracula 的黄紫青粉,和 Alucard 的那几个深色。
+      在宿主只有明暗两套主题时这是对的;宿主长出十二套具名主题之后就错了:
+      ThemeDictionaries 认的是 ThemeVariant(只有 Dark / Light 两格),于是 Tokyo Night、
+      Nord、Gruvbox、Obsidian… 共用同一套 Dracula 色,Sakura、GitHub Light、One Light
+      共用同一套 Alucard 色。底色跟着主题换了,压在上面的字没换。
+
+      而宿主本来就有一整套**语义**令牌是逐主题派生的(VelaShellYellow / Cyan / Green /
+      Magenta / Blue / Subtle —— 终端十六色那一族),语法高亮要的正是它们。
+      所以这八支不是"改个值",而是**整个删掉**,用处改指宿主令牌:
+
+        DockerCodeString      → VelaShellYellow
+        DockerCodeNumber      → VelaShellBlue
+        DockerCodeKey         → VelaShellCyan
+        DockerCodeComment     → VelaShellSubtle(界面上的弱化说明文字用 VelaTextTertiary,
+                                 同值,但那边要的是"三档正文"而不是"注释")
+        DockerCodeSection     → VelaShellGreen
+        DockerCodePunctuation → VelaShellMagenta
+        DockerWarnDim         → VelaShellYellowDim
+
+      品牌蓝留下:它是 Docker 的标识色,**不该**跟着主题变 —— 那正是"品牌色"的定义。
+      只按明暗分两格,是为了让它在两种底色上都压得住。
+    -->
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="DockerBrand" Color="#4DA6FF" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="DockerBrand" Color="#0B72C4" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- ── 图标几何(lucide,24×24 视框,描边风格)────────────────────────
+       宿主的 Icon.* 已经有 78 个,这里只补它没有的。
+       内联而不是引用宿主资源的那几个,是为了让面板在宿主图标集变动时不会突然缺图。 -->
+
+  <StreamGeometry x:Key="Docker.whale">M4 12.5h16.5c0 3.6-2.4 6.5-6.5 6.5H8.5C5.5 19 4 16.5 4 13.5z M6 12V9.5h2.5V12 M9 12V9.5h2.5V12 M12 12V9.5h2.5V12 M9 9V6.5h2.5V9 M15 12V9.5h2.5V12 M19 10c1-1 2.5-.8 3 0-.4 1.2-1.7 1.6-3 1.4</StreamGeometry>
+  <StreamGeometry x:Key="Docker.box">M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z M3.3 7 12 12l8.7-5 M12 22V12</StreamGeometry>
+  <StreamGeometry x:Key="Docker.boxes">M7 6.5 12 4l5 2.5V11l-5 2.5L7 11z M2.5 14.5 7 12.5l4.5 2v4.5L7 21l-4.5-2.5z M12.5 14.5 17 12.5l4.5 2v4.5L17 21l-4.5-2.5z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.layout-dashboard">M3 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z M14 3h6a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z M14 12h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z M4 15h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.rotate-cw">M21 12a9 9 0 1 1-2.64-6.36L21 8 M21 3v5h-5</StreamGeometry>
+  <StreamGeometry x:Key="Docker.scroll-text">M15 12h-5 M15 8h-5 M19 17V5a2 2 0 0 0-2-2H4 M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3</StreamGeometry>
+  <StreamGeometry x:Key="Docker.server">M5 2h14a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3z M5 14h14a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-2a3 3 0 0 1 3-3z M6.5 6h.01 M6.5 18h.01</StreamGeometry>
+  <StreamGeometry x:Key="Docker.monitor">M8 21h8 M12 17v4 M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.check">M20 6 9 17l-5-5</StreamGeometry>
+  <StreamGeometry x:Key="Docker.circle-x">M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M15 9l-6 6 M9 9l6 6</StreamGeometry>
+  <StreamGeometry x:Key="Docker.circle-dashed">M10.1 2.2a10 10 0 0 1 3.8 0 M13.9 21.8a10 10 0 0 1-3.8 0 M17.6 3.7a10 10 0 0 1 2.7 2.7 M2.2 13.9a10 10 0 0 1 0-3.8 M20.3 17.6a10 10 0 0 1-2.7 2.7 M21.8 10.1a10 10 0 0 1 0 3.8 M3.7 6.4a10 10 0 0 1 2.7-2.7 M6.4 20.3a10 10 0 0 1-2.7-2.7</StreamGeometry>
+  <StreamGeometry x:Key="Docker.database">M3 5a9 3 0 1 0 18 0 9 3 0 1 0-18 0 M3 5v14a9 3 0 0 0 18 0V5 M3 12a9 3 0 0 0 18 0</StreamGeometry>
+  <StreamGeometry x:Key="Docker.tag">M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z M7 7h.01</StreamGeometry>
+  <StreamGeometry x:Key="Docker.arrow-right">M5 12h14 M12 5l7 7-7 7</StreamGeometry>
+  <StreamGeometry x:Key="Docker.arrow-down-to-line">M12 17V3 M6 11l6 6 6-6 M19 21H5</StreamGeometry>
+  <StreamGeometry x:Key="Docker.broom">M16 22l-1-4 M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1 M5 14h14l2 6.8a1 1 0 0 1-1 1.2H4a1 1 0 0 1-1-1.2z M8 22l1-4</StreamGeometry>
+  <StreamGeometry x:Key="Docker.square-terminal">M7 11l2-2-2-2 M11 13h4 M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.lock">M3 12a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M7 10V7a5 5 0 0 1 10 0v3</StreamGeometry>
+  <StreamGeometry x:Key="Docker.users">M18 21a8 8 0 0 0-16 0 M10 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M22 20c0-3.4-2-6.5-4-8a5 5 0 0 0-.5-8.3</StreamGeometry>
+  <StreamGeometry x:Key="Docker.pin">M12 17v5 M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9A2 2 0 0 1 15 10.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.eraser">M21 21H8a2 2 0 0 1-1.4-.6l-4-4a2 2 0 0 1 0-2.8l10-10a2 2 0 0 1 2.8 0l6 6a2 2 0 0 1 0 2.8L12.8 21 M5 11l4 4</StreamGeometry>
+  <StreamGeometry x:Key="Docker.braces">M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1 M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1</StreamGeometry>
+  <StreamGeometry x:Key="Docker.list-tree">M21 12h-8 M21 6H8 M21 18h-8 M3 6v4c0 1.1.9 2 2 2h3 M3 10v6c0 1.1.9 2 2 2h3</StreamGeometry>
+  <StreamGeometry x:Key="Docker.hammer">M15 12l-8.4 8.4a1.5 1.5 0 1 1-2.1-2.1L12 9.9 M17.5 15L22 10.5 M21.5 11.5l-1.9-1.9A2 2 0 0 1 19 8.2V7l-2.3-2.3a6 6 0 0 0-4.2-1.7L9 3l.9.8A6.2 6.2 0 0 1 12 8.4V10l2 2h1.2a2 2 0 0 1 1.4.6l1.9 1.9</StreamGeometry>
+  <StreamGeometry x:Key="Docker.power">M12 2v10 M18.4 6.6a9 9 0 1 1-12.8 0</StreamGeometry>
+  <StreamGeometry x:Key="Docker.file-code">M10 12.5 8 15l2 2.5 M14 12.5l2 2.5-2 2.5 M14 2v4a2 2 0 0 0 2 2h4 M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.minimize-2">M4 14h6v6 M20 10h-6V4 M14 10l7-7 M3 21l7-7</StreamGeometry>
+  <StreamGeometry x:Key="Docker.maximize-2">M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7</StreamGeometry>
+  <StreamGeometry x:Key="Docker.git-compare">M5 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M5 15V9a4 4 0 0 1 4-4h3 M19 9v6a4 4 0 0 1-4 4h-3 M10 3 8 5l2 2 M14 21l2-2-2-2</StreamGeometry>
+  <StreamGeometry x:Key="Docker.git-merge">M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 15V9 M18 9a9 9 0 0 1-9 9</StreamGeometry>
+  <StreamGeometry x:Key="Docker.keyboard">M10 8h.01 M12 12h.01 M14 8h.01 M16 12h.01 M18 8h.01 M6 8h.01 M7 16h10 M8 12h.01 M2 6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.undo-2">M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 0 11H11</StreamGeometry>
+  <StreamGeometry x:Key="Docker.list-filter">M3 6h18 M7 12h10 M10 18h4</StreamGeometry>
+  <StreamGeometry x:Key="Docker.wrap-text">M3 6h18 M3 12h15a3 3 0 1 1 0 6h-4 M16 16l-2 2 2 2 M3 18h4</StreamGeometry>
+  <StreamGeometry x:Key="Docker.file-archive">M14 2v4a2 2 0 0 0 2 2h4 M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M10 6h1 M10 9h1 M10 12h1 M10 15h1 M9.5 18h2v2h-2z</StreamGeometry>
+  <StreamGeometry x:Key="Docker.shield-alert">M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z M12 8v4 M12 16h.01</StreamGeometry>
+  <StreamGeometry x:Key="Docker.circle-check-big">M21.8 10a10 10 0 1 1-5.9-7.8 M9 11l3 3L22 4</StreamGeometry>
+
+  <!-- ── 控件主题 ──────────────────────────────────────────────────
+       自带而不是依赖宿主的 ControlTheme:令牌缺失时属性只会回落默认值,面板照样成型;
+       而依赖一个不存在的 ControlTheme 会让整个控件塌掉。 -->
+
+  <!-- 工具条按钮:描边 + 图标 + 文字。危险/主要/激活三种变体在 DockerStyles.axaml 里按 class 改。 -->
+  <ControlTheme x:Key="DockerToolButton" TargetType="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="9,0" />
+    <Setter Property="Height" Value="26" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.38" />
+      <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 只有图标的方形按钮(刷新、关闭、行内动作)。 -->
+  <ControlTheme x:Key="DockerIconButton" TargetType="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <!-- 对齐与内边距一律走 TemplateBinding。
+             写死成 Center 的话,调用方那些 HorizontalContentAlignment="Stretch" + Padding
+             会被静默吃掉 —— 拿它当整行按钮用的地方(命令面板、文件树、卷/网络列表、
+             端点菜单)就会变成"每一行各自居中、宽度跟着文字长短跑"。
+             默认值仍是 Center,所以纯图标按钮的行为不变。 -->
+        <Border Background="{TemplateBinding Background}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+      <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 左导航栏的一项:图标在上、文字在下,选中时整块药丸底 + 强调色。
+       56×48 的格子里放一枚 46×42 的药丸 —— 药丸不贴边,悬停底才不会糊到导航栏边界上。 -->
+  <ControlTheme x:Key="DockerRailButton" TargetType="RadioButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    <Setter Property="Width" Value="56" />
+    <Setter Property="Height" Value="48" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="Pill" Background="{TemplateBinding Background}" CornerRadius="8" Margin="5,3">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Pill">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Pill">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 导航栏底部那一项(设置)。长得和上面的导航项一模一样,但它开的是覆盖层不是页面 ——
+       所以是 Button 而不是 RadioButton:它按下去不该把当前页的高亮抢走。 -->
+  <ControlTheme x:Key="DockerRailActionButton" TargetType="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Width" Value="56" />
+    <Setter Property="Height" Value="48" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="Pill" Background="{TemplateBinding Background}" CornerRadius="8" Margin="5,3">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Pill">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 分段控件里的一格。 -->
+  <ControlTheme x:Key="DockerSegmentButton" TargetType="RadioButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Padding" Value="11,0" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="Seg" Background="{TemplateBinding Background}" CornerRadius="3"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Seg">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Seg">
+      <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 抽屉/详情页的页签。 -->
+  <ControlTheme x:Key="DockerTabButton" TargetType="RadioButton" BasedOn="{StaticResource DockerSegmentButton}">
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="11,0" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize12}" />
+  </ControlTheme>
+
+  <!-- 视图开关(时间戳 / 换行 / 仅错误 / 跟随)。
+       描边 = 关,强调色底 = 开。用底色而不是打勾:这三颗要在一眼扫过时读出状态。 -->
+  <ControlTheme x:Key="DockerChipToggle" TargetType="ToggleButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="9,0" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="Chip" Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Chip">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Chip">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 开关。 -->
+  <ControlTheme x:Key="DockerSwitch" TargetType="ToggleButton">
+    <Setter Property="Width" Value="28" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="Track" CornerRadius="8"
+                Background="{DynamicResource VelaBgActive}"
+                BorderBrush="{DynamicResource VelaBorderSecondary}"
+                BorderThickness="1">
+          <Ellipse Name="Knob" Width="11" Height="11" Margin="2,0"
+                   HorizontalAlignment="Left"
+                   Fill="{DynamicResource VelaTextTertiary}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ Border#Track">
+      <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="^:checked /template/ Ellipse#Knob">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Fill" Value="{DynamicResource VelaAccentForeground}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+  </ControlTheme>
+
+
+  <!--
+    日志列表:**虚拟化**的 ItemsControl。
+
+    面板里别处的列表都是 ItemsControl 直接塞进一个 ScrollViewer —— 几十上百行没关系。
+    日志不是:合并日志留 5000 行、执行记录留 2000 行,而那种写法一行都不会省,
+    每一行都实打实地建控件、测量、排版。用户看到的就是"这个页签一点开要卡一下,
+    而且每次回来都要再卡一次"(其实是可见性一变就整棵重排)。
+
+    要虚拟化,滚动条必须在**这个控件自己的模板里**:外面套一层 ScrollViewer 的话,
+    ItemsControl 是在无限高里测量的,VirtualizingStackPanel 照样会把每一行都实现出来。
+    这也是这份主题存在的全部理由。
+  -->
+  <ControlTheme x:Key="DockerLogList" TargetType="ItemsControl">
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <VirtualizingStackPanel />
+      </ItemsPanelTemplate>
+    </Setter>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ScrollViewer Name="PART_ScrollViewer" Padding="{TemplateBinding Padding}"
+                      HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                      VerticalScrollBarVisibility="Auto">
+          <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+        </ScrollViewer>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+</ResourceDictionary>

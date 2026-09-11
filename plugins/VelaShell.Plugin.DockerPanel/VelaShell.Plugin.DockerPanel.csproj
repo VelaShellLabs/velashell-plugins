@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>VelaShell Docker 面板插件:经既有 SSH 会话直连远端 /var/run/docker.sock,以 Docker Engine HTTP API 管理容器、镜像、卷、网络与 Compose,含实时统计、日志、容器内文件编辑与内置控制台。</Description>
+    <!-- 与 plugin.json 的 id 一致;驱动构建后复制到应用输出的 plugins/<目录名>/
+         (目录名 = id 把点换成短横,原因见 plugins/Directory.Build.targets)。 -->
+    <VelaPluginId>velashell.dockerpanel</VelaPluginId>
+    <!-- AVLN3001:面板视图刻意只有带上下文的构造(由 ShowPanelAsync 的工厂创建),
+         不走运行时 XAML 装载器的无参构造路径。 -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 契约程序集 + Avalonia + AXAML 编译器 + 清单校验 + PackVpx,一个包全到位。
+         Docker 那一侧**没有任何随包分发的第三方依赖** —— 远端是 Docker 自带的 HTTP API,
+         本地只用 BCL 的 System.Text.Json。 -->
+    <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!--
+         唯一的第三方件,而且**只在编译期**。
+
+         compose.yaml / .env / config 展开都要语法高亮,而 TextBox 的整块文本共用一个
+         Foreground,按 token 着色它给不了 —— compose.yaml 恰恰是"缩进错一格就全错"的格式,
+         高亮在那里不是装饰,是校对工具。
+
+         程序集名 AvaloniaEdit 命中宿主 PluginAssemblyLoadContext 的 SharedPrefixes("Avalonia"),
+         运行时一律回落到宿主那一份(版本须与宿主一致)—— 复制过去反而会变成两份类型。
+         版本由 SDK 导出的权威值核对(见根 Directory.Build.targets 的 VELAP1001)。
+         本插件 hostMode 是 inProcess(plugin.json 里写清了理由),这条回落成立。
+
+         ⚠️ ExcludeAssets="runtime" **必须显式写在这里**,尽管 plugins/README.md 说"不要写"。
+         那条纪律的前提是"插件不直接引 Avalonia 包" —— 本仓库前四个插件都不引,于是
+         SDK 包的 VelaExcludeSharedRuntimeAssets 处理它自己那条引用就够了。
+         DockerPanel 是**第一个直接引 Avalonia.* 包的插件**,而那条 target 拦不住由它带进来的
+         **传递依赖**:去掉这里的 ExcludeAssets,AvaloniaEdit→Avalonia→MicroCom.Runtime 里的
+         MicroCom.Runtime.dll 会落进插件目录(2026-09-11 并库时实测)。
+         它不以 "Avalonia" 打头,既躲过装载器的共享前缀(插件会加载自己那一份),
+         也躲过 CI 那条只认 Avalonia*/VelaShell.PluginSdk.dll 的泄漏体检 ——
+         所以这条体检也一并把它加进去了,别再依赖"下次有人肉眼看出来"。 -->
+    <PackageReference Include="Avalonia.AvaloniaEdit" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 语法高亮定义。用 EmbeddedResource 而非 AvaloniaResource:HighlightingLoader 要的是
+         普通 Stream,由 Assembly.GetManifestResourceStream 提供。宿主自己也带了同名定义,
+         但那是它的内部资源,插件够不着 —— 各带一份,注册名加前缀避免抢占全局管理器里的名字。 -->
+    <EmbeddedResource Include="Syntax/*.xshd" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单测直接驱动内部类型(命令拼装、输出解析、视图模型)。 -->
+    <InternalsVisibleTo Include="VelaShell.Plugin.DockerPanel.Tests" />
+  </ItemGroup>
+
+</Project>

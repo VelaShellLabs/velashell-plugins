@@ -1,0 +1,309 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.OverviewPageView"
+             x:DataType="pages:OverviewPageViewModel">
+
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="toolbar">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="总览" Classes="h1" />
+        <TextBlock Grid.Column="1" Text="事件驱动 —— 自动刷新默认关闭" Classes="meta" Margin="10,0,0,0" />
+        <Button Grid.Column="3" Theme="{StaticResource DockerIconButton}" Width="26" Height="26"
+                  ToolTip.Tip="刷新(F5)" Command="{Binding RefreshCommand}">
+          <ui:Glyph Key="Icon.refresh-cw" Size="14" Brush="{DynamicResource VelaTextTertiary}" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <ScrollViewer Background="{DynamicResource VelaBgDockDocument}">
+      <StackPanel Margin="16" Spacing="14">
+
+        <!-- 四张统计卡 -->
+        <Grid ColumnDefinitions="*,12,*,12,*,12,*">
+          <Border Grid.Column="0" Classes="card" Padding="13,11">
+            <StackPanel Spacing="5">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Docker.box" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+                <TextBlock Text="运行中容器" Classes="label" />
+              </StackPanel>
+              <TextBlock Text="{Binding RunningText}" FontSize="{DynamicResource VelaFontSize20}"
+                         FontWeight="SemiBold" Foreground="{DynamicResource VelaTextPrimary}" />
+              <TextBlock Text="{Binding RunningDetail}" Classes="hint" />
+            </StackPanel>
+          </Border>
+          <Border Grid.Column="2" Classes="card" Padding="13,11">
+            <StackPanel Spacing="5">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Icon.cpu" Size="12" Brush="{DynamicResource VelaGaugeCpu}" />
+                <TextBlock Text="CPU 总占用" Classes="label" />
+              </StackPanel>
+              <TextBlock Text="{Binding CpuText}" FontSize="{DynamicResource VelaFontSize20}"
+                         FontWeight="SemiBold" Foreground="{DynamicResource VelaTextPrimary}" />
+              <TextBlock Text="{Binding CpuDetail}" Classes="hint" />
+            </StackPanel>
+          </Border>
+          <Border Grid.Column="4" Classes="card" Padding="13,11">
+            <StackPanel Spacing="5">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Icon.memory-stick" Size="12" Brush="{DynamicResource VelaGaugeMemory}" />
+                <TextBlock Text="内存" Classes="label" />
+              </StackPanel>
+              <TextBlock Text="{Binding MemText}" FontSize="{DynamicResource VelaFontSize20}"
+                         FontWeight="SemiBold" Foreground="{DynamicResource VelaTextPrimary}" />
+              <TextBlock Text="{Binding MemDetail}" Classes="hint" />
+            </StackPanel>
+          </Border>
+          <Border Grid.Column="6" Classes="card" Padding="13,11">
+            <StackPanel Spacing="5">
+              <Grid ColumnDefinitions="Auto,6,Auto,*,Auto">
+                <ui:Glyph Grid.Column="0" Key="Icon.hard-drive" Size="12" Brush="{DynamicResource VelaWarning}" />
+                <TextBlock Grid.Column="2" Text="可回收空间" Classes="label" />
+                <!-- system df 要 daemon 把每个卷 du 一遍,所以只在进来时算一次,之后按需重算 -->
+                <Button Grid.Column="4" Theme="{StaticResource DockerIconButton}" Width="18" Height="18"
+                        ToolTip.Tip="重新统计(docker system df)"
+                        Command="{Binding RefreshReclaimCommand}">
+                  <ui:Glyph Key="Icon.refresh-cw" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                </Button>
+              </Grid>
+              <TextBlock Text="{Binding ReclaimText}" FontSize="{DynamicResource VelaFontSize20}"
+                         FontWeight="SemiBold" Foreground="{DynamicResource VelaTextPrimary}" />
+              <TextBlock Text="{Binding ReclaimDetail}" Classes="hint" />
+            </StackPanel>
+          </Border>
+        </Grid>
+
+        <Grid ColumnDefinitions="*,12,420">
+
+          <StackPanel Name="MidLeft" Grid.Column="0" Spacing="12">
+            <!-- 趋势 -->
+            <Border Classes="card" Padding="14,12">
+              <StackPanel Spacing="9">
+                <Grid ColumnDefinitions="Auto,Auto,*">
+                  <TextBlock Grid.Column="0" Text="CPU 趋势" Classes="h3" />
+                  <TextBlock Grid.Column="1" Text="{Binding TrendScaleText}" Classes="meta" Margin="9,0,0,0" />
+                </Grid>
+                <!--
+                  48 个格子铺满整张卡的宽度(UniformGrid,不是定宽柱子)——
+                  柱宽写死的话 48 根只占约 380px,而下面那条时间轴横跨整卡,两者对不上。
+                  还没采到的格子留空,不画成 0:"没数据"和"CPU 是 0"是两回事。
+                -->
+                <ItemsControl ItemsSource="{Binding CpuTrend}" Height="96">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <UniformGrid Rows="1" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="pages:TrendBar">
+                      <Border CornerRadius="2" Margin="1,0" VerticalAlignment="Bottom"
+                              IsVisible="{Binding HasSample}"
+                              Height="{Binding Height}"
+                              Background="{DynamicResource VelaGaugeCpu}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <!-- 时间轴:一条没有刻度的趋势看不出多久以前 -->
+                <Grid ColumnDefinitions="*,*,*,*,Auto">
+                  <TextBlock Grid.Column="0" Text="-4m" Classes="meta" FontSize="9" />
+                  <TextBlock Grid.Column="1" Text="-3m" Classes="meta" FontSize="9" />
+                  <TextBlock Grid.Column="2" Text="-2m" Classes="meta" FontSize="9" />
+                  <TextBlock Grid.Column="3" Text="-1m" Classes="meta" FontSize="9" />
+                  <TextBlock Grid.Column="4" Text="现在" Classes="meta" FontSize="9" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <!-- Top 5 -->
+            <Border Classes="card" Padding="14,12">
+              <StackPanel Spacing="9">
+                <Grid ColumnDefinitions="Auto,Auto,*">
+                  <TextBlock Grid.Column="0" Text="容器 CPU 占用 Top 5" Classes="h3" />
+                  <TextBlock Grid.Column="1" Text="条长按相对最大值,不是绝对百分比" Classes="meta"
+                             Margin="9,0,0,0" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding TopCpu}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="pages:TopItem">
+                      <Grid ColumnDefinitions="120,*,60" Height="24">
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" Classes="cell" />
+                        <Border Grid.Column="1" Height="8" CornerRadius="4" Margin="0,0,10,0"
+                                Background="{DynamicResource VelaGaugeTrack}" ClipToBounds="True">
+                          <ui:WeightedStackPanel>
+                            <Border Tag="{Binding Ratio}" CornerRadius="4">
+                              <Border.Background>
+                                <Binding Path="Hot">
+                                  <Binding.Converter>
+                                    <ui:HotBrushConverter />
+                                  </Binding.Converter>
+                                </Binding>
+                              </Border.Background>
+                            </Border>
+                            <Border Tag="{Binding Ratio, Converter={x:Static ui:Converters.RemainingWeight}}"
+                                    Background="Transparent" />
+                          </ui:WeightedStackPanel>
+                        </Border>
+                        <TextBlock Grid.Column="2" Text="{Binding ValueText}" Classes="cell" TextAlignment="Right">
+                          <TextBlock.Foreground>
+                            <Binding Path="Hot">
+                              <Binding.Converter>
+                                <ui:HotBrushConverter />
+                              </Binding.Converter>
+                            </Binding>
+                          </TextBlock.Foreground>
+                        </TextBlock>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+          </StackPanel>
+
+          <!--
+            实时事件。高度跟着左栏走(设计稿里这一栏是 fill_container),超出的在卡片内部滚 ——
+            事件最多留 60 条,不封顶的话这一块能长到近 2000px,把下面整排顶出屏幕。
+          -->
+          <Border Grid.Column="2" Classes="card" Padding="14,12" ClipToBounds="True"
+                  Height="{Binding #MidLeft.Bounds.Height}">
+            <DockPanel>
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,9">
+                <TextBlock Grid.Column="0" Text="实时事件" Classes="h3" />
+                <TextBlock Grid.Column="1" Text="docker events" Classes="meta" Margin="9,0,0,0" />
+              </Grid>
+              <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding Events}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="pages:EventItem">
+                    <Grid ColumnDefinitions="52,3,*" Height="30" Margin="0,0,0,2">
+                      <TextBlock Grid.Column="0" Text="{Binding Time}" Classes="meta" VerticalAlignment="Center" />
+                      <Border Grid.Column="1" Width="3" CornerRadius="2" Margin="0,4"
+                              Background="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                      <StackPanel Grid.Column="2" Margin="9,0" VerticalAlignment="Center" Spacing="1">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="{Binding Action}" Classes="meta"
+                                     Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                          <TextBlock Text="{Binding Target}" Classes="meta" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Message}" FontSize="{DynamicResource VelaFontSize9}"
+                                   Foreground="{DynamicResource VelaTextTertiary}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+        </Grid>
+
+      <!--
+        底部这一排横跨整个宽度:「需要关注」是这一页真正的行动清单,
+        窝在左半栏里会被上面那两张图压成脚注。
+      -->
+      <!-- 高度按设计稿钉死 146:「需要关注」一个异常容器一条,不封顶的话
+           一台有几十个 exited 容器的机器会把这张卡撑到几屏高。超出的在卡内滚。 -->
+      <Grid ColumnDefinitions="*,12,420" Height="146">
+        <!-- 需要关注 -->
+        <Border Grid.Column="0" Classes="card" Padding="14,12" ClipToBounds="True">
+          <DockPanel>
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*" Height="20" Margin="0,0,0,8">
+              <TextBlock Grid.Column="0" Text="需要关注" Classes="h3" />
+              <TextBlock Grid.Column="1" Text="{Binding Attention.Count, StringFormat='{}{0} 项'}"
+                         Classes="meta" Margin="9,0,0,0" />
+            </Grid>
+            <TextBlock DockPanel.Dock="Top" Text="一切正常 —— 没有不健康、异常退出或被暂停的容器。"
+                       Classes="hint" IsVisible="{Binding !HasAttention}" />
+            <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Attention}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:AttentionItem">
+                  <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Height="28">
+                    <ui:Glyph Grid.Column="0" Key="{Binding Icon}" Size="13" VerticalAlignment="Center"
+                              Brush="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="name" Margin="8,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="meta" Margin="9,0,0,0" />
+                    <Button Grid.Column="4" Theme="{StaticResource DockerIconButton}" Width="NaN" Height="20"
+                            Padding="6,0" Click="OnAttentionClick" Tag="{Binding}">
+                      <TextBlock Text="{Binding ActionLabel}" FontSize="{DynamicResource VelaFontSize10}"
+                                 Foreground="{DynamicResource VelaAccent}" />
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            </ScrollViewer>
+          </DockPanel>
+        </Border>
+
+        <!--
+          快捷动作。设计稿是 3×2:六颗按钮各占三分之一,分两行。
+          排成一行放不下 —— 这张卡只有 420px 宽,六颗按钮会一路顶出面板右边缘。
+        -->
+        <Border Grid.Column="2" Classes="card" Padding="14,12">
+          <StackPanel Spacing="8">
+            <TextBlock Text="快捷动作" Classes="h3" Height="20" />
+            <Grid ColumnDefinitions="*,8,*,8,*">
+              <Button Grid.Column="0" Theme="{StaticResource DockerToolButton}" Height="30"
+                      Command="{Binding RunContainerCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Icon.play" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="运行容器" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="2" Theme="{StaticResource DockerToolButton}" Height="30"
+                      Command="{Binding PullImageCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Docker.arrow-down-to-line" Size="13"
+                            Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="拉取镜像" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="4" Theme="{StaticResource DockerToolButton}" Height="30"
+                      Command="{Binding NewComposeCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Docker.file-code" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="新建 Compose" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </Grid>
+            <Grid ColumnDefinitions="*,8,*,8,*">
+              <Button Grid.Column="0" Theme="{StaticResource DockerToolButton}" Height="30"
+                      Command="{Binding CleanupCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Docker.broom" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="清理空间" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="2" Theme="{StaticResource DockerToolButton}" Height="30"
+                      Command="{Binding OpenTerminalCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Icon.terminal" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="打开终端" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="4" Theme="{StaticResource DockerToolButton}" Height="30"
+                      IsVisible="{Binding CanPickFiles}"
+                      ToolTip.Tip="导出一份可以直接发给别人的诊断信息(不含凭据与日志正文)"
+                      Command="{Binding ExportDiagnosticsCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Icon.download" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="导出诊断" FontSize="{DynamicResource VelaFontSize11}"
+                             Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </Grid>
+          </StackPanel>
+        </Border>
+      </Grid>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

@@ -1,0 +1,249 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.DockerPanel.Ui"
+             xmlns:pages="clr-namespace:VelaShell.Plugin.DockerPanel.Ui.Pages"
+             x:Class="VelaShell.Plugin.DockerPanel.Ui.Pages.ImageDetailView"
+             x:DataType="pages:ImageDetailViewModel">
+
+  <DockPanel>
+
+    <!-- 头 -->
+    <Border DockPanel.Dock="Top" Height="44" Padding="14,0"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <ui:Glyph Grid.Column="0" Key="Icon.layers" Size="15" VerticalAlignment="Center"
+                  Brush="{DynamicResource VelaAccent}" />
+        <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="h2" Margin="8,0,0,0"
+                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title, Converter={x:Static ui:Converters.TipText}}" />
+        <!-- 铺开 / 还原与关闭并排,位置与容器抽屉一致 —— 四个页面之间来回切时,
+             "关闭在哪、铺开在哪"永远是同一个位置。 -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+          <Button Theme="{StaticResource DockerIconButton}" ToolTip.Tip="最大化 / 还原"
+                  Command="{Binding Owner.Drawer.ToggleMaximizeCommand}">
+            <ui:Glyph Key="{Binding Owner.Drawer.Maximized, Converter={x:Static ui:Converters.MaximizeIcon}}"
+                      Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+          <Button Theme="{StaticResource DockerIconButton}" ToolTip.Tip="关闭"
+                  Command="{Binding CloseCommand}">
+            <ui:Glyph Key="Icon.x" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- id / 大小 / 使用情况 -->
+    <Border DockPanel.Dock="Top" Height="26" Padding="14,0" Background="{DynamicResource VelaBgContentHeader}"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+        <TextBlock Text="{Binding ShortId}" Classes="meta" />
+        <Button Theme="{StaticResource DockerIconButton}" Width="18" Height="18"
+                ToolTip.Tip="复制镜像 ID" Command="{Binding CopyIdCommand}">
+          <ui:Glyph Key="Icon.copy" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+        </Button>
+        <TextBlock Text="·" Classes="meta" />
+        <TextBlock Text="{Binding SizeText}" Classes="meta" />
+        <TextBlock Text="·" Classes="meta" />
+        <TextBlock Text="{Binding UsageText}" Classes="meta" />
+      </StackPanel>
+    </Border>
+
+    <!-- 页签 -->
+    <Border DockPanel.Dock="Top" Height="34" Padding="10,0"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <RadioButton Theme="{StaticResource DockerTabButton}" GroupName="imagedetail"
+                     IsChecked="{Binding IsOverview, Mode=OneWay}" Command="{Binding SetTabCommand}"
+                     CommandParameter="{x:Static pages:ImageDetailTab.Overview}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.info" Size="13" Brush="{Binding $parent[RadioButton].Foreground}" />
+            <TextBlock Text="概览" VerticalAlignment="Center"
+                       Foreground="{Binding $parent[RadioButton].Foreground}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Theme="{StaticResource DockerTabButton}" GroupName="imagedetail"
+                     IsChecked="{Binding IsHistory, Mode=OneWay}" Command="{Binding SetTabCommand}"
+                     CommandParameter="{x:Static pages:ImageDetailTab.History}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.layers" Size="13" Brush="{Binding $parent[RadioButton].Foreground}" />
+            <TextBlock Text="层历史" VerticalAlignment="Center"
+                       Foreground="{Binding $parent[RadioButton].Foreground}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Theme="{StaticResource DockerTabButton}" GroupName="imagedetail"
+                     IsChecked="{Binding IsRaw, Mode=OneWay}" Command="{Binding SetTabCommand}"
+                     CommandParameter="{x:Static pages:ImageDetailTab.Raw}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.code" Size="13" Brush="{Binding $parent[RadioButton].Foreground}" />
+            <TextBlock Text="原文" VerticalAlignment="Center"
+                       Foreground="{Binding $parent[RadioButton].Foreground}" />
+          </StackPanel>
+        </RadioButton>
+      </StackPanel>
+    </Border>
+
+    <!-- 快捷动作 -->
+    <Border DockPanel.Dock="Top" Height="42" Padding="14,0"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <Button Theme="{StaticResource DockerToolButton}" Command="{Binding RunCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.play" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+            <TextBlock Text="运行…" FontSize="{DynamicResource VelaFontSize11}"
+                       Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Theme="{StaticResource DockerToolButton}" Command="{Binding TagCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.tag" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+            <TextBlock Text="打标签…" FontSize="{DynamicResource VelaFontSize11}"
+                       Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Theme="{StaticResource DockerToolButton}" Command="{Binding PushCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.upload" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+            <TextBlock Text="推送…" FontSize="{DynamicResource VelaFontSize11}"
+                       Foreground="{DynamicResource VelaTextSecondary}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Theme="{StaticResource DockerToolButton}" BorderBrush="{DynamicResource VelaShellRedDim}"
+                Command="{Binding RemoveCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Icon.trash-2" Size="13" Brush="{DynamicResource VelaError}" />
+            <TextBlock Text="删除…" FontSize="{DynamicResource VelaFontSize11}"
+                       Foreground="{DynamicResource VelaError}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <!-- 内容 -->
+    <Grid>
+
+      <!-- 概览 -->
+      <ScrollViewer IsVisible="{Binding IsOverview}">
+        <StackPanel Margin="14,12" Spacing="12">
+          <TextBlock Text="基本信息" Classes="h4" />
+          <ItemsControl ItemsSource="{Binding Basics}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DetailField">
+                <Grid ColumnDefinitions="106,*" Height="22">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                  <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell"
+                             Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" IsVisible="{Binding Tags.Count}" />
+          <TextBlock Text="标签" Classes="h4" IsVisible="{Binding Tags.Count}" />
+          <ItemsControl ItemsSource="{Binding Tags}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <SelectableTextBlock Text="{Binding}" Classes="code" Height="20"
+                                     Foreground="{DynamicResource VelaAccent}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" IsVisible="{Binding Digests.Count}" />
+          <TextBlock Text="摘要" Classes="h4" IsVisible="{Binding Digests.Count}" />
+          <ItemsControl ItemsSource="{Binding Digests}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <SelectableTextBlock Text="{Binding}" Classes="code" FontSize="10" TextWrapping="Wrap"
+                                     Foreground="{DynamicResource VelaTextTertiary}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" IsVisible="{Binding Runtime.Count}" />
+          <TextBlock Text="默认运行配置" Classes="h4" IsVisible="{Binding Runtime.Count}" />
+          <ItemsControl ItemsSource="{Binding Runtime}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DetailField">
+                <Grid ColumnDefinitions="106,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" Classes="code"
+                                       TextWrapping="Wrap"
+                                       Foreground="{Binding Tone, Converter={x:Static ui:Converters.ToneBrush}}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" IsVisible="{Binding Environment.Count}" />
+          <TextBlock Text="环境变量" Classes="h4" IsVisible="{Binding Environment.Count}" />
+          <ItemsControl ItemsSource="{Binding Environment}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DetailField">
+                <Grid ColumnDefinitions="106,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key, Converter={x:Static ui:Converters.TipText}}" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" Classes="code" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Classes="divider" IsVisible="{Binding Labels.Count}" />
+          <TextBlock Text="镜像标签" Classes="h4" IsVisible="{Binding Labels.Count}" />
+          <ItemsControl ItemsSource="{Binding Labels}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:DetailField">
+                <Grid ColumnDefinitions="106,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="label"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key, Converter={x:Static ui:Converters.TipText}}" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" Classes="cell" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- 层历史 -->
+      <ScrollViewer IsVisible="{Binding IsHistory}">
+        <StackPanel Margin="14,12" Spacing="10">
+          <TextBlock Classes="hint" TextWrapping="Wrap"
+                     Text="按 Dockerfile 的顺序从上到下排。条的长度是这一层相对最大那层的体积 —— 想瘦身,先看最长的那几条。" />
+          <TextBlock Text="{Binding HistoryNote}" Classes="hint" TextWrapping="Wrap"
+                     IsVisible="{Binding HasHistoryNote}" />
+          <ItemsControl ItemsSource="{Binding Layers}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="pages:LayerRow">
+                <Border Classes="card" Padding="10,8" Margin="0,0,0,6">
+                  <StackPanel Spacing="5">
+                    <SelectableTextBlock Text="{Binding Instruction}" Classes="code" TextWrapping="Wrap"
+                                         MaxLines="4" TextTrimming="CharacterEllipsis" />
+                    <Grid ColumnDefinitions="Auto,8,*,8,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding SizeText}" Classes="meta"
+                                 Foreground="{DynamicResource VelaTextSecondary}" />
+                      <!-- 体积条:空层没有条,免得一排 0 字节的 ENV 层看起来也在占地方。
+                           宽度按权重瓜分而不是算像素 —— 抽屉宽度是用户拖出来的 -->
+                      <ui:WeightedStackPanel Grid.Column="2" Height="4" IsVisible="{Binding !IsEmpty}">
+                        <Border Tag="{Binding Weight}" CornerRadius="2"
+                                Background="{DynamicResource VelaAccent}" />
+                        <Border Tag="{Binding Rest}" />
+                      </ui:WeightedStackPanel>
+                      <TextBlock Grid.Column="4" Text="{Binding AgeText}" Classes="meta" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- 原文 -->
+      <Border IsVisible="{Binding IsRaw}" Margin="14,12" CornerRadius="4" Padding="10,8"
+              Background="{DynamicResource VelaBgTerminal}" ClipToBounds="True">
+        <ScrollViewer>
+          <SelectableTextBlock Text="{Binding RawInspect}" Classes="code" FontSize="10" />
+        </ScrollViewer>
+      </Border>
+    </Grid>
+  </DockPanel>
+</UserControl>
