@@ -152,6 +152,7 @@ SDK 1.1 的远程执行只有两种**文本**形态:整段 UTF-8 解码,或按 `
 | 文件 | 内容 |
 | --- | --- |
 | `PluginMain.cs` | 入口:注册命令、开 / 激活面板、停用时收掉视图模型 |
+| `DockerIcon.cs` | 标签页图标:Docker 的鲸鱼标(实心、视框 1024,经 `PanelOptions.Icon` 交给宿主)。lucide 里没有 Docker,而 `container` / `box` 那几个近似字形摆在标签条上认不出是它;不自报则是所有插件共用的通用插头 |
 | `Docker/DockerTransport.cs` | 两种传输:SSH 隧道 / 本机 socket-管道 |
 | `Docker/DockerClient*.cs` | Engine API 客户端,按域拆 partial |
 | `Docker/DockerFrames.cs` | 8 字节多路复用帧解码 + 跨帧 UTF-8 与半行处理 |
