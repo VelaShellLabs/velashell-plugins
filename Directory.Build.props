@@ -26,7 +26,7 @@
          scripts/Set-Version.ps1 统一写,**不要手改**:手改了 CI 的版本同步体检就红,
          而且那个红灯只会告诉你"和 VelaPluginsVersion 不一致",不会告诉你是谁改错了哪边。
          要发新版本就跑 `pwsh scripts/Set-Version.ps1 <版本>`,三类落点一起动。 -->
-    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">2.0.0</VelaPluginsVersion>
+    <VelaPluginsVersion Condition="'$(VelaPluginsVersion)' == ''">2.0.3</VelaPluginsVersion>
     <!-- 去掉预发布后缀的数字版(AssemblyVersion/FileVersion 不接受后缀)。 -->
     <VelaPluginsVersionCore>$([System.Text.RegularExpressions.Regex]::Replace($(VelaPluginsVersion), '-.*$', ''))</VelaPluginsVersionCore>
     <Version>$(VelaPluginsVersion)</Version>

@@ -1,6 +1,6 @@
 {
   "id": "velashell.serial",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "displayName": "Serial",
   "description": "RS-232 / USB 转串口终端:端口热插拔枚举、波特率与校验/流控制、换行归一化、本地回显、发送节流,以及 Break 与 DTR/RTS 控制。",
   "publisher": "velashell",

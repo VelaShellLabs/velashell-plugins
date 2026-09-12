@@ -1,6 +1,6 @@
 {
   "id": "velashell.dockerpanel",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "displayName": "Docker Panel",
   "description": "远端 Docker 管理面板:容器 / 镜像 / 卷 / 网络 / Compose 一站式管理,含实时统计、日志、容器内文件编辑与内置终端。经既有 SSH 会话直连远端的 /var/run/docker.sock,服务器上不需要暴露 daemon 端口。",
   "publisher": "velashell",
