@@ -516,6 +516,24 @@
                 </StackPanel>
               </Border>
 
+              <!-- 路径对、权限也对、daemon 也在跑,却还是连不上 —— 这一档只有一个常见原因,
+                   而它在服务器的 sshd 上,不在这个输入框里。用户是在「连不上」的当口打开这一屏的,
+                   答案就得摆在这儿:不然他只能自己去翻 sshd 的源码才找得到。 -->
+              <Border Classes="card" Padding="10,9">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="路径没填错却还是连不上?看 SSH 允不允许转发" Classes="label"
+                             Foreground="{DynamicResource VelaTextPrimary}" />
+                  <TextBlock Classes="hint" TextWrapping="Wrap"
+                             Text="面板是在这条 SSH 会话上开一条到 socket 的转发通道(direct-streamlocal)。服务器的 /etc/ssh/sshd_config 里只要有这么一行,通道就开不起来:" />
+                  <TextBlock Classes="code" Text="AllowTcpForwarding no" />
+                  <TextBlock Classes="hint" TextWrapping="Wrap"
+                             Text="它和 AllowStreamLocalForwarding 不是各管各的:AllowTcpForwarding 一关,sshd 会把整个「本地方向」的转发许可一并关掉,unix socket 也在里面 —— 所以 AllowStreamLocalForwarding yes 救不回来。改成下面这行就够,面板要的本地方向放开了,-R 远程转发仍然禁着:" />
+                  <TextBlock Classes="code" Text="AllowTcpForwarding local" />
+                  <TextBlock Classes="hint" TextWrapping="Wrap"
+                             Text="改完 systemctl reload sshd,再把这条 SSH 会话断开重连 —— 配置只对新连接生效。" />
+                </StackPanel>
+              </Border>
+
               <TextBlock Classes="hint" TextWrapping="Wrap"
                          Text="远端的 DOCKER_CONTEXT 面板不读:上下文是 CLI 的概念,daemon 不认它 —— 但上面那条命令会把 context 指到哪儿一并打出来,照着填就行。" />
               <StackPanel Orientation="Horizontal" Spacing="8">
