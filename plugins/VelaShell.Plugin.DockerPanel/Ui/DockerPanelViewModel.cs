@@ -755,7 +755,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
                 case DockerUnreachableReason.SocketMissing:
                     ErrorIcon = "Docker.circle-x";
                     ErrorTitle = "打不开到 docker.sock 的通道";
-                    ErrorDetail = "路径不存在、daemon 没在跑,或者当前账号根本碰不到这个 socket —— 远端只回了一句笼统的失败,自己分不出是哪一种。下面这条命令一次看清。";
+                    ErrorDetail = "路径不存在、daemon 没在跑、当前账号碰不到这个 socket,或者这台机器的 sshd 根本不允许开转发通道 —— 远端只回了一句笼统的失败,自己分不出是哪一种。下面这条命令一次看清。";
                     // 三种可能一条命令全覆盖:socket 在不在、当前账号读不读得动它、daemon 跑没跑。
                     // 关键是**替他判**,而不是把 `ls -l` 和 `id` 两串输出丢过去让他自己对 ——
                     // 权限这一档最常见,而 "srw-rw---- root docker" 与 "groups=Users"
@@ -860,10 +860,62 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
                 break;
             case SocketProbeKind.Ready:
                 // 文件在、也读得动,却还是连不上 —— 那就不是这两件事。别再引导用户去加组。
-                ErrorHint = $"{item.Endpoint.SocketPath} 存在而且当前账号读写得动,所以问题不在路径也不在权限。" +
-                            "多半是 Docker 服务本身没起来,或者这条 SSH 会话中途断了。";
+                ShowTunnelBlocked(item);
                 break;
         }
+    }
+
+    /// <summary>
+    /// "socket 是好的,通道还是开不起来"这一屏。
+    /// <para>
+    /// 探针走的是 SSH 的**执行**通道,面板的数据走的是**转发**通道 —— 在 sshd 那边是两道各自
+    /// 独立的闸。所以"探针读写得动 socket,面板却连不上"这件事本身就把原因指到了转发这一侧:
+    /// 探针恰恰测不到那道闸,它测得到的全过了。
+    /// </para>
+    /// <para>
+    /// 十有八九是 <c>AllowTcpForwarding no</c>。它名字里只有 TCP,实际上 sshd 认证完会拿它去关掉
+    /// 整个"本地方向"的转发许可(<c>session.c</c> 里那句 <c>channel_disable_admin(FORWARD_LOCAL)</c>,
+    /// 旁边就挂着一条 <c>/* XXX - streamlocal? */</c>),而 unix socket 的转发查的是同一个许可集 ——
+    /// 于是 <c>AllowStreamLocalForwarding yes</c> 摆在那儿也不管用。这句话不写在界面上,
+    /// 用户就只能自己去翻 sshd 的源码才找得到,这条路没人走得通。
+    /// </para>
+    /// </summary>
+    private void ShowTunnelBlocked(EndpointItem item)
+    {
+        var path = item.Endpoint.SocketPath;
+        RecoveryActions.Clear();
+        // 本机端点压根没有 SSH 这一层,上面那套话术套不上去。
+        if (item.Endpoint.Kind == DockerEndpointKind.Local)
+        {
+            ErrorIcon = "Icon.circle-alert";
+            ErrorTitle = "socket 是好的,连接却建不起来";
+            ErrorDetail = $"{path} 存在而且读写得动,所以不是路径也不是权限。多半是 Docker 服务本身没在跑。";
+            ErrorHint = "";
+            RecoveryActions.Add(new("重新连", "Icon.refresh-cw", true, () => _ = ConnectAsync(item)));
+            return;
+        }
+        ErrorIcon = "Icon.triangle-alert";
+        ErrorTitle = "Docker 是好的,挡住的是这台机器的 SSH";
+        ErrorDetail = $"刚在这条会话上试过了:{path} 存在,当前账号也读写得动 —— 路径、权限、会话都没问题。" +
+                      "那就只剩 SSH 这一层:面板要在这条会话上开一条到 socket 的转发通道(direct-streamlocal),而 sshd 不让开。";
+        ErrorHint = "十有八九是 /etc/ssh/sshd_config 里的 AllowTcpForwarding no。它和 AllowStreamLocalForwarding 不是各管各的:" +
+                    "前者一关,sshd 会把整个「本地方向」的转发许可一并关掉,unix socket 也在里面 —— 后者写着 yes 也救不回来。" +
+                    "改成 AllowTcpForwarding local 就够:放开面板要的这一半,-R 远程转发仍然禁着。" +
+                    "改完执行 systemctl reload sshd,再把这条 SSH 会话断开重连 —— 配置只对新连接生效。";
+        RecoveryActions.Add(new("看 sshd 允不允许转发", "Icon.terminal", true,
+            () => _ = SendToHostTerminalAsync(
+                "sshd -T 2>/dev/null | grep -Ei 'forwarding' || " +
+                "grep -REi '^[[:space:]]*(AllowTcpForwarding|AllowStreamLocalForwarding|DisableForwarding)' " +
+                "/etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null")));
+        // 拒绝是有日志的,而且那句日志会直接点名 /var/run/docker.sock ——
+        // 比任何推断都硬,值得单给一颗。
+        RecoveryActions.Add(new("看 sshd 是不是拒了", "Icon.terminal", false,
+            () => _ = SendToHostTerminalAsync(
+                "journalctl -u sshd -u ssh --since '1 hour ago' --no-pager 2>/dev/null | " +
+                "grep -iE 'streamlocal|administratively|denied|refused' | tail -20")));
+        RecoveryActions.Add(new("改好了,重新连", "Icon.refresh-cw", false, () => _ = ConnectAsync(item)));
+        // 机器本身是好的,改完 sshd 还要能从菜单里再选回来 —— 跟"没权限"那一档同理。
+        item.Update(true, "SSH 不让开通道", FeedbackKind.Warning);
     }
 
     /// <summary>
