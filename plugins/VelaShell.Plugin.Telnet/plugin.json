@@ -1,6 +1,6 @@
 {
   "id": "velashell.telnet",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "displayName": "Telnet",
   "description": "RFC 854 Telnet 终端:选项协商(ECHO / SGA / TERMINAL-TYPE / NAWS / BINARY)、窗口尺寸上报与 8 位透明传输。",
   "publisher": "velashell",
