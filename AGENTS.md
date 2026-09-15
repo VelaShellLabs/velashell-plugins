@@ -107,3 +107,7 @@ Assert.AreSequenceEqual(content, downloaded);
 ```
 
 同一条规则适用于任何 span 接收者或 span 实参的调用:**调用的实参列表里不许出现 `await`**。
+
+### 提交约束
+
+- **所有提交信息与 PR 描述都不要附加 Claude Code 等 AI 工具的作者信息** —— 不加 `Co-Authored-By: Claude …` 行,也不加 `🤖 Generated with Claude Code` 之类的署名。VelaShellLabs 下所有仓库一致适用。
