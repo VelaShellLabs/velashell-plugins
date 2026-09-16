@@ -60,7 +60,7 @@
     <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.1.26425.128" />
   </ItemGroup>
   <ItemGroup Label="测试框架">
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.4.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.4.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
