@@ -31,8 +31,9 @@ public sealed class RedisPanelUiTests
     private static bool _serverAvailable;
     private static readonly string[] stringArray = ["DatabaseBox", "TypeFilterBox"];
 
+    // 参数不叫 _:方法体里的 `_ = await …` 弃元会被当成给它赋值(单个 _ 形参是具名参数)。
     [ClassInitialize]
-    public static async Task InitAsync(TestContext _)
+    public static async Task InitAsync(TestContext context)
     {
         _session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(RedisPanelUiTests).Assembly);
         _prefix = $"velashell-ui-{Guid.NewGuid():N}";

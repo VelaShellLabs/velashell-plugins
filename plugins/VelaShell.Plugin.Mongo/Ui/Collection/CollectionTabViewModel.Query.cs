@@ -99,7 +99,7 @@ internal sealed partial class CollectionTabViewModel
             return RunQueryAsync(resetPage: true);
         });
         RefreshCommand = new(() => RunQueryAsync(resetPage: false));
-        StopCommand = new(StopAsync, () => _isLoading);
+        StopCommand = new(StopAsync, () => IsLoading);
         FirstPageCommand = new(() => GoToPageAsync(0), () => _pageIndex > 0);
         PreviousPageCommand = new(() => GoToPageAsync(_pageIndex - 1), () => _pageIndex > 0);
         NextPageCommand = new(() => GoToPageAsync(_pageIndex + 1), () => _pageIndex < PageCount - 1);
@@ -360,7 +360,7 @@ internal sealed partial class CollectionTabViewModel
             {
                 return;
             }
-            _elapsed = watch.Elapsed;
+            Elapsed = watch.Elapsed;
             _loadedOnce = true;
             CurrentRequest = request;
             LastRunFilter = _filterText.Trim();
@@ -475,7 +475,7 @@ internal sealed partial class CollectionTabViewModel
 
     private async Task GoToPageAsync(int page)
     {
-        if (page < 0 || page == _pageIndex && !_isLoading && _documents.Count > 0)
+        if (page < 0 || page == _pageIndex && !IsLoading && _documents.Count > 0)
         {
             return;
         }
@@ -579,7 +579,7 @@ internal sealed partial class CollectionTabViewModel
 
     private void OnLongQueryTick()
     {
-        if (_queryWatch is null || !_isLoading)
+        if (_queryWatch is null || !IsLoading)
         {
             return;
         }

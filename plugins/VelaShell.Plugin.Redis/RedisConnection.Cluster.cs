@@ -122,7 +122,7 @@ internal sealed partial class RedisConnection
     /// </summary>
     private bool IsClusterMode() =>
         string.Equals(Info.Mode, "cluster", StringComparison.OrdinalIgnoreCase)
-        || (string.IsNullOrEmpty(Info.Mode) && _settings.Deployment == RedisDeployment.Cluster);
+        || (string.IsNullOrEmpty(Info.Mode) && Settings.Deployment == RedisDeployment.Cluster);
 
     /// <summary>
     /// 单机实例上 <c>CLUSTER NODES</c> 的拒绝措辞与"命令被禁"不同,单独认一下 ——

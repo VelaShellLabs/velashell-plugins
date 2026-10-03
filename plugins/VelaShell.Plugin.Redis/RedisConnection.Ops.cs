@@ -282,7 +282,7 @@ internal sealed partial class RedisConnection
                 // 靠客户端名认自己:多路复用下我们有两条连接(交互 + 订阅),
                 // 认名字才能把它们都标出来 —— 一个客户端把自己 kill 掉然后报"连接丢失",
                 // 是很蠢但很常见的 bug。
-                string.Equals(name, _settings.ClientName, StringComparison.Ordinal)));
+                string.Equals(name, Settings.ClientName, StringComparison.Ordinal)));
         }
         return entries;
     }
@@ -445,7 +445,7 @@ internal sealed partial class RedisConnection
     /// </summary>
     private string PrefixOf(string keyText, int segments)
     {
-        string delimiter = _settings.Delimiter;
+        string delimiter = Settings.Delimiter;
         if (delimiter.Length == 0 || segments <= 0)
         {
             return keyText;

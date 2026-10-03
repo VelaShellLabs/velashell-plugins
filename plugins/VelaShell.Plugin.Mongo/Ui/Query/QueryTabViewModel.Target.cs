@@ -157,7 +157,7 @@ with(StringComparer.Ordinal),         "insertOne", "insertMany", "insert", "bulk
         var warnings = new List<EditorDiagnostic>();
         foreach (ShellStatement statement in statements)
         {
-            if (statement.Contains(_caretOffset))
+            if (statement.Contains(CaretOffset))
             {
                 continue;
             }

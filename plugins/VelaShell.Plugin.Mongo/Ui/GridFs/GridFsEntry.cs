@@ -286,15 +286,18 @@ internal sealed class GridFsTransfer
     /// <summary>总块数。</summary>
     public long ChunkTotal => Math.Max(1, (Size + ChunkSize - 1) / ChunkSize);
 
+    // 必须是真字段:Sink 在驱动线程上用 Interlocked.Exchange 写它,属性(含 field 关键字)取不了 ref。
+    private long _bytes;
+
     /// <summary>已走过的字节(任意线程写,UI 定时读)。</summary>
-    public long Bytes { get => Interlocked.Read(ref field); private set; }
+    public long Bytes => Interlocked.Read(ref _bytes);
 
     /// <summary>进度回调(驱动在线程池线程上调)。</summary>
     public IProgress<long> Reporter => new Sink(this);
 
     private sealed class Sink(GridFsTransfer owner) : IProgress<long>
     {
-        public void Report(long value) => Interlocked.Exchange(ref owner.Bytes, value);
+        public void Report(long value) => Interlocked.Exchange(ref owner._bytes, value);
     }
 }
 

@@ -79,7 +79,7 @@ internal sealed partial class GridFsTabViewModel
     public string UploadTarget => UploadPrefix.Length == 0 ? "/" : UploadPrefix;
 
     /// <summary>上传落到的前缀。</summary>
-    private string UploadPrefix => _virtualDirs ? _prefix : "";
+    private string UploadPrefix => _virtualDirs ? Prefix : "";
 
     /// <summary>拖放区主文字「拖拽文件到此处上传到 products/SKU-7710/」。</summary>
     public string DropText => Loc.Format("Fs_DropHere", UploadTarget);
@@ -302,7 +302,7 @@ internal sealed partial class GridFsTabViewModel
                 {
                     string root = target.Path.TrimEnd('/');
                     root = GridFsPaths.BaseName(root);
-                    foreach (GridFsFile inner in await _service.FilesUnderAsync(target.Path, latestOnly: true).ConfigureAwait(true))
+                    foreach (GridFsFile inner in await Service.FilesUnderAsync(target.Path, latestOnly: true).ConfigureAwait(true))
                     {
                         jobs.Add(DownloadJob(inner, SafeLocalPath(folder, root + "/" + inner.Filename[target.Path.Length..])));
                     }
@@ -442,7 +442,7 @@ internal sealed partial class GridFsTabViewModel
                     {
                         await using var source = new FileStream(job.LocalPath, FileMode.Open, FileAccess.Read, FileShare.Read,
                             1 << 16, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                        _ = await _service.UploadAsync(job.Filename, source, job.Metadata, job.Reporter, job.ChunkSize, cts.Token)
+                        _ = await Service.UploadAsync(job.Filename, source, job.Metadata, job.Reporter, job.ChunkSize, cts.Token)
                             .ConfigureAwait(true);
                         uploaded = true;
                     }
@@ -452,7 +452,7 @@ internal sealed partial class GridFsTabViewModel
                         await using (var target = new FileStream(job.LocalPath, FileMode.Create, FileAccess.Write, FileShare.None,
                                          1 << 16, FileOptions.Asynchronous))
                         {
-                            await _service.DownloadAsync(job.Source!.Id, target, job.Reporter, cts.Token).ConfigureAwait(true);
+                            await Service.DownloadAsync(job.Source!.Id, target, job.Reporter, cts.Token).ConfigureAwait(true);
                         }
                         if (job.Then is { } then)
                         {
@@ -630,11 +630,11 @@ internal sealed partial class GridFsTabViewModel
                 {
                     return Loc["Fs_RenameIntoSelf"];
                 }
-                if (await _service.AnyUnderAsync(to).ConfigureAwait(true))
+                if (await Service.AnyUnderAsync(to).ConfigureAwait(true))
                 {
                     return Loc["Fs_RenameFolderExists"];
                 }
-                modified = await _service.RenameFolderAsync(entry.Path, to).ConfigureAwait(true);
+                modified = await Service.RenameFolderAsync(entry.Path, to).ConfigureAwait(true);
                 newPath = to;
             }
             else
@@ -647,11 +647,11 @@ internal sealed partial class GridFsTabViewModel
                 {
                     return null;
                 }
-                if (await _service.ExistsAsync(value).ConfigureAwait(true))
+                if (await Service.ExistsAsync(value).ConfigureAwait(true))
                 {
                     return Loc["Fs_RenameExists"];
                 }
-                modified = await _service.RenameAsync(entry.Path, value).ConfigureAwait(true);
+                modified = await Service.RenameAsync(entry.Path, value).ConfigureAwait(true);
                 newPath = value;
             }
             Workspace.Toast(new() { Title = Loc.Format("Fs_Renamed", BsonText.Grouped(modified)), Kind = ToastKind.Success });
@@ -689,8 +689,8 @@ internal sealed partial class GridFsTabViewModel
             foreach (GridFsEntry target in targets)
             {
                 victims.AddRange(target.IsFolder
-                    ? await _service.FilesUnderAsync(target.Path, latestOnly: false).ConfigureAwait(true)
-                    : await _service.VersionsAsync(target.Path).ConfigureAwait(true));
+                    ? await Service.FilesUnderAsync(target.Path, latestOnly: false).ConfigureAwait(true)
+                    : await Service.VersionsAsync(target.Path).ConfigureAwait(true));
             }
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -733,7 +733,7 @@ internal sealed partial class GridFsTabViewModel
         }
         try
         {
-            long deleted = await _service.DeleteManyAsync([.. victims.Select(static f => f.Id)]).ConfigureAwait(true);
+            long deleted = await Service.DeleteManyAsync([.. victims.Select(static f => f.Id)]).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Fs_Deleted", BsonText.Grouped(deleted)), Kind = ToastKind.Success });
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -838,7 +838,7 @@ internal sealed partial class GridFsTabViewModel
         }
         try
         {
-            long deleted = await _service.DeleteManyAsync([.. old.Select(static v => v.File.Id)]).ConfigureAwait(true);
+            long deleted = await Service.DeleteManyAsync([.. old.Select(static v => v.File.Id)]).ConfigureAwait(true);
             Workspace.Toast(new()
             {
                 Title = Loc.Format("Fs_VersionsDeleted", BsonText.Grouped(deleted), BsonText.Bytes(bytes)),
@@ -861,7 +861,7 @@ internal sealed partial class GridFsTabViewModel
         }
         try
         {
-            await _service.DeleteAsync(file.Id).ConfigureAwait(true);
+            await Service.DeleteAsync(file.Id).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Fs_Deleted", 1), Kind = ToastKind.Success });
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -880,7 +880,7 @@ internal sealed partial class GridFsTabViewModel
         }
         try
         {
-            _ = await _service.RestoreAsync(version).ConfigureAwait(true);
+            _ = await Service.RestoreAsync(version).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Fs_Restored", label, version.BaseName), Kind = ToastKind.Success });
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -901,7 +901,7 @@ internal sealed partial class GridFsTabViewModel
         IReadOnlyList<GridFsOrphan> orphans;
         try
         {
-            orphans = await _service.FindOrphansAsync().ConfigureAwait(true);
+            orphans = await Service.FindOrphansAsync().ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
@@ -944,7 +944,7 @@ internal sealed partial class GridFsTabViewModel
         }
         try
         {
-            long deleted = await _service.DeleteOrphansAsync([.. orphans.Select(static o => o.FilesId)]).ConfigureAwait(true);
+            long deleted = await Service.DeleteOrphansAsync([.. orphans.Select(static o => o.FilesId)]).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Fs_OrphansCleaned", BsonText.Grouped(deleted)), Kind = ToastKind.Success });
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -1007,7 +1007,7 @@ internal sealed partial class GridFsTabViewModel
             }
             try
             {
-                byte[] bytes = await _service.ReadAllAsync(entry.File!.Id, cts.Token).ConfigureAwait(true);
+                byte[] bytes = await Service.ReadAllAsync(entry.File!.Id, cts.Token).ConfigureAwait(true);
                 entry.Thumbnail = await Task.Run(() => Decode(bytes, 192), cts.Token).ConfigureAwait(true);
             }
             catch (OperationCanceledException)

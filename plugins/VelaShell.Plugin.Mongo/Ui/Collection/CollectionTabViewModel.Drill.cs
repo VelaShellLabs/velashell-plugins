@@ -28,10 +28,10 @@ internal sealed partial class CollectionTabViewModel
     public GridDrill? Drill { get; private set; }
 
     /// <summary>网格的列。</summary>
-    public IReadOnlyList<CollectionColumn> GridColumns => Drill?.Columns ?? _columns;
+    public IReadOnlyList<CollectionColumn> GridColumns => Drill?.Columns ?? Columns;
 
     /// <summary>网格的行。</summary>
-    public ObservableCollection<CollectionRow> GridRows => Drill is null ? _rows : _drillRows;
+    public ObservableCollection<CollectionRow> GridRows => Drill is null ? Rows : _drillRows;
 
     /// <summary>网格选中的行(钻入时是子表里的那一行;检查器仍看它所属的文档)。</summary>
     public CollectionRow? GridSelectedRow
@@ -176,12 +176,12 @@ internal sealed partial class CollectionTabViewModel
             _swappingGrid = false;
         }
         string? first = focusFrom?.Split('.')[0];
-        if (first is not null && _columns.FirstOrDefault(c => c.Name == first) is { } column)
+        if (first is not null && Columns.FirstOrDefault(c => c.Name == first) is { } column)
         {
             _currentColumn = column;
             RaisePropertyChanged(nameof(CurrentColumn));
         }
-        CollectionRow? root = _rows.Contains(drill.Root) ? drill.Root : _selectedRow;
+        CollectionRow? root = Rows.Contains(drill.Root) ? drill.Root : _selectedRow;
         _selectedRow = null;
         SelectedRow = root;
         RaisePropertyChanged(nameof(GridSelectedRow));
@@ -261,7 +261,7 @@ internal sealed partial class CollectionTabViewModel
         {
             return;
         }
-        if (!_rows.Contains(drill.Root))
+        if (!Rows.Contains(drill.Root))
         {
             ExitDrill();
             return;
@@ -301,8 +301,8 @@ internal sealed partial class CollectionTabViewModel
             return;
         }
         CollectionRow? root = drill.Root.Insert is { } insert
-            ? _rows.FirstOrDefault(r => ReferenceEquals(r.Insert, insert))
-            : _rows.FirstOrDefault(r => drill.Root.Id is { } id && id.Equals(r.Id));
+            ? Rows.FirstOrDefault(r => ReferenceEquals(r.Insert, insert))
+            : Rows.FirstOrDefault(r => drill.Root.Id is { } id && id.Equals(r.Id));
         if (root is null || !Show(root, drill.Path, focusFrom: null))
         {
             ExitDrill();
@@ -334,7 +334,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>工具栏「删除」、底栏「−」、Del:网格钻入时删子表里的元素,否则暂存删除选中的文档。</summary>
     private void DeleteGridSelection()
     {
-        if (Drill is { } drill && _viewMode == CollectionViewMode.Grid)
+        if (Drill is { } drill && ViewMode == CollectionViewMode.Grid)
         {
             DeleteDrillRows(drill);
         }

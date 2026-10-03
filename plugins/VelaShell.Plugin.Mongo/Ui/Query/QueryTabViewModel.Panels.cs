@@ -138,7 +138,7 @@ internal sealed partial class QueryTabViewModel
     internal async Task RefreshHelperAsync()
     {
         IReadOnlyList<ShellStatement> statements = ShellScript.Split(_text);
-        (string? collection, string? database) = Target(ShellScript.At(statements, _caretOffset));
+        (string? collection, string? database) = Target(ShellScript.At(statements, CaretOffset));
         if (collection is null && _helperTarget is null)
         {
             foreach (ShellStatement statement in statements)
@@ -221,7 +221,7 @@ internal sealed partial class QueryTabViewModel
     /// <summary>字段页双击:在光标处插入字段路径。</summary>
     private void InsertField(SampledField field)
     {
-        ReplaceText(Math.Clamp(_caretOffset, 0, _text.Length), 0, field.Path, literal: true);
+        ReplaceText(Math.Clamp(CaretOffset, 0, _text.Length), 0, field.Path, literal: true);
         Editor?.Focus();
     }
 
@@ -239,7 +239,7 @@ internal sealed partial class QueryTabViewModel
             UpdateStatus();
             return;
         }
-        int caret = Math.Clamp(_caretOffset, 0, _text.Length);
+        int caret = Math.Clamp(CaretOffset, 0, _text.Length);
         string before = _text[..caret];
         bool afterMember = System.Text.RegularExpressions.Regex.IsMatch(before, @"db\.[\w$.]+\.\s*$|\)\.\s*$");
         string text = snippet.Text;
@@ -294,7 +294,7 @@ internal sealed partial class QueryTabViewModel
 
     private (ShellCommand? Command, string Database) CommandAt(ShellStatement? statement)
     {
-        statement ??= ShellScript.At(ShellScript.Split(_text), _caretOffset);
+        statement ??= ShellScript.At(ShellScript.Split(_text), CaretOffset);
         if (statement is null)
         {
             return (null, _database);

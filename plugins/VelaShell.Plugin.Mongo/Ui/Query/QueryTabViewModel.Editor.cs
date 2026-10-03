@@ -64,7 +64,7 @@ internal sealed partial class QueryTabViewModel
                     DiagnosticSeverity.Error, d.Fix, d.Fix is null ? null : Loc["Query_FixHint"]));
             }
             // 解析错误只报光标不在的语句:正在打的那条还没写完,每敲一个字都标红只会添乱。
-            if (found.Count == 0 && !statement.Contains(_caretOffset)
+            if (found.Count == 0 && !statement.Contains(CaretOffset)
                 && !ShellParser.TryParse(statement, out _, out ShellParseException? error) && error is not null)
             {
                 diagnostics.Add(new EditorDiagnostic(statement.Offset + Math.Min(error.Offset, Math.Max(0, statement.Length - 1)),
@@ -84,8 +84,8 @@ internal sealed partial class QueryTabViewModel
         {
             return false;
         }
-        int lineStart = _text.LastIndexOf('\n', Math.Clamp(_caretOffset - 1, 0, Math.Max(0, _text.Length - 1))) + 1;
-        int lineEnd = _text.IndexOf('\n', Math.Min(_caretOffset, _text.Length));
+        int lineStart = _text.LastIndexOf('\n', Math.Clamp(CaretOffset - 1, 0, Math.Max(0, _text.Length - 1))) + 1;
+        int lineEnd = _text.IndexOf('\n', Math.Min(CaretOffset, _text.Length));
         lineEnd = lineEnd < 0 ? _text.Length : lineEnd;
         EditorDiagnostic? target = fixable.FirstOrDefault(d => d.Offset >= lineStart && d.Offset <= lineEnd)
                                    ?? (fixable.Count == 1 ? fixable[0] : null);

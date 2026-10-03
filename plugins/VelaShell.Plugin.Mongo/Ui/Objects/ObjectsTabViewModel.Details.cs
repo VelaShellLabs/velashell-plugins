@@ -59,19 +59,19 @@ internal sealed partial class ObjectsTabViewModel
     public bool IsPrivilegesTab { get => DetailTab == ObjectDetailTab.Privileges; set { if (value) { DetailTab = ObjectDetailTab.Privileges; } } }
 
     /// <summary>面板头的图标。</summary>
-    public string DetailIconKey => _selected?.IconKey ?? "Mongo.layout-grid";
+    public string DetailIconKey => SelectedItem?.IconKey ?? "Mongo.layout-grid";
 
     /// <summary>面板头的图标颜色。</summary>
-    public string DetailIconToken => _selected?.IconToken ?? "VelaTextTertiary";
+    public string DetailIconToken => SelectedItem?.IconToken ?? "VelaTextTertiary";
 
     /// <summary>面板头的名字。</summary>
-    public string DetailTitle => _selected?.DisplayName ?? "";
+    public string DetailTitle => SelectedItem?.DisplayName ?? "";
 
     /// <summary>面板头的副标题(<c>时序集合 · shop</c>)。</summary>
-    public string DetailSubtitle => _selected is { } s ? $"{s.KindName} · {Database}" : "";
+    public string DetailSubtitle => SelectedItem is { } s ? $"{s.KindName} · {Database}" : "";
 
     /// <summary>底部主按钮的文字(集合 / 视图 / 存储桶各说各的)。</summary>
-    public string OpenLabel => _selected?.Kind switch
+    public string OpenLabel => SelectedItem?.Kind switch
     {
         ObjectKind.Bucket => Loc["Obj_OpenBucket"],
         ObjectKind.View => Loc["Obj_OpenView"],
@@ -79,10 +79,10 @@ internal sealed partial class ObjectsTabViewModel
     };
 
     /// <summary>「设计集合」可用(视图与桶没有可设计的结构)。</summary>
-    public bool CanDesign => _selected?.IsCollection == true;
+    public bool CanDesign => SelectedItem?.IsCollection == true;
 
     /// <summary>「在管道构建器中打开」可用。</summary>
-    public bool CanPipeline => _selected is { Kind: not ObjectKind.Bucket };
+    public bool CanPipeline => SelectedItem is { Kind: not ObjectKind.Bucket };
 
     /// <summary>常规页的小节。</summary>
     public ObservableCollection<ObjectFactSection> Sections { get; } = [];
@@ -115,7 +115,7 @@ internal sealed partial class ObjectsTabViewModel
     } = "";
 
     /// <summary>权限页「对 shop.events 的有效动作」那一行标题。</summary>
-    public string PrivilegeActionsTitle => _selected is { } s
+    public string PrivilegeActionsTitle => SelectedItem is { } s
         ? Loc.Format("Obj_PrivActions", s.Bucket is { } b ? $"{Database}.{b.FilesCollection}" : s.Namespace)
         : "";
 
@@ -609,7 +609,7 @@ internal sealed partial class ObjectsTabViewModel
     /// <summary>打开选中的对象(双击 / 回车 / 主按钮)。</summary>
     internal void OpenSelected()
     {
-        switch (_selected)
+        switch (SelectedItem)
         {
             case null:
                 return;
@@ -617,14 +617,14 @@ internal sealed partial class ObjectsTabViewModel
                 Workspace.OpenGridFs(Database, bucket.Name);
                 return;
             default:
-                Workspace.OpenCollection(Database, _selected.Name);
+                Workspace.OpenCollection(Database, SelectedItem.Name);
                 return;
         }
     }
 
     private void Design(DesignPage page)
     {
-        if (_selected is { IsCollection: true } item)
+        if (SelectedItem is { IsCollection: true } item)
         {
             Workspace.OpenDesign(Database, item.Name, page);
         }
@@ -632,31 +632,31 @@ internal sealed partial class ObjectsTabViewModel
 
     private void OpenPipeline()
     {
-        if (_selected is { Kind: not ObjectKind.Bucket } item)
+        if (SelectedItem is { Kind: not ObjectKind.Bucket } item)
         {
             Workspace.OpenPipeline(Database, item.Name);
         }
     }
 
     private void OpenQuery() =>
-        Workspace.OpenQuery(Database, _selected is { Kind: not ObjectKind.Bucket } item
+        Workspace.OpenQuery(Database, SelectedItem is { Kind: not ObjectKind.Bucket } item
             ? $"{ObjectScripts.CollectionRef(item.Name)}.find({{}}).limit(50)"
             : null);
 
     private void Import()
     {
-        if (_selected is { IsCollection: true } item)
+        if (SelectedItem is { IsCollection: true } item)
         {
             Workspace.ShowDialog(new ImportWizardViewModel(Workspace, Database, item.Name));
         }
     }
 
     private void Export() =>
-        Workspace.ShowDialog(new ExportWizardViewModel(Workspace, Database, _selected is { Kind: not ObjectKind.Bucket } item ? item.Name : null, null, null));
+        Workspace.ShowDialog(new ExportWizardViewModel(Workspace, Database, SelectedItem is { Kind: not ObjectKind.Bucket } item ? item.Name : null, null, null));
 
     private async Task CopyStructureAsync()
     {
-        if (_selected is not { } item)
+        if (SelectedItem is not { } item)
         {
             return;
         }
@@ -686,7 +686,7 @@ internal sealed partial class ObjectsTabViewModel
     /// <summary>删除选中的集合 / 视图 / 桶:先过写护栏,再确认(有数据或写前确认时手打名称),再删。</summary>
     private async Task DropSelectedAsync()
     {
-        if (_selected is not { } item || !Workspace.EnsureWritable(Database))
+        if (SelectedItem is not { } item || !Workspace.EnsureWritable(Database))
         {
             return;
         }
@@ -761,7 +761,7 @@ internal sealed partial class ObjectsTabViewModel
     /// <summary>清空集合(<c>deleteMany({})</c>):索引与验证规则保留。</summary>
     private async Task EmptySelectedAsync()
     {
-        if (_selected is not { Kind: ObjectKind.Collection or ObjectKind.TimeSeries or ObjectKind.Clustered } item
+        if (SelectedItem is not { Kind: ObjectKind.Collection or ObjectKind.TimeSeries or ObjectKind.Clustered } item
             || !Workspace.EnsureWritable(Database))
         {
             return;
@@ -785,7 +785,7 @@ internal sealed partial class ObjectsTabViewModel
             Workspace.Toast(new() { Title = Loc.Format("Tree_EmptyDone", BsonText.Grouped(result.DeletedCount)), Kind = ToastKind.Success });
             _ = _statsTasks.TryRemove(item, out _);
             await EnsureStatsAsync(item).ConfigureAwait(true);
-            if (ReferenceEquals(_selected, item))
+            if (ReferenceEquals(SelectedItem, item))
             {
                 _ = LoadDetailAsync(item);
             }

@@ -137,7 +137,7 @@ internal sealed partial class RedisConnection
                             && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int target)
                 ? target
                 : null;
-            if (selected is { } database && _settings.SupportsDatabases)
+            if (selected is { } database && Settings.SupportsDatabases)
             {
                 // 控制台切库要让浏览器跟上:静默分叉(控制台在 db3、浏览器还在 db0)
                 // 是比"多刷新一次"糟糕得多的失败模式。

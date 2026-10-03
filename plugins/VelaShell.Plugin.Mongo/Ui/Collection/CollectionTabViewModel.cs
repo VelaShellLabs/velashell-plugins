@@ -231,7 +231,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     {
         get; private set
         {
-            if (SetProperty(ref field, value) && _drill is null)
+            if (SetProperty(ref field, value) && Drill is null)
             {
                 RaisePropertyChanged(nameof(GridColumns));
             }
@@ -243,7 +243,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     {
         get; private set
         {
-            if (SetProperty(ref field, value) && _drill is null)
+            if (SetProperty(ref field, value) && Drill is null)
             {
                 RaisePropertyChanged(nameof(GridRows));
             }
@@ -264,7 +264,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
             {
                 return;
             }
-            if (_drill is null)
+            if (Drill is null)
             {
                 UpdateCurrentCell(previous, value);
                 RaisePropertyChanged(nameof(GridSelectedRow));
