@@ -6,10 +6,18 @@ using VelaShell.Plugin.Mongo.Bson;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
-/// <summary>集合设计 · 右侧「新建索引」面板(设计稿 07)。</summary>
+/// <summary>
+/// 集合设计 · 索引页下半部分的「新建索引」编辑器(设计稿 07,Navicat 的设计表做法)。
+/// <para>
+/// 编辑器开着时索引表末尾多一行「新建」草稿,跟着表单实时变(键、类型、属性、预估大小),
+/// 下半部分整宽分三栏:字段表(序号 / 字段 / 排序 / ESR / 抽样类型 / 上移下移删除)、类型与选项、命令预览与预估。
+/// 原先挤在右侧 340px 面板里,字段行一窄就点错 —— 摊开之后每一列都有自己的位置。
+/// </para>
+/// </summary>
 internal sealed partial class DesignTabViewModel
 {
     private bool _isCreateOpen;
+    private IndexRow? _draftIndex;
     private string _newKind = "normal";
     private bool _newUnique;
     private bool _newSparse;
@@ -28,12 +36,37 @@ internal sealed partial class DesignTabViewModel
     private bool _isCreating;
     private IReadOnlyList<FieldOption> _fieldOptions = [];
 
-    /// <summary>面板开着。</summary>
+    /// <summary>编辑器开着(下半部分从索引建议换成编辑器,索引表收矮、末尾挂草稿行)。</summary>
     public bool IsCreateOpen
     {
         get => _isCreateOpen;
-        set => SetProperty(ref _isCreateOpen, value);
+        set
+        {
+            if (SetProperty(ref _isCreateOpen, value))
+            {
+                RaisePropertyChanged(nameof(HasDraft));
+            }
+        }
     }
+
+    /// <summary>索引表末尾的「新建」草稿行;还没有字段时为 <see langword="null" />。</summary>
+    public IndexRow? DraftIndex
+    {
+        get => _draftIndex;
+        private set
+        {
+            if (SetProperty(ref _draftIndex, value))
+            {
+                RaisePropertyChanged(nameof(HasDraft));
+            }
+        }
+    }
+
+    /// <summary>草稿行可见(创建期间表里挂的是「构建中」那一行,草稿让位)。</summary>
+    public bool HasDraft => _isCreateOpen && _draftIndex is not null && !_isCreating;
+
+    /// <summary>编辑器底栏左侧那句「将在 shop.orders 上执行 createIndexes」。</summary>
+    public string NewTarget => Loc.Format("Design_EditorTarget", Namespace);
 
     /// <summary>键字段行。</summary>
     public ObservableCollection<NewKeyRow> NewKeys { get; } = [];
@@ -214,6 +247,7 @@ internal sealed partial class DesignTabViewModel
         {
             if (SetProperty(ref _isCreating, value))
             {
+                RaisePropertyChanged(nameof(HasDraft));
                 CreateIndexCommand.RaiseCanExecuteChanged();
             }
         }
@@ -247,6 +281,12 @@ internal sealed partial class DesignTabViewModel
     /// <summary>删除一个字段行。</summary>
     public RelayCommand<NewKeyRow> RemoveKeyCommand { get; private set; } = null!;
 
+    /// <summary>字段行上移一位(键序前移)。</summary>
+    public RelayCommand<NewKeyRow> MoveKeyUpCommand { get; private set; } = null!;
+
+    /// <summary>字段行下移一位。</summary>
+    public RelayCommand<NewKeyRow> MoveKeyDownCommand { get; private set; } = null!;
+
     /// <summary>创建索引。</summary>
     public AsyncCommand CreateIndexCommand { get; private set; } = null!;
 
@@ -261,6 +301,8 @@ internal sealed partial class DesignTabViewModel
             RenumberKeys();
             RecomputeNewIndex();
         });
+        MoveKeyUpCommand = new(row => MoveKey(NewKeys.IndexOf(row), NewKeys.IndexOf(row) - 1));
+        MoveKeyDownCommand = new(row => MoveKey(NewKeys.IndexOf(row), NewKeys.IndexOf(row) + 1));
         CreateIndexCommand = new(CreateIndexAsync, () => !_isCreating && _newError.Length == 0 && NewKeys.Any(static k => k.Field.Length > 0));
     }
 
@@ -303,7 +345,7 @@ internal sealed partial class DesignTabViewModel
     /// <summary>加一行字段。</summary>
     internal void AddKey(string field, int direction, string role, bool recompute = true)
     {
-        var row = new NewKeyRow(field, direction, role.Length > 0 ? role : GuessRole(field), TokenOf, RecomputeNewIndex, DirectionLabel)
+        var row = new NewKeyRow(field, direction, role.Length > 0 ? role : GuessRole(field), OptionOf, RecomputeNewIndex, DirectionLabel)
         {
             Kind = _newKind
         };
@@ -331,7 +373,9 @@ internal sealed partial class DesignTabViewModel
     {
         for (int i = 0; i < NewKeys.Count; i++)
         {
+            NewKeys[i].Number = i + 1;
             NewKeys[i].IsFirst = i == 0;
+            NewKeys[i].IsLast = i == NewKeys.Count - 1;
         }
     }
 
@@ -341,9 +385,8 @@ internal sealed partial class DesignTabViewModel
             ? Loc[value.ToDouble() < 0 ? "Design_DirDesc" : "Design_DirAsc"]
             : value.ToString() ?? "";
 
-    /// <summary>字段 → 类型色(抽样里没有就是灰的)。</summary>
-    private string TokenOf(string field) =>
-        _fieldOptions.FirstOrDefault(f => f.Path == field)?.Token ?? "VelaTextMuted";
+    /// <summary>字段 → 抽样到的那一项;抽样里没有为 <see langword="null" />。</summary>
+    private FieldOption? OptionOf(string field) => _fieldOptions.FirstOrDefault(f => f.Path == field);
 
     /// <summary>ESR 角色 → 小标签文字。</summary>
     private string RoleText(string? role) => role switch
@@ -492,15 +535,35 @@ internal sealed partial class DesignTabViewModel
         NewCommand = key.ElementCount == 0
             ? ""
             : $"{ShellRef}.createIndex(\n  {BsonText.Literal(key)}" + (options.ElementCount > 0 ? $",\n  {BsonText.Literal(options)}" : "") + "\n)";
-        UpdateImpact(key);
+        long size = UpdateImpact(key);
+        DraftIndex = key.ElementCount == 0 ? null : Draft(key, options, size);
         CreateIndexCommand?.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>草稿行:与表里的行同一个模型,大小列写预估,使用列写「待创建」。</summary>
+    private IndexRow Draft(BsonDocument key, BsonDocument options, long size)
+    {
+        string name = _newName.Trim().Length > 0 ? _newName.Trim() : IndexAdvisor.DefaultName(key);
+        var spec = new BsonDocument { { "key", key }, { "name", name } };
+        spec.Merge(options, overwriteExistingElements: false);
+        IndexForm form = IndexAdvisor.ShapeOf(spec);
+        return new IndexRow
+        {
+            Name = name,
+            Spec = spec,
+            Keys = [.. IndexAdvisor.DisplayKeys(spec).Select(static k => new IndexKeyChip(k.Field, k.Value))],
+            Form = form,
+            TypeText = FormText(form),
+            Attributes = Attributes(spec, 0),
+            SizeText = "≈ " + BsonText.Bytes(size)
+        };
     }
 
     /// <summary>
     /// 预估:大小 ≈ 文档数 ×(各键字段平均值长 + 每项开销),构建耗时按数据量粗估;
-    /// 再写一句当前版本的构建方式(4.4 起的优化构建只在首尾短暂持排他锁)。
+    /// 再写一句当前版本的构建方式(4.4 起的优化构建只在首尾短暂持排他锁)。返回预估大小(字节)。
     /// </summary>
-    private void UpdateImpact(BsonDocument key)
+    private long UpdateImpact(BsonDocument key)
     {
         long count = _indexStats?.Count ?? _stats?.Count ?? 0;
         long data = _indexStats?.Size ?? _stats?.Size ?? 0;
@@ -525,6 +588,7 @@ internal sealed partial class DesignTabViewModel
             detail += " " + Loc["Design_ImpactPartial"];
         }
         NewImpactDetail = detail;
+        return size;
     }
 
     /// <summary>

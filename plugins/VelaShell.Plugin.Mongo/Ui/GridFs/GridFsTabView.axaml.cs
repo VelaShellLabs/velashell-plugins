@@ -1,14 +1,16 @@
 using System.Diagnostics;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
 /// <summary>
 /// GridFS 文件管理视图。代码后置只做视图模型做不了的事:
-/// 双击 / 键盘手势、从系统拖进来的文件(拖放事件与数据格式只有控件层看得到)、
+/// 双击 / 键盘手势、从系统拖进来的文件(拖放事件与数据格式只有控件层看得到)与点拖放区选文件、
 /// 桶下拉与行右键菜单(弹出层在独立可视树里,菜单现建最省事)、以及"交给系统打开"(只有 TopLevel 拿得到 Launcher)。
 /// </summary>
 public sealed partial class GridFsTabView : UserControl
@@ -40,6 +42,7 @@ public sealed partial class GridFsTabView : UserControl
         ListArea.AddHandler(DragDrop.DragOverEvent, OnDragOver);
         ListArea.AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         ListArea.AddHandler(DragDrop.DropEvent, OnDrop);
+        DropZone.Tapped += OnDropZoneTapped;
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
@@ -132,6 +135,17 @@ public sealed partial class GridFsTabView : UserControl
         {
             _ = _viewModel.UploadPathsAsync(paths);
         }
+    }
+
+    /// <summary>点拖放区的空白处 = 「上传文件」;框里的「选择文件 / 选择文件夹」链接自己处理,这里不再重复弹。</summary>
+    private void OnDropZoneTapped(object? sender, TappedEventArgs e)
+    {
+        if (_viewModel is null || (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Button>().Any() != false)
+        {
+            return;
+        }
+        e.Handled = true;
+        _viewModel.UploadFilesCommand.Execute(null);
     }
 
     // ── 菜单 ───────────────────────────────────────────────────────────────

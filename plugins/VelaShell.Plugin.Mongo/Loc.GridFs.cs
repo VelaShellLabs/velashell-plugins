@@ -39,7 +39,10 @@ public sealed partial class Loc
         ("Fs_NoMatch", "No files match “{0}”", "没有匹配 “{0}” 的文件"),
         ("Fs_Truncated", "Showing the first {0} items — narrow it down with search", "仅显示前 {0} 项 · 用搜索缩小范围"),
         ("Fs_OpenFolder", "Open", "打开"),
-        ("Fs_DropHere", "Drop files here to upload to {0}", "拖拽文件到此处上传到 {0}"),
+        ("Fs_DropHere", "Drop files here, or click to choose files — they go to {0}", "拖拽文件到此处,或点击选择文件 · 上传到 {0}"),
+        ("Fs_DropPickFiles", "Choose files…", "选择文件…"),
+        ("Fs_DropPickFolder", "Choose a folder…", "选择文件夹…"),
+        ("Fs_DropClickTip", "Click to choose files to upload", "点击选择要上传的文件"),
         ("Fs_DropHint", "No 16 MB per-file limit · chunkSize 255 KB · metadata can be edited before upload",
             "单文件上限不受 16 MB 限制 · chunkSize 255 KB · 可在上传前编辑 metadata"),
 

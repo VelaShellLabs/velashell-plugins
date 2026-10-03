@@ -87,12 +87,32 @@ public sealed class DesignTests
             tab.MoveKey(1, 0);
             Assert.AreEqual("price_-1_kind_1", tab.NewName, "the name follows the key order until edited by hand");
             tab.MoveKey(0, 1);
+
+            // ── 编辑器的字段表与草稿行:序号、上移 / 下移按钮、末尾的「新建」行跟着表单变 ──
+            Assert.AreEqual(1, tab.NewKeys[0].Number);
+            Assert.IsFalse(tab.NewKeys[0].CanMoveUp);
+            Assert.IsFalse(tab.NewKeys[1].CanMoveDown);
+            tab.MoveKeyUpCommand.Execute(tab.NewKeys[1]);
+            Assert.AreEqual("price", tab.NewKeys[0].Field);
+            Assert.AreEqual(1, tab.NewKeys[0].Number);
+            Assert.AreEqual("price_-1_kind_1", tab.DraftIndex?.Name);
+            tab.MoveKeyDownCommand.Execute(tab.NewKeys[0]);
+            Assert.AreEqual("kind", tab.NewKeys[0].Field);
+            Assert.IsTrue(tab.HasDraft);
+            Assert.AreEqual("kind_1_price_-1", tab.DraftIndex!.Name);
+            CollectionAssert.AreEqual(new[] { "kind", "price" }, tab.DraftIndex.Keys.Select(static k => k.Field).ToArray());
+            Assert.AreEqual("复合", tab.DraftIndex.TypeText);
+            Assert.IsTrue(tab.DraftIndex.Attributes.Any(static a => a.Text == "部分"));
+            StringAssert.StartsWith(tab.DraftIndex.SizeText, "≈ ");
+            Assert.IsFalse(tab.Indexes.Any(static r => r.Name == "kind_1_price_-1"), "the draft row is not an index yet");
+            Assert.AreEqual($"将在 {db}.items 上执行 createIndexes", tab.NewTarget);
             tab.CreateIndexCommand.Execute(null);
             await WaitAsync(() => tab.Indexes.Any(static r => r.Name == "kind_1_price_-1" && !r.IsBuilding) && !tab.IsCreating);
             IndexRow created = tab.Indexes.Single(static r => r.Name == "kind_1_price_-1");
             Assert.AreEqual("复合", created.TypeText);
             Assert.IsTrue(created.Attributes.Any(static a => a.Text == "部分"));
             Assert.IsFalse(tab.IsCreateOpen);
+            Assert.IsFalse(tab.HasDraft);
 
             // 多键:tags 是数组,执行计划里 isMultiKey 为真。
             await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("tags", 1)));

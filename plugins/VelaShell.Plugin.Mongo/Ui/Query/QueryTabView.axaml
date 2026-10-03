@@ -8,7 +8,7 @@
 
   <!--
     查询编辑器(设计稿 03 / 14):
-      36px 工具行(运行药丸 / 运行当前语句 / 停止 | 执行计划 | 格式化 / 保存 / 历史 / 导出为代码 … 当前库 / maxTimeMS)
+      2 × 36px 工具行(上:保存 / 格式化 / 历史 / 导出为代码;下:连接 ▾ 数据库 ▾ | 运行 / 运行当前语句 / 停止 | 执行计划 … 执行目标 · maxTimeMS)
       编辑器(code lens 叠加层)+ 右侧 248px 字段 / 片段 / 历史
       1px 可拖动分隔
       32px 结果页签(结果 N / 执行计划 / 消息 + 网格·树·JSON / 导出 / 复制 / 固定结果)+ 内容
@@ -79,6 +79,18 @@
     <Style Selector="RadioButton.small">
       <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
       <Setter Property="Padding" Value="8,0" />
+    </Style>
+    <!-- 执行目标下拉(连接 / 数据库):输入框底 + 描边,看得出是选择框而不是按钮。 -->
+    <Style Selector="Button.target">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.target:pointerover /template/ Border#Bg">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderSecondary}" />
     </Style>
     <Style Selector="ComboBox.small">
       <Setter Property="Height" Value="22" />
@@ -368,65 +380,28 @@
 
   <Grid x:Name="Root">
     <Grid.RowDefinitions>
-      <RowDefinition Height="36" />
-      <RowDefinition Height="447" MinHeight="80" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="411" MinHeight="80" />
       <RowDefinition Height="1" />
       <RowDefinition Height="*" MinHeight="90" />
       <RowDefinition Height="28" />
     </Grid.RowDefinitions>
 
-    <!-- ══ 工具行 ══ -->
-    <Border Grid.Row="0" Classes="toolrow">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
-          <Button x:Name="DatabaseButton" Theme="{StaticResource MongoToolButton}" Padding="8,0"
-                  Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
-                  ToolTip.Tip="{Binding Loc[Query_DatabaseTip]}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <ui:Glyph Key="Mongo.database" Size="12" Brush="{DynamicResource VelaWarning}" />
-              <TextBlock Classes="mono primary" Text="{Binding Database}" />
-              <ui:Glyph Key="Mongo.chevron-down" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
-            </StackPanel>
-          </Button>
-          <Button x:Name="TimeoutButton" Theme="{StaticResource MongoToolButton}" Padding="8,0"
-                  BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" ToolTip.Tip="{Binding Loc[Query_MaxTimeTip]}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <ui:Glyph Key="Mongo.timer" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
-              <TextBlock Classes="mono small secondary" Text="{Binding MaxTimeText}" />
-            </StackPanel>
-          </Button>
-        </StackPanel>
-
+    <!--
+      ══ 工具行(Navicat 查询窗口的两行):
+         上行 = 编辑类(保存 / 格式化 / 历史 / 导出为代码);
+         下行 = 执行目标与执行(连接 ▾ 数据库 ▾ | 运行 / 运行当前语句 / 停止 | 执行计划 … 在 X / Y 上执行 · maxTimeMS)。
+         「在哪跑」与「跑」挨在一起:先看清连接与库,再按运行。 ══
+    -->
+    <StackPanel Grid.Row="0">
+      <Border Classes="toolrow">
         <StackPanel Orientation="Horizontal" Spacing="4">
-          <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding RunCommand}">
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding SaveCommand}">
             <StackPanel Orientation="Horizontal" Spacing="5">
-              <ui:Glyph Key="Mongo.play" Size="12" Brush="{DynamicResource VelaAccent}" />
-              <TextBlock Text="{Binding Loc[Query_Run]}" />
-              <TextBlock Classes="mono tiny accent" Text="F5" />
+              <ui:Glyph Key="Mongo.save" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Common_Save]}" />
             </StackPanel>
           </Button>
-          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding RunCurrentCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-              <ui:Glyph Key="Mongo.text-cursor-input" Size="12" Brush="{DynamicResource VelaAccent}" />
-              <TextBlock Text="{Binding Loc[Query_RunCurrent]}" />
-              <TextBlock Classes="kbd" Text="Ctrl+↵" />
-            </StackPanel>
-          </Button>
-          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding StopCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-              <ui:Glyph Key="Mongo.square" Size="12" Brush="{Binding StopIconToken, Converter={x:Static ui:Converters.Token}}" />
-              <TextBlock Text="{Binding Loc[Query_Stop]}" />
-            </StackPanel>
-          </Button>
-          <Rectangle Classes="vsep" Margin="0" />
-          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExplainCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-              <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaInfo}" />
-              <TextBlock Text="{Binding Loc[Query_Explain]}" />
-              <TextBlock Classes="kbd" Text="F6" />
-            </StackPanel>
-          </Button>
-          <Rectangle Classes="vsep" Margin="0" />
           <Button Theme="{StaticResource MongoToolButton}" Command="{Binding FormatCommand}">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <ui:Glyph Key="Mongo.wand-sparkles" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
@@ -434,12 +409,7 @@
               <TextBlock Classes="kbd" Text="Alt+Shift+F" />
             </StackPanel>
           </Button>
-          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding SaveCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-              <ui:Glyph Key="Mongo.save" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
-              <TextBlock Text="{Binding Loc[Common_Save]}" />
-            </StackPanel>
-          </Button>
+          <Rectangle Classes="vsep" Margin="0" />
           <Button Theme="{StaticResource MongoToolButton}" Command="{Binding HistoryCommand}">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <ui:Glyph Key="Mongo.history" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
@@ -453,8 +423,79 @@
             </StackPanel>
           </Button>
         </StackPanel>
-      </DockPanel>
-    </Border>
+      </Border>
+
+      <Border Classes="toolrow" Background="{DynamicResource VelaBgSidebar}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+            <TextBlock Classes="ui small muted trim" MaxWidth="280" VerticalAlignment="Center" Text="{Binding TargetText}" />
+            <Button x:Name="TimeoutButton" Theme="{StaticResource MongoToolButton}" Padding="8,0"
+                    BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" ToolTip.Tip="{Binding Loc[Query_MaxTimeTip]}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Mongo.timer" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Classes="mono small secondary" Text="{Binding MaxTimeText}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <!-- 连接 ▾:插件里全部已保存的连接;选没连的会先安静地连上 -->
+            <Button x:Name="ConnectionButton" Classes="target" Theme="{StaticResource MongoToolButton}" MinWidth="168"
+                    ToolTip.Tip="{Binding Loc[Query_ConnectionTip]}">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <Panel Width="12" Margin="0,0,6,0">
+                  <Ellipse Classes="dot ok" Width="7" Height="7" IsVisible="{Binding !IsSwitching}" />
+                  <ui:Glyph Key="Mongo.loader-circle" Size="12" Brush="{DynamicResource VelaStatusConnecting}" IsVisible="{Binding IsSwitching}" />
+                </Panel>
+                <Panel Grid.Column="1">
+                  <TextBlock Classes="mono primary trim" MaxWidth="200" Text="{Binding ConnectionName}" IsVisible="{Binding !IsSwitching}" />
+                  <TextBlock Classes="ui small secondary trim" MaxWidth="200" Text="{Binding SwitchingText}" IsVisible="{Binding IsSwitching}" />
+                </Panel>
+                <ui:Glyph Grid.Column="2" Key="Mongo.chevron-down" Size="11" Margin="8,0,0,0" Brush="{DynamicResource VelaTextTertiary}" />
+              </Grid>
+            </Button>
+            <!-- 数据库 ▾:语句在哪个库上执行;db.<集合> 在这个库里解析 -->
+            <Button x:Name="DatabaseButton" Classes="target" Theme="{StaticResource MongoToolButton}" MinWidth="132"
+                    ToolTip.Tip="{Binding Loc[Query_DatabaseTip]}">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <ui:Glyph Key="Mongo.database" Size="12" Margin="0,0,6,0" Brush="{DynamicResource VelaWarning}" />
+                <TextBlock Grid.Column="1" Classes="mono primary trim" MaxWidth="180" Text="{Binding Database}" />
+                <ui:Glyph Grid.Column="2" Key="Mongo.chevron-down" Size="11" Margin="8,0,0,0" Brush="{DynamicResource VelaTextTertiary}" />
+              </Grid>
+            </Button>
+            <Rectangle Classes="vsep" Margin="4,0" />
+            <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding RunCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.play" Size="12" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Text="{Binding Loc[Query_Run]}" />
+                <TextBlock Classes="mono tiny accent" Text="F5" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource MongoToolButton}" Command="{Binding RunCurrentCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.text-cursor-input" Size="12" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Text="{Binding Loc[Query_RunCurrent]}" />
+                <TextBlock Classes="kbd" Text="Ctrl+↵" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource MongoToolButton}" Command="{Binding StopCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.square" Size="12" Brush="{Binding StopIconToken, Converter={x:Static ui:Converters.Token}}" />
+                <TextBlock Text="{Binding Loc[Query_Stop]}" />
+              </StackPanel>
+            </Button>
+            <Rectangle Classes="vsep" Margin="0" />
+            <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExplainCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaInfo}" />
+                <TextBlock Text="{Binding Loc[Query_Explain]}" />
+                <TextBlock Classes="kbd" Text="F6" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </StackPanel>
 
     <!-- ══ 编辑器 + 右侧面板 ══ -->
     <Grid Grid.Row="1">
@@ -493,11 +534,18 @@
                   <TextBlock Classes="ui small muted" Text="{Binding Loc[Query_HelperHint]}" />
                 </StackPanel>
               </Border>
-              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="12,8,12,4" IsVisible="{Binding HasHelperCollection}">
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="12,8,12,4" IsVisible="{Binding HasHelperCollection}">
                 <ui:Glyph Grid.Column="0" Key="Mongo.table-2" Size="12" Brush="{DynamicResource VelaInfo}" />
-                <TextBlock Grid.Column="1" Classes="mono primary medium trim" Margin="6,0" Text="{Binding HelperCollection}" />
-                <TextBlock Grid.Column="2" Classes="ui small muted" Text="{Binding HelperSampleText}" />
+                <TextBlock Grid.Column="1" Classes="mono primary medium trim" Margin="6,0,4,0" MaxWidth="140" Text="{Binding HelperCollection}" />
+                <TextBlock Grid.Column="2" Classes="mono small muted trim" Text="{Binding HelperDatabase}" />
+                <TextBlock Grid.Column="3" Classes="ui small muted" Margin="6,0,0,0" Text="{Binding HelperSampleText}" />
               </Grid>
+              <Border DockPanel.Dock="Top" Classes="notice warn" Margin="12,2,12,6" Padding="8,6" IsVisible="{Binding HasHelperMissing}">
+                <Grid ColumnDefinitions="Auto,*">
+                  <ui:Glyph Key="Mongo.triangle-alert" Size="11" Margin="0,1,6,0" VerticalAlignment="Top" Brush="{DynamicResource VelaWarning}" />
+                  <TextBlock Grid.Column="1" Classes="ui small warn wrap" Text="{Binding HelperMissing}" />
+                </Grid>
+              </Border>
               <Panel>
                 <ListBox x:Name="FieldList" Classes="rows" Padding="0,2" ItemsSource="{Binding HelperFields}">
                   <ListBox.ItemTemplate>

@@ -250,6 +250,7 @@ internal sealed partial class QueryTabViewModel
                 }
                 if (result.ChangesCatalog)
                 {
+                    ForgetCollections(result.Database);
                     _ = Workspace.RefreshTreeAsync(result.Database);
                 }
             }

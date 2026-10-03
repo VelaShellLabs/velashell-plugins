@@ -11,13 +11,13 @@ namespace VelaShell.Plugin.Mongo.Ui;
 
 /// <summary>
 /// 集合设计 · 索引页。代码里只做两件 AXAML 不好做的事:
-/// 字段 / 方向下拉的菜单(弹出层在独立可视树里,菜单项要直达行模型,现建最省事),
-/// 以及字段行按住左侧把手拖动排序。
+/// 索引编辑器字段表里字段 / 方向下拉的菜单(弹出层在独立可视树里,菜单项要直达行模型,现建最省事),
+/// 以及字段行按住序号列的把手拖动排序(行尾的上移 / 下移按钮走视图模型命令)。
 /// </summary>
 public sealed partial class DesignIndexesView : UserControl
 {
-    /// <summary>字段行的行距(26 高 + 6 间距)。</summary>
-    private const double RowPitch = 32;
+    /// <summary>字段表的行距(28 高、行间无空隙)。</summary>
+    private const double RowPitch = 28;
 
     private NewKeyRow? _dragging;
 

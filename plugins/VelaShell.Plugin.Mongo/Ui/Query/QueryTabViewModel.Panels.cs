@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia.Threading;
 using MongoDB.Bson;
 using VelaShell.Plugin.Mongo.Bson;
+using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Shell;
 
 namespace VelaShell.Plugin.Mongo.Ui;
@@ -55,6 +56,8 @@ internal sealed partial class QueryTabViewModel
     private (string Database, string Collection)? _helperTarget;
     private IReadOnlyList<SampledField> _helperFields = [];
     private string _helperCollection = "";
+    private string _helperDatabase = "";
+    private string _helperMissing = "";
     private string _helperSampleText = "";
     private bool _helperBusy;
 
@@ -82,6 +85,29 @@ internal sealed partial class QueryTabViewModel
 
     /// <summary>有没有可抽样的集合。</summary>
     public bool HasHelperCollection => _helperCollection.Length > 0;
+
+    /// <summary>字段页的集合在哪个库(集合名后面的 <c>@shop</c>:抽的是哪个库里的这个集合,一眼看清)。</summary>
+    public string HelperDatabase
+    {
+        get => _helperDatabase;
+        private set => SetProperty(ref _helperDatabase, value);
+    }
+
+    /// <summary>那个库里没有这个集合时的提示;有为空。</summary>
+    public string HelperMissing
+    {
+        get => _helperMissing;
+        private set
+        {
+            if (SetProperty(ref _helperMissing, value))
+            {
+                RaisePropertyChanged(nameof(HasHelperMissing));
+            }
+        }
+    }
+
+    /// <summary>那个库里没有这个集合。</summary>
+    public bool HasHelperMissing => _helperMissing.Length > 0;
 
     /// <summary>「抽样 1,000」。</summary>
     public string HelperSampleText
@@ -136,13 +162,20 @@ internal sealed partial class QueryTabViewModel
         }
         _helperTarget = (database, collection);
         HelperCollection = collection;
+        HelperDatabase = "@" + database;
+        HelperMissing = "";
         HelperBusy = true;
         SampledSchema? schema = await SchemaAsync(database, collection).ConfigureAwait(true);
+        IReadOnlyList<CollectionInfo> known = await CollectionsAsync(database).ConfigureAwait(true);
         if (_helperTarget != (database, collection))
         {
             return;
         }
         HelperBusy = false;
+        // 列不出集合(没权限、超时)就不下结论。
+        HelperMissing = _collections.ContainsKey(database) && known.All(c => c.Name != collection)
+            ? Loc.Format("Query_CollectionMissing", collection, database)
+            : "";
         HelperFields = schema?.Fields ?? [];
         HelperSampleText = schema is null ? "" : Loc.Format("Query_SampledCount", BsonText.Grouped(schema.Sampled));
     }

@@ -277,6 +277,30 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
         return tab;
     }
 
+    /// <summary>
+    /// 原位换掉一个标签:查询编辑器切换连接时,新标签属于另一条连接(标签的连接定死在构造里),
+    /// 位置与"是不是活动标签"照旧,旧标签直接释放(不问未保存 —— 文本已经带进了新标签)。
+    /// </summary>
+    internal void ReplaceTab(WorkspaceTab old, WorkspaceTab replacement)
+    {
+        int index = Tabs.IndexOf(old);
+        if (index < 0)
+        {
+            Activate(replacement);
+            return;
+        }
+        replacement.Closer = CloseTabAsync;
+        bool wasActive = ReferenceEquals(_activeTab, old);
+        Tabs[index] = replacement;
+        if (wasActive)
+        {
+            ActiveTab = replacement;
+        }
+        old.Dispose();
+        UpdateCurrentSession();
+        _ = LoadTabAsync(replacement);
+    }
+
     private async Task LoadTabAsync(WorkspaceTab tab)
     {
         try

@@ -121,7 +121,14 @@
       <Setter Property="TextDecorations" Value="Underline" />
     </Style>
 
-    <!-- 拖进来时拖放区描 Accent、铺一层淡底。 -->
+    <!-- 拖放区:悬停描边变亮、铺一层很淡的底(看得出能点);拖进来时描 Accent、底再深一点。 -->
+    <Style Selector="Panel#DropZone:pointerover Rectangle#DropFrame">
+      <Setter Property="Stroke" Value="{DynamicResource VelaTextMuted}" />
+      <Setter Property="Fill" Value="{ui:Dim VelaAccent, 0.03}" />
+    </Style>
+    <Style Selector="Panel#DropZone:pointerover Border#DropIcon">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+    </Style>
     <Style Selector="Rectangle#DropFrame.over">
       <Setter Property="Stroke" Value="{DynamicResource VelaAccent}" />
       <Setter Property="Fill" Value="{ui:Dim VelaAccent, 0.06}" />
@@ -410,14 +417,34 @@
             </Panel>
           </DockPanel>
 
-          <!-- 下:拖放区(虚线框) -->
-          <Panel Margin="14">
+          <!--
+            下:拖放区(虚线框)。整块可点:点空白处弹「选择要上传的文件」,与工具行的「上传文件」同一条路;
+            框里两个链接分别选文件 / 选文件夹。悬停描边变亮、铺一层淡底,让人看得出它能点。
+          -->
+          <Panel x:Name="DropZone" Margin="14" Background="Transparent" Cursor="Hand" ToolTip.Tip="{Binding Loc[Fs_DropClickTip]}">
             <Rectangle x:Name="DropFrame" RadiusX="4" RadiusY="4" Stroke="{DynamicResource VelaBorderSecondary}" StrokeThickness="1"
                        StrokeDashArray="4,3" Fill="Transparent" />
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="12">
-              <ui:Glyph Key="Mongo.cloud-upload" Size="20" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
-              <TextBlock Classes="ui tertiary" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+              <Border x:Name="DropIcon" Width="36" Height="36" CornerRadius="18" HorizontalAlignment="Center" Background="{DynamicResource VelaBgHover}">
+                <ui:Glyph Key="Mongo.cloud-upload" Size="18" Brush="{DynamicResource VelaTextTertiary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <TextBlock Classes="ui secondary" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis"
                          Text="{Binding DropText}" />
+              <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding UploadFilesCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <ui:Glyph Key="Mongo.file-up" Size="11" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="ui small accent" Text="{Binding Loc[Fs_DropPickFiles]}" />
+                  </StackPanel>
+                </Button>
+                <TextBlock Classes="ui small muted" VerticalAlignment="Center" Text="·" />
+                <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding UploadFolderCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <ui:Glyph Key="Mongo.folder-up" Size="11" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="ui small accent" Text="{Binding Loc[Fs_DropPickFolder]}" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
               <TextBlock Classes="ui small muted" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis"
                          Text="{Binding Loc[Fs_DropHint]}" />
               <TextBlock Classes="ui small warn" HorizontalAlignment="Center" Text="{Binding TruncatedText}" IsVisible="{Binding IsTruncated}" />
