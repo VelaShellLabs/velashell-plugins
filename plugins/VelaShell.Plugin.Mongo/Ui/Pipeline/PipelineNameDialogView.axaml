@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.PipelineNameDialogView"
+             x:DataType="ui:PipelineNameDialogViewModel">
+
+  <!-- 输入一个名字(保存管道 / 创建视图 / 另存为集合)。外壳画 28px 标题栏,这里只画内容与 48px 底栏。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <StackPanel Grid.Row="0" Margin="16,14,16,16" Spacing="8">
+      <TextBlock Classes="ui small secondary" Text="{Binding Options.Label}" />
+      <TextBox x:Name="NameBox" Theme="{StaticResource MongoTextBox}" Height="30" Text="{Binding Name}"
+               Classes.invalid="{Binding HasError}" />
+      <TextBlock Classes="ui small err wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Classes="ui small muted wrap" Text="{Binding Options.Hint}" IsVisible="{Binding HasHint}" />
+
+      <!-- 另存为集合:写入方式。 -->
+      <StackPanel Spacing="6" Margin="0,4,0,0" IsVisible="{Binding Options.OfferMerge}">
+        <Border Classes="segments" HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="1">
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeWriteMode" IsChecked="{Binding IsOut}"
+                         Content="{Binding Loc[Pipe_SaveAsOut]}" />
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeWriteMode" IsChecked="{Binding IsMerge}"
+                         Content="{Binding Loc[Pipe_SaveAsMerge]}" />
+          </StackPanel>
+        </Border>
+        <TextBlock Classes="ui small tertiary wrap" Text="{Binding WriteHint}" />
+      </StackPanel>
+
+      <!-- 保存管道:已保存的名字,点一下即覆盖它。 -->
+      <StackPanel Spacing="6" Margin="0,4,0,0" IsVisible="{Binding HasSuggestions}">
+        <TextBlock Classes="section" Text="{Binding Loc[Pipe_SaveExisting]}" />
+        <ItemsControl ItemsSource="{Binding Options.Suggestions}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel ItemSpacing="6" LineSpacing="6" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <Button Theme="{StaticResource MongoOutlineButton}" Height="22" Padding="8,0"
+                      Command="{Binding $parent[UserControl].((ui:PipelineNameDialogViewModel)DataContext).PickCommand}"
+                      CommandParameter="{Binding}">
+                <TextBlock Classes="mono small secondary" Text="{Binding}" />
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Content="{Binding Options.ConfirmLabel}" Command="{Binding ConfirmCommand}"
+                IsDefault="True" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

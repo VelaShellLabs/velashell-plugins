@@ -1,0 +1,584 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.ConnectionDialogView"
+             x:DataType="ui:ConnectionDialogViewModel">
+
+  <!-- 设计稿 10「新建 MongoDB 连接」1020 × 760:左 700 表单(基本 / 服务器 / 认证 / 安全通道,设计稿外的调优项收进末尾的「高级」),
+       右 320 侧栏(连接字符串 / 测试结果 / 发现的成员 / 安全策略),48px 页脚。颜色一律走宿主令牌。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+
+    <!-- 输入框外壳:28px、VelaBgInput、聚焦描强调色;里面放无边框的 TextBox 与前后缀。 -->
+    <Style Selector="Border.field">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="8,0" />
+    </Style>
+    <Style Selector="Border.field:focus-within">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="TextBox.bare">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.bare:focus /template/ Border#Frame">
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <!-- 分组的自动完成框:里面那个文本框换成插件的无边框输入框,外壳交给 Border.field(与别的输入框同一个样子)。 -->
+    <Style Selector="AutoCompleteBox.bare">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="AutoCompleteBox.bare /template/ TextBox#PART_TextBox">
+      <Setter Property="Theme" Value="{StaticResource MongoTextBox}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+      <Setter Property="Margin" Value="0,0,0,5" />
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+    <Style Selector="TextBlock.side">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+
+    <!-- 环境标记:三颗带语气色圆点的小标签,选中描同色边、铺淡底(设计稿 10 的「生产」)。 -->
+    <Style Selector="RadioButton.env Ellipse.chipdot">
+      <Setter Property="Width" Value="6" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="RadioButton.env.dev Ellipse.chipdot"><Setter Property="Fill" Value="{DynamicResource VelaStatusConnected}" /></Style>
+    <Style Selector="RadioButton.env.test Ellipse.chipdot"><Setter Property="Fill" Value="{DynamicResource VelaInfo}" /></Style>
+    <Style Selector="RadioButton.env.prod Ellipse.chipdot"><Setter Property="Fill" Value="{DynamicResource VelaError}" /></Style>
+    <Style Selector="RadioButton.env.prod:checked /template/ ContentPresenter">
+      <Setter Property="Background" Value="{ui:Dim VelaError, 0.12}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="RadioButton.env.prod:checked TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+    </Style>
+
+    <!-- 角色徽章(PRIMARY / SECONDARY):10px 等宽大写,按语气色着字铺淡底。 -->
+    <Style Selector="Border.role">
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{ui:Dim VelaTextMuted, 0.12}" />
+    </Style>
+    <Style Selector="Border.role > TextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="Border.role.ok"><Setter Property="Background" Value="{ui:Dim VelaStatusConnected, 0.12}" /></Style>
+    <Style Selector="Border.role.ok > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaStatusConnected}" /></Style>
+    <Style Selector="Border.role.info"><Setter Property="Background" Value="{ui:Dim VelaInfo, 0.12}" /></Style>
+    <Style Selector="Border.role.info > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaInfo}" /></Style>
+    <Style Selector="Border.role.warn"><Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" /></Style>
+    <Style Selector="Border.role.warn > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaWarning}" /></Style>
+    <Style Selector="Border.role.err"><Setter Property="Background" Value="{ui:Dim VelaError, 0.12}" /></Style>
+    <Style Selector="Border.role.err > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaError}" /></Style>
+
+    <!-- 成员表里的角色字:着色,不铺底。 -->
+    <Style Selector="TextBlock.role.ok"><Setter Property="Foreground" Value="{DynamicResource VelaStatusConnected}" /></Style>
+    <Style Selector="TextBlock.role.info"><Setter Property="Foreground" Value="{DynamicResource VelaInfo}" /></Style>
+    <Style Selector="TextBlock.role.warn"><Setter Property="Foreground" Value="{DynamicResource VelaWarning}" /></Style>
+    <Style Selector="TextBlock.role.err"><Setter Property="Foreground" Value="{DynamicResource VelaError}" /></Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <Grid Grid.Row="0" ColumnDefinitions="*,320">
+
+      <!-- ══ 表单 ══════════════════════════════════════════════════════════════ -->
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20,14,20,18" Spacing="18">
+
+          <!-- 基本 -->
+          <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="{Binding Loc[Conn_SecBasic]}" />
+            <Grid ColumnDefinitions="*,12,200,12,Auto">
+              <StackPanel Grid.Column="0">
+                <TextBlock Classes="label" Text="{Binding Loc[Conn_Name]}" />
+                <Border Classes="field">
+                  <TextBox x:Name="NameBox" Theme="{StaticResource MongoTextBox}" Classes="bare" Text="{Binding Name}"
+                           PlaceholderText="mongo-inner-01" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Classes="label" Text="{Binding Loc[Conn_Group]}" />
+                <Border Classes="field">
+                  <AutoCompleteBox Classes="bare" ItemsSource="{Binding Groups}" Text="{Binding Group}"
+                                   FilterMode="Contains" PlaceholderText="{Binding Loc[Conn_GroupNone]}" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="4">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_Environment]}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" Height="28">
+                  <RadioButton Theme="{StaticResource MongoChip}" Classes="env dev" Height="24" GroupName="env" IsChecked="{Binding IsDevelopment}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Ellipse Classes="chipdot" />
+                      <TextBlock Text="{Binding Loc[Mongo_EnvDevelopment]}" />
+                    </StackPanel>
+                  </RadioButton>
+                  <RadioButton Theme="{StaticResource MongoChip}" Classes="env test" Height="24" GroupName="env" IsChecked="{Binding IsTesting}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Ellipse Classes="chipdot" />
+                      <TextBlock Text="{Binding Loc[Mongo_EnvTesting]}" />
+                    </StackPanel>
+                  </RadioButton>
+                  <RadioButton Theme="{StaticResource MongoChip}" Classes="env prod" Height="24" GroupName="env" IsChecked="{Binding IsProduction}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Ellipse Classes="chipdot" />
+                      <TextBlock Text="{Binding Loc[Mongo_EnvProduction]}" />
+                    </StackPanel>
+                  </RadioButton>
+                </StackPanel>
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+
+          <!-- 服务器 -->
+          <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="{Binding Loc[Mongo_Topology]}" />
+            <Border Classes="segments" Height="28" HorizontalAlignment="Left">
+              <Grid ColumnDefinitions="Auto,1,Auto,1,Auto">
+                <RadioButton Grid.Column="0" Theme="{StaticResource MongoSegment}" Padding="12,0" GroupName="topology"
+                             Content="{Binding Loc[Mongo_TopologyHosts]}" IsChecked="{Binding IsHostsTopology}" />
+                <RadioButton Grid.Column="2" Theme="{StaticResource MongoSegment}" Padding="12,0" GroupName="topology"
+                             Content="{Binding Loc[Mongo_TopologySrv]}" IsChecked="{Binding IsSrvTopology}" />
+                <RadioButton Grid.Column="4" Theme="{StaticResource MongoSegment}" Padding="12,0" GroupName="topology"
+                             Content="{Binding Loc[Mongo_TopologyUri]}" IsChecked="{Binding IsUriTopology}" />
+              </Grid>
+            </Border>
+
+            <!-- 主机列表:一行一台(第一台就是连接的主机),测试后标上发现的角色。 -->
+            <StackPanel Spacing="6" IsVisible="{Binding IsHostsTopology}">
+              <ItemsControl ItemsSource="{Binding Hosts}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="6" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ui:HostRowViewModel">
+                    <Grid ColumnDefinitions="14,*,8,90,Auto,28">
+                      <ui:Glyph Grid.Column="0" Key="Mongo.grip-vertical" Size="12" Brush="{DynamicResource VelaTextMuted}" VerticalAlignment="Center" />
+                      <Border Grid.Column="1" Classes="field">
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding Host}" PlaceholderText="10.20.3.21" />
+                      </Border>
+                      <Border Grid.Column="3" Classes="field">
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding Port}" PlaceholderText="27017" />
+                      </Border>
+                      <Border Grid.Column="4" Classes="role" Margin="8,0,0,0" IsVisible="{Binding HasBadge}"
+                              Classes.ok="{Binding IsBadgeOk}" Classes.info="{Binding IsBadgeInfo}"
+                              Classes.warn="{Binding IsBadgeWarn}" Classes.err="{Binding IsBadgeErr}">
+                        <TextBlock Text="{Binding Badge}" />
+                      </Border>
+                      <Button Grid.Column="5" Theme="{StaticResource MongoIconButton}" HorizontalAlignment="Right"
+                              Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}"
+                              ToolTip.Tip="{Binding $parent[UserControl].((ui:ConnectionDialogViewModel)DataContext).Loc[Conn_RemoveHost]}">
+                        <ui:Glyph Key="Mongo.minus" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                      </Button>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="14,0,0,0">
+                <Button Theme="{StaticResource MongoToolButton}" Padding="4,2" Command="{Binding AddHostCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <ui:Glyph Key="Mongo.plus" Size="11" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="ui small accent" Text="{Binding Loc[Conn_AddHost]}" />
+                  </StackPanel>
+                </Button>
+                <TextBlock Classes="ui small muted" VerticalAlignment="Center" Text="{Binding Loc[Mongo_HostsHint]}" />
+              </StackPanel>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsSrvTopology}">
+              <TextBlock Classes="label" Text="{Binding Loc[Mongo_HostSrv]}" />
+              <Border Classes="field">
+                <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding SrvHost}"
+                         PlaceholderText="cluster0.example.mongodb.net" />
+              </Border>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsUriTopology}">
+              <TextBlock Classes="label" Text="{Binding Loc[Mongo_HostUri]}" />
+              <Border Classes="field">
+                <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding Uri}"
+                         PlaceholderText="mongodb://10.20.3.21:27017,10.20.3.22:27017/shop?replicaSet=rs0" />
+              </Border>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,12,*,12,*" IsVisible="{Binding !IsUriTopology}">
+              <StackPanel Grid.Column="0">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_ReplicaSet]}" />
+                <Border Classes="field">
+                  <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding ReplicaSet}" PlaceholderText="rs0" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_Database]}" />
+                <Border Classes="field">
+                  <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding Database}" PlaceholderText="shop" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="4">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_ReadPreference]}" />
+                <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding ReadPreferences}" SelectedItem="{Binding ReadPreference}" />
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+
+          <!-- 认证 -->
+          <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="{Binding Loc[Conn_SecAuth]}" />
+            <Grid ColumnDefinitions="*,12,180">
+              <StackPanel Grid.Column="0">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_AuthMechanism]}" />
+                <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding MechanismChoices}" SelectedItem="{Binding SelectedMechanism}" />
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_AuthSource]}" />
+                <Border Classes="field">
+                  <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding AuthSource}" PlaceholderText="admin" />
+                </Border>
+              </StackPanel>
+            </Grid>
+            <Grid ColumnDefinitions="*,12,*">
+              <StackPanel Grid.Column="0">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_User]}" />
+                <Border Classes="field">
+                  <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding Username}"
+                           PlaceholderText="{Binding Loc[Conn_UserAnonymous]}" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Classes="label" Text="{Binding Loc[Mongo_Password]}" />
+                <Border Classes="field" Padding="8,0,4,0">
+                  <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBox x:Name="PasswordBox" Theme="{StaticResource MongoTextBox}" Classes="bare mono"
+                             PasswordChar="•" RevealPassword="{Binding PasswordVisible}"
+                             Text="{Binding Password}" PlaceholderText="{Binding PasswordPlaceholder}" />
+                    <Button Grid.Column="1" Theme="{StaticResource MongoIconButton}" Command="{Binding TogglePasswordCommand}">
+                      <Panel>
+                        <ui:Glyph Key="Mongo.eye" Size="12" Brush="{DynamicResource VelaTextTertiary}" IsVisible="{Binding !PasswordVisible}" />
+                        <ui:Glyph Key="Mongo.eye-off" Size="12" Brush="{DynamicResource VelaTextTertiary}" IsVisible="{Binding PasswordVisible}" />
+                      </Panel>
+                    </Button>
+                    <Border Grid.Column="2" Classes="tag ok" Margin="4,0,0,0" VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding Loc[Conn_KeychainTip]}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.key-round" Size="10" Brush="{DynamicResource VelaStatusConnected}" />
+                        <TextBlock Classes="ui small ok" Text="{Binding Loc[Conn_Keychain]}" />
+                      </StackPanel>
+                    </Border>
+                  </Grid>
+                </Border>
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+
+          <!-- 安全通道:SSH 跳板与 TLS 两张开关卡片 -->
+          <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="{Binding Loc[Mongo_SecChannel]}" />
+            <Grid ColumnDefinitions="*,12,*">
+              <Border Grid.Column="0" Classes="card" Padding="12,10" VerticalAlignment="Top">
+                <StackPanel Spacing="8">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <ui:Glyph Key="Mongo.network" Size="13" Brush="{DynamicResource VelaAccent}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="ui primary medium" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Loc[Mongo_JumpSession]}" />
+                    <ToggleButton x:Name="SshSwitch" Grid.Column="2" Theme="{StaticResource MongoSwitch}" IsChecked="{Binding SshEnabled}" IsEnabled="{Binding CanUseSsh}" />
+                  </Grid>
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding SshHint}" />
+                  <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch" IsVisible="{Binding SshEnabled}"
+                            ItemsSource="{Binding SshChoices}" SelectedItem="{Binding SshChoice}" />
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="2" Classes="card" Padding="12,10" VerticalAlignment="Top">
+                <StackPanel Spacing="8">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <ui:Glyph Key="Mongo.shield" Size="13" Brush="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="ui primary medium" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Loc[Mongo_Tls]}" />
+                    <ToggleButton Grid.Column="2" Theme="{StaticResource MongoSwitch}" IsChecked="{Binding TlsEnabled}" />
+                  </Grid>
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Mongo_TlsHint]}" />
+                  <StackPanel Spacing="6" IsVisible="{Binding TlsEnabled}">
+                    <Grid ColumnDefinitions="*,6,Auto">
+                      <Border Classes="field">
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding TlsCaFile}"
+                                 PlaceholderText="{Binding Loc[Mongo_TlsCaFile]}" />
+                      </Border>
+                      <Button Grid.Column="2" Theme="{StaticResource MongoOutlineButton}" Height="28" Padding="8,0"
+                              Command="{Binding BrowseCaCommand}" ToolTip.Tip="{Binding Loc[Mongo_TlsCaFile]}">
+                        <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+                      </Button>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,6,Auto">
+                      <Border Classes="field">
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding TlsCertFile}"
+                                 PlaceholderText="{Binding Loc[Mongo_TlsCertFile]}" />
+                      </Border>
+                      <Button Grid.Column="2" Theme="{StaticResource MongoOutlineButton}" Height="28" Padding="8,0"
+                              Command="{Binding BrowseCertCommand}" ToolTip.Tip="{Binding Loc[Mongo_TlsCertFile]}">
+                        <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+                      </Button>
+                    </Grid>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </StackPanel>
+
+          <!-- 高级:设计稿外的调优项(不决定连不连得上),默认收起。 -->
+          <StackPanel Spacing="8">
+            <Button Theme="{StaticResource MongoToolButton}" Padding="0" HorizontalAlignment="Left" Command="{Binding ToggleAdvancedCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <Panel>
+                  <ui:Glyph Key="Mongo.chevron-right" Size="11" Brush="{DynamicResource VelaTextMuted}" IsVisible="{Binding !ShowAdvanced}" />
+                  <ui:Glyph Key="Mongo.chevron-down" Size="11" Brush="{DynamicResource VelaTextMuted}" IsVisible="{Binding ShowAdvanced}" />
+                </Panel>
+                <TextBlock Classes="caption" Text="{Binding Loc[Conn_SecAdvanced]}" />
+              </StackPanel>
+            </Button>
+            <StackPanel Spacing="10" IsVisible="{Binding ShowAdvanced}">
+              <Grid ColumnDefinitions="*,12,*,12,*">
+                <StackPanel Grid.Column="0">
+                  <TextBlock Classes="label" Text="{Binding Loc[Mongo_AppName]}" />
+                  <Border Classes="field">
+                    <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding AppName}" />
+                  </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Classes="label" Text="{Binding Loc[Mongo_ConnectTimeout]}" />
+                  <Border Classes="field">
+                    <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding ConnectTimeout}" />
+                  </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                  <TextBlock Classes="label" Text="{Binding Loc[Mongo_MaxTimeMs]}" />
+                  <Border Classes="field">
+                    <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding MaxTimeMs}" />
+                  </Border>
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,12,*,12,*">
+                <StackPanel Grid.Column="0">
+                  <TextBlock Classes="label" Text="{Binding Loc[Mongo_PageSize]}" />
+                  <Border Classes="field">
+                    <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding PageSize}" />
+                  </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Classes="label" Text="{Binding Loc[Mongo_SampleSize]}" />
+                  <Border Classes="field">
+                    <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare mono" Text="{Binding SampleSize}" />
+                  </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                  <TextBlock Classes="label" Text="{Binding Loc[Mongo_EjsonMode]}" />
+                  <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch"
+                            ItemsSource="{Binding EjsonChoices}" SelectedItem="{Binding SelectedEjson}" />
+                </StackPanel>
+              </Grid>
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding DirectConnection}">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="ui primary" Text="{Binding Loc[Mongo_DirectConnection]}" />
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Mongo_DirectConnectionHint]}" />
+                </StackPanel>
+              </CheckBox>
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding ShowSystemDatabases}">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="ui primary" Text="{Binding Loc[Mongo_ShowSystemDatabases]}" />
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Mongo_ShowSystemDatabasesHint]}" />
+                </StackPanel>
+              </CheckBox>
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ══ 侧栏 ══════════════════════════════════════════════════════════════ -->
+      <Border Grid.Column="1" Background="{DynamicResource VelaBgSidebar}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <!-- 连接字符串 -->
+            <StackPanel Margin="14,12,14,14" Spacing="8">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <ui:Glyph Key="Mongo.link" Size="12" Brush="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="side" Margin="7,0,0,0" VerticalAlignment="Center" Text="{Binding Loc[Conn_Uri]}" />
+                <Button Grid.Column="2" Theme="{StaticResource MongoIconButton}" Command="{Binding CopyPreviewCommand}"
+                        ToolTip.Tip="{Binding Loc[Conn_CopyUri]}">
+                  <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                </Button>
+              </Grid>
+              <Border Classes="code" Padding="10,8">
+                <SelectableTextBlock x:Name="PreviewBlock" TextWrapping="Wrap" LineHeight="18"
+                                     FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize11}" />
+              </Border>
+              <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Conn_UriNote]}" />
+            </StackPanel>
+            <Border Height="1" Background="{DynamicResource VelaBorderPrimary}" />
+
+            <!-- 测试结果 -->
+            <StackPanel Margin="14,12,14,14" Spacing="10">
+              <Grid ColumnDefinitions="Auto,*">
+                <ui:Glyph Key="Mongo.activity" Size="12" Brush="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="side" Margin="7,0,0,0" VerticalAlignment="Center" Text="{Binding Loc[Conn_TestResults]}" />
+              </Grid>
+              <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Conn_TestResultsHint]}" IsVisible="{Binding ShowStepsHint}" />
+              <ItemsControl ItemsSource="{Binding Steps}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="9" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ui:ProbeStepViewModel">
+                    <Grid ColumnDefinitions="16,*,Auto">
+                      <Panel Grid.Column="0" Width="13" Height="13" VerticalAlignment="Top" Margin="0,1,0,0">
+                        <ui:Glyph Key="Mongo.circle-check" Size="13" Brush="{DynamicResource VelaStatusConnected}" IsVisible="{Binding IsPassed}" />
+                        <ui:Glyph Key="Mongo.triangle-alert" Size="13" Brush="{DynamicResource VelaWarning}" IsVisible="{Binding IsWarning}" />
+                        <ui:Glyph Key="Mongo.circle-x" Size="13" Brush="{DynamicResource VelaError}" IsVisible="{Binding IsFailed}" />
+                        <ui:CollectionSpinner Width="12" Height="12" IsVisible="{Binding IsRunning}" />
+                        <Ellipse Width="7" Height="7" Fill="{DynamicResource VelaTextMuted}" IsVisible="{Binding IsIdle}" />
+                      </Panel>
+                      <StackPanel Grid.Column="1" Margin="7,0,0,0" Spacing="2">
+                        <TextBlock Classes="ui primary" Text="{Binding Title}" />
+                        <TextBlock Classes="mono small tertiary wrap" Text="{Binding Detail}" IsVisible="{Binding HasDetail}"
+                                   Classes.warn="{Binding IsWarning}" Classes.err="{Binding IsFailed}" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Classes="mono small muted" Margin="8,0,0,0" Text="{Binding Elapsed}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <!-- 发现的成员 -->
+            <StackPanel IsVisible="{Binding HasMembers}">
+              <Border Height="1" Background="{DynamicResource VelaBorderPrimary}" />
+              <StackPanel Margin="14,12,14,14" Spacing="8">
+                <Grid ColumnDefinitions="Auto,*">
+                  <ui:Glyph Key="Mongo.network" Size="12" Brush="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Classes="side" Margin="7,0,0,0" VerticalAlignment="Center" Text="{Binding Loc[Conn_Members]}" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Members}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="7" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:ProbeEndpointViewModel">
+                      <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                        <Ellipse Classes="dot" VerticalAlignment="Center"
+                                 Classes.ok="{Binding IsOk}" Classes.info="{Binding IsInfo}" Classes.warn="{Binding IsWarn}" Classes.err="{Binding IsErr}" />
+                        <TextBlock Grid.Column="1" Classes="mono small primary" Margin="7,0,0,0" Text="{Binding Address}" />
+                        <TextBlock Grid.Column="2" Classes="mono small role" Margin="8,0,0,0" Text="{Binding Role}"
+                                   Classes.ok="{Binding IsOk}" Classes.info="{Binding IsInfo}" Classes.warn="{Binding IsWarn}" Classes.err="{Binding IsErr}" />
+                        <TextBlock Grid.Column="3" Classes="mono small muted" HorizontalAlignment="Right" Text="{Binding Detail}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </StackPanel>
+            <Border Height="1" Background="{DynamicResource VelaBorderPrimary}" />
+
+            <!-- 安全策略 -->
+            <StackPanel Margin="14,12,14,16" Spacing="10">
+              <TextBlock Classes="side" Text="{Binding Loc[Mongo_SecPolicy]}" />
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding ReadOnly}">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="ui primary" Text="{Binding Loc[Mongo_ReadOnly]}" />
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Mongo_ReadOnlyHint]}" />
+                </StackPanel>
+              </CheckBox>
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding ConfirmWrites}">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="ui primary" Text="{Binding Loc[Mongo_ConfirmWrites]}" />
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Mongo_ConfirmWritesHint]}" />
+                </StackPanel>
+              </CheckBox>
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding DisableDropDatabase}">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="ui primary" Text="{Binding Loc[Mongo_DisableDropDatabase]}" />
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Mongo_DisableDropDatabaseHint]}" />
+                </StackPanel>
+              </CheckBox>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- ══ 页脚 ══════════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}"
+                  IsEnabled="{Binding !IsSaving}" />
+          <Button x:Name="SaveButton" Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Conn_SaveOnly]}"
+                  Command="{Binding SaveCommand}" IsEnabled="{Binding !IsSaving}" />
+          <Button x:Name="SaveConnectButton" Theme="{StaticResource MongoPillButton}" Command="{Binding SaveAndConnectCommand}"
+                  IsEnabled="{Binding !IsSaving}" IsDefault="True">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.plug" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Conn_SaveConnect]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Button x:Name="TestButton" Theme="{StaticResource MongoOutlineButton}" Command="{Binding TestCommand}" IsEnabled="{Binding !IsProbing}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.activity" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+              <TextBlock Text="{Binding Loc[Conn_Test]}" />
+            </StackPanel>
+          </Button>
+          <ui:CollectionSpinner Width="14" Height="14" IsVisible="{Binding IsProbing}" />
+          <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding TestPassed}">
+            <ui:Glyph Key="Mongo.circle-check" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+            <TextBlock Classes="ui small ok" Text="{Binding TestSummary}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding TestFailed}">
+            <ui:Glyph Key="Mongo.circle-x" Size="12" Brush="{DynamicResource VelaError}" />
+            <TextBlock Classes="ui small err trim" MaxWidth="300" Text="{Binding TestSummary}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding HasError}">
+            <ui:Glyph Key="Mongo.triangle-alert" Size="12" Brush="{DynamicResource VelaError}" />
+            <TextBlock Classes="ui small err trim" MaxWidth="320" Text="{Binding Error}" />
+          </StackPanel>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

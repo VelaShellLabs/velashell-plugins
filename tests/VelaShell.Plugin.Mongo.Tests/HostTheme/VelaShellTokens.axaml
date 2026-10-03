@@ -1,0 +1,54 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <!-- Dracula 暗色:沿用官方 BG 阶梯 #191A21 < #21222C < #282A36 < #343746
+         < #44475A。终端区取 Dracula 正典背景 #282A36(ANSI 方案即按它调校),窗口铬色
+         压得更暗,弹窗/菜单浮在 #343746。 -->
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="VelaBgPage" Color="#191A21" />
+      <!-- 侧栏贴近终端平面(仅低一小档,镜像亮色 F8F4E4→FFFBEB 的微差),
+           原 #21222C 与终端 #282A36 落差过大,分界生硬。 -->
+      <SolidColorBrush x:Key="VelaBgSidebar" Color="#252734" />
+      <SolidColorBrush x:Key="VelaBgTerminal" Color="#282A36" />
+      <!-- SFTP 文件面板底(默认同终端色);单列出来是为了背景图功能可与终端分开调不透明度。 -->
+      <SolidColorBrush x:Key="VelaBgSftpPanel" Color="#282A36" />
+      <!-- Dock 文档容器底(默认同终端色);单列出来是为了背景图时它保持透明,
+           让终端 tint 只由 TerminalHost 单个 Border 承担,避免与之嵌套叠加成双层。 -->
+      <SolidColorBrush x:Key="VelaBgDockDocument" Color="#282A36" />
+      <SolidColorBrush x:Key="VelaBgSurface" Color="#343746" />
+      <!-- 内容区表头/工具条底(默认同 Surface 色);单列出来是为了背景图时可随内容半透明,
+           而 VelaBgSurface 仍需给弹层/对话框保持不透明。 -->
+      <SolidColorBrush x:Key="VelaBgContentHeader" Color="#343746" />
+      <SolidColorBrush x:Key="VelaBgActive" Color="#44475A" />
+      <SolidColorBrush x:Key="VelaBgHover" Color="#363948" />
+      <SolidColorBrush x:Key="VelaBgInput" Color="#282A36" />
+      <SolidColorBrush x:Key="VelaTabActiveBg" Color="#282A36" />
+      <SolidColorBrush x:Key="VelaTabInactiveBg" Color="#191A21" />
+      <!-- 遮罩两档:轻(点空白即关的浮层)与重(模态抽屉/对话框)。窗口铬色掺七成黑,
+           再按档位给不透明度 —— 派生规则在 ThemeTokenApplier,这里是编译期缺省。 -->
+      <SolidColorBrush x:Key="VelaScrim" Color="#9908080A" />
+      <SolidColorBrush x:Key="VelaScrimStrong" Color="#CC08080A" />
+    </ResourceDictionary>
+    <!-- Alucard 亮色(dracula/foot 官方亮色方案):奶油底 #FFFBEB 家族。 -->
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="VelaBgPage" Color="#F2EDDA" />
+      <SolidColorBrush x:Key="VelaBgSidebar" Color="#F8F4E4" />
+      <SolidColorBrush x:Key="VelaBgTerminal" Color="#FFFBEB" />
+      <SolidColorBrush x:Key="VelaBgSftpPanel" Color="#FFFBEB" />
+      <SolidColorBrush x:Key="VelaBgDockDocument" Color="#FFFBEB" />
+      <SolidColorBrush x:Key="VelaBgSurface" Color="#FFFBEB" />
+      <SolidColorBrush x:Key="VelaBgContentHeader" Color="#FFFBEB" />
+      <!-- 强调色 13% 的淡底。通道顺序是 #AARRGGBB:原先写成 #644AC922 会被解析成
+           「39% 不透明度的 #4AC922」——一片绿色,与 Alucard 的紫强调毫无关系。 -->
+      <SolidColorBrush x:Key="VelaBgActive" Color="#22644AC9" />
+      <SolidColorBrush x:Key="VelaBgHover" Color="#EDE7D0" />
+      <SolidColorBrush x:Key="VelaBgInput" Color="#F7F2DF" />
+      <SolidColorBrush x:Key="VelaTabActiveBg" Color="#FFFBEB" />
+      <SolidColorBrush x:Key="VelaTabInactiveBg" Color="#EBE5CC" />
+      <!-- 亮色主题的遮罩同样偏黑:铺一层浅遮罩读不出"下面那层不可点了",
+           而这正是遮罩唯一要传达的事。 -->
+      <SolidColorBrush x:Key="VelaScrim" Color="#99494741" />
+      <SolidColorBrush x:Key="VelaScrimStrong" Color="#CC494741" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -1,0 +1,33 @@
+{
+  "id": "velashell.mongo",
+  "version": "2.0.3",
+  "displayName": "MongoDB Workbench",
+  "description": "MongoDB 工作台:对象树、网格 / 树 / JSON 三视图与暂存区编辑、查询编辑器、聚合管道、Schema 分析、索引建议、GridFS、服务器监控、慢查询、用户与角色、导入导出与数据传输。从命令面板打开,连接由插件自己管理。",
+  "publisher": "velashell",
+  "entry": "VelaShell.Plugin.Mongo.dll",
+  "apiLevel": 2,
+  // 连接由插件自己管:SSH 跳板要经宿主打开一条已保存的 SSH 会话(ISessionsApi.OpenAsync)
+  // 再在上面开 TCP 流(IRemoteTunnelApi.OpenTcpAsync)。前者是 2.0.2 才有的面,apiLevel 表达不了这一档,
+  // 所以钉 minSdkVersion(同 DockerPanel)。
+  "minSdkVersion": "2.0.2",
+  "license": "MIT",
+  "homepage": "https://github.com/joesdu/VelaShell",
+  // 命令贡献:发现期就进命令面板(**不装载本程序集**),用户按下它才触发下面的惰性激活 ——
+  // 驱动有好几兆,不用 MongoDB 的用户一个字节都不该为它装载。
+  // 不贡献 workspaces:MongoDB 不出现在宿主的新建连接窗口与会话树里,连接列在工作台对象树的根上。
+  "contributes": {
+    "commands": [
+      {
+        "id": "velashell.mongo.open",
+        "title": "MongoDB: 打开 MongoDB 工作台",
+        "category": "MongoDB"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onCommand:velashell.mongo.open"
+  ]
+  // hostMode 必须是默认的 inProcess,两个理由都是硬的:
+  //   · 工作台要以文档标签页的身份进主窗口标签区,而原生控件无法跨进程嵌入;
+  //   · IRemoteTunnelApi 交出去的是一条活的 Stream,隔离进程里明确不可用。
+}

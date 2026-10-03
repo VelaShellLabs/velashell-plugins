@@ -1,0 +1,541 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.ObjectsTabView"
+             x:DataType="ui:ObjectsTabViewModel"
+             Background="{DynamicResource VelaBgTerminal}">
+
+  <!--
+    对象列表(设计稿 12):36px 工具行 → 32px 过滤芯片 → 左表右详情(320px)。
+    表格列宽照设计稿取整:名称 170 / 类型 90 / 文档数 86 / 平均大小 76 / 数据大小 82 / 存储大小 82 /
+    索引 44 / 索引大小 76 / 验证 余下,数字列右对齐。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里的 AvaloniaEdit TextEditor 需要它自己的控件模板;共享样式表还没带上它(DockerPanel 同样在视图里自带)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+    <!-- 选中行的名字改强调色(图标颜色由 ObjectItem.ShownIconToken 跟着变)。 -->
+    <Style Selector="TextBlock.name.sel">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+
+    <!-- 芯片里的计数:未选灰、选中随芯片变强调色。 -->
+    <Style Selector="RadioButton.chip TextBlock.count">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+    <Style Selector="RadioButton.chip:checked TextBlock.count">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="RadioButton.chip:checked TextBlock.label">
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+
+    <!-- 视图切换分段:图标随选中变强调色。 -->
+    <Style Selector="RadioButton.mode ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="RadioButton.mode:checked ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 列头按钮:没有悬停底色以外的装饰,高度贴满 26px。 -->
+    <Style Selector="Button.colbtn">
+      <Setter Property="Height" Value="26" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- 详情面板的小节 -->
+    <Style Selector="Border.sec">
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <!-- 详情面板底部的按钮:整行宽、内容靠左(设计稿 12 的 打开集合 / 设计集合 / 在管道构建器中打开)。 -->
+    <Style Selector="Button.wide">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="10,0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="36,32,*">
+
+    <!-- ══ 工具行 ══════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="0" Classes="toolrow">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Border Classes="input" Width="180" Height="24">
+            <DockPanel Margin="8,0,4,0">
+              <ui:Glyph DockPanel.Dock="Left" Key="Mongo.search" Size="12" Brush="{DynamicResource VelaTextMuted}" Margin="0,0,6,0" />
+              <TextBox x:Name="SearchBox" Theme="{StaticResource MongoTextBox}" BorderThickness="0" Background="Transparent"
+                       Padding="0" MinHeight="22" Height="22" FontFamily="{DynamicResource VelaUiFont}"
+                       PlaceholderText="{Binding Loc[Obj_Search]}" Text="{Binding SearchText}" />
+            </DockPanel>
+          </Border>
+          <Border Classes="segments">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <RadioButton Theme="{StaticResource MongoSegment}" Classes="mode" Width="28" Padding="0"
+                           ToolTip.Tip="{Binding Loc[Obj_ModeGrid]}" IsChecked="{Binding IsGridMode}">
+                <ui:Glyph Key="Mongo.layout-grid" Size="12" />
+              </RadioButton>
+              <RadioButton Theme="{StaticResource MongoSegment}" Classes="mode" Width="28" Padding="0"
+                           ToolTip.Tip="{Binding Loc[Obj_ModeList]}" IsChecked="{Binding IsListMode}">
+                <ui:Glyph Key="Mongo.list" Size="12" />
+              </RadioButton>
+              <RadioButton Theme="{StaticResource MongoSegment}" Classes="mode" Width="28" Padding="0"
+                           ToolTip.Tip="{Binding Loc[Obj_ModeDetails]}" IsChecked="{Binding IsDetailsMode}">
+                <ui:Glyph Key="Mongo.table-properties" Size="12" />
+              </RadioButton>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding OpenCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaInfo}" />
+              <TextBlock Text="{Binding Loc[Obj_OpenCollection]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding DesignCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.pencil-ruler" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Tree_Design]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="7,0" Command="{Binding NewCollectionCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Nav_NewCollection]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding DropCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[Common_Delete]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding EmptyCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.eraser" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Obj_Empty]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding CopyStructureCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Obj_CopyStructure]}" />
+            </StackPanel>
+          </Button>
+          <Rectangle Classes="vsep" Margin="0" />
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ImportCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Toolbar_Import]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExportCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.upload" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Toolbar_Export]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ 过滤芯片 ════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="1" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+            BorderThickness="0,0,0,1" Padding="10,0">
+      <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <RadioButton Theme="{StaticResource MongoChip}" Classes="chip" IsChecked="{Binding FilterAll}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Classes="label" Text="{Binding Loc[Common_All]}" VerticalAlignment="Center" />
+            <TextBlock Classes="count" FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize9}"
+                       VerticalAlignment="Center" Text="{Binding AllCount}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Theme="{StaticResource MongoChip}" Classes="chip" IsChecked="{Binding FilterCollections}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Classes="label" Text="{Binding Loc[Tree_Collections]}" VerticalAlignment="Center" />
+            <TextBlock Classes="count" FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize9}"
+                       VerticalAlignment="Center" Text="{Binding CollectionCount}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Theme="{StaticResource MongoChip}" Classes="chip" IsChecked="{Binding FilterViews}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Classes="label" Text="{Binding Loc[Tree_Views]}" VerticalAlignment="Center" />
+            <TextBlock Classes="count" FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize9}"
+                       VerticalAlignment="Center" Text="{Binding ViewCount}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Theme="{StaticResource MongoChip}" Classes="chip" IsChecked="{Binding FilterTimeSeries}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Classes="label" Text="{Binding Loc[Tag_TimeSeries]}" VerticalAlignment="Center" />
+            <TextBlock Classes="count" FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize9}"
+                       VerticalAlignment="Center" Text="{Binding TimeSeriesCount}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Theme="{StaticResource MongoChip}" Classes="chip" IsChecked="{Binding FilterGridFs}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Classes="label" Text="GridFS" VerticalAlignment="Center" />
+            <TextBlock Classes="count" FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize9}"
+                       VerticalAlignment="Center" Text="{Binding GridFsCount}" />
+          </StackPanel>
+        </RadioButton>
+      </StackPanel>
+    </Border>
+
+    <!-- ══ 表 + 详情面板 ══════════════════════════════════════════════════ -->
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="360" />
+        <ColumnDefinition Width="0" />
+        <ColumnDefinition Width="320" MinWidth="220" MaxWidth="640" />
+      </Grid.ColumnDefinitions>
+
+      <Panel Grid.Column="0">
+        <!-- 详情表 -->
+        <Grid RowDefinitions="26,*" IsVisible="{Binding IsDetailsMode}">
+          <Border Grid.Row="0" Classes="colheader">
+            <Grid ColumnDefinitions="170,90,86,76,82,82,44,76,*" ui:TableColumns.Header="objects">
+              <Button Grid.Column="0" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Left"
+                      Command="{Binding SortCommand}" CommandParameter="Name">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColName]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Name}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="1" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Left"
+                      Command="{Binding SortCommand}" CommandParameter="Type">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColType]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Type}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="2" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Right"
+                      Command="{Binding SortCommand}" CommandParameter="Count">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColCount]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Count}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="3" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Right"
+                      Command="{Binding SortCommand}" CommandParameter="AvgSize">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColAvgSize]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=AvgSize}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="4" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Right"
+                      Command="{Binding SortCommand}" CommandParameter="DataSize">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColDataSize]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=DataSize}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="5" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Right"
+                      Command="{Binding SortCommand}" CommandParameter="StorageSize">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColStorageSize]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=StorageSize}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="6" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Right"
+                      Command="{Binding SortCommand}" CommandParameter="Indexes">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColIndexes]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Indexes}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="7" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Right"
+                      Command="{Binding SortCommand}" CommandParameter="IndexSize">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColIndexSize]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=IndexSize}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="8" Theme="{StaticResource MongoToolButton}" Classes="colbtn" HorizontalContentAlignment="Left"
+                      Command="{Binding SortCommand}" CommandParameter="Validation">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_ColValidation]}" />
+                  <ui:Glyph Key="{Binding SortIconKey}" Size="10" Brush="{DynamicResource VelaAccent}"
+                            IsVisible="{Binding SortColumn, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Validation}" />
+                </StackPanel>
+              </Button>
+            </Grid>
+          </Border>
+
+          <ListBox x:Name="DetailsList" Grid.Row="1" Classes="rows" ItemsSource="{Binding Items}"
+                   SelectedItem="{Binding SelectedItem}" SelectionMode="Single">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="ui:ObjectItem">
+                <Border Classes="row" Background="Transparent">
+                  <Grid ColumnDefinitions="170,90,86,76,82,82,44,76,*" ui:TableColumns.Row="objects">
+                    <DockPanel Grid.Column="0" Margin="8,0">
+                      <ui:Glyph DockPanel.Dock="Left" Key="{Binding IconKey}" Size="13" Margin="0,0,7,0"
+                                Brush="{Binding ShownIconToken, Converter={x:Static ui:Converters.Token}}" />
+                      <TextBlock Classes="mono primary trim name" Classes.sel="{Binding IsSelected}" Text="{Binding DisplayName}" />
+                    </DockPanel>
+                    <Panel Grid.Column="1" Margin="8,0">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding TypeText}" IsVisible="{Binding !HasTag}" />
+                      <Border Classes="tag" HorizontalAlignment="Left" IsVisible="{Binding HasTag}"
+                              Classes.info="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=info}"
+                              Classes.warn="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=warn}"
+                              Classes.muted="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=muted}">
+                        <TextBlock Text="{Binding TypeText}" />
+                      </Border>
+                    </Panel>
+                    <TextBlock Grid.Column="2" Classes="mono small secondary" Classes.muted="{Binding IsView}" HorizontalAlignment="Right" Margin="0,0,8,0" Text="{Binding CountText}" />
+                    <TextBlock Grid.Column="3" Classes="mono small secondary" Classes.muted="{Binding IsView}" HorizontalAlignment="Right" Margin="0,0,8,0" Text="{Binding AvgSizeText}" />
+                    <TextBlock Grid.Column="4" Classes="mono small secondary" Classes.muted="{Binding IsView}" HorizontalAlignment="Right" Margin="0,0,8,0" Text="{Binding DataSizeText}" />
+                    <TextBlock Grid.Column="5" Classes="mono small secondary" Classes.muted="{Binding IsView}" HorizontalAlignment="Right" Margin="0,0,8,0" Text="{Binding StorageSizeText}" />
+                    <TextBlock Grid.Column="6" Classes="mono small secondary" Classes.muted="{Binding IsView}" HorizontalAlignment="Right" Margin="0,0,8,0" Text="{Binding IndexCountText}" />
+                    <TextBlock Grid.Column="7" Classes="mono small secondary" Classes.muted="{Binding IsView}" HorizontalAlignment="Right" Margin="0,0,8,0" Text="{Binding IndexSizeText}" />
+                    <Panel Grid.Column="8" Margin="8,0">
+                      <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding HasValidator}">
+                        <ui:Glyph Key="Mongo.shield-check" Size="11" Brush="{Binding ValidationToken, Converter={x:Static ui:Converters.Token}}" />
+                        <TextBlock Classes="mono tiny tertiary" Text="{Binding ValidationLevel}" />
+                      </StackPanel>
+                      <TextBlock Classes="ui small muted" Text="—" IsVisible="{Binding !HasValidator}" />
+                    </Panel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+
+        <!-- 大图标 -->
+        <ListBox x:Name="GridList" Classes="rows" Padding="8" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+                 SelectionMode="Single" IsVisible="{Binding IsGridMode}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="ui:ObjectItem">
+              <StackPanel Width="112" Height="96" Spacing="6" Margin="0,10,0,0" HorizontalAlignment="Center">
+                <Border Width="40" Height="40" CornerRadius="6" HorizontalAlignment="Center"
+                        Background="{Binding IconToken, Converter={x:Static ui:ObjectsConverters.DimToken}}">
+                  <ui:Glyph Key="{Binding IconKey}" Size="20" HorizontalAlignment="Center"
+                            Brush="{Binding ShownIconToken, Converter={x:Static ui:Converters.Token}}" />
+                </Border>
+                <TextBlock Classes="mono small primary trim name" Classes.sel="{Binding IsSelected}" Text="{Binding DisplayName}"
+                           HorizontalAlignment="Center" MaxWidth="104" />
+                <TextBlock Classes="ui tiny muted" Text="{Binding TypeText}" HorizontalAlignment="Center" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- 列表 -->
+        <ListBox x:Name="CompactList" Classes="rows" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+                 SelectionMode="Single" IsVisible="{Binding IsListMode}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="ui:ObjectItem">
+              <Border Classes="row" Background="Transparent" Padding="10,0">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Classes="mono small tertiary" Text="{Binding CountText}" Margin="12,0,0,0" />
+                  <ui:Glyph DockPanel.Dock="Left" Key="{Binding IconKey}" Size="13" Margin="0,0,8,0"
+                            Brush="{Binding ShownIconToken, Converter={x:Static ui:Converters.Token}}" />
+                  <Border DockPanel.Dock="Right" Classes="tag" IsVisible="{Binding HasTag}"
+                          Classes.info="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=info}"
+                          Classes.warn="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=warn}"
+                          Classes.muted="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=muted}">
+                    <TextBlock Text="{Binding TypeText}" />
+                  </Border>
+                  <TextBlock Classes="mono primary trim name" Classes.sel="{Binding IsSelected}" Text="{Binding DisplayName}" />
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- 空态:加载中 / 失败 / 无匹配 / 空库 -->
+        <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding ShowEmpty}"
+                    IsHitTestVisible="False">
+          <ui:Glyph Key="Mongo.inbox" Size="22" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+          <TextBlock Classes="ui muted" Text="{Binding EmptyText}" HorizontalAlignment="Center" />
+        </StackPanel>
+      </Panel>
+
+      <!-- ══ 详情面板 ══════════════════════════════════════════════════════ -->
+      <GridSplitter Grid.Column="1" Classes="vsplit" />
+      <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+              BorderThickness="1,0,0,0">
+        <Panel>
+          <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasSelection}">
+            <ui:Glyph Key="Mongo.mouse-pointer-click" Size="20" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+            <TextBlock Classes="ui small muted" Text="{Binding Loc[Obj_NoSelection]}" HorizontalAlignment="Center" />
+          </StackPanel>
+
+          <Grid RowDefinitions="Auto,30,*" IsVisible="{Binding HasSelection}">
+            <!-- 头:32px 图标方块 + 名字 + 种类 · 库 -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="14,14,14,10">
+              <Border Width="32" Height="32" CornerRadius="6"
+                      Background="{Binding DetailIconToken, Converter={x:Static ui:ObjectsConverters.DimToken}}">
+                <ui:Glyph Key="{Binding DetailIconKey}" Size="16" HorizontalAlignment="Center"
+                          Brush="{Binding DetailIconToken, Converter={x:Static ui:Converters.Token}}" />
+              </Border>
+              <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Classes="mono primary semibold trim" FontSize="{DynamicResource VelaFontSize13}" MaxWidth="240"
+                           Text="{Binding DetailTitle}" />
+                <TextBlock Classes="ui small tertiary" Text="{Binding DetailSubtitle}" />
+              </StackPanel>
+            </StackPanel>
+
+            <!-- 页签 -->
+            <Border Grid.Row="1" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="14,0">
+              <StackPanel Orientation="Horizontal" Spacing="16">
+                <RadioButton Theme="{StaticResource MongoUnderlineTab}" Content="{Binding Loc[Obj_TabGeneral]}" IsChecked="{Binding IsGeneralTab}" />
+                <RadioButton Theme="{StaticResource MongoUnderlineTab}" Content="DDL" IsChecked="{Binding IsDdlTab}" />
+                <RadioButton Theme="{StaticResource MongoUnderlineTab}" Content="{Binding Loc[Obj_TabPrivileges]}" IsChecked="{Binding IsPrivilegesTab}" />
+              </StackPanel>
+            </Border>
+
+            <!-- 常规 -->
+            <ScrollViewer Grid.Row="2" IsVisible="{Binding IsGeneralTab}" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
+                <ItemsControl ItemsSource="{Binding Sections}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:ObjectFactSection">
+                      <Border Classes="sec">
+                        <StackPanel Spacing="6">
+                          <TextBlock Classes="ui small muted medium" Text="{Binding Title}" Margin="0,0,0,2" />
+                          <ItemsControl ItemsSource="{Binding Facts}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Spacing="6" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="ui:ObjectFact">
+                                <DockPanel>
+                                  <TextBlock DockPanel.Dock="Right" Classes="mono small" TextAlignment="Right" MaxWidth="190"
+                                             TextTrimming="CharacterEllipsis" Text="{Binding Value}"
+                                             Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                                  <TextBlock Classes="ui small tertiary trim" Text="{Binding Label}" Margin="0,0,10,0" />
+                                </DockPanel>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Spacing="6" Margin="14,12">
+                  <Button Theme="{StaticResource MongoPillButton}" Classes="wide" Command="{Binding OpenCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaAccent}" />
+                      <TextBlock Text="{Binding OpenLabel}" />
+                    </StackPanel>
+                  </Button>
+                  <Button Theme="{StaticResource MongoOutlineButton}" Classes="wide" Command="{Binding DesignCommand}"
+                          IsVisible="{Binding CanDesign}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <ui:Glyph Key="Mongo.pencil-ruler" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                      <TextBlock Text="{Binding Loc[Tree_Design]}" />
+                    </StackPanel>
+                  </Button>
+                  <Button Theme="{StaticResource MongoOutlineButton}" Classes="wide" Command="{Binding PipelineCommand}"
+                          IsVisible="{Binding CanPipeline}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <ui:Glyph Key="Mongo.workflow" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                      <TextBlock Text="{Binding Loc[Tree_Pipeline]}" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
+
+            <!-- DDL -->
+            <Grid Grid.Row="2" RowDefinitions="*,Auto" IsVisible="{Binding IsDdlTab}">
+              <Border Grid.Row="0" Classes="code" Padding="0" Margin="14,12,14,8">
+                <ui:CodeEditor Text="{Binding DdlText, Mode=OneWay}" Language="Shell" IsReadOnly="True" WordWrap="True" FontSize="{DynamicResource VelaFontSize11}"
+                               ShowLineNumbers="False" HighlightCurrentLine="False" />
+              </Border>
+              <DockPanel Grid.Row="1" Margin="14,0,14,12">
+                <Button DockPanel.Dock="Right" Theme="{StaticResource MongoOutlineButton}" Height="24" Padding="10,0"
+                        Command="{Binding CopyDdlCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <ui:Glyph Key="Mongo.copy" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                    <TextBlock Text="{Binding Loc[Common_Copy]}" />
+                  </StackPanel>
+                </Button>
+                <TextBlock Classes="ui small muted wrap" Text="{Binding Loc[Obj_DdlHint]}" Margin="0,0,10,0" />
+              </DockPanel>
+            </Grid>
+
+            <!-- 权限 -->
+            <ScrollViewer Grid.Row="2" IsVisible="{Binding IsPrivilegesTab}" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Spacing="12" Margin="14,12">
+                <Border Classes="notice" Padding="10,8" IsVisible="{Binding PrivilegeNotice, Converter={x:Static ui:Converters.NotEmpty}}">
+                  <DockPanel>
+                    <ui:Glyph DockPanel.Dock="Left" Key="Mongo.info" Size="12" Brush="{DynamicResource VelaInfo}" Margin="0,1,8,0"
+                              VerticalAlignment="Top" />
+                    <TextBlock Classes="ui small secondary wrap" Text="{Binding PrivilegeNotice}" />
+                  </DockPanel>
+                </Border>
+                <StackPanel Spacing="6" IsVisible="{Binding PrivilegeUser, Converter={x:Static ui:Converters.NotEmpty}}">
+                  <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Obj_PrivUser]}" />
+                  <TextBlock Classes="mono primary" Text="{Binding PrivilegeUser}" />
+                </StackPanel>
+                <StackPanel Spacing="6" IsVisible="{Binding PrivilegeRoles.Count, Converter={x:Static ui:Converters.Positive}}">
+                  <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Obj_PrivRoles]}" />
+                  <ItemsControl ItemsSource="{Binding PrivilegeRoles}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="x:String">
+                        <Border Classes="tag mono info">
+                          <TextBlock Text="{Binding}" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+                <StackPanel Spacing="6" IsVisible="{Binding PrivilegeActions.Count, Converter={x:Static ui:Converters.Positive}}">
+                  <TextBlock Classes="ui small muted medium" Text="{Binding PrivilegeActionsTitle}" />
+                  <ItemsControl ItemsSource="{Binding PrivilegeActions}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="ui:ObjectPrivilege">
+                        <Border Classes="tag mono" Classes.muted="{Binding !IsWrite}" Classes.warn="{Binding IsWrite}">
+                          <TextBlock Text="{Binding Name}" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Panel>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

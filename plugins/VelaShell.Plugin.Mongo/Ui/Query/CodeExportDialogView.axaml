@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.CodeExportDialogView"
+             x:DataType="ui:CodeExportDialogViewModel">
+
+  <!-- 导出为代码:顶部语言分段,中间只读代码框,底栏复制 / 关闭。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="44,*,48">
+    <Border Grid.Row="0" Padding="14,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Classes="ui tiny muted" Text="{Binding Loc[Query_ExportCodeHint]}" />
+        <Border Classes="segments" HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="1">
+            <RadioButton Theme="{StaticResource MongoSegment}" Content="mongosh"
+                         IsChecked="{Binding Target, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Mongosh}" />
+            <RadioButton Theme="{StaticResource MongoSegment}" Content="C#"
+                         IsChecked="{Binding Target, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=CSharp}" />
+            <RadioButton Theme="{StaticResource MongoSegment}" Content="Python"
+                         IsChecked="{Binding Target, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Python}" />
+            <RadioButton Theme="{StaticResource MongoSegment}" Content="Node.js"
+                         IsChecked="{Binding Target, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=NodeJs}" />
+            <RadioButton Theme="{StaticResource MongoSegment}" Content="Java"
+                         IsChecked="{Binding Target, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Java}" />
+          </StackPanel>
+        </Border>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="1" Background="{DynamicResource VelaBgTerminal}">
+      <ui:CodeEditor Text="{Binding Code, Mode=OneWay}" Language="Shell" IsReadOnly="True" HighlightCurrentLine="False" />
+    </Border>
+
+    <Border Grid.Row="2" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Close]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Command="{Binding CopyCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding Loc[Common_Copy]}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

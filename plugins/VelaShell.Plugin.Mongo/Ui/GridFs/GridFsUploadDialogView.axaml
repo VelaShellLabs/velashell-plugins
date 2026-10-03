@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.GridFsUploadDialogView"
+             x:DataType="ui:GridFsUploadDialogViewModel">
+
+  <!-- 「上传到 GridFS」:目标目录 → 文件清单 → metadata 模板 → 上传。外壳画标题栏,这里只画内容与底栏。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- metadata 框里的 CodeEditor 是 AvaloniaEdit 的 TextEditor:它的控件模板在这份样式里,共享样式表没带。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <Style Selector="Border.input.err">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <StackPanel Grid.Row="0" Margin="16,14" Spacing="12">
+      <StackPanel Spacing="6">
+        <TextBlock Classes="ui small secondary" Text="{Binding Loc[Fs_TargetDir]}" />
+        <TextBox x:Name="TargetBox" Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding Target}" PlaceholderText="/" />
+      </StackPanel>
+
+      <StackPanel Spacing="4">
+        <TextBlock Classes="ui small secondary" Text="{Binding Summary}" />
+        <ItemsControl ItemsSource="{Binding Preview}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <StackPanel Orientation="Horizontal" Spacing="6" Height="16">
+                <ui:Glyph Key="Mongo.file-up" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+                <TextBlock Classes="mono small tertiary trim" Text="{Binding}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="ui small muted" Text="{Binding More}" IsVisible="{Binding More, Converter={x:Static ui:Converters.NotEmpty}}" />
+      </StackPanel>
+
+      <StackPanel Spacing="6">
+        <TextBlock Classes="ui small secondary" Text="{Binding Loc[Fs_UploadMetadata]}" />
+        <Border Classes="input" Height="120" Classes.err="{Binding HasError}">
+          <ui:CodeEditor Text="{Binding MetadataText}" Language="Shell" ShowLineNumbers="False" HighlightCurrentLine="False"
+                         FontSize="{DynamicResource VelaFontSize11}" />
+        </Border>
+        <TextBlock Classes="ui small err wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      </StackPanel>
+
+      <TextBlock Classes="ui small muted wrap" Text="{Binding Loc[Fs_UploadHint]}" />
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Command="{Binding ConfirmCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.upload" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding ConfirmLabel}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

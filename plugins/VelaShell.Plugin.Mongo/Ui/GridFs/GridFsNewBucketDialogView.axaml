@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.GridFsNewBucketDialogView"
+             x:DataType="ui:GridFsNewBucketDialogViewModel">
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <StackPanel Grid.Row="0" Margin="16,14" Spacing="8">
+      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Fs_BucketName]}" />
+      <TextBox x:Name="NameBox" Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding Name}" PlaceholderText="images"
+               Classes.invalid="{Binding HasError}" />
+      <TextBlock Classes="ui small err wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+
+      <TextBlock Classes="ui small tertiary" Margin="0,6,0,0" Text="{Binding Loc[Fs_BucketWillCreate]}" />
+      <Border Classes="code">
+        <StackPanel Spacing="6">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Classes="ui small muted" Text="{Binding Loc[Fs_BucketIndexFiles]}" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.table-2" Size="12" Brush="{DynamicResource VelaInfo}" />
+              <TextBlock Classes="mono primary" Text="{Binding FilesName}" />
+            </StackPanel>
+          </DockPanel>
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Classes="ui small muted" Text="{Binding Loc[Fs_BucketIndexChunks]}" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.table-2" Size="12" Brush="{DynamicResource VelaInfo}" />
+              <TextBlock Classes="mono primary" Text="{Binding ChunksName}" />
+            </StackPanel>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Command="{Binding CreateCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.folder-plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding Loc[Fs_CreateBucket]}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.CompletionPopupView"
+             x:DataType="ui:CompletionSession">
+
+  <!-- 补全弹层(设计稿 03 / 02):左列候选(图标 + 文字 + 右侧类别,值建议多一根比例条),
+       右栏是选中项的详情(说明、语法、上游字段、文档链接)。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Border Background="{DynamicResource VelaBgSurface}" BorderBrush="{DynamicResource VelaBorderSecondary}"
+          BorderThickness="1" CornerRadius="6" BoxShadow="{DynamicResource VelaShadowWindow}" ClipToBounds="True">
+    <Grid ColumnDefinitions="300,Auto">
+      <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0" Padding="10,6" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1"
+                IsVisible="{Binding HasHeader}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.wand-sparkles" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Classes="ui small secondary" Text="{Binding Set.Header}" />
+          </StackPanel>
+        </Border>
+        <ListBox x:Name="List" Grid.Row="1" Classes="rows" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}"
+                 MaxHeight="220" Padding="4" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.Styles>
+            <Style Selector="ListBoxItem">
+              <Setter Property="CornerRadius" Value="3" />
+            </Style>
+          </ListBox.Styles>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="ui:CompletionItem">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" Height="24" Margin="6,0">
+                <ui:Glyph Grid.Column="0" Key="{Binding IconKey}" Size="13" Margin="0,0,8,0"
+                          Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                <TextBlock Grid.Column="1" Classes="mono primary trim" Text="{Binding Label}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" IsVisible="{Binding HasRatio}">
+                  <Border Width="80" Height="3" CornerRadius="2" Background="{DynamicResource VelaBgActive}" VerticalAlignment="Center">
+                    <Border Width="{Binding RatioWidth}" HorizontalAlignment="Left" CornerRadius="2" Background="{DynamicResource VelaAccent}" />
+                  </Border>
+                  <TextBlock Classes="mono tiny muted" Text="{Binding RatioText}" MinWidth="26" TextAlignment="Right" />
+                </StackPanel>
+                <TextBlock Grid.Column="3" Classes="ui tiny muted" Margin="8,0,0,0" Text="{Binding Category}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <Border Grid.Row="2" Padding="10,5" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0"
+                IsVisible="{Binding HasFooter}">
+          <TextBlock Classes="ui tiny muted" Text="{Binding Set.Footer}" />
+        </Border>
+      </Grid>
+
+      <Border Grid.Column="1" Width="280" Padding="12,10" IsVisible="{Binding ShowDetail}"
+              Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Classes="mono primary semibold" FontSize="{DynamicResource VelaFontSize12}" Text="{Binding Selected.Label}" />
+            <Border Classes="tag" IsVisible="{Binding Selected.Badge, Converter={x:Static ui:Converters.NotEmpty}}">
+              <TextBlock Text="{Binding Selected.Badge}" />
+            </Border>
+          </StackPanel>
+          <TextBlock Classes="ui small secondary wrap" Text="{Binding Selected.Description}"
+                     IsVisible="{Binding Selected.Description, Converter={x:Static ui:Converters.NotEmpty}}" />
+          <Border Classes="code" IsVisible="{Binding Selected.Syntax, Converter={x:Static ui:Converters.NotEmpty}}">
+            <TextBlock Classes="secondary" Text="{Binding Selected.Syntax}" TextWrapping="Wrap" />
+          </Border>
+          <StackPanel Spacing="6" IsVisible="{Binding Selected.ChipsTitle, Converter={x:Static ui:Converters.NotEmpty}}">
+            <TextBlock Classes="ui tiny tertiary" Text="{Binding Selected.ChipsTitle}" />
+            <ItemsControl ItemsSource="{Binding Selected.Chips}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <Border Classes="tag warn mono">
+                    <TextBlock Text="{Binding}" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <Button x:Name="DocsLink" Theme="{StaticResource MongoToolButton}" Padding="0" HorizontalAlignment="Left"
+                  IsVisible="{Binding Selected.DocsUrl, Converter={x:Static ui:Converters.NotEmpty}}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Classes="ui small info" Text="MongoDB Docs" />
+              <ui:Glyph Key="Mongo.external-link" Size="11" Brush="{DynamicResource VelaInfo}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

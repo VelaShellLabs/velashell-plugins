@@ -10,6 +10,7 @@ SDK 契约与开发文档在工具链仓库
 | 目录 | id | 随包分发 | 装载模式 | 说明 |
 | --- | --- | --- | --- | --- |
 | [VelaShell.Plugin.DockerPanel](VelaShell.Plugin.DockerPanel/) | `velashell.dockerpanel` | 是 | 进程内 | 远端 Docker 管理面板:容器 / 镜像 / 卷 / 网络 / Compose,含实时统计、日志、容器内文件编辑与内置终端 |
+| [VelaShell.Plugin.Mongo](VelaShell.Plugin.Mongo/) | `velashell.mongo` | 是 | 进程内 | MongoDB 工作台:Navicat 式对象树与工具栏、网格 / 树 / JSON 三视图与暂存区编辑、查询编辑器与可视化执行计划、聚合管道构建器、Schema 分析与验证规则、索引建议、GridFS、服务器监控、慢查询、用户与角色、导入 / 导出 / 数据传输 |
 | [VelaShell.Plugin.Redis](VelaShell.Plugin.Redis/) | `velashell.redis` | 是 | 进程内 | Redis 客户端:键浏览、类型化查看与编辑、命令执行 |
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
 | [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
@@ -17,7 +18,7 @@ SDK 契约与开发文档在工具链仓库
 
 装载模式由 `plugin.json` 的 `hostMode` 决定(`isolated` / `inProcess`,默认进程内)。
 隔离插件跑在独立的 `VelaShell.PluginHost` 进程里(实现在主仓库),崩溃不波及宿主;
-S3 与 Redis 因为**协议能力只在进程内可用**必须进程内装载 —— 协议是宿主反向调用插件的
+S3 与 Redis 因为**协议能力只在进程内可用**必须进程内装载(MongoDB 与 Docker 面板同理:面板要把原生控件挂进主窗口的文档区) —— 协议是宿主反向调用插件的
 高频通道,隔离进程的 RPC 只承载插件→宿主方向(清单校验会直接拒绝 protocols + isolated 的组合);
 Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原生 Avalonia 控件挂进主窗口标签区
 (控件无法跨进程嵌入),而且 `IRemoteTunnelApi` 交给它的是一条**活的 `Stream`**,
@@ -72,9 +73,9 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 ### 例外:确实需要某个 `Avalonia.*` 包时,`ExcludeAssets="runtime"` 必须自己写
 
 上一段那条"不要写 `ExcludeAssets`"的前提是**插件不直接引 Avalonia 包** ——
-前四个插件都不引,SDK 包处理它自己那条引用就够了。
+Redis、S3、Telnet、串口这四个插件都不引,SDK 包处理它自己那条引用就够了。
 
-DockerPanel 要 `Avalonia.AvaloniaEdit` 做语法高亮,于是撞上了另一面:
+DockerPanel 与 MongoDB 都要 `Avalonia.AvaloniaEdit`(compose.yaml 高亮;查询编辑器 / JSON 视图 / 管道阶段的高亮、补全与诊断),于是撞上了另一面:
 `VelaExcludeSharedRuntimeAssets` 排得掉 `Avalonia.AvaloniaEdit` 自己的运行时资产,
 **排不掉它带进来的传递依赖**。去掉那条 `ExcludeAssets`,
 `AvaloniaEdit → Avalonia → MicroCom.Runtime` 里的 `MicroCom.Runtime.dll`
@@ -98,7 +99,7 @@ CI 那条泄漏体检原本也只认 `Avalonia*` 与 `VelaShell.PluginSdk.dll`�
 "随包分发"由 csproj 的 `<VelaPluginShip>` 控制(默认 `true`)。设成 `false` 的插件
 本机构建仍会镜像到 `artifacts/plugins/`(以及 `VELASHELL_DEV_APP_DIR` 指定的应用目录),
 装载起来验证插件系统没问题,但它不会被收进分发布局 —— 给开发者读的范例用这一档。
-(当前五个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
+(当前六个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
 
 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`
 的插件收成安装包 `plugins/` 那一层的布局:它不再作为 Release 资产上传,只在 CI 与发布流水线里

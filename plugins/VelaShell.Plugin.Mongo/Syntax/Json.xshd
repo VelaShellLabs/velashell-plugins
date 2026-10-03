@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  扩展 JSON(Relaxed / Canonical)的着色。键名是带引号的字符串,所以先按"字符串 + 冒号"认键,
+  其余字符串才算值。颜色同 Mongosh.xshd,由 CodeEditor.Role 映射到宿主令牌。
+-->
+<SyntaxDefinition name="Mongo.Json" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Key" />
+  <Color name="String" />
+  <Color name="Number" />
+  <Color name="Bool" />
+  <Color name="Null" />
+  <Color name="Operator" />
+
+  <RuleSet ignoreCase="false">
+    <Rule color="Operator">"\$[A-Za-z]\w*"(?=\s*:)</Rule>
+    <Rule color="Key">"(?:[^"\\]|\\.)*"(?=\s*:)</Rule>
+    <Span color="String">
+      <Begin>"</Begin>
+      <End>"</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+    <Keywords color="Bool">
+      <Word>true</Word>
+      <Word>false</Word>
+    </Keywords>
+    <Keywords color="Null">
+      <Word>null</Word>
+    </Keywords>
+    <Rule color="Number">-?\b\d+(\.\d+)?([eE][+-]?\d+)?\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

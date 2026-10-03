@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MSTest.TestAdapter" />
+    <PackageReference Include="MSTest.TestFramework" />
+    <PackageReference Include="VelaShell.PluginSdk.Testing" />
+    <!-- SDK 包把 Avalonia 设成 ExcludeAssets="runtime"(运行时由宿主共享),这份排除会沿
+         ProjectReference 传到这里 —— 测试宿主要扮演装载方,得显式提供运行时那份。 -->
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Headless" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <!-- 真渲染:截图测试要拿到位图(设计稿逐屏比对),UseHeadlessDrawing 给不出。 -->
+    <PackageReference Include="Avalonia.Skia" />
+    <!-- AvaloniaEdit 同理:插件只在编译期引它(运行时回落宿主那份),测试里得自己带。 -->
+    <PackageReference Include="Avalonia.AvaloniaEdit" />
+    <!-- 种数据与清理用同一个驱动。 -->
+    <PackageReference Include="MongoDB.Driver" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 宿主 VelaDark 的令牌(VelaShellTokens / VelaTokens / DarkTheme 三份原样拷贝,
+         只把字体 URI 换成系统字体名 —— 测试里没有宿主注册的字体集合)。
+         给截图测试用:没有令牌的话所有 DynamicResource 落空,截出来是一张透明图。 -->
+    <AvaloniaResource Include="HostTheme/*.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\plugins\VelaShell.Plugin.Mongo\VelaShell.Plugin.Mongo.csproj" />
+  </ItemGroup>
+
+</Project>

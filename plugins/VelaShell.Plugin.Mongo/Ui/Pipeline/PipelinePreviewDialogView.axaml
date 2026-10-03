@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.PipelinePreviewDialogView"
+             x:DataType="ui:PipelinePreviewDialogViewModel">
+
+  <!-- 阶段输出预览的"看全部":只读编辑器逐份排开(mongosh 写法),底栏复制 / 关闭。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里的 AvaloniaEdit 需要它自己的控件模板;插件不该假定宿主的资源里有它(与 DockerPanel 同理)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <Border Grid.Row="0" Background="{DynamicResource VelaBgInput}">
+      <ui:CodeEditor Text="{Binding Text, Mode=OneWay}" Language="Shell" IsReadOnly="True"
+                     HighlightCurrentLine="False" FontSize="{DynamicResource VelaFontSize11}" />
+    </Border>
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Close]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Command="{Binding CopyCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding Loc[Pipe_Copy]}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

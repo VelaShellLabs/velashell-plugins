@@ -1,0 +1,83 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DocTreeView"
+             x:DataType="ui:CollectionTabViewModel">
+
+  <!--
+    树视图(设计稿 13):键 380 / 值 * / 类型 130 三列;文档行 VelaBgSidebar 底,字段行按层级缩进 18px;
+    改过的字段橙底 + 左 2px 橙条 + 「原值 2」,选中行左 2px 强调条。摊平成一张虚拟化列表。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Collection/CollectionStyles.axaml" />
+  </UserControl.Styles>
+
+  <UserControl.DataTemplates>
+    <!-- 值的内联编辑器;日期字段右边多一个日历按钮(DatePickFlyout)。 -->
+    <DataTemplate DataType="ui:InlineValueEditor">
+      <Border Classes="fieldedit" Classes.bad="{Binding HasError}" ToolTip.Tip="{Binding Error}" Margin="0,0,10,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <ui:GridEditBox Grid.Column="0" Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding Text}"
+                          Foreground="{DynamicResource VelaTextPrimary}" />
+          <Button Grid.Column="1" Theme="{StaticResource MongoIconButton}" Width="16" Height="16" Margin="2,0,-4,0" Classes="datepick"
+                  IsVisible="{Binding IsDate}" Focusable="False">
+            <ui:Glyph Key="Mongo.calendar" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
+      </Border>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <Grid RowDefinitions="26,*" Background="{DynamicResource VelaBgTerminal}">
+    <Border Grid.Row="0" Classes="colheader">
+      <Grid ColumnDefinitions="380,*,130" ui:TableColumns.Header="doctree">
+        <Border Grid.Column="0" Classes="hcell" Padding="10,0">
+          <TextBlock Classes="ui small muted" Text="{Binding Loc[Cw_TreeKey]}" />
+        </Border>
+        <Border Grid.Column="1" Classes="hcell" Padding="10,0">
+          <TextBlock Classes="ui small muted" Text="{Binding Loc[Cw_TreeValue]}" />
+        </Border>
+        <Border Grid.Column="2" Classes="hcell" Padding="10,0">
+          <TextBlock Classes="ui small muted" Text="{Binding Loc[Cw_TreeType]}" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <ListBox x:Name="TreeList" Grid.Row="1" Classes="rows" ItemsSource="{Binding TreeRows}" SelectedItem="{Binding SelectedTreeRow}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="ui:DocTreeRow">
+          <Border Classes="trow" Classes.doc="{Binding IsDocument}" Classes.mod="{Binding IsModified}">
+            <Grid ColumnDefinitions="380,*,130" ui:TableColumns.Row="doctree">
+              <Border Grid.Column="0" Classes="tkey" Padding="{Binding Indent, Converter={x:Static ui:Converters.LeftPadding}}">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <Panel Width="11" Height="11" Background="Transparent" Classes="chevron" Cursor="Hand">
+                    <ui:Glyph Key="{Binding Chevron}" Size="11" Brush="{DynamicResource VelaTextMuted}" IsVisible="{Binding IsExpandable}" />
+                  </Panel>
+                  <TextBlock Classes="mono small muted" Text="{Binding NumberText}" IsVisible="{Binding IsDocument}" />
+                  <TextBlock Classes="mono key" Text="{Binding Key}" IsVisible="{Binding !IsDocument}" />
+                  <TextBlock Classes="mono medium" Text="{Binding Key}" Foreground="{DynamicResource VelaShellBlue}"
+                             IsVisible="{Binding IsDocument}" />
+                </StackPanel>
+              </Border>
+              <Panel Grid.Column="1" Margin="10,0,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" IsVisible="{Binding !IsEditing}">
+                  <TextBlock Classes="mono trim" Classes.medium="{Binding IsModified}" Text="{Binding ValueText}" MaxWidth="560"
+                             Foreground="{Binding ValueToken, Converter={x:Static ui:Converters.Token}}" />
+                  <TextBlock Classes="ui small muted" Text="{Binding OriginalText}" IsVisible="{Binding HasOriginal}" />
+                </StackPanel>
+                <ContentControl Content="{Binding Editor}" IsVisible="{Binding IsEditing}" VerticalAlignment="Center" />
+              </Panel>
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="10,0" VerticalAlignment="Center">
+                <Rectangle Width="7" Height="7" RadiusX="2" RadiusY="2" VerticalAlignment="Center"
+                           Fill="{Binding TypeToken, Converter={x:Static ui:Converters.Token}}" />
+                <TextBlock Classes="mono small tertiary" Text="{Binding TypeName}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </Grid>
+</UserControl>

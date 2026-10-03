@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.HintCompareDialogView"
+             x:DataType="ui:HintCompareDialogViewModel">
+
+  <!-- 用 hint 对比:选索引 → 对比 → 两列逐项比较(更好的一边绿字)。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,48">
+    <Border Grid.Row="0" Padding="16,12" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Theme="{StaticResource MongoPillButton}" Height="26" Padding="12,0" Command="{Binding CompareCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.git-compare" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding Loc[Query_HintRun]}" />
+          </StackPanel>
+        </Button>
+        <TextBlock DockPanel.Dock="Left" Classes="ui small secondary" Margin="0,0,10,0" Text="{Binding Loc[Query_HintIndex]}" />
+        <ComboBox Classes="compact" Margin="0,0,10,0" HorizontalAlignment="Stretch"
+                  ItemsSource="{Binding Indexes}" SelectedItem="{Binding SelectedIndex}" />
+      </DockPanel>
+    </Border>
+
+    <StackPanel Grid.Row="1" Margin="16,12,16,14" Spacing="0">
+      <Grid ColumnDefinitions="120,*,*" ui:TableColumns.Header="hints" Height="26">
+        <TextBlock Grid.Column="1" Classes="ui small tertiary trim" Text="{Binding CurrentTitle}" />
+        <TextBlock Grid.Column="2" Classes="ui small tertiary trim" Margin="12,0,0,0" Text="{Binding HintedTitle}" />
+      </Grid>
+      <ItemsControl ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="ui:HintCompareRow">
+            <Border Classes="row">
+              <Grid ColumnDefinitions="120,*,*" ui:TableColumns.Row="hints">
+                <TextBlock Grid.Column="0" Classes="ui small muted" Text="{Binding Label}" />
+                <TextBlock Grid.Column="1" Classes="mono small primary trim" Classes.ok="{Binding CurrentBetter}" Text="{Binding Current}" />
+                <TextBlock Grid.Column="2" Classes="mono small primary trim" Classes.ok="{Binding HintedBetter}" Margin="12,0,0,0" Text="{Binding Hinted}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <Border Classes="notice err" Margin="0,10,0,0" IsVisible="{Binding HasError}">
+        <TextBlock Classes="ui small err wrap" Text="{Binding Error}" />
+      </Border>
+      <ProgressBar Classes="thin" IsIndeterminate="True" Margin="0,10,0,0" IsVisible="{Binding IsBusy}" />
+    </StackPanel>
+
+    <Border Grid.Row="2" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Close]}" Command="{Binding CloseCommand}" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

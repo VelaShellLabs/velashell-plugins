@@ -1,0 +1,132 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="using:VelaShell.Plugin.Mongo.Ui">
+
+  <!--
+    集合设计各子页共用的局部版式。只放 MongoStyles 里没有、又在这几页反复出现的几样:
+    子页条的页签、属性小标签(10px,比通用 tag 的 9px 大一号 —— 设计稿 07 的属性列就是这么写的)、
+    下拉选择框的外观(VelaBgInput 底 + 描边 + 右侧 chevron)、右栏面板头、链接样式按钮。
+    颜色一律宿主令牌。
+  -->
+
+  <!-- ══ 子页条:下划线页签;未选中 VelaTextSecondary、选中主文字 + 强调色图标 ══ -->
+  <Style Selector="RadioButton.subtab">
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+  </Style>
+  <Style Selector="RadioButton.subtab:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+  </Style>
+  <Style Selector="RadioButton.subtab:checked">
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+  </Style>
+  <Style Selector="RadioButton.subtab ui|Glyph">
+    <Setter Property="Brush" Value="{DynamicResource VelaTextTertiary}" />
+  </Style>
+  <Style Selector="RadioButton.subtab:checked ui|Glyph">
+    <Setter Property="Brush" Value="{DynamicResource VelaAccent}" />
+  </Style>
+  <Style Selector="RadioButton.subtab TextBlock.label">
+    <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="RadioButton.subtab:checked TextBlock.label">
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+
+  <!-- ══ 属性小标签(设计稿 07:18 高、圆角 2、10px Medium) ══ -->
+  <Style Selector="Border.chip">
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="6,0" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+  </Style>
+  <Style Selector="Border.chip > TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.chip.muted"><Setter Property="Background" Value="{DynamicResource VelaBgActive}" /></Style>
+  <Style Selector="Border.chip.muted > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" /></Style>
+  <Style Selector="Border.chip.info"><Setter Property="Background" Value="{ui:Dim VelaInfo, 0.1}" /></Style>
+  <Style Selector="Border.chip.info > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaInfo}" /></Style>
+  <Style Selector="Border.chip.warn"><Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" /></Style>
+  <Style Selector="Border.chip.warn > TextBlock"><Setter Property="Foreground" Value="{DynamicResource VelaWarning}" /></Style>
+
+  <!-- ══ 键芯片(20 高、VelaBgInput 底、1px 描边) ══ -->
+  <Style Selector="Border.keychip">
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Padding" Value="6,0" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <!-- ══ 下拉选择框外观的按钮(VelaBgInput 底 + 描边 + chevron;点开是代码里现建的菜单) ══ -->
+  <Style Selector="Button.select">
+    <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,0" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.select:pointerover /template/ Border#Bg">
+    <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderSecondary}" />
+  </Style>
+
+  <!-- ══ 右栏面板头(36 高、底边线、12px 左内边距) ══ -->
+  <Style Selector="Border.panelhead">
+    <Setter Property="Height" Value="36" />
+    <Setter Property="Padding" Value="12,0,8,0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+
+  <!-- ══ 右栏底部按钮条(48 高、顶边线;与面板同底色,不另起一块深色) ══ -->
+  <Style Selector="Border.panelfoot">
+    <Setter Property="MinHeight" Value="48" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+  </Style>
+
+  <!-- ══ 链接样式的按钮(信息色文字,无底无框) ══ -->
+  <Style Selector="Button.link">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaInfo}" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+  </Style>
+  <Style Selector="Button.link:pointerover /template/ Border#Bg">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.link:pointerover TextBlock">
+    <Setter Property="TextDecorations" Value="Underline" />
+  </Style>
+
+  <!-- ══ 表单小节标题(10px Medium VelaTextMuted) ══ -->
+  <Style Selector="TextBlock.flabel">
+    <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+    <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <!-- ══ 嵌在描边框里的无框输入(字段名、筛选条件) ══ -->
+  <Style Selector="TextBox.bare">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <Style Selector="TextBox.bare:focus /template/ Border#Frame">
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+</Styles>
