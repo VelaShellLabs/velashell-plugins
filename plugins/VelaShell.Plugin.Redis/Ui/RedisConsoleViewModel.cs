@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 
 namespace VelaShell.Plugin.Redis.Ui;
@@ -106,7 +106,7 @@ public sealed class RedisConsoleViewModel : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RunCommand.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(InputHint));
             RefreshCompletions();
@@ -152,7 +152,7 @@ public sealed class RedisConsoleViewModel : ObservableObject
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RunCommand.RaiseCanExecuteChanged();
         }
     }
@@ -222,12 +222,12 @@ public sealed class RedisConsoleViewModel : ObservableObject
         var merged = new List<string>(saved.Count + _history.Count);
         foreach (string line in saved)
         {
-            merged.Remove(line);
+            _ = merged.Remove(line);
             merged.Add(line);
         }
         foreach (string line in _history)
         {
-            merged.Remove(line);
+            _ = merged.Remove(line);
             merged.Add(line);
         }
         _history.Clear();
@@ -274,7 +274,7 @@ public sealed class RedisConsoleViewModel : ObservableObject
             return;
         }
 
-        _history.Remove(line);
+        _ = _history.Remove(line);
         _history.Add(line);
         _historyCursor = -1;
         // 落时序库:下次打开这条连接时 ↑ 还能翻到,而"谁在什么时候敲了什么"也就此可回溯。

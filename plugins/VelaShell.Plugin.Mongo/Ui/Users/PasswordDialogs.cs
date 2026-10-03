@@ -12,9 +12,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed class ResetPasswordDialogViewModel : DialogViewModel, IViewFactory
 {
     private readonly Func<string, bool, Task<bool>> _apply;
-    private string _password = "";
-    private string _confirm = "";
-    private bool _reveal;
     private bool _generated;
 
     /// <summary>构造。</summary>
@@ -37,7 +34,7 @@ internal sealed class ResetPasswordDialogViewModel : DialogViewModel, IViewFacto
         });
         ApplyCommand = new(async () =>
         {
-            if (await _apply(_password, _generated).ConfigureAwait(true))
+            if (await _apply(Password, _generated).ConfigureAwait(true))
             {
                 Close();
             }
@@ -53,37 +50,37 @@ internal sealed class ResetPasswordDialogViewModel : DialogViewModel, IViewFacto
     /// <summary>新密码。</summary>
     public string Password
     {
-        get => _password;
+        get;
         set
         {
-            if (SetProperty(ref _password, value))
+            if (SetProperty(ref field, value))
             {
                 _generated = false;
                 Revalidate();
             }
         }
-    }
+    } = "";
 
     /// <summary>再输一遍。</summary>
     public string Confirm
     {
-        get => _confirm;
+        get;
         set
         {
-            if (SetProperty(ref _confirm, value))
+            if (SetProperty(ref field, value))
             {
                 Revalidate();
             }
         }
-    }
+    } = "";
 
     /// <summary>明文显示。</summary>
     public bool Reveal
     {
-        get => _reveal;
+        get;
         set
         {
-            if (SetProperty(ref _reveal, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(PasswordChar));
             }
@@ -91,16 +88,16 @@ internal sealed class ResetPasswordDialogViewModel : DialogViewModel, IViewFacto
     }
 
     /// <summary>掩码字符。</summary>
-    public char PasswordChar => _reveal ? '\0' : '•';
+    public char PasswordChar => Reveal ? '\0' : '•';
 
     /// <summary>两遍不一致。</summary>
-    public bool Mismatch => _confirm.Length > 0 && !string.Equals(_confirm, _password, StringComparison.Ordinal);
+    public bool Mismatch => Confirm.Length > 0 && !string.Equals(Confirm, Password, StringComparison.Ordinal);
 
     /// <summary>太短(只提醒,不拦:有的环境另有策略插件管长度)。</summary>
-    public bool Weak => _password.Length is > 0 and < 12;
+    public bool Weak => Password.Length is > 0 and < 12;
 
     /// <summary>能不能保存。</summary>
-    public bool CanApply => _password.Length > 0 && string.Equals(_confirm, _password, StringComparison.Ordinal);
+    public bool CanApply => Password.Length > 0 && string.Equals(Confirm, Password, StringComparison.Ordinal);
 
     /// <summary>生成。</summary>
     public RelayCommand GenerateCommand { get; }

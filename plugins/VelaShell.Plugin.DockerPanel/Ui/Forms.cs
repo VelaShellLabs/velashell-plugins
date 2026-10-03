@@ -51,7 +51,7 @@ public sealed partial class RenameContainerForm : PanelForm
     /// <inheritdoc />
     public override bool Validate()
     {
-        var value = _next.Value.Trim();
+        string value = _next.Value.Trim();
         if (value.Length == 0)
         {
             _next.Error = "名字不能为空。";
@@ -117,7 +117,7 @@ public sealed class RestartPolicyForm : PanelForm
     public string Policy => _policy.Value;
 
     /// <summary>最大重试次数。</summary>
-    public int MaxRetries => int.TryParse(_retries.Value, out var n) ? Math.Max(0, n) : 0;
+    public int MaxRetries => int.TryParse(_retries.Value, out int n) ? Math.Max(0, n) : 0;
 
     /// <inheritdoc />
     public override bool Validate()
@@ -376,28 +376,28 @@ public sealed class CreateNetworkForm : PanelForm
     /// <inheritdoc />
     protected override void UpdatePreview()
     {
-        var sb = new StringBuilder("docker network create -d ").Append(Driver);
+        StringBuilder sb = new StringBuilder("docker network create -d ").Append(Driver);
         if (Subnet.Length > 0)
         {
-            sb.Append(" --subnet ").Append(Subnet);
+            _ = sb.Append(" --subnet ").Append(Subnet);
         }
         if (Gateway.Length > 0)
         {
-            sb.Append(" --gateway ").Append(Gateway);
+            _ = sb.Append(" --gateway ").Append(Gateway);
         }
         if (Internal)
         {
-            sb.Append(" --internal");
+            _ = sb.Append(" --internal");
         }
         if (Attachable)
         {
-            sb.Append(" --attachable");
+            _ = sb.Append(" --attachable");
         }
         if (EnableIPv6)
         {
-            sb.Append(" --ipv6");
+            _ = sb.Append(" --ipv6");
         }
-        sb.Append(' ').Append(Name.Length > 0 ? Name : "<名称>");
+        _ = sb.Append(' ').Append(Name.Length > 0 ? Name : "<名称>");
         CommandPreview = "POST /networks/create";
         CommandNote = $"等价于  {sb}";
     }
@@ -416,7 +416,7 @@ public sealed class ConnectNetworkForm : PanelForm
     {
         Fields.Add(new TextField("目标网络") { Value = network, ReadOnly = true });
         Containers = new("选择容器") { Placeholder = "过滤未接入的容器…" };
-        foreach ((var id, var name, var meta, var enabled, var reason) in candidates)
+        foreach ((string? id, string? name, string? meta, bool enabled, string? reason) in candidates)
         {
             Containers.Items.Add(new(id, name, meta, enabled, reason));
         }
@@ -624,7 +624,7 @@ public sealed class ExecUserForm : PanelForm
     /// <inheritdoc />
     protected override void UpdatePreview()
     {
-        var user = User.Length > 0 ? $"&User={User}" : "";
+        string user = User.Length > 0 ? $"&User={User}" : "";
         CommandPreview = $"POST /containers/{{id}}/exec   Cmd=[{Shell}]{user}";
         CommandNote = "等价于  docker exec -it " + (User.Length > 0 ? $"-u {User} " : "") + $"<容器> {Shell}";
     }
@@ -680,7 +680,7 @@ public sealed class ExecWorkingDirForm : PanelForm
     /// <inheritdoc />
     protected override void UpdatePreview()
     {
-        var dir = WorkingDir.Length > 0 ? $"&WorkingDir={WorkingDir}" : "";
+        string dir = WorkingDir.Length > 0 ? $"&WorkingDir={WorkingDir}" : "";
         CommandPreview = $"POST /containers/{{id}}/exec   Cmd=[shell]{dir}";
         CommandNote = "等价于  docker exec -it " + (WorkingDir.Length > 0 ? $"-w {WorkingDir} " : "") + "<容器> <shell>";
     }

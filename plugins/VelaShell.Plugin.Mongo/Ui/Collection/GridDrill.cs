@@ -53,22 +53,26 @@ internal sealed class GridDrill
         switch (BsonPath.Get(root.Document, path))
         {
             case BsonArray array:
-            {
-                var drill = new GridDrill(root, path, isArray: true, array.Count);
-                drill.Columns = ArrayColumns(owner.Loc, array, previous);
-                for (int i = 0; i < array.Count; i++)
                 {
-                    rows.Add(new CollectionRow(owner, root, drill, i));
+                    var drill = new GridDrill(root, path, isArray: true, array.Count)
+                    {
+                        Columns = ArrayColumns(owner.Loc, array, previous)
+                    };
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        rows.Add(new CollectionRow(owner, root, drill, i));
+                    }
+                    return drill;
                 }
-                return drill;
-            }
             case BsonDocument document:
-            {
-                var drill = new GridDrill(root, path, isArray: false, document.ElementCount);
-                drill.Columns = DocumentColumns([document], previous);
-                rows.Add(new CollectionRow(owner, root, drill, -1));
-                return drill;
-            }
+                {
+                    var drill = new GridDrill(root, path, isArray: false, document.ElementCount)
+                    {
+                        Columns = DocumentColumns([document], previous)
+                    };
+                    rows.Add(new CollectionRow(owner, root, drill, -1));
+                    return drill;
+                }
             default:
                 return null;
         }

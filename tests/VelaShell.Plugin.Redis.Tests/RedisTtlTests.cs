@@ -61,11 +61,9 @@ public sealed class RedisTtlTests
     }
 
     [TestMethod]
-    public void AbsoluteTimeInThePast_IsRejected()
-    {
+    public void AbsoluteTimeInThePast_IsRejected() =>
         // 不当成"立刻过期":那等于用一个看着像笔误的输入删掉一个键。
         Assert.IsFalse(RedisTtl.TryParse("2020-01-01 00:00:00", Now, out _));
-    }
 
     [TestMethod]
     public void ZeroAndNegative_AreRejected()
@@ -75,11 +73,9 @@ public sealed class RedisTtlTests
     }
 
     [TestMethod]
-    public void IncompleteDuration_IsRejected()
-    {
+    public void IncompleteDuration_IsRejected() =>
         // "2h30" 的 30 没有单位 —— 不猜它是分钟还是秒。
         Assert.IsFalse(RedisTtl.TryParse("2h30", Now, out _));
-    }
 
     [TestMethod]
     public void UnknownUnit_IsRejected()

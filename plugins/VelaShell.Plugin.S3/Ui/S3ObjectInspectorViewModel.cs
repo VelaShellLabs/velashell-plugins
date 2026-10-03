@@ -52,7 +52,7 @@ public sealed class S3ObjectInspectorViewModel : ObservableObject
         ReloadCommand = new AsyncCommand(LoadAsync);
         SaveTagsCommand = new AsyncCommand(SaveTagsAsync);
         AddTagCommand = new AsyncCommand(() => { Tags.Add(new()); return Task.CompletedTask; });
-        RemoveTagCommand = new AsyncCommand<S3TagRowViewModel>(row => { Tags.Remove(row); return Task.CompletedTask; });
+        RemoveTagCommand = new AsyncCommand<S3TagRowViewModel>(row => { _ = Tags.Remove(row); return Task.CompletedTask; });
         ApplyAclCommand = new AsyncCommand(ApplyAclAsync);
         ApplyStorageClassCommand = new AsyncCommand(ApplyStorageClassAsync);
         ApplyRetentionCommand = new AsyncCommand(ApplyRetentionAsync);

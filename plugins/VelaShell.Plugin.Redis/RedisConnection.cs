@@ -17,9 +17,7 @@ namespace VelaShell.Plugin.Redis;
 /// </summary>
 internal sealed partial class RedisConnection : IAsyncDisposable
 {
-    private readonly RedisSettings _settings;
     private readonly ConnectionMultiplexer _mux;
-    private int _database;
 
     /// <summary>
     /// 服务器是否支持 <c>SCAN … TYPE</c>(Redis 6.0+)。null = 还没试过。
@@ -44,9 +42,9 @@ internal sealed partial class RedisConnection : IAsyncDisposable
     private RedisConnection(ConnectionMultiplexer mux, RedisSettings settings, RedisServerInfo info)
     {
         _mux = mux;
-        _settings = settings;
+        Settings = settings;
         Info = info;
-        _database = settings.Database;
+        Database = settings.Database;
         _mux.ConnectionFailed += OnConnectionFailed;
         _mux.ConnectionRestored += OnConnectionRestored;
     }
@@ -58,10 +56,10 @@ internal sealed partial class RedisConnection : IAsyncDisposable
     public RedisServerInfo Info { get; private set; }
 
     /// <summary>当前数据库(集群下恒为 0)。</summary>
-    public int Database => _database;
+    public int Database { get; private set; }
 
     /// <summary>连接设置。</summary>
-    public RedisSettings Settings => _settings;
+    public RedisSettings Settings { get; }
 
     /// <summary>库当前认为连接是通的。</summary>
     public bool IsConnected => _mux.IsConnected;
@@ -172,9 +170,9 @@ internal sealed partial class RedisConnection : IAsyncDisposable
     /// <param name="database">目标库。</param>
     public void SelectDatabase(int database)
     {
-        if (_settings.SupportsDatabases)
+        if (Settings.SupportsDatabases)
         {
-            _database = Math.Max(0, database);
+            Database = Math.Max(0, database);
         }
     }
 
@@ -202,7 +200,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         {
             try
             {
-                total += await server.DatabaseSizeAsync(_database).ConfigureAwait(false);
+                total += await server.DatabaseSizeAsync(Database).ConfigureAwait(false);
                 any = true;
             }
             catch (Exception ex) when (IsDeniedOrUnsupported(ex))
@@ -238,14 +236,14 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (_settings.Deployment == RedisDeployment.Cluster)
+        if (Settings.Deployment == RedisDeployment.Cluster)
         {
             RedisScanPage clustered = await ScanClusterAsync(cursor, match, type, cancellationToken).ConfigureAwait(false);
             return await NarrowByTypeAsync(clustered, type, cancellationToken).ConfigureAwait(false);
         }
         (string next, List<RedisKeyName> keys) = await ScanOnceAsync(
             Db(), cursor is { Length: > 0 } ? cursor : "0", match, type).ConfigureAwait(false);
-        return await NarrowByTypeAsync(new(next, keys, _settings.ScanCount), type, cancellationToken).ConfigureAwait(false);
+        return await NarrowByTypeAsync(new(next, keys, Settings.ScanCount), type, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -318,8 +316,8 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         }
         try
         {
-            await Task.WhenAll(ttls).ConfigureAwait(false);
-            await Task.WhenAll(lengths).ConfigureAwait(false);
+            _ = await Task.WhenAll(ttls).ConfigureAwait(false);
+            _ = await Task.WhenAll(lengths).ConfigureAwait(false);
         }
         catch (Exception ex) when (IsDeniedOrUnsupported(ex))
         {
@@ -376,7 +374,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         }
         try
         {
-            await Task.WhenAll(pending).ConfigureAwait(false);
+            _ = await Task.WhenAll(pending).ConfigureAwait(false);
         }
         catch (Exception ex) when (IsDeniedOrUnsupported(ex))
         {
@@ -425,7 +423,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
             // 两条一起打包:一个往返。MEMORY USAGE 对大键并不便宜,所以只有详情页才问它。
             Task<RedisResult> usageTask = TryExecuteAsync(db, "MEMORY", "USAGE", redisKey);
             Task<RedisResult> idleTask = TryExecuteAsync(db, "OBJECT", "IDLETIME", redisKey);
-            await Task.WhenAll(usageTask, idleTask).ConfigureAwait(false);
+            _ = await Task.WhenAll(usageTask, idleTask).ConfigureAwait(false);
             memory = usageTask.Result.IsNull ? -1 : (long?)usageTask.Result ?? -1;
             // LFU 策略下服务器只给 FREQ,IDLETIME 会报错 —— TryExecuteAsync 已经把它变成 nil,
             // 于是这里自然落到 -1(界面据此留空,而不是显示"空闲 0 秒")。
@@ -445,7 +443,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         IDatabase db = Db();
         var redisKey = key.ToRedisKey();
         long total = await db.StringLengthAsync(redisKey).ConfigureAwait(false);
-        int limit = _settings.ValuePreviewBytes;
+        int limit = Settings.ValuePreviewBytes;
         if (total <= limit)
         {
             RedisValue whole = await db.StringGetAsync(redisKey).ConfigureAwait(false);
@@ -532,7 +530,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(key);
         cancellationToken.ThrowIfCancellationRequested();
         IDatabase db = Db();
-        RedisKey redisKey = key.ToRedisKey();
+        var redisKey = key.ToRedisKey();
         double start = ParseBound(min, double.NegativeInfinity);
         double stop = ParseBound(max, double.PositiveInfinity);
         if (start > stop)
@@ -621,7 +619,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         _mux.Dispose();
     }
 
-    private IDatabase Db() => _mux.GetDatabase(_settings.SupportsDatabases ? _database : 0);
+    private IDatabase Db() => _mux.GetDatabase(Settings.SupportsDatabases ? Database : 0);
 
     private IEnumerable<IServer> PrimaryServers()
     {
@@ -656,7 +654,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
             keys.AddRange(page);
             if (next is not "0")
             {
-                return new(FormatClusterCursor(node, next), keys, _settings.ScanCount);
+                return new(FormatClusterCursor(node, next), keys, Settings.ScanCount);
             }
             // 这个节点扫完了 → 从下一个节点的游标 0 接着来。
             node++;
@@ -668,8 +666,8 @@ internal sealed partial class RedisConnection : IAsyncDisposable
             // 这一轮什么都没拿到:继续往下一个节点走,免得界面上出现连续多次"点了没反应"。
         }
         return node >= servers.Count
-            ? new("0", keys, _settings.ScanCount)
-            : new(FormatClusterCursor(node, "0"), keys, _settings.ScanCount);
+            ? new("0", keys, Settings.ScanCount)
+            : new(FormatClusterCursor(node, "0"), keys, Settings.ScanCount);
     }
 
     /// <summary>
@@ -692,7 +690,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         // 集群只有 db0;仍显式传,免得库回到"没有目标库"那条错误路径上。
-        int database = _settings.SupportsDatabases ? _database : 0;
+        int database = Settings.SupportsDatabases ? Database : 0;
         long start = long.TryParse(cursor, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed) && parsed > 0
             ? parsed
             : 0;
@@ -704,10 +702,10 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         IAsyncEnumerable<RedisKey> source = server.KeysAsync(
             database,
             string.IsNullOrEmpty(match) ? "*" : match,
-            pageSize: _settings.ScanCount,
+            pageSize: Settings.ScanCount,
             cursor: start);
         await using IAsyncEnumerator<RedisKey> enumerator = source.GetAsyncEnumerator(cancellationToken);
-        while (keys.Count < _settings.ScanCount && await enumerator.MoveNextAsync().ConfigureAwait(false))
+        while (keys.Count < Settings.ScanCount && await enumerator.MoveNextAsync().ConfigureAwait(false))
         {
             if ((byte[]?)enumerator.Current is { } raw)
             {
@@ -718,7 +716,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         }
         // 枚举提前结束 = 这个节点扫完了。凑满一页时按当前游标续扫 —— 可能与上一页有重叠,
         // 而 SCAN 本身在 rehash 期间也会返回重复键,调用方按键名去重,两者是同一条兜底。
-        bool exhausted = keys.Count < _settings.ScanCount;
+        bool exhausted = keys.Count < Settings.ScanCount;
         return (exhausted ? "0" : next.ToString(CultureInfo.InvariantCulture), keys);
     }
 
@@ -740,7 +738,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
             args.Add(match);
         }
         args.Add("COUNT");
-        args.Add(_settings.ScanCount);
+        args.Add(Settings.ScanCount);
         if (!string.IsNullOrEmpty(type))
         {
             args.Add("TYPE");

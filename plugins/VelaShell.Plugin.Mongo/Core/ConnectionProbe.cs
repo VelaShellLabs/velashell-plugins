@@ -5,7 +5,6 @@ using System.Net.Sockets;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Configuration;
-using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 
 namespace VelaShell.Plugin.Mongo.Core;
@@ -243,10 +242,10 @@ internal static class ConnectionProbe
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    run.Finish("ssh", ProbeState.Failed, MongoConnector.Describe(ex));
+                    _ = run.Finish("ssh", ProbeState.Failed, MongoConnector.Describe(ex));
                     return run.Report(null);
                 }
-                run.Finish("ssh", ProbeState.Passed,
+                _ = run.Finish("ssh", ProbeState.Passed,
                     loc.Format("Conn_SshDetail", tunnel.JumpName, tunnel.LocalPort, (int)watch.ElapsedMilliseconds), (int)watch.ElapsedMilliseconds);
                 request = tunnel.Rewrite(request);
             }
@@ -264,7 +263,7 @@ internal static class ConnectionProbe
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                run.Finish("auth", ProbeState.Failed, translate(ex, settings));
+                _ = run.Finish("auth", ProbeState.Failed, translate(ex, settings));
                 return run.Report(null);
             }
             await using (connection.ConfigureAwait(false))
@@ -307,12 +306,12 @@ internal static class ConnectionProbe
             try
             {
                 int ms = await tunnel.CheckTargetAsync(cancellationToken).ConfigureAwait(false);
-                run.Finish("tcp", ProbeState.Passed, loc.Format("Conn_TcpViaTunnel", tunnel.Target, ms), ms);
+                _ = run.Finish("tcp", ProbeState.Passed, loc.Format("Conn_TcpViaTunnel", tunnel.Target, ms), ms);
                 return true;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                run.Finish("tcp", ProbeState.Failed, MongoConnector.Describe(ex));
+                _ = run.Finish("tcp", ProbeState.Failed, MongoConnector.Describe(ex));
                 return false;
             }
         }
@@ -323,20 +322,20 @@ internal static class ConnectionProbe
             if (target.Srv)
             {
                 // SRV 的成员由驱动按 DNS 解析,这里没有现成的地址可敲;交给后面的认证一步去证明连得上。
-                run.Finish("tcp", ProbeState.Skipped, loc["Conn_TcpSrv"]);
+                _ = run.Finish("tcp", ProbeState.Skipped, loc["Conn_TcpSrv"]);
                 return true;
             }
             targets = [.. target.Hosts.Select(ToEndPoint)];
         }
         catch (Exception ex) when (ex is MongoConfigurationException or ArgumentException or FormatException)
         {
-            run.Finish("tcp", ProbeState.Failed, ex.Message);
+            _ = run.Finish("tcp", ProbeState.Failed, ex.Message);
             return false;
         }
         (bool Ok, int Ms)[] results = await Task.WhenAll(targets.Select(t => TcpAsync(t, cancellationToken))).ConfigureAwait(false);
         int reachable = results.Count(static r => r.Ok);
         int fastest = results.Where(static r => r.Ok).Select(static r => r.Ms).DefaultIfEmpty(0).Min();
-        run.Finish("tcp",
+        _ = run.Finish("tcp",
             reachable == results.Length ? ProbeState.Passed : reachable > 0 ? ProbeState.Warning : ProbeState.Failed,
             loc.Format("Conn_TcpDetail", reachable, results.Length, fastest),
             reachable > 0 ? fastest : null);
@@ -372,14 +371,14 @@ internal static class ConnectionProbe
             BsonDocument status = await connection.RunCommandAsync("admin", new BsonDocument("connectionStatus", 1), cancellationToken).ConfigureAwait(false);
             BsonArray users = status.GetValue("authInfo", new BsonDocument()).AsBsonDocument
                 .GetValue("authenticatedUsers", new BsonArray()).AsBsonArray;
-            run.Finish("auth", ProbeState.Passed, users.Count == 0
+            _ = run.Finish("auth", ProbeState.Passed, users.Count == 0
                 ? loc["Conn_Anonymous"]
                 : string.Join(", ", users.Select(static u => $"{u["user"].AsString}@{u["db"].AsString}")));
             return true;
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            run.Finish("auth", ProbeState.Failed, MongoConnector.Describe(ex));
+            _ = run.Finish("auth", ProbeState.Failed, MongoConnector.Describe(ex));
             return false;
         }
     }
@@ -403,13 +402,13 @@ internal static class ConnectionProbe
             }
             ServerInfo info = MongoConnection.ParseHello(hello, build);
             string head = info.SetName is { Length: > 0 } set ? $"{set} · {info.Role}" : info.Role;
-            run.Finish("hello", ProbeState.Passed,
+            _ = run.Finish("hello", ProbeState.Passed,
                 $"{head} {info.Me}".TrimEnd() + (info.Version.Length > 0 ? $" · {info.Version}" : ""), ms);
             return ms;
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            run.Finish("hello", ProbeState.Failed, MongoConnector.Describe(ex));
+            _ = run.Finish("hello", ProbeState.Failed, MongoConnector.Describe(ex));
             return null;
         }
     }
@@ -424,25 +423,25 @@ internal static class ConnectionProbe
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            run.Finish("privileges", ProbeState.Warning, MongoConnector.Describe(ex));
+            _ = run.Finish("privileges", ProbeState.Warning, MongoConnector.Describe(ex));
             return;
         }
         PrivilegeSummary privileges = connection.Privileges;
         string roles = string.Join(loc["Conn_ListSeparator"], privileges.Roles.Select(static r => r.ToString()));
         if (privileges.User.Length == 0)
         {
-            run.Finish("privileges", ProbeState.Passed, loc["Conn_PrivUnrestricted"]);
+            _ = run.Finish("privileges", ProbeState.Passed, loc["Conn_PrivUnrestricted"]);
         }
         else if (!privileges.CanWriteAnything)
         {
-            run.Finish("privileges", ProbeState.Warning, loc.Format("Conn_PrivReadOnly", roles.Length > 0 ? roles : "—"));
+            _ = run.Finish("privileges", ProbeState.Warning, loc.Format("Conn_PrivReadOnly", roles.Length > 0 ? roles : "—"));
         }
         else
         {
             string writable = privileges.WritableDatabases.Contains("*")
                 ? loc["Conn_PrivAllDatabases"]
                 : string.Join(", ", privileges.WritableDatabases.Order(StringComparer.Ordinal));
-            run.Finish("privileges", ProbeState.Passed, loc.Format("Conn_PrivWritable", roles, writable));
+            _ = run.Finish("privileges", ProbeState.Passed, loc.Format("Conn_PrivWritable", roles, writable));
         }
     }
 

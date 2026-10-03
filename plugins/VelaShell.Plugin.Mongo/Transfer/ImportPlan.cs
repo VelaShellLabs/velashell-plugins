@@ -175,7 +175,7 @@ internal sealed class ImportConverter(IReadOnlyList<ImportColumn> columns, Impor
     {
         var issues = new List<ImportIssue>();
         var values = new BsonValue?[_included.Length];
-        var raw = new string?[_included.Length];
+        string?[] raw = new string?[_included.Length];
         if (record.Error is { } parseError)
         {
             issues.Add(new(ImportIssueKind.Parse, true, "", -1, parseError));
@@ -261,7 +261,7 @@ internal sealed class ImportConverter(IReadOnlyList<ImportColumn> columns, Impor
             }
         }
         values[index] = value;
-        BsonPath.Set(document, target, value);
+        _ = BsonPath.Set(document, target, value);
     }
 
     private void Check(BsonDocument document, List<ImportIssue> issues)
@@ -315,8 +315,8 @@ internal static class ImportDryRun
         {
             foreach (ImportIssue issue in row.Issues.DistinctBy(static i => (i.Kind, i.Field, i.IsError)))
             {
-                var key = (issue.Kind, issue.Field, issue.IsError);
-                if (groups.TryGetValue(key, out var existing))
+                (ImportIssueKind Kind, string Field, bool IsError) key = (issue.Kind, issue.Field, issue.IsError);
+                if (groups.TryGetValue(key, out (int Rows, long First, string Detail) existing))
                 {
                     groups[key] = (existing.Rows + 1, existing.First, existing.Detail);
                 }

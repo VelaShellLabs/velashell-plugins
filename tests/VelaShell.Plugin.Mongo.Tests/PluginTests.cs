@@ -33,7 +33,7 @@ public sealed class PluginTests
             Username = user,
             Password = password,
             Tunnel = tunnel,
-            Settings = settings ?? new Dictionary<string, string>(StringComparer.Ordinal)
+            Settings = settings ?? [with(StringComparer.Ordinal)]
         };
 
     /// <summary>
@@ -126,11 +126,11 @@ public sealed class PluginTests
     [TestMethod]
     public void Settings_ProductionDefaultsToReadOnlyAndConfirm()
     {
-        MongoSettings prod = MongoSettings.From(Request(new() { ["environment"] = "production" }));
+        var prod = MongoSettings.From(Request(new() { ["environment"] = "production" }));
         Assert.IsTrue(prod.ReadOnly);
         Assert.IsTrue(prod.ConfirmWrites);
 
-        MongoSettings dev = MongoSettings.From(Request());
+        var dev = MongoSettings.From(Request());
         Assert.IsFalse(dev.ReadOnly);
         Assert.IsFalse(dev.ConfirmWrites);
         Assert.IsTrue(dev.DisableDropDatabase);
@@ -139,7 +139,7 @@ public sealed class PluginTests
     [TestMethod]
     public void Settings_ExplicitValuesWinOverTheEnvironmentDefault()
     {
-        MongoSettings prod = MongoSettings.From(Request(new() { ["environment"] = "production", ["readOnly"] = "false" }));
+        var prod = MongoSettings.From(Request(new() { ["environment"] = "production", ["readOnly"] = "false" }));
         Assert.IsFalse(prod.ReadOnly, "用户显式关掉了就听用户的");
         Assert.IsTrue(prod.ConfirmWrites);
     }
@@ -147,7 +147,7 @@ public sealed class PluginTests
     [TestMethod]
     public void Settings_ClampsAndSplits()
     {
-        MongoSettings settings = MongoSettings.From(Request(new()
+        var settings = MongoSettings.From(Request(new()
         {
             ["hosts"] = "10.20.3.22:27017, 10.20.3.23:27018;10.20.3.24",
             ["pageSize"] = "100000",

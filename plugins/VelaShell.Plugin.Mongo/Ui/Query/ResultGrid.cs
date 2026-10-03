@@ -119,19 +119,13 @@ public sealed class ResultGrid : Control
     {
         base.OnAttachedToVisualTree(e);
         _scroller = this.FindAncestorOfType<ScrollViewer>();
-        if (_scroller is not null)
-        {
-            _scroller.ScrollChanged += OnScrollChanged;
-        }
+        _scroller?.ScrollChanged += OnScrollChanged;
     }
 
     /// <inheritdoc />
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (_scroller is not null)
-        {
-            _scroller.ScrollChanged -= OnScrollChanged;
-        }
+        _scroller?.ScrollChanged -= OnScrollChanged;
         _scroller = null;
         base.OnDetachedFromVisualTree(e);
     }
@@ -167,10 +161,7 @@ public sealed class ResultGrid : Control
         _hover = -1;
         InvalidateMeasure();
         InvalidateVisual();
-        if (_scroller is not null)
-        {
-            _scroller.Offset = default;
-        }
+        _scroller?.Offset = default;
         return true;
     }
 
@@ -191,10 +182,7 @@ public sealed class ResultGrid : Control
         Vector restore = _levels[^1].ScrollOffset;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (_scroller is not null)
-            {
-                _scroller.Offset = restore;
-            }
+            _scroller?.Offset = restore;
         }, Avalonia.Threading.DispatcherPriority.Loaded);
         return true;
     }
@@ -466,11 +454,11 @@ public sealed class ResultGrid : Control
             {
                 if (_backHit.Contains(point))
                 {
-                    DrillBack();
+                    _ = DrillBack();
                 }
                 else if (_crumbHits.FirstOrDefault(h => h.Bounds.Contains(point)) is { Bounds.Width: > 0 } hit)
                 {
-                    DrillTo(hit.Level);
+                    _ = DrillTo(hit.Level);
                 }
             }
             e.Handled = true;
@@ -511,7 +499,7 @@ public sealed class ResultGrid : Control
             return;
         }
         level.Selected = row;
-        Focus();
+        _ = Focus();
         InvalidateVisual();
         int? col = ColumnAt(point.X);
         if (properties.IsRightButtonPressed)
@@ -561,7 +549,7 @@ public sealed class ResultGrid : Control
         }
         if (_levels.Count > 1 && (e.Key == Key.Back && e.KeyModifiers == KeyModifiers.None || e.Key == Key.Left && e.KeyModifiers == KeyModifiers.Alt))
         {
-            DrillBack();
+            _ = DrillBack();
             e.Handled = true;
             return;
         }
@@ -723,7 +711,7 @@ public sealed class ResultGrid : Control
 
     private FormattedText Text(string text, Typeface face, double size, IBrush? brush, FontWeight weight = FontWeight.Normal, double maxWidth = double.NaN)
     {
-        var typeface = weight == FontWeight.Normal ? face : new Typeface(face.FontFamily, face.Style, weight);
+        Typeface typeface = weight == FontWeight.Normal ? face : new Typeface(face.FontFamily, face.Style, weight);
         var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, FontSizeOf(size), brush ?? Brushes.Gray);
         if (!double.IsNaN(maxWidth) && maxWidth > 0)
         {

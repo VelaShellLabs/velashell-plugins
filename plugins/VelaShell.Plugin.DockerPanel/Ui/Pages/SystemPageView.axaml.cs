@@ -7,5 +7,8 @@ namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
 public sealed partial class SystemPageView : UserControl
 {
     /// <summary>建视图。</summary>
-    public SystemPageView() => AvaloniaXamlLoader.Load(this);
+    public SystemPageView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

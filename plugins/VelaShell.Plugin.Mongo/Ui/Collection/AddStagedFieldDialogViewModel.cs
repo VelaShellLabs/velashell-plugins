@@ -27,10 +27,6 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
     private readonly BsonDocument _document;
     private readonly string _parent;
     private readonly Func<string, BsonValue, bool> _stage;
-    private string _name = "";
-    private ValueKindChoice _kind = ValueKindChoice.All[0];
-    private string _valueText = "";
-    private string? _error;
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -57,15 +53,15 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
     /// <summary>字段名。</summary>
     public string Name
     {
-        get => _name;
+        get;
         set
         {
-            if (SetProperty(ref _name, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 Error = null;
             }
         }
-    }
+    } = "";
 
     /// <summary>可选类型。</summary>
     public IReadOnlyList<ValueKindChoice> Kinds => ValueKindChoice.All;
@@ -73,40 +69,40 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
     /// <summary>选中的类型。</summary>
     public ValueKindChoice Kind
     {
-        get => _kind;
+        get;
         set
         {
-            if (SetProperty(ref _kind, value ?? ValueKindChoice.All[0]))
+            if (SetProperty(ref field, value ?? ValueKindChoice.All[0]))
             {
                 Error = null;
                 RaisePropertyChanged(nameof(ValueHint));
             }
         }
-    }
+    } = ValueKindChoice.All[0];
 
     /// <summary>值(按类型解析;空 = 该类型的空值)。</summary>
     public string ValueText
     {
-        get => _valueText;
+        get;
         set
         {
-            if (SetProperty(ref _valueText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 Error = null;
             }
         }
-    }
+    } = "";
 
     /// <summary>值框的占位提示。</summary>
-    public string ValueHint => Loc.Format("Cw_AddFieldValueHint", BsonText.Literal(BsonEdit.Empty(_kind.Kind)));
+    public string ValueHint => Loc.Format("Cw_AddFieldValueHint", BsonText.Literal(BsonEdit.Empty(Kind.Kind)));
 
     /// <summary>错误。</summary>
     public string? Error
     {
-        get => _error;
+        get;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
@@ -114,7 +110,7 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
     }
 
     /// <summary>有错。</summary>
-    public bool HasError => _error is not null;
+    public bool HasError => Error is not null;
 
     /// <summary>添加。</summary>
     public RelayCommand ConfirmCommand { get; }
@@ -124,7 +120,7 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
 
     private void Confirm()
     {
-        string name = _name.Trim();
+        string name = Name.Trim();
         if (name.Length == 0 || name.StartsWith('$') || name.Contains('.'))
         {
             Error = Loc["Cw_AddFieldBadName"];
@@ -137,11 +133,11 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
             return;
         }
         BsonValue value;
-        if (_valueText.Length == 0)
+        if (ValueText.Length == 0)
         {
-            value = BsonEdit.Empty(_kind.Kind);
+            value = BsonEdit.Empty(Kind.Kind);
         }
-        else if (!BsonEdit.TryParse(_valueText, _kind.Kind, out value, out string? error))
+        else if (!BsonEdit.TryParse(ValueText, Kind.Kind, out value, out string? error))
         {
             Error = Loc[error ?? "Edit_BadLiteral"];
             return;

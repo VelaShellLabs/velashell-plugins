@@ -54,12 +54,6 @@ internal sealed partial class QueryTabViewModel
 {
     private readonly DispatcherTimer _helperTimer;
     private (string Database, string Collection)? _helperTarget;
-    private IReadOnlyList<SampledField> _helperFields = [];
-    private string _helperCollection = "";
-    private string _helperDatabase = "";
-    private string _helperMissing = "";
-    private string _helperSampleText = "";
-    private bool _helperBusy;
 
     /// <summary>片段页:词汇表片段 + 保存的查询。</summary>
     public ObservableCollection<QuerySnippet> Snippets { get; } = [];
@@ -73,61 +67,61 @@ internal sealed partial class QueryTabViewModel
     /// <summary>字段页的集合名。</summary>
     public string HelperCollection
     {
-        get => _helperCollection;
+        get;
         private set
         {
-            if (SetProperty(ref _helperCollection, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasHelperCollection));
             }
         }
-    }
+    } = "";
 
     /// <summary>有没有可抽样的集合。</summary>
-    public bool HasHelperCollection => _helperCollection.Length > 0;
+    public bool HasHelperCollection => HelperCollection.Length > 0;
 
     /// <summary>字段页的集合在哪个库(集合名后面的 <c>@shop</c>:抽的是哪个库里的这个集合,一眼看清)。</summary>
     public string HelperDatabase
     {
-        get => _helperDatabase;
-        private set => SetProperty(ref _helperDatabase, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>那个库里没有这个集合时的提示;有为空。</summary>
     public string HelperMissing
     {
-        get => _helperMissing;
+        get;
         private set
         {
-            if (SetProperty(ref _helperMissing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasHelperMissing));
             }
         }
-    }
+    } = "";
 
     /// <summary>那个库里没有这个集合。</summary>
-    public bool HasHelperMissing => _helperMissing.Length > 0;
+    public bool HasHelperMissing => HelperMissing.Length > 0;
 
     /// <summary>「抽样 1,000」。</summary>
     public string HelperSampleText
     {
-        get => _helperSampleText;
-        private set => SetProperty(ref _helperSampleText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>字段页的字段。</summary>
     public IReadOnlyList<SampledField> HelperFields
     {
-        get => _helperFields;
-        private set => SetProperty(ref _helperFields, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>字段页在抽样。</summary>
     public bool HelperBusy
     {
-        get => _helperBusy;
-        private set => SetProperty(ref _helperBusy, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     private void ScheduleHelper()
@@ -251,7 +245,7 @@ internal sealed partial class QueryTabViewModel
         string text = snippet.Text;
         if (!afterMember)
         {
-            string collection = _helperCollection.Length > 0 ? _helperCollection : "collection";
+            string collection = HelperCollection.Length > 0 ? HelperCollection : "collection";
             string prefix = (before.Length > 0 && !before.EndsWith('\n') ? "\n" : "") + "db." + collection + ".";
             text = prefix + text;
         }
@@ -275,7 +269,7 @@ internal sealed partial class QueryTabViewModel
     {
         if (_savedName is null)
         {
-            Workspace.ShowDialog(new SaveQueryDialogViewModel(Workspace, Loc.Format("Query_Title", _number), name => SaveAsAsync(name)));
+            Workspace.ShowDialog(new SaveQueryDialogViewModel(Workspace, Loc.Format("Query_Title", _number), SaveAsAsync));
             return;
         }
         await SaveAsAsync(_savedName).ConfigureAwait(true);

@@ -106,7 +106,7 @@ public sealed class ImportTests
     [TestMethod]
     public void Rules_come_from_the_json_schema_validator()
     {
-        ImportRules rules = ImportRules.FromValidator(Validator, "error");
+        var rules = ImportRules.FromValidator(Validator, "error");
         CollectionAssert.AreEqual(new[] { "orderNo" }, rules.Required.ToArray());
         Assert.IsTrue(rules.Enums.ContainsKey("status"));
         Assert.IsTrue(rules.Enums.ContainsKey("customer.level"), "nested enums are found by path");
@@ -168,7 +168,7 @@ public sealed class ImportTests
 
         var replace = (ReplaceOneModel<BsonDocument>)ImportRunner.Model(doc, rules with { Mode = ImportWriteMode.Replace });
         Assert.IsFalse(replace.Replacement.Contains("_id"), "a matched document keeps its own _id");
-        Assert.IsInstanceOfType<InsertOneModel<BsonDocument>>(ImportRunner.Model(doc, new ImportRules()));
+        _ = Assert.IsInstanceOfType<InsertOneModel<BsonDocument>>(ImportRunner.Model(doc, new ImportRules()));
     }
 
     // ── 文件与读者 ─────────────────────────────────────────────────────────
@@ -181,7 +181,7 @@ public sealed class ImportTests
         {
             string gbk = Path.Combine(dir, "gbk.txt");
             File.WriteAllBytes(gbk, TextEncodings.Gbk.GetBytes("名称;等级\r\n陈立;普通\r\n"));
-            ImportSource source = ImportSource.Sniff(gbk);
+            var source = ImportSource.Sniff(gbk);
             Assert.AreEqual(ImportFormat.Csv, source.Format);
             Assert.AreEqual(TextEncodingKind.Gbk, source.Encoding);
             Assert.AreEqual(';', source.Delimiter);
@@ -196,7 +196,7 @@ public sealed class ImportTests
 
             string json = Path.Combine(dir, "data.txt");
             File.WriteAllText(json, "[{\"a\":1}]", new UTF8Encoding(true));
-            ImportSource jsonSource = ImportSource.Sniff(json);
+            var jsonSource = ImportSource.Sniff(json);
             Assert.AreEqual(ImportFormat.Json, jsonSource.Format);
             Assert.AreEqual(TextEncodingKind.Utf8Bom, jsonSource.Encoding);
         }
@@ -287,7 +287,7 @@ public sealed class ImportTests
         {
             await CreateOrdersAsync(connection, db);
             string csv = WriteSampleCsv(dir, 300);
-            ImportSource source = ImportSource.Sniff(csv);
+            var source = ImportSource.Sniff(csv);
             ImportColumn[] columns =
             [
                 new() { Source = "orderNo", Index = 0, Target = "orderNo", Kind = BsonKind.String },
@@ -297,12 +297,18 @@ public sealed class ImportTests
                 new() { Source = "level", Index = 4, Target = "level", Kind = BsonKind.String }
             ];
             CollectionInfo info = (await connection.ListCollectionsAsync(db)).Single(static c => c.Name == "orders");
-            ImportRules rules = ImportRules.FromValidator(info.Validator, info.ValidationAction);
+            var rules = ImportRules.FromValidator(info.Validator, info.ValidationAction);
 
             ImportResult inserted = await ImportRunner.RunAsync(connection, new ImportJob
             {
-                Database = db, Collection = "orders", Source = source, Columns = columns, Rules = rules,
-                BatchSize = 50, ReportDirectory = dir, EstimatedTotal = source.CountRecords(CancellationToken.None)
+                Database = db,
+                Collection = "orders",
+                Source = source,
+                Columns = columns,
+                Rules = rules,
+                BatchSize = 50,
+                ReportDirectory = dir,
+                EstimatedTotal = source.CountRecords(CancellationToken.None)
             }, new Loc("zh-CN"), null, CancellationToken.None);
             // 300 行:2 行坏(缺 orderNo、日期歧义),3 行与预置的文档撞唯一索引
             Assert.AreEqual(300, inserted.Rows);
@@ -311,7 +317,7 @@ public sealed class ImportTests
             Assert.IsNotNull(inserted.ErrorReport);
             string[] report = await File.ReadAllLinesAsync(inserted.ErrorReport);
             Assert.HasCount(5, report);
-            BsonDocument firstError = BsonDocument.Parse(report[0]);
+            var firstError = BsonDocument.Parse(report[0]);
             Assert.IsTrue(firstError.Contains("line"));
             Assert.IsTrue(firstError["row"].AsBsonDocument.Contains("orderNo"), "the original row is kept so it can be fixed and re-imported");
             Assert.IsTrue(report.Any(static l => l.Contains("E11000", StringComparison.Ordinal)), "duplicate keys come back from the server");
@@ -319,9 +325,14 @@ public sealed class ImportTests
             // 再按 orderNo upsert 一遍:没有新增,全部命中,备份文件里是被覆盖前的文档
             ImportResult upserted = await ImportRunner.RunAsync(connection, new ImportJob
             {
-                Database = db, Collection = "orders", Source = source, Columns = columns,
+                Database = db,
+                Collection = "orders",
+                Source = source,
+                Columns = columns,
                 Rules = rules with { Mode = ImportWriteMode.Upsert, MatchKey = "orderNo" },
-                BatchSize = 100, Backup = true, ReportDirectory = dir
+                BatchSize = 100,
+                Backup = true,
+                ReportDirectory = dir
             }, new Loc("zh-CN"), null, CancellationToken.None);
             Assert.AreEqual(0, upserted.Inserted);
             Assert.AreEqual(298, upserted.Updated);
@@ -394,11 +405,11 @@ public sealed class ImportTests
             vm.FilePath = WriteSampleCsv(dir, 1500, name: "orders_2026-09.csv");
             await ExportTests.WaitAsync(() => vm.Mappings.Count == 5 && !vm.Counting);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "20-import-file");
+            _ = Screens.Capture(bench.Window, "20-import-file");
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsStep1);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "20-import-mapping");
+            _ = Screens.Capture(bench.Window, "20-import-mapping");
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsStep2 && !vm.DryRunning && vm.PreviewRows.Count > 0);
             vm.ModeUpsert = true;
@@ -419,13 +430,13 @@ public sealed class ImportTests
     /// <summary>建一个带 validator 与唯一索引的 orders,预置三份会被 upsert 命中的文档。</summary>
     internal static async Task CreateOrdersAsync(MongoConnection connection, string db)
     {
-        await connection.RunCommandAsync(db, new BsonDocument
+        _ = await connection.RunCommandAsync(db, new BsonDocument
         {
             { "create", "orders" },
             { "validator", Validator }
         });
         IMongoCollection<BsonDocument> orders = connection.Collection(db, "orders");
-        await orders.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("orderNo", 1), new CreateIndexOptions { Unique = true }));
+        _ = await orders.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("orderNo", 1), new CreateIndexOptions { Unique = true }));
         await orders.InsertManyAsync(
         [
             new BsonDocument { { "orderNo", "SO2609-20001" }, { "total", new BsonDecimal128(Decimal128.Parse("1.00")) }, { "status", "pending" } },
@@ -455,10 +466,10 @@ public sealed class ImportTests
         ];
         for (int i = 0; i < rows; i++)
         {
-            text.Append(i < head.Length
+            _ = text.Append(i < head.Length
                 ? head[i]
                 : $"SO2609-{21000 + i},{100 + i % 900}.00,{(i % 3 == 0 ? "shipped" : "paid")},2026-09-0{1 + i % 9} 1{i % 10}:{i % 60:00}:00,{(i % 4 == 0 ? "VIP" : "普通")}");
-            text.Append("\r\n");
+            _ = text.Append("\r\n");
         }
         string path = Path.Combine(dir, name);
         File.WriteAllText(path, text.ToString(), new UTF8Encoding(false));

@@ -99,27 +99,27 @@ internal sealed record ImportSource
             case ImportFormat.Bson:
                 return BsonDump.Count(Path, cancellationToken);
             case ImportFormat.Json:
-            {
-                using FileStream stream = File.OpenRead(Path);
-                using StreamReader reader = TextEncodings.OpenReader(stream, Encoding);
-                var scanner = new JsonDocumentScanner(reader);
-                long count = 0;
-                while (scanner.Skip())
                 {
-                    if ((++count & 0xFFF) == 0)
+                    using FileStream stream = File.OpenRead(Path);
+                    using StreamReader reader = TextEncodings.OpenReader(stream, Encoding);
+                    var scanner = new JsonDocumentScanner(reader);
+                    long count = 0;
+                    while (scanner.Skip())
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        if ((++count & 0xFFF) == 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
                     }
+                    return count;
                 }
-                return count;
-            }
             default:
-            {
-                using FileStream stream = File.OpenRead(Path);
-                using StreamReader reader = TextEncodings.OpenReader(stream, Encoding);
-                long records = CsvReader.CountRecords(reader, cancellationToken);
-                return HasHeader ? Math.Max(0, records - 1) : records;
-            }
+                {
+                    using FileStream stream = File.OpenRead(Path);
+                    using StreamReader reader = TextEncodings.OpenReader(stream, Encoding);
+                    long records = CsvReader.CountRecords(reader, cancellationToken);
+                    return HasHeader ? Math.Max(0, records - 1) : records;
+                }
         }
     }
 }
@@ -148,7 +148,7 @@ internal sealed class CsvImportReader : IImportReader
     private readonly StreamReader _text;
     private readonly CsvReader _csv;
     private string[]? _pending;
-    private long _pendingLine;
+    private readonly long _pendingLine;
 
     /// <summary>构造(读掉表头)。</summary>
     public CsvImportReader(ImportSource source)
@@ -300,7 +300,7 @@ internal sealed class JsonDocumentScanner(TextReader reader)
     {
         json = "";
         line = 0;
-        _current.Clear();
+        _ = _current.Clear();
         int depth = 0;
         bool inString = false;
         bool escape = false;
@@ -330,14 +330,14 @@ internal sealed class JsonDocumentScanner(TextReader reader)
                     line = _line;
                     if (capture)
                     {
-                        _current.Append(c);
+                        _ = _current.Append(c);
                     }
                 }
                 continue;
             }
             if (capture)
             {
-                _current.Append(c);
+                _ = _current.Append(c);
             }
             if (inString)
             {

@@ -16,13 +16,11 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed class MongoSession : IMongoWorkspace, IDisposable
 {
     private readonly ConcurrentDictionary<string, IReadOnlyList<CollectionInfo>> _collections = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CollectionStats> _statsCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CollectionStats> _statsCache = [with(StringComparer.Ordinal)];
     private readonly List<TreeNode> _databaseNodes = [];
     private readonly IDisposable _registration;
     private IReadOnlyList<DatabaseInfo> _databases = [];
     private bool _showSystemDatabases;
-    private bool _isAvailable = true;
-    private int? _latencyMs;
     private int _queryCounter;
 
     /// <summary>构造(连上之后)。</summary>
@@ -36,7 +34,7 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
         Link = link;
         Guard = new(Connection.Settings, Connection.Privileges);
         Guard.Changed += OnGuardChanged;
-        _latencyMs = Connection.LatencyMs;
+        LatencyMs = Connection.LatencyMs;
         _showSystemDatabases = Connection.Settings.ShowSystemDatabases;
         Connection.Availability += OnAvailability;
         Connection.LatencyChanged += OnLatency;
@@ -77,10 +75,10 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
     public TreeNode Root => Entry.Root;
 
     /// <summary>服务器还在不在(驱动的心跳)。</summary>
-    public bool IsAvailable => _isAvailable;
+    public bool IsAvailable { get; private set; } = true;
 
     /// <summary>最近一次往返的延迟。</summary>
-    public int? LatencyMs => _latencyMs;
+    public int? LatencyMs { get; private set; }
 
     /// <summary>新查询标签的编号(每条连接各数各的)。</summary>
     internal int NextQueryNumber() => ++_queryCounter;
@@ -312,10 +310,10 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
             Database = dbNode.Name,
             Folder = kind,
             Meta = count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            IsLoaded = true
+            IsLoaded = true,
+            // 集合与视图默认展开(设计稿);用户与存储函数默认收起 —— 那两组很少是此行的目的。
+            IsExpanded = kind is FolderKind.Collections or FolderKind.Views or FolderKind.Buckets
         };
-        // 集合与视图默认展开(设计稿);用户与存储函数默认收起 —— 那两组很少是此行的目的。
-        folder.IsExpanded = kind is FolderKind.Collections or FolderKind.Views or FolderKind.Buckets;
         dbNode.Children.Add(folder);
         return folder;
     }
@@ -351,7 +349,7 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
             }
             finally
             {
-                gate.Release();
+                _ = gate.Release();
             }
         })).ConfigureAwait(false);
     }
@@ -477,13 +475,13 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
     internal async Task UnlockAsync()
     {
         if (Guard.IsProduction && !await ConfirmAsync(new()
-            {
-                Title = Loc["Toolbar_UnlockTitle"],
-                Message = Loc.Format("Toolbar_UnlockBody", ConnectionName),
-                ConfirmLabel = Loc["Toolbar_Unlock"],
-                IconKey = "Mongo.lock-open",
-                Danger = true
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Toolbar_UnlockTitle"],
+            Message = Loc.Format("Toolbar_UnlockBody", ConnectionName),
+            ConfirmLabel = Loc["Toolbar_Unlock"],
+            IconKey = "Mongo.lock-open",
+            Danger = true
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -494,13 +492,13 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
 
     private void OnAvailability(bool available) => Dispatcher.UIThread.Post(() =>
     {
-        _isAvailable = available;
+        IsAvailable = available;
         Shell.OnSessionChanged(this);
     });
 
     private void OnLatency(int ms) => Dispatcher.UIThread.Post(() =>
     {
-        _latencyMs = ms;
+        LatencyMs = ms;
         Shell.OnSessionChanged(this);
     });
 

@@ -34,33 +34,17 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>抽样数的可选值。</summary>
     public static IReadOnlyList<int> SampleChoices { get; } = [10, 20, 50, 100, 500, 1000];
 
-    private PipelineMode _mode = PipelineMode.Stages;
-    private string _pipelineText = "";
     private bool _syncingText;
-    private IReadOnlyList<EditorDiagnostic> _textDiagnostics = [];
-    private string _textError = "";
-    private bool _autoPreview = true;
-    private int _sampleSize = 20;
-    private bool _allowDiskUse = true;
-    private string _sourceCount = "";
     private bool _bulk;
     private CancellationTokenSource? _previewDebounce;
     private CancellationTokenSource? _previewRun;
     private CancellationTokenSource? _textDebounce;
     private CancellationTokenSource? _runCts;
     private string? _runComment;
-    private bool _isPreviewing;
     private TimeSpan? _previewElapsed;
-    private string _previewError = "";
     private IReadOnlyList<BsonDocument> _inputSample = [];
     private string _savedSnapshot;
     private string? _savedName;
-    private IReadOnlyList<PipelineColumn> _columns = [];
-    private IReadOnlyList<PipelineRow> _rows = [];
-    private bool _hasRun;
-    private bool _isRunning;
-    private string _runError = "";
-    private string _resultSummary = "";
     private string _activity = "";
 
     /// <summary>构造。</summary>
@@ -140,9 +124,9 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>源集合的文档数缩写(<c>1.28M</c>)。</summary>
     public string SourceCount
     {
-        get => _sourceCount;
-        private set => SetProperty(ref _sourceCount, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>源集合图标(视图是眼睛,时序集合是柱状)。</summary>
     public string SourceIcon => Info.Kind switch
@@ -153,12 +137,12 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     };
 
     /// <summary>当前编辑方式。</summary>
-    public PipelineMode Mode => _mode;
+    public PipelineMode Mode { get; private set; } = PipelineMode.Stages;
 
     /// <summary>「阶段」分段。</summary>
     public bool IsStagesMode
     {
-        get => _mode == PipelineMode.Stages;
+        get => Mode == PipelineMode.Stages;
         set
         {
             if (value)
@@ -171,7 +155,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>「文本」分段。</summary>
     public bool IsTextMode
     {
-        get => _mode == PipelineMode.Text;
+        get => Mode == PipelineMode.Text;
         set
         {
             if (value)
@@ -184,10 +168,9 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>自动预览。</summary>
     public bool AutoPreview
     {
-        get => _autoPreview;
-        set
+        get; set
         {
-            if (!SetProperty(ref _autoPreview, value))
+            if (!SetProperty(ref field, value))
             {
                 return;
             }
@@ -205,16 +188,15 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
                 _previewDebounce?.Cancel();
             }
         }
-    }
+    } = true;
 
     /// <summary>预览的抽样输入文档数。</summary>
     public int SampleSize
     {
-        get => _sampleSize;
-        set
+        get; set
         {
             value = Math.Clamp(value, 1, 100_000);
-            if (SetProperty(ref _sampleSize, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(SampleText), nameof(SampleTip), nameof(PreviewSummary));
                 if (AutoPreview)
@@ -224,68 +206,61 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
                 UpdateStatus();
             }
         }
-    }
+    } = 20;
 
     /// <summary><c>抽样 20</c>。</summary>
-    public string SampleText => Loc.Format("Pipe_Sample", _sampleSize);
+    public string SampleText => Loc.Format("Pipe_Sample", SampleSize);
 
     /// <summary>抽样数的悬停说明。</summary>
-    public string SampleTip => Loc.Format("Pipe_SampleTip", _sampleSize);
+    public string SampleTip => Loc.Format("Pipe_SampleTip", SampleSize);
 
     /// <summary>allowDiskUse(底栏右侧可切)。</summary>
     public bool AllowDiskUse
     {
-        get => _allowDiskUse;
-        set
+        get; set
         {
-            if (SetProperty(ref _allowDiskUse, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(AllowDiskUseText));
             }
         }
-    }
+    } = true;
 
     /// <summary><c>allowDiskUse · 已开启</c>。</summary>
-    public string AllowDiskUseText => Loc.Format("Pipe_AllowDiskUse", Loc[_allowDiskUse ? "Pipe_On" : "Pipe_Off"]);
+    public string AllowDiskUseText => Loc.Format("Pipe_AllowDiskUse", Loc[AllowDiskUse ? "Pipe_On" : "Pipe_Off"]);
 
     // ── 文本模式 ───────────────────────────────────────────────────────────
 
     /// <summary>整条管道的文本(文本模式的编辑器双向绑定)。</summary>
     public string PipelineTextValue
     {
-        get => _pipelineText;
-        set
+        get; set
         {
-            if (!SetProperty(ref _pipelineText, value ?? "") || _syncingText)
+            if (!SetProperty(ref field, value ?? "") || _syncingText)
             {
                 return;
             }
             ScheduleTextSync();
         }
-    }
+    } = "";
 
     /// <summary>文本的诊断。</summary>
-    public IReadOnlyList<EditorDiagnostic> TextDiagnostics
-    {
-        get => _textDiagnostics;
-        private set => SetProperty(ref _textDiagnostics, value);
-    }
+    public IReadOnlyList<EditorDiagnostic> TextDiagnostics { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>文本解析失败的原因;同步成功为空。</summary>
     public string TextError
     {
-        get => _textError;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _textError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasTextError));
             }
         }
-    }
+    } = "";
 
     /// <summary>文本有错(停在文本模式)。</summary>
-    public bool HasTextError => _textError.Length > 0;
+    public bool HasTextError => TextError.Length > 0;
 
     /// <summary>文本模式编辑器的补全(阶段名、运算符、源集合的字段)。</summary>
     public Func<CompletionRequest, Task<CompletionSet?>> TextCompletionProvider => request =>
@@ -296,10 +271,9 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>正在算预览。</summary>
     public bool IsPreviewing
     {
-        get => _isPreviewing;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _isPreviewing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(PreviewSummary));
             }
@@ -332,69 +306,58 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     {
         get
         {
-            if (!_autoPreview && _previewElapsed is null)
+            if (!AutoPreview && _previewElapsed is null)
             {
                 return Loc["Pipe_PreviewOffHint"];
             }
-            if (_isPreviewing)
+            if (IsPreviewing)
             {
-                return Loc.Format("Pipe_Previewing", _sampleSize);
+                return Loc.Format("Pipe_Previewing", SampleSize);
             }
-            if (_previewError.Length > 0)
+            if (field.Length > 0)
             {
-                return Loc.Format("Pipe_PreviewFailed", _previewError);
+                return Loc.Format("Pipe_PreviewFailed", field);
             }
             return _previewElapsed is { } elapsed
-                ? Loc.Format("Pipe_PreviewBasis", _sampleSize, PipelineResults.Elapsed(elapsed))
-                : Loc.Format("Pipe_PreviewBasisPending", _sampleSize);
+                ? Loc.Format("Pipe_PreviewBasis", SampleSize, PipelineResults.Elapsed(elapsed))
+                : Loc.Format("Pipe_PreviewBasisPending", SampleSize);
         }
-    }
+
+        private set;
+    } = "";
 
     /// <summary>自动预览关着时,底栏那句可以点一下手动算一次。</summary>
-    public bool CanRefreshPreview => !_autoPreview;
+    public bool CanRefreshPreview => !AutoPreview;
 
     // ── 输出表 ─────────────────────────────────────────────────────────────
 
     /// <summary>输出表的列。</summary>
-    public IReadOnlyList<PipelineColumn> ResultColumns
-    {
-        get => _columns;
-        private set => SetProperty(ref _columns, value);
-    }
+    public IReadOnlyList<PipelineColumn> ResultColumns { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>输出表的行。</summary>
-    public IReadOnlyList<PipelineRow> ResultRows
-    {
-        get => _rows;
-        private set => SetProperty(ref _rows, value);
-    }
+    public IReadOnlyList<PipelineRow> ResultRows { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>输出表的总宽(横向滚动用)。</summary>
-    public double ResultWidth => PipelineResults.NumberWidth + _columns.Sum(static c => c.Width);
+    public double ResultWidth => PipelineResults.NumberWidth + ResultColumns.Sum(static c => c.Width);
 
     /// <summary>输出表的高度:最多十二行,再多在表里滚。</summary>
-    public double ResultListHeight => Math.Max(1, Math.Min(_rows.Count, 12)) * PipelineResults.RowHeight;
+    public double ResultListHeight => Math.Max(1, Math.Min(ResultRows.Count, 12)) * PipelineResults.RowHeight;
 
     /// <summary>跑过一次(输出卡片才出现)。</summary>
-    public bool HasRun
-    {
-        get => _hasRun;
-        private set => SetProperty(ref _hasRun, value);
-    }
+    public bool HasRun { get; private set => SetProperty(ref field, value); }
 
     /// <summary>有输出行。</summary>
-    public bool HasRows => _rows.Count > 0;
+    public bool HasRows => ResultRows.Count > 0;
 
     /// <summary>跑完了、没出错、但一份文档也没有(给一句话,而不是一张空表)。</summary>
-    public bool ShowEmptyResult => _hasRun && !_isRunning && _runError.Length == 0 && _rows.Count == 0;
+    public bool ShowEmptyResult => HasRun && !IsRunning && RunError.Length == 0 && ResultRows.Count == 0;
 
     /// <summary>正在运行。</summary>
     public bool IsRunning
     {
-        get => _isRunning;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _isRunning, value))
+            if (SetProperty(ref field, value))
             {
                 RunCommand.RaiseCanExecuteChanged();
                 RaisePropertiesChanged(nameof(ResultSummary), nameof(ShowEmptyResult));
@@ -405,21 +368,20 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>运行的报错。</summary>
     public string RunError
     {
-        get => _runError;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _runError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(HasRunError), nameof(ShowEmptyResult));
             }
         }
-    }
+    } = "";
 
     /// <summary>运行失败。</summary>
-    public bool HasRunError => _runError.Length > 0;
+    public bool HasRunError => RunError.Length > 0;
 
     /// <summary>输出卡片标题旁:<c>10 份文档 · 完整运行 1.4 s</c>。</summary>
-    public string ResultSummary => _isRunning ? Loc["Pipe_Running"] : _resultSummary;
+    public string ResultSummary { get => IsRunning ? Loc["Pipe_Running"] : field; private set; } = "";
 
     // ── 命令 ───────────────────────────────────────────────────────────────
 
@@ -688,7 +650,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
 
     private void SwitchMode(PipelineMode mode)
     {
-        if (_mode == mode)
+        if (Mode == mode)
         {
             return;
         }
@@ -699,7 +661,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
             _syncingText = false;
             TextError = "";
             TextDiagnostics = [];
-            _mode = mode;
+            Mode = mode;
         }
         else
         {
@@ -711,7 +673,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
                 RaisePropertiesChanged(nameof(IsStagesMode), nameof(IsTextMode));
                 return;
             }
-            _mode = mode;
+            Mode = mode;
         }
         RaisePropertiesChanged(nameof(Mode), nameof(IsStagesMode), nameof(IsTextMode));
     }
@@ -734,18 +696,18 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
         {
             return;
         }
-        ApplyText();
+        _ = ApplyText();
     }
 
     /// <summary>把文本解析回卡片;失败时标错并返回 <see langword="false" />(卡片不动)。</summary>
     internal bool ApplyText()
     {
-        PipelineParse parse = PipelineText.Parse(_pipelineText);
+        PipelineParse parse = PipelineText.Parse(PipelineTextValue);
         if (!parse.Ok)
         {
             string message = Loc.Format(parse.ErrorKey!, parse.ErrorArgument);
             TextError = message;
-            TextDiagnostics = [new EditorDiagnostic(Math.Clamp(parse.ErrorOffset, 0, Math.Max(0, _pipelineText.Length - 1)), parse.ErrorLength, message)];
+            TextDiagnostics = [new EditorDiagnostic(Math.Clamp(parse.ErrorOffset, 0, Math.Max(0, PipelineTextValue.Length - 1)), parse.ErrorLength, message)];
             RaisePropertiesChanged(nameof(SummaryIcon), nameof(SummaryToken));
             return false;
         }
@@ -858,7 +820,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
             // 预览从不写,任何失败都只是"这次没算出来":记在底栏,不弹错误框打断用户打字。
             if (!cts.IsCancellationRequested)
             {
-                _previewError = MongoConnector.Describe(ex);
+                PreviewSummary = MongoConnector.Describe(ex);
                 RaisePropertyChanged(nameof(PreviewSummary));
             }
         }
@@ -873,7 +835,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
 
     private void ApplyPreview(List<PipelineStage> stages, PipelinePreviewRun run)
     {
-        _previewError = "";
+        PreviewSummary = "";
         _inputSample = run.Input;
         IReadOnlyList<PipelineFieldSample> upstream = PipelineFields.Sample(run.Input);
         for (int i = 0; i < stages.Count && i < run.Stages.Count; i++)
@@ -905,7 +867,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// </summary>
     private bool EnsureRunnable()
     {
-        if (_mode == PipelineMode.Text && !ApplyText())
+        if (Mode == PipelineMode.Text && !ApplyText())
         {
             Workspace.Toast(new() { Title = Loc["Pipe_TextInvalid"], Detail = TextError, Kind = ToastKind.Warning });
             return false;
@@ -988,12 +950,12 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
         catch (OperationCanceledException)
         {
             RunError = Loc["Pipe_RunCancelled"];
-            _resultSummary = "";
+            ResultSummary = "";
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
             RunError = MongoConnector.Describe(ex);
-            _resultSummary = "";
+            ResultSummary = "";
             ResultColumns = [];
             ResultRows = [];
             RaisePropertiesChanged(nameof(HasRows), nameof(ResultWidth), nameof(ResultListHeight), nameof(ShowEmptyResult));
@@ -1028,7 +990,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     {
         try
         {
-            await Workspace.Connection.KillByCommentAsync(comment).ConfigureAwait(false);
+            _ = await Workspace.Connection.KillByCommentAsync(comment).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
@@ -1042,7 +1004,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
         ResultColumns = columns;
         ResultRows = rows;
         string count = BsonText.Grouped(docs.Count);
-        _resultSummary = more
+        ResultSummary = more
             ? Loc.Format("Pipe_ResultSummaryMore", count, PipelineResults.Elapsed(elapsed))
             : Loc.Format("Pipe_ResultSummary", count, PipelineResults.Elapsed(elapsed));
         _activity = Loc.Format("Pipe_StatusRun", more ? count + "+" : count, PipelineResults.Elapsed(elapsed));
@@ -1095,15 +1057,15 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
                     _ => (Database, spec.ToString()!)
                 };
             case "$merge":
-            {
-                BsonValue into = spec is BsonDocument merge ? merge.GetValue("into", "") : spec;
-                return into switch
                 {
-                    BsonString name => (Database, name.Value),
-                    BsonDocument doc => (doc.GetValue("db", Database).ToString()!, doc.GetValue("coll", "").ToString()!),
-                    _ => (Database, into.ToString()!)
-                };
-            }
+                    BsonValue into = spec is BsonDocument merge ? merge.GetValue("into", "") : spec;
+                    return into switch
+                    {
+                        BsonString name => (Database, name.Value),
+                        BsonDocument doc => (doc.GetValue("db", Database).ToString()!, doc.GetValue("coll", "").ToString()!),
+                        _ => (Database, into.ToString()!)
+                    };
+                }
             default:
                 return null;
         }
@@ -1174,7 +1136,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     /// <summary>保存管道(按连接存放,同名覆盖)。</summary>
     private async Task SaveAsync()
     {
-        if (_mode == PipelineMode.Text && !ApplyText())
+        if (Mode == PipelineMode.Text && !ApplyText())
         {
             Workspace.Toast(new() { Title = Loc["Pipe_TextInvalid"], Detail = TextError, Kind = ToastKind.Warning });
             return;
@@ -1246,18 +1208,18 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
         }
         string name = chosen.Name.Trim();
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Pipe_ViewTitle"],
-                Message = Loc.Format("Pipe_ViewConfirmBody", name, CollectionName, Database),
-                ConfirmLabel = Loc["Pipe_ViewConfirm"],
-                IconKey = "Mongo.eye",
-                Danger = false,
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? name : null
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Pipe_ViewTitle"],
+            Message = Loc.Format("Pipe_ViewConfirmBody", name, CollectionName, Database),
+            ConfirmLabel = Loc["Pipe_ViewConfirm"],
+            IconKey = "Mongo.eye",
+            Danger = false,
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
-        await CreateViewCoreAsync(name, pipeline).ConfigureAwait(true);
+        _ = await CreateViewCoreAsync(name, pipeline).ConfigureAwait(true);
     }
 
     /// <summary>真正建视图(单测直接调)。</summary>
@@ -1265,7 +1227,7 @@ internal sealed class PipelineTabViewModel : WorkspaceTab
     {
         try
         {
-            await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
             {
                 { "create", name },
                 { "viewOn", CollectionName },

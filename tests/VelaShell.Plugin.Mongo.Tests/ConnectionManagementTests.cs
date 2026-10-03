@@ -1,7 +1,5 @@
 using Avalonia.Controls;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Ui;
@@ -58,7 +56,7 @@ public sealed class ConnectionManagementTests
             Button connect = view.GetVisualDescendants().OfType<Button>().Single(static b => b.Name == "ConnectButton");
             Assert.IsTrue(connect.IsEffectivelyVisible);
             Assert.IsTrue(view.GetVisualDescendants().OfType<Button>().Single(static b => b.Name == "EmptyNewConnection").IsEffectivelyVisible);
-            Screens.Capture(window, "00-empty-workbench");
+            _ = Screens.Capture(window, "00-empty-workbench");
 
             connect.Command!.Execute(null);
             await Screens.PumpAsync(5);
@@ -178,7 +176,7 @@ public sealed class ConnectionManagementTests
             Assert.AreEqual(bastion.SavedSessionId, settings.JumpSessionId);
             Assert.IsTrue(settings.ReadOnly);
             Assert.IsFalse(profile.Settings.Values.Any(static v => v.Contains("pw", StringComparison.Ordinal)), "口令不进设置");
-            Screens.Capture(window, "10-connection-dialog");
+            _ = Screens.Capture(window, "10-connection-dialog");
 
             dialog.IsSrvTopology = true;
             Assert.IsFalse(dialog.CanUseSsh is false && dialog.SshEnabled is false, "开着的跳板开关仍然能关");
@@ -243,7 +241,7 @@ public sealed class ConnectionManagementTests
             CollectionAssert.AreEqual(new[] { "tcp", "auth", "hello", "privileges" }, dialog.Steps.Select(static s => s.Key).ToArray());
             Assert.IsTrue(dialog.HasMembers);
             StringAssert.StartsWith(dialog.TestSummary, "连接成功");
-            Screens.Capture(window, "10-connection-dialog-tested");
+            _ = Screens.Capture(window, "10-connection-dialog-tested");
 
             dialog.Database = "other";
             Assert.IsEmpty(dialog.Steps, "参数一改,上一次的测试结果不再代表它");
@@ -277,7 +275,7 @@ public sealed class ConnectionManagementTests
             Assert.IsNotNull(entry.Session);
             Assert.AreSame(entry.Session, shell.CurrentSession);
             Assert.AreEqual("ok", entry.Root.DotClass);
-            Assert.IsInstanceOfType<ObjectsTabViewModel>(shell.ActiveTab);
+            _ = Assert.IsInstanceOfType<ObjectsTabViewModel>(shell.ActiveTab);
             Assert.AreEqual("local", shell.StatusConnection);
             Assert.AreEqual("local", (await new MongoProfileStore(context).LoadAsync()).Single().Name);
             Assert.IsNotNull((await new MongoProfileStore(context).LoadAsync()).Single().LastConnectedAt, "记下最近连过,下次排在上面");
@@ -314,10 +312,10 @@ public sealed class ConnectionManagementTests
             Assert.AreEqual("无法连接 mongo-inner-01", card.FailedTitle);
             StringAssert.Contains(card.ErrorMessage, "127.0.0.1:1");
             Assert.IsTrue(view.GetVisualDescendants().OfType<TextBlock>().Any(static t => t.Text == "无法连接 mongo-inner-01" && t.IsEffectivelyVisible));
-            Screens.Capture(window, "22-connection-failed");
+            _ = Screens.Capture(window, "22-connection-failed");
 
             card.EditCommand.Execute(null);
-            Assert.IsInstanceOfType<ConnectionDialogViewModel>(shell.Dialog);
+            _ = Assert.IsInstanceOfType<ConnectionDialogViewModel>(shell.Dialog);
             shell.CloseDialog(shell.Dialog!);
 
             await card.CloseCommand.ExecuteAsync();
@@ -389,7 +387,7 @@ public sealed class ConnectionManagementTests
         Assert.IsFalse(tab.IsSidePanelVisible);
         Assert.AreEqual(0d, split.ColumnDefinitions[2].ActualWidth);
         Assert.IsFalse(inspector.IsEffectivelyVisible);
-        Screens.Capture(bench.Window, "01-collection-side-panel-hidden");
+        _ = Screens.Capture(bench.Window, "01-collection-side-panel-hidden");
 
         toggle.Command.Execute(null);
         await Screens.PumpAsync(5);

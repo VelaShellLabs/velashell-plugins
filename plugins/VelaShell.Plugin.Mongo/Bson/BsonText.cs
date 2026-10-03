@@ -135,123 +135,123 @@ public static partial class BsonText
         switch (value.BsonType)
         {
             case BsonType.Document:
-            {
-                BsonDocument doc = value.AsBsonDocument;
-                if (doc.ElementCount == 0)
                 {
-                    b.Append("{}");
+                    BsonDocument doc = value.AsBsonDocument;
+                    if (doc.ElementCount == 0)
+                    {
+                        _ = b.Append("{}");
+                        return;
+                    }
+                    _ = b.Append('{');
+                    int i = 0;
+                    foreach (BsonElement element in doc)
+                    {
+                        _ = b.Append(i++ == 0 ? "" : ",");
+                        NewLine(b, indent, depth + 1);
+                        _ = b.Append(FieldName(element.Name)).Append(": ");
+                        WriteShell(b, element.Value, indent, depth + 1);
+                    }
+                    NewLine(b, indent, depth);
+                    _ = b.Append('}');
                     return;
                 }
-                b.Append('{');
-                int i = 0;
-                foreach (BsonElement element in doc)
-                {
-                    b.Append(i++ == 0 ? "" : ",");
-                    NewLine(b, indent, depth + 1);
-                    b.Append(FieldName(element.Name)).Append(": ");
-                    WriteShell(b, element.Value, indent, depth + 1);
-                }
-                NewLine(b, indent, depth);
-                b.Append('}');
-                return;
-            }
             case BsonType.Array:
-            {
-                BsonArray array = value.AsBsonArray;
-                if (array.Count == 0)
                 {
-                    b.Append("[]");
-                    return;
-                }
-                // 全是标量的短数组写在一行:["企业", "开票"] 拆成三行只会把 JSON 视图拉长。
-                bool flat = indent is null || array.All(static v => !v.IsBsonDocument && !v.IsBsonArray) && array.Count <= 8;
-                b.Append('[');
-                for (int i = 0; i < array.Count; i++)
-                {
-                    b.Append(i == 0 ? "" : ",");
+                    BsonArray array = value.AsBsonArray;
+                    if (array.Count == 0)
+                    {
+                        _ = b.Append("[]");
+                        return;
+                    }
+                    // 全是标量的短数组写在一行:["企业", "开票"] 拆成三行只会把 JSON 视图拉长。
+                    bool flat = indent is null || array.All(static v => !v.IsBsonDocument && !v.IsBsonArray) && array.Count <= 8;
+                    _ = b.Append('[');
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        _ = b.Append(i == 0 ? "" : ",");
+                        if (flat)
+                        {
+                            _ = b.Append(' ');
+                        }
+                        else
+                        {
+                            NewLine(b, indent, depth + 1);
+                        }
+                        WriteShell(b, array[i], indent, depth + 1);
+                    }
                     if (flat)
                     {
-                        b.Append(' ');
+                        _ = b.Append(" ]");
                     }
                     else
                     {
-                        NewLine(b, indent, depth + 1);
+                        NewLine(b, indent, depth);
+                        _ = b.Append(']');
                     }
-                    WriteShell(b, array[i], indent, depth + 1);
+                    return;
                 }
-                if (flat)
-                {
-                    b.Append(" ]");
-                }
-                else
-                {
-                    NewLine(b, indent, depth);
-                    b.Append(']');
-                }
-                return;
-            }
             case BsonType.ObjectId:
-                b.Append("ObjectId(\"").Append(value.AsObjectId).Append("\")");
+                _ = b.Append("ObjectId(\"").Append(value.AsObjectId).Append("\")");
                 return;
             case BsonType.String:
-                b.Append(Quote(value.AsString));
+                _ = b.Append(Quote(value.AsString));
                 return;
             case BsonType.Int32:
-                b.Append(value.AsInt32.ToString(CultureInfo.InvariantCulture));
+                _ = b.Append(value.AsInt32.ToString(CultureInfo.InvariantCulture));
                 return;
             case BsonType.Int64:
-                b.Append("NumberLong(\"").Append(value.AsInt64.ToString(CultureInfo.InvariantCulture)).Append("\")");
+                _ = b.Append("NumberLong(\"").Append(value.AsInt64.ToString(CultureInfo.InvariantCulture)).Append("\")");
                 return;
             case BsonType.Double:
-                b.Append(FormatDouble(value.AsDouble, forceDecimalPoint: false));
+                _ = b.Append(FormatDouble(value.AsDouble, forceDecimalPoint: false));
                 return;
             case BsonType.Decimal128:
-                b.Append("NumberDecimal(\"").Append(value.AsDecimal128).Append("\")");
+                _ = b.Append("NumberDecimal(\"").Append(value.AsDecimal128).Append("\")");
                 return;
             case BsonType.Boolean:
-                b.Append(value.AsBoolean ? "true" : "false");
+                _ = b.Append(value.AsBoolean ? "true" : "false");
                 return;
             case BsonType.DateTime:
-                b.Append("ISODate(\"").Append(IsoDate(value)).Append("\")");
+                _ = b.Append("ISODate(\"").Append(IsoDate(value)).Append("\")");
                 return;
             case BsonType.Null:
-                b.Append("null");
+                _ = b.Append("null");
                 return;
             case BsonType.Binary:
-            {
-                BsonBinaryData binary = value.AsBsonBinaryData;
-                if (binary.SubType == BsonBinarySubType.UuidStandard)
                 {
-                    b.Append("UUID(\"").Append(binary.ToGuid()).Append("\")");
+                    BsonBinaryData binary = value.AsBsonBinaryData;
+                    if (binary.SubType == BsonBinarySubType.UuidStandard)
+                    {
+                        _ = b.Append("UUID(\"").Append(binary.ToGuid()).Append("\")");
+                    }
+                    else
+                    {
+                        _ = b.Append("BinData(").Append((int)binary.SubType).Append(", \"")
+                            .Append(Convert.ToBase64String(binary.Bytes)).Append("\")");
+                    }
+                    return;
                 }
-                else
-                {
-                    b.Append("BinData(").Append((int)binary.SubType).Append(", \"")
-                        .Append(Convert.ToBase64String(binary.Bytes)).Append("\")");
-                }
-                return;
-            }
             case BsonType.RegularExpression:
-            {
-                BsonRegularExpression regex = value.AsBsonRegularExpression;
-                b.Append('/').Append(regex.Pattern.Replace("/", "\\/", StringComparison.Ordinal)).Append('/').Append(regex.Options);
-                return;
-            }
+                {
+                    BsonRegularExpression regex = value.AsBsonRegularExpression;
+                    _ = b.Append('/').Append(regex.Pattern.Replace("/", "\\/", StringComparison.Ordinal)).Append('/').Append(regex.Options);
+                    return;
+                }
             case BsonType.Timestamp:
-                b.Append("Timestamp({ t: ").Append(value.AsBsonTimestamp.Timestamp)
+                _ = b.Append("Timestamp({ t: ").Append(value.AsBsonTimestamp.Timestamp)
                     .Append(", i: ").Append(value.AsBsonTimestamp.Increment).Append(" })");
                 return;
             case BsonType.MinKey:
-                b.Append("MinKey()");
+                _ = b.Append("MinKey()");
                 return;
             case BsonType.MaxKey:
-                b.Append("MaxKey()");
+                _ = b.Append("MaxKey()");
                 return;
             case BsonType.Undefined:
-                b.Append("undefined");
+                _ = b.Append("undefined");
                 return;
             default:
-                b.Append(value.ToJson());
+                _ = b.Append(value.ToJson());
                 return;
         }
     }
@@ -260,13 +260,13 @@ public static partial class BsonText
     {
         if (indent is null)
         {
-            b.Append(' ');
+            _ = b.Append(' ');
             return;
         }
-        b.Append('\n');
+        _ = b.Append('\n');
         for (int i = 0; i < depth; i++)
         {
-            b.Append(indent);
+            _ = b.Append(indent);
         }
     }
 
@@ -277,29 +277,29 @@ public static partial class BsonText
     public static string Quote(string text)
     {
         var b = new StringBuilder(text.Length + 2);
-        b.Append('"');
+        _ = b.Append('"');
         foreach (char c in text)
         {
             switch (c)
             {
-                case '"': b.Append("\\\""); break;
-                case '\\': b.Append("\\\\"); break;
-                case '\n': b.Append("\\n"); break;
-                case '\r': b.Append("\\r"); break;
-                case '\t': b.Append("\\t"); break;
+                case '"': _ = b.Append("\\\""); break;
+                case '\\': _ = b.Append("\\\\"); break;
+                case '\n': _ = b.Append("\\n"); break;
+                case '\r': _ = b.Append("\\r"); break;
+                case '\t': _ = b.Append("\\t"); break;
                 default:
                     if (c < 0x20)
                     {
-                        b.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        _ = b.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
                     }
                     else
                     {
-                        b.Append(c);
+                        _ = b.Append(c);
                     }
                     break;
             }
         }
-        b.Append('"');
+        _ = b.Append('"');
         return b.ToString();
     }
 
@@ -307,7 +307,7 @@ public static partial class BsonText
     public static string IsoDate(BsonValue value)
     {
         long ms = value.AsBsonDateTime.MillisecondsSinceEpoch;
-        DateTimeOffset at = DateTimeOffset.FromUnixTimeMilliseconds(ms);
+        var at = DateTimeOffset.FromUnixTimeMilliseconds(ms);
         return at.UtcDateTime.ToString(at.Millisecond == 0 ? "yyyy-MM-ddTHH:mm:ssZ" : "yyyy-MM-ddTHH:mm:ss.fffZ",
             CultureInfo.InvariantCulture);
     }
@@ -316,7 +316,7 @@ public static partial class BsonText
     public static string FormatDate(BsonValue value)
     {
         long ms = value.AsBsonDateTime.MillisecondsSinceEpoch;
-        if (ms < -62135596800000L || ms > 253402300799999L)
+        if (ms is < -62135596800000L or > 253402300799999L)
         {
             return ms.ToString(CultureInfo.InvariantCulture);
         }

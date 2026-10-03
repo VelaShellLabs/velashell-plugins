@@ -35,7 +35,7 @@ public sealed class XlsxTests
         foreach (ZipArchiveEntry entry in zip.Entries)
         {
             using Stream stream = entry.Open();
-            XDocument.Load(stream); // 不合法的 XML 在这里就抛
+            _ = XDocument.Load(stream); // 不合法的 XML 在这里就抛
         }
 
         XDocument workbook = Load(zip, "xl/workbook.xml");

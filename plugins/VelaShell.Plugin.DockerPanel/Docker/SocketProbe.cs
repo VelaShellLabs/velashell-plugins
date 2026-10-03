@@ -56,8 +56,8 @@ public static class SocketProbe
     {
         try
         {
-            var script = Script(endpoint.SocketPath);
-            var output = endpoint.Kind == DockerEndpointKind.Remote
+            string script = Script(endpoint.SocketPath);
+            string output = endpoint.Kind == DockerEndpointKind.Remote
                 ? (await exec.RunAsync(endpoint.SessionId, script,
                     new ExecOptions { Timeout = TimeSpan.FromSeconds(10) }, cancellationToken)
                     .ConfigureAwait(false)).Output
@@ -104,15 +104,15 @@ public static class SocketProbe
                 CreateNoWindow = true
             }
         };
-        process.Start();
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        _ = process.Start();
+        string output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         return output;
     }
 
     private static SocketProbeResult Parse(string output)
     {
-        var line = output.Split('\n').Select(l => l.Trim())
+        string line = output.Split('\n').Select(l => l.Trim())
                             .LastOrDefault(l => l.Length > 0) ?? "";
         if (line == "OK")
         {
@@ -127,7 +127,7 @@ public static class SocketProbe
             return Unknown;
         }
         // DENIED|属组|账号|账号所在的组
-        var parts = line.Split('|');
+        string[] parts = line.Split('|');
         return new(SocketProbeKind.PermissionDenied,
             parts.Length > 2 ? parts[2].Trim() : "",
             parts.Length > 1 ? parts[1].Trim() : "",

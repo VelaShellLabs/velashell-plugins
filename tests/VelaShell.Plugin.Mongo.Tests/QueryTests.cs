@@ -5,7 +5,6 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Shell;
@@ -455,34 +454,34 @@ public sealed class QueryTests
         first.TreeRows[0].ToggleCommand.Execute(null);
         await Screens.PumpAsync();
         Assert.IsGreaterThan(first.Documents.Count, first.TreeRows.Count, "展开第一份文档后多出它的字段行");
-        Screens.Capture(bench.Window, "03-query-tree");
+        _ = Screens.Capture(bench.Window, "03-query-tree");
 
         tab.ResultView = "json";
         await Screens.PumpAsync();
         Assert.StartsWith("[", first.JsonText);
-        Screens.Capture(bench.Window, "03-query-json");
+        _ = Screens.Capture(bench.Window, "03-query-json");
 
         tab.SelectPaneCommand.Execute(tab.Messages);
         tab.HelperTab = "history";
         await Screens.PumpAsync();
-        Screens.Capture(bench.Window, "03-query-messages");
+        _ = Screens.Capture(bench.Window, "03-query-messages");
 
         tab.CaretOffset = RunnableScript.IndexOf("orderNo", StringComparison.Ordinal);
         tab.ExportCodeCommand.Execute(null);
         await Screens.PumpAsync();
-        Assert.IsInstanceOfType<CodeExportDialogViewModel>(bench.ViewModel.Dialog);
-        Screens.Capture(bench.Window, "03-query-export");
+        _ = Assert.IsInstanceOfType<CodeExportDialogViewModel>(bench.ViewModel.Dialog);
+        _ = Screens.Capture(bench.Window, "03-query-export");
         bench.ViewModel.CloseDialog(bench.ViewModel.Dialog!);
 
         await tab.ExplainCurrentAsync(null);
         await tab.CompareWithHintAsync();
         await Screens.PumpAsync(60);
-        HintCompareDialogViewModel hint = (HintCompareDialogViewModel)bench.ViewModel.Dialog!;
+        var hint = (HintCompareDialogViewModel)bench.ViewModel.Dialog!;
         hint.SelectedIndex = "_id_";
         hint.CompareCommand.Execute(null);
         await Screens.PumpAsync(80);
         Assert.AreEqual("hint · _id_", hint.HintedTitle);
-        Screens.Capture(bench.Window, "14-explain-hint");
+        _ = Screens.Capture(bench.Window, "14-explain-hint");
     });
 
     [TestMethod]

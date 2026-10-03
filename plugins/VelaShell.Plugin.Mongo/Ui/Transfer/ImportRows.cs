@@ -8,11 +8,8 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed class ImportMappingRow : ObservableObject
 {
     private readonly Action _changed;
-    private bool _include = true;
     private string _target;
     private XferOption _kind;
-    private bool _isRequired;
-    private bool _isUnique;
 
     /// <summary>构造。</summary>
     public ImportMappingRow(string source, int index, string sample, string target, IReadOnlyList<XferOption> kinds, XferOption kind, Action changed)
@@ -38,19 +35,19 @@ internal sealed class ImportMappingRow : ObservableObject
     /// <summary>导入这一列。</summary>
     public bool Include
     {
-        get => _include;
+        get;
         set
         {
-            if (SetProperty(ref _include, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(RowOpacity));
                 _changed();
             }
         }
-    }
+    } = true;
 
     /// <summary>没勾的行淡一点。</summary>
-    public double RowOpacity => _include ? 1 : 0.55;
+    public double RowOpacity => Include ? 1 : 0.55;
 
     /// <summary>目标字段路径。</summary>
     public string Target
@@ -88,15 +85,15 @@ internal sealed class ImportMappingRow : ObservableObject
     /// <summary>目标字段是 validator 的必填项。</summary>
     public bool IsRequired
     {
-        get => _isRequired;
-        set => SetProperty(ref _isRequired, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>目标字段上有唯一索引。</summary>
     public bool IsUnique
     {
-        get => _isUnique;
-        set => SetProperty(ref _isUnique, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>→ 核心层的映射。</summary>
@@ -104,7 +101,7 @@ internal sealed class ImportMappingRow : ObservableObject
     {
         Source = Source,
         Index = Index,
-        Include = _include,
+        Include = Include,
         Target = _target.Trim(),
         Kind = _kind.Value as BsonKind?
     };

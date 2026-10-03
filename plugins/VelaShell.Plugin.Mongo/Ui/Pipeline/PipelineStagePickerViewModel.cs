@@ -15,7 +15,6 @@ internal sealed record PipelineStageChoice(string Name, string Short, string Des
 internal sealed class PipelineStagePickerViewModel : ObservableObject
 {
     private readonly IReadOnlyList<PipelineStageChoice> _all;
-    private string _query = "";
     private IReadOnlyList<PipelineStageChoice> _items;
     private PipelineStageChoice? _selected;
 
@@ -46,15 +45,15 @@ internal sealed class PipelineStagePickerViewModel : ObservableObject
     /// <summary>搜索词(<c>$lo</c>、<c>lookup</c>、<c>关联</c> 都能搜到 <c>$lookup</c>)。</summary>
     public string Query
     {
-        get => _query;
+        get;
         set
         {
-            if (SetProperty(ref _query, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 Filter();
             }
         }
-    }
+    } = "";
 
     /// <summary>过滤后的列表。</summary>
     public IReadOnlyList<PipelineStageChoice> Items
@@ -111,7 +110,7 @@ internal sealed class PipelineStagePickerViewModel : ObservableObject
 
     private void Filter()
     {
-        string q = _query.Trim().TrimStart('$');
+        string q = Query.Trim().TrimStart('$');
         if (q.Length == 0)
         {
             Items = _all;
@@ -119,8 +118,8 @@ internal sealed class PipelineStagePickerViewModel : ObservableObject
         else
         {
             // 名字前缀匹配排前面,其余(名字包含、说明包含)随后 —— 敲 "$s" 先给 $sort / $set 而不是 $densify。
-            var prefix = _all.Where(c => c.Name.TrimStart('$').StartsWith(q, StringComparison.OrdinalIgnoreCase));
-            var rest = _all.Where(c => !c.Name.TrimStart('$').StartsWith(q, StringComparison.OrdinalIgnoreCase)
+            IEnumerable<PipelineStageChoice> prefix = _all.Where(c => c.Name.TrimStart('$').StartsWith(q, StringComparison.OrdinalIgnoreCase));
+            IEnumerable<PipelineStageChoice> rest = _all.Where(c => !c.Name.TrimStart('$').StartsWith(q, StringComparison.OrdinalIgnoreCase)
                                        && (c.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                                            || c.Short.Contains(q, StringComparison.OrdinalIgnoreCase)
                                            || c.Description.Contains(q, StringComparison.OrdinalIgnoreCase)));

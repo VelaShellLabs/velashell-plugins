@@ -35,11 +35,11 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
             var builder = new StringBuilder(Filter);
             if (Sort is { Length: > 0 })
             {
-                builder.Append("  sort ").Append(Sort);
+                _ = builder.Append("  sort ").Append(Sort);
             }
             if (Extra is { Length: > 0 })
             {
-                builder.Append("  ").Append(Extra);
+                _ = builder.Append("  ").Append(Extra);
             }
             return builder.ToString();
         }
@@ -127,14 +127,14 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
         var builder = new StringBuilder("[");
         for (int i = 0; i < pipeline.Count; i++)
         {
-            builder.Append(i == 0 ? "" : ", ");
+            _ = builder.Append(i == 0 ? "" : ", ");
             if (pipeline[i] is not BsonDocument { ElementCount: > 0 } stage)
             {
-                builder.Append('?');
+                _ = builder.Append('?');
                 continue;
             }
             BsonElement head = stage.GetElement(0);
-            builder.Append(head.Name).Append(' ');
+            _ = builder.Append(head.Name).Append(' ');
             if (head.Name == "$match")
             {
                 WriteQuery(builder, head.Value);
@@ -158,7 +158,7 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
         int i = 0;
         foreach (BsonElement element in doc)
         {
-            builder.Append(i++ == 0 ? "" : ", ").Append(element.Name).Append(": ").Append(BsonText.Literal(element.Value));
+            _ = builder.Append(i++ == 0 ? "" : ", ").Append(element.Name).Append(": ").Append(BsonText.Literal(element.Value));
         }
         return builder.Append(" }").ToString();
     }
@@ -186,32 +186,32 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
     {
         if (value is not BsonDocument doc)
         {
-            b.Append('?');
+            _ = b.Append('?');
             return;
         }
         if (doc.ElementCount == 0)
         {
-            b.Append("{}");
+            _ = b.Append("{}");
             return;
         }
-        b.Append("{ ");
+        _ = b.Append("{ ");
         int i = 0;
         foreach (BsonElement element in doc)
         {
-            b.Append(i++ == 0 ? "" : ", ").Append(element.Name).Append(": ");
+            _ = b.Append(i++ == 0 ? "" : ", ").Append(element.Name).Append(": ");
             switch (element.Name)
             {
                 case "$and" or "$or" or "$nor" when element.Value is BsonArray branches:
-                    b.Append('[');
+                    _ = b.Append('[');
                     for (int j = 0; j < branches.Count; j++)
                     {
-                        b.Append(j == 0 ? "" : ", ");
+                        _ = b.Append(j == 0 ? "" : ", ");
                         WriteQuery(b, branches[j]);
                     }
-                    b.Append(']');
+                    _ = b.Append(']');
                     break;
                 case "$exists" when element.Value.IsBoolean:
-                    b.Append(element.Value.AsBoolean ? "true" : "false");
+                    _ = b.Append(element.Value.AsBoolean ? "true" : "false");
                     break;
                 case "$expr":
                     WriteExpression(b, element.Value);
@@ -224,12 +224,12 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
                     }
                     else
                     {
-                        b.Append('?');
+                        _ = b.Append('?');
                     }
                     break;
             }
         }
-        b.Append(" }");
+        _ = b.Append(" }");
     }
 
     private static void WriteExpression(StringBuilder b, BsonValue value)
@@ -239,14 +239,14 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
             case BsonDocument doc:
                 if (doc.ElementCount == 0)
                 {
-                    b.Append("{}");
+                    _ = b.Append("{}");
                     return;
                 }
-                b.Append("{ ");
+                _ = b.Append("{ ");
                 int i = 0;
                 foreach (BsonElement element in doc)
                 {
-                    b.Append(i++ == 0 ? "" : ", ").Append(element.Name).Append(": ");
+                    _ = b.Append(i++ == 0 ? "" : ", ").Append(element.Name).Append(": ");
                     if (element.Name == "$match")
                     {
                         // $lookup / $facet 里嵌套的子管道:$match 依旧按条件打码。
@@ -257,27 +257,27 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
                         WriteExpression(b, element.Value);
                     }
                 }
-                b.Append(" }");
+                _ = b.Append(" }");
                 return;
             case BsonArray array:
-                b.Append('[');
+                _ = b.Append('[');
                 for (int j = 0; j < array.Count; j++)
                 {
-                    b.Append(j == 0 ? "" : ", ");
+                    _ = b.Append(j == 0 ? "" : ", ");
                     WriteExpression(b, array[j]);
                 }
-                b.Append(']');
+                _ = b.Append(']');
                 return;
             case BsonString s:
                 // 表达式里的字符串多半是结构($字段路径、$lookup 的 from / as);常量字符串也一并保留,
                 // 宁可两个形状分开,也不要把 "$device" 这种关键信息抹成问号。
-                b.Append(s.Value.StartsWith('$') ? s.Value : BsonText.Quote(s.Value));
+                _ = b.Append(s.Value.StartsWith('$') ? s.Value : BsonText.Quote(s.Value));
                 return;
             case BsonInt32 or BsonInt64 or BsonDouble or BsonDecimal128 or BsonBoolean or BsonNull:
-                b.Append(BsonText.Literal(value));
+                _ = b.Append(BsonText.Literal(value));
                 return;
             default:
-                b.Append('?');
+                _ = b.Append('?');
                 return;
         }
     }
@@ -287,12 +287,13 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
         ["find", "aggregate", "count", "distinct", "findAndModify", "findandmodify", "update", "delete", "insert"];
 
     /// <summary>命令里与语句无关的会话 / 路由字段(还原 mongosh 语句时去掉)。</summary>
-    private static readonly HashSet<string> Plumbing = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> Plumbing =
+    [
+        with(StringComparer.Ordinal),
         "lsid", "$clusterTime", "$db", "$readPreference", "txnNumber", "autocommit", "startTransaction",
         "$audit", "$client", "mayBypassWriteBlocking", "cursor", "batchSize", "singleBatch", "comment",
         "maxTimeMS", "readConcern", "writeConcern", "$configTime", "$topologyTime", "shardVersion", "databaseVersion"
-    };
+    ];
 
     /// <summary>
     /// 把一条 profile 记录还原成可以粘进查询编辑器的 mongosh 语句,并给出对应的执行计划写法。
@@ -320,24 +321,24 @@ internal sealed record QueryShape(string Collection, string Operation, string Fi
             var builder = new StringBuilder($"{db}.find({Arg(Doc(command, "filter") ?? [])}");
             if (Doc(command, "projection") is { ElementCount: > 0 } projection)
             {
-                builder.Append(", ").Append(BsonText.Literal(projection));
+                _ = builder.Append(", ").Append(BsonText.Literal(projection));
             }
-            builder.Append(')');
+            _ = builder.Append(')');
             if (Doc(command, "sort") is { ElementCount: > 0 } sort)
             {
-                builder.Append(".sort(").Append(BsonText.Literal(sort)).Append(')');
+                _ = builder.Append(".sort(").Append(BsonText.Literal(sort)).Append(')');
             }
             if (command.TryGetValue("hint", out BsonValue hint))
             {
-                builder.Append(".hint(").Append(BsonText.Literal(hint)).Append(')');
+                _ = builder.Append(".hint(").Append(BsonText.Literal(hint)).Append(')');
             }
             if (command.TryGetValue("skip", out BsonValue skip) && skip.IsNumeric && skip.ToInt64() != 0)
             {
-                builder.Append(".skip(").Append(skip.ToInt64()).Append(')');
+                _ = builder.Append(".skip(").Append(skip.ToInt64()).Append(')');
             }
             if (command.TryGetValue("limit", out BsonValue limit) && limit.IsNumeric && limit.ToInt64() != 0)
             {
-                builder.Append(".limit(").Append(Math.Abs(limit.ToInt64())).Append(')');
+                _ = builder.Append(".limit(").Append(Math.Abs(limit.ToInt64())).Append(')');
             }
             string find = builder.ToString();
             return (find, $"{find}.explain({verbosity})");

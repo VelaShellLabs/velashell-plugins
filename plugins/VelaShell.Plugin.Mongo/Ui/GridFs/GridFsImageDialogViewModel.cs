@@ -9,7 +9,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed class GridFsImageDialogViewModel : DialogViewModel, IViewFactory
 {
     private readonly GridFsTabViewModel _owner;
-    private bool _actualSize;
 
     /// <summary>构造。</summary>
     /// <param name="owner">所属标签页(下载走它的传输队列)。</param>
@@ -52,7 +51,7 @@ internal sealed class GridFsImageDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>适应窗口。</summary>
     public bool IsFit
     {
-        get => !_actualSize;
+        get => !IsActualSize;
         set
         {
             if (value)
@@ -65,10 +64,10 @@ internal sealed class GridFsImageDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>100%(原始像素,可滚动)。</summary>
     public bool IsActualSize
     {
-        get => _actualSize;
+        get;
         set
         {
-            if (SetProperty(ref _actualSize, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsFit));
             }

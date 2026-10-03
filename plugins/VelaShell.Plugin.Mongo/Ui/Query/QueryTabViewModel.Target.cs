@@ -19,12 +19,10 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed partial class QueryTabViewModel
 {
     /// <summary>往不存在的集合里调也正常的方法(插入即新建集合),不报"库里没有这个集合"。</summary>
-    private static readonly HashSet<string> CreatingMethods = new(StringComparer.Ordinal)
-    {
-        "insertOne", "insertMany", "insert", "bulkWrite", "createIndex", "createIndexes", "ensureIndex"
-    };
-
-    private string? _switchingTo;
+    private static readonly HashSet<string> CreatingMethods =
+    [
+with(StringComparer.Ordinal),         "insertOne", "insertMany", "insert", "bulkWrite", "createIndex", "createIndexes", "ensureIndex"
+    ];
     private int _collectionCheck;
 
     /// <summary>连接下拉上的名字(这个标签所属的连接)。</summary>
@@ -33,10 +31,10 @@ internal sealed partial class QueryTabViewModel
     /// <summary>正在切过去的连接名(连接下拉上转圈、写「正在连接 X…」);没在切为 <see langword="null" />。</summary>
     public string? SwitchingTo
     {
-        get => _switchingTo;
+        get;
         private set
         {
-            if (SetProperty(ref _switchingTo, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsSwitching), nameof(SwitchingText));
             }
@@ -44,10 +42,10 @@ internal sealed partial class QueryTabViewModel
     }
 
     /// <summary>正在切换连接。</summary>
-    public bool IsSwitching => _switchingTo is not null;
+    public bool IsSwitching => SwitchingTo is not null;
 
     /// <summary>连接下拉在切换期间的字。</summary>
-    public string SwitchingText => _switchingTo is null ? "" : Loc.Format("Query_SwitchingTo", _switchingTo);
+    public string SwitchingText => SwitchingTo is null ? "" : Loc.Format("Query_SwitchingTo", SwitchingTo);
 
     /// <summary>工具行右侧那句「在 mongo-inner-01 / shop 上执行」。</summary>
     public string TargetText => Loc.Format("Query_TargetHint", ConnectionName, _database);
@@ -66,7 +64,7 @@ internal sealed partial class QueryTabViewModel
     internal bool IsCurrentConnection(ConnectionEntry entry) => ReferenceEquals((Workspace as MongoSession)?.Entry, entry);
 
     private void InitializeTarget() =>
-        SwitchConnectionCommand = new AsyncCommand<ConnectionEntry>(async entry => await SwitchConnectionAsync(entry).ConfigureAwait(true));
+        SwitchConnectionCommand = new AsyncCommand<ConnectionEntry>(SwitchConnectionAsync);
 
     /// <summary>
     /// 切到另一条连接:没连上先连;库名在那边也有就沿用,没有就用那条连接的默认库(提示里写明换了库)。

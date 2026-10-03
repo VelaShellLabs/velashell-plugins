@@ -17,9 +17,9 @@ public class DotEnvImportTests
     [TestMethod]
     public void ReadsPlainAssignments()
     {
-        var field = Field();
+        PairListField field = Field();
 
-        (var imported, var skipped) = field.ImportDotEnv("APP_MODE=prod\nPORT=8080");
+        (int imported, int skipped) = field.ImportDotEnv("APP_MODE=prod\nPORT=8080");
 
         Assert.AreEqual(2, imported);
         Assert.AreEqual(0, skipped);
@@ -31,9 +31,9 @@ public class DotEnvImportTests
     [TestMethod]
     public void SkipsBlanksAndComments()
     {
-        var field = Field();
+        PairListField field = Field();
 
-        (var imported, var skipped) = field.ImportDotEnv("# 注释\n\nA=1\n   \n# 又一条\nB=2");
+        (int imported, int skipped) = field.ImportDotEnv("# 注释\n\nA=1\n   \n# 又一条\nB=2");
 
         Assert.AreEqual(2, imported);
         // 空行与注释不算"跳过" —— 它们本来就不是配置。
@@ -43,9 +43,9 @@ public class DotEnvImportTests
     [TestMethod]
     public void StripsSurroundingQuotes()
     {
-        var field = Field();
+        PairListField field = Field();
 
-        field.ImportDotEnv("""
+        _ = field.ImportDotEnv("""
             A="hello world"
             B='single'
             C=no-quotes
@@ -59,9 +59,9 @@ public class DotEnvImportTests
     [TestMethod]
     public void HandlesExportPrefix()
     {
-        var field = Field();
+        PairListField field = Field();
 
-        field.ImportDotEnv("export DATABASE_URL=postgres://app@db:5432/shop");
+        _ = field.ImportDotEnv("export DATABASE_URL=postgres://app@db:5432/shop");
 
         Assert.AreEqual("DATABASE_URL", field.Rows[0].Key);
         Assert.AreEqual("postgres://app@db:5432/shop", field.Rows[0].Value);
@@ -70,10 +70,10 @@ public class DotEnvImportTests
     [TestMethod]
     public void KeepsEqualsSignsInsideTheValue()
     {
-        var field = Field();
+        PairListField field = Field();
 
         // base64 与连接串里满是 = ,只能按**第一个** = 切。
-        field.ImportDotEnv("TOKEN=YWJjZA==");
+        _ = field.ImportDotEnv("TOKEN=YWJjZA==");
 
         Assert.AreEqual("TOKEN", field.Rows[0].Key);
         Assert.AreEqual("YWJjZA==", field.Rows[0].Value);
@@ -82,9 +82,9 @@ public class DotEnvImportTests
     [TestMethod]
     public void ReportsLinesItCouldNotUnderstand()
     {
-        var field = Field();
+        PairListField field = Field();
 
-        (var imported, var skipped) = field.ImportDotEnv("A=1\n这一行没有等号\n=没有键\nB=2");
+        (int imported, int skipped) = field.ImportDotEnv("A=1\n这一行没有等号\n=没有键\nB=2");
 
         Assert.AreEqual(2, imported);
         // 报出来而不是静默丢掉:用户得知道有东西没进来。
@@ -94,9 +94,9 @@ public class DotEnvImportTests
     [TestMethod]
     public void LaterAssignmentsWinJustLikeDotEnvItself()
     {
-        var field = Field();
+        PairListField field = Field();
 
-        field.ImportDotEnv("A=first\nA=second");
+        _ = field.ImportDotEnv("A=first\nA=second");
 
         Assert.HasCount(1, field.Rows);
         Assert.AreEqual("second", field.Rows[0].Value);
@@ -105,10 +105,10 @@ public class DotEnvImportTests
     [TestMethod]
     public void DropsTheEmptyPlaceholderRow()
     {
-        var field = Field();
+        PairListField field = Field();
         field.AddCommand.Execute(null);
 
-        field.ImportDotEnv("A=1");
+        _ = field.ImportDotEnv("A=1");
 
         // 导完之后留着一个空占位行只会让"等效命令"多一个空的 -e。
         Assert.HasCount(1, field.Rows);

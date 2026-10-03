@@ -18,7 +18,7 @@ public static class SidePanel
 
     static SidePanel()
     {
-        CollapsedProperty.Changed.AddClassHandler<Grid>(static (grid, _) => Apply(grid));
+        _ = CollapsedProperty.Changed.AddClassHandler<Grid>(static (grid, _) => Apply(grid));
     }
 
     /// <summary>读。</summary>

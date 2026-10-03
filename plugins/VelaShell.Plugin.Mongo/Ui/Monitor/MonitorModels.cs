@@ -5,11 +5,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// <summary>顶部六张指标卡之一(设计稿 11:连接 / 操作每秒 / 网络 / 缓存 / 复制延迟 / Oplog 窗口)。</summary>
 internal sealed class MonitorKpi : ObservableObject
 {
-    private string _value = "—";
-    private string _unit = "";
-    private string _foot = "";
-    private bool _isAlert;
-    private bool _footWarn;
 
     /// <summary>构造。</summary>
     /// <param name="title">标题(<c>连接</c>)。</param>
@@ -32,31 +27,31 @@ internal sealed class MonitorKpi : ObservableObject
     /// <summary>大号数字(<c>128</c>、<c>1,236</c>)。</summary>
     public string Value
     {
-        get => _value;
-        set => SetProperty(ref _value, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "—";
 
     /// <summary>数字后面的小字(<c>/ 512</c>、<c>MB/s</c>)。</summary>
     public string Unit
     {
-        get => _unit;
-        set => SetProperty(ref _unit, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>底行(<c>当前 · 可用 384</c>)。</summary>
     public string Foot
     {
-        get => _foot;
-        set => SetProperty(ref _foot, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>告警(橙色描边 + 角标;复制延迟超过阈值时)。</summary>
     public bool IsAlert
     {
-        get => _isAlert;
+        get;
         set
         {
-            if (SetProperty(ref _isAlert, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IconToken));
             }
@@ -66,12 +61,12 @@ internal sealed class MonitorKpi : ObservableObject
     /// <summary>底行要不要用警告色(Oplog 窗口偏短)。</summary>
     public bool FootWarn
     {
-        get => _footWarn;
-        set => SetProperty(ref _footWarn, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>图标颜色:告警时跟着变橙。</summary>
-    public string IconToken => _isAlert ? "VelaWarning" : "VelaTextTertiary";
+    public string IconToken => IsAlert ? "VelaWarning" : "VelaTextTertiary";
 
     /// <summary>一次把三段文字都换掉。</summary>
     public void Set(string value, string unit, string foot)
@@ -170,7 +165,7 @@ internal sealed class MonitorEvent : ObservableObject
 internal static class MonitorFormat
 {
     /// <summary>每秒次数:≥ 10 取整加千分位,小于 10 留一位小数(空闲库上 0.5 次 / 秒也看得见)。</summary>
-    public static string Rate(double value) => value >= 10 || value == 0
+    public static string Rate(double value) => value is >= 10 or 0
         ? Math.Round(value).ToString("N0", CultureInfo.InvariantCulture)
         : value.ToString("0.0", CultureInfo.InvariantCulture);
 

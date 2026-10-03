@@ -125,11 +125,11 @@ internal sealed class StagingArea
     {
         if (value is null)
         {
-            Bson.BsonPath.Unset(insert.Document, path);
+            _ = Bson.BsonPath.Unset(insert.Document, path);
         }
         else
         {
-            Bson.BsonPath.Set(insert.Document, path, value);
+            _ = Bson.BsonPath.Set(insert.Document, path, value);
         }
         Raise();
     }
@@ -163,7 +163,7 @@ internal sealed class StagingArea
         }
         if (_edits.Remove(id, out StagedEdit? edit))
         {
-            _editOrder.Remove(edit);
+            _ = _editOrder.Remove(edit);
         }
         var staged = new StagedDelete(id, (BsonDocument)(edit?.Original ?? original).DeepClone());
         _deletes[id] = staged;
@@ -176,7 +176,7 @@ internal sealed class StagingArea
     {
         if (_deletes.Remove(id, out StagedDelete? staged))
         {
-            _deleteOrder.Remove(staged);
+            _ = _deleteOrder.Remove(staged);
             Raise();
         }
     }
@@ -187,12 +187,12 @@ internal sealed class StagingArea
         bool changed = false;
         if (_edits.Remove(id, out StagedEdit? edit))
         {
-            _editOrder.Remove(edit);
+            _ = _editOrder.Remove(edit);
             changed = true;
         }
         if (_deletes.Remove(id, out StagedDelete? staged))
         {
-            _deleteOrder.Remove(staged);
+            _ = _deleteOrder.Remove(staged);
             changed = true;
         }
         if (changed)
@@ -235,18 +235,18 @@ internal sealed class StagingArea
         {
             if (_edits.Remove(edit.Id))
             {
-                _editOrder.Remove(edit);
+                _ = _editOrder.Remove(edit);
             }
         }
         foreach (StagedInsert insert in inserts)
         {
-            _inserts.Remove(insert);
+            _ = _inserts.Remove(insert);
         }
         foreach (StagedDelete delete in deletes)
         {
             if (_deletes.Remove(delete.Id))
             {
-                _deleteOrder.Remove(delete);
+                _ = _deleteOrder.Remove(delete);
             }
         }
         Raise();
@@ -287,7 +287,7 @@ internal sealed class StagingArea
     {
         if (edit.IsEmpty && _edits.Remove(edit.Id))
         {
-            _editOrder.Remove(edit);
+            _ = _editOrder.Remove(edit);
         }
     }
 

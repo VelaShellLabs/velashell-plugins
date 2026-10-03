@@ -49,10 +49,10 @@ public sealed partial class DockerClient
     public async Task<ContainerFileEntry[]> ListDirectoryAsync(string containerId, string path,
         CancellationToken cancellationToken = default)
     {
-        var target = string.IsNullOrWhiteSpace(path) ? "/" : path;
+        string target = string.IsNullOrWhiteSpace(path) ? "/" : path;
         // -A 排掉 . 与 ..,--time-style=long-iso 把时间列压成固定的两段,
         // 省得为不同 locale 的 ls 输出各写一套解析。
-        var result = await ExecCaptureAsync(containerId,
+        ExecCapture result = await ExecCaptureAsync(containerId,
             ["/bin/sh", "-c", $"ls -lAL --time-style=long-iso -- {ShellQuote(target)} 2>/dev/null || ls -lA -- {ShellQuote(target)}"],
             cancellationToken: cancellationToken).ConfigureAwait(false);
         if (!result.IsSuccess && result.StandardOutput.Length == 0)
@@ -61,7 +61,7 @@ public sealed partial class DockerClient
                 result.StandardError.Length > 0 ? result.FailureText : $"列不出目录 {target}。");
         }
         List<ContainerFileEntry> entries = [];
-        foreach (var raw in result.StandardOutput.Split('\n'))
+        foreach (string raw in result.StandardOutput.Split('\n'))
         {
             if (ParseLsLine(raw, target) is { } entry)
             {
@@ -76,32 +76,32 @@ public sealed partial class DockerClient
     /// </summary>
     internal static ContainerFileEntry? ParseLsLine(string line, string directory)
     {
-        var trimmed = line.TrimEnd('\r');
+        string trimmed = line.TrimEnd('\r');
         if (trimmed.Length < 10 || trimmed.StartsWith("total ", StringComparison.Ordinal))
         {
             return null;
         }
-        var mode = trimmed[..10];
+        string mode = trimmed[..10];
         if (mode[0] is not ('-' or 'd' or 'l' or 'c' or 'b' or 'p' or 's'))
         {
             return null;
         }
         // 权限 链接数 属主 属组 大小 日期 时间 名字…
-        var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 8)
         {
             return null;
         }
-        var owner = $"{parts[2]} {parts[3]}";
-        _ = long.TryParse(parts[4], out var size);
-        var modified = $"{parts[5]} {parts[6]}";
+        string owner = $"{parts[2]} {parts[3]}";
+        _ = long.TryParse(parts[4], out long size);
+        string modified = $"{parts[5]} {parts[6]}";
         // 名字里可能有空格,所以按"前七段之后的全部"取,而不是取第八段。
-        var nameStart = IndexOfNthToken(trimmed, 7);
-        var name = nameStart >= 0 ? trimmed[nameStart..] : parts[^1];
+        int nameStart = IndexOfNthToken(trimmed, 7);
+        string name = nameStart >= 0 ? trimmed[nameStart..] : parts[^1];
         string? linkTarget = null;
         if (mode[0] == 'l')
         {
-            var arrow = name.IndexOf(" -> ", StringComparison.Ordinal);
+            int arrow = name.IndexOf(" -> ", StringComparison.Ordinal);
             if (arrow > 0)
             {
                 linkTarget = name[(arrow + 4)..];
@@ -112,7 +112,7 @@ public sealed partial class DockerClient
         {
             return null;
         }
-        var full = directory.TrimEnd('/') + "/" + name;
+        string full = directory.TrimEnd('/') + "/" + name;
         return new(name, full, mode[0] == 'd', mode[0] == 'l', size, mode, owner, modified, linkTarget);
     }
 
@@ -153,10 +153,10 @@ public sealed partial class DockerClient
     public async Task<byte[]> ReadFileAsync(string containerId, string path, long maxBytes = MaxEditableFileBytes,
         CancellationToken cancellationToken = default)
     {
-        var url = $"/containers/{Uri.EscapeDataString(containerId)}/archive" + Query(("path", path));
-        using var response = await OpenStreamAsync(HttpMethod.Get, url, cancellationToken).ConfigureAwait(false);
-        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        var entry = await TarUtil.ReadFirstFileAsync(body, maxBytes, cancellationToken)
+        string url = $"/containers/{Uri.EscapeDataString(containerId)}/archive" + Query(("path", path));
+        using HttpResponseMessage response = await OpenStreamAsync(HttpMethod.Get, url, cancellationToken).ConfigureAwait(false);
+        await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        (string Name, byte[] Content)? entry = await TarUtil.ReadFirstFileAsync(body, maxBytes, cancellationToken)
                                                             .ConfigureAwait(false);
         return entry?.Content
                ?? throw new DockerApiException(System.Net.HttpStatusCode.NotFound, $"{path} 不是一个普通文件。");
@@ -172,31 +172,31 @@ public sealed partial class DockerClient
     public async Task WriteFileAsync(string containerId, string path, ReadOnlyMemory<byte> content,
         CancellationToken cancellationToken = default)
     {
-        var directory = GetDirectory(path);
-        var name = path[(path.LastIndexOf('/') + 1)..];
-        var tar = TarUtil.CreateSingleFile(name, content.Span);
-        var url = $"/containers/{Uri.EscapeDataString(containerId)}/archive" +
+        string directory = GetDirectory(path);
+        string name = path[(path.LastIndexOf('/') + 1)..];
+        byte[] tar = TarUtil.CreateSingleFile(name, content.Span);
+        string url = $"/containers/{Uri.EscapeDataString(containerId)}/archive" +
                      Query(("path", directory), ("noOverwriteDirNonDir", "1"));
         using var request = new HttpRequestMessage(HttpMethod.Put, url)
         {
             Content = new ByteArrayContent(tar)
         };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/x-tar");
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, url, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>把容器里的一个路径整包取下来(目录也行),交给调用方落盘。</summary>
     public async Task<Stream> DownloadArchiveAsync(string containerId, string path, CancellationToken cancellationToken = default)
     {
-        var url = $"/containers/{Uri.EscapeDataString(containerId)}/archive" + Query(("path", path));
-        var response = await OpenStreamAsync(HttpMethod.Get, url, cancellationToken).ConfigureAwait(false);
+        string url = $"/containers/{Uri.EscapeDataString(containerId)}/archive" + Query(("path", path));
+        HttpResponseMessage response = await OpenStreamAsync(HttpMethod.Get, url, cancellationToken).ConfigureAwait(false);
         return new ResponseOwningStream(response, await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false));
     }
 
     private static string GetDirectory(string path)
     {
-        var slash = path.LastIndexOf('/');
+        int slash = path.LastIndexOf('/');
         return slash <= 0 ? "/" : path[..slash];
     }
 

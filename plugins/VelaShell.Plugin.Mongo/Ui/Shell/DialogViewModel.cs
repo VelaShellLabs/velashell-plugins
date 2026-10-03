@@ -9,16 +9,13 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// </summary>
 internal abstract class DialogViewModel : ObservableObject
 {
-    private string _title = "";
-    private string _subtitle = "";
-    private readonly IMongoWorkspace? _workspace;
 
     /// <summary>构造一条连接里的对话框。</summary>
     /// <param name="workspace">这条连接的服务。</param>
     protected DialogViewModel(IMongoWorkspace workspace)
         : this((IWorkbench)workspace)
     {
-        _workspace = workspace;
+        Owner = workspace;
     }
 
     /// <summary>构造外壳自己的对话框(新建 / 编辑连接、确认框):不属于任何一条连接。</summary>
@@ -32,30 +29,22 @@ internal abstract class DialogViewModel : ObservableObject
 
     /// <summary>这条连接的服务。外壳自己的对话框没有连接,读它是编程错误。</summary>
     public IMongoWorkspace Workspace =>
-        _workspace ?? throw new InvalidOperationException(GetType().Name + " does not belong to a connection.");
+        Owner ?? throw new InvalidOperationException(GetType().Name + " does not belong to a connection.");
 
     /// <summary>外壳服务。</summary>
     public IWorkbench Workbench { get; }
 
     /// <summary>它属于哪条连接;外壳自己的对话框为 <see langword="null" />(断开连接时据此把它一并关掉)。</summary>
-    public IMongoWorkspace? Owner => _workspace;
+    public IMongoWorkspace? Owner { get; }
 
     /// <summary>文案表。</summary>
     public Loc Loc => Workbench.Loc;
 
     /// <summary>标题。</summary>
-    public string Title
-    {
-        get => _title;
-        set => SetProperty(ref _title, value);
-    }
+    public string Title { get; set => SetProperty(ref field, value); } = "";
 
     /// <summary>标题旁的等宽小字(<c>shop.orders</c>)。</summary>
-    public string Subtitle
-    {
-        get => _subtitle;
-        set => SetProperty(ref _subtitle, value);
-    }
+    public string Subtitle { get; set => SetProperty(ref field, value); } = "";
 
     /// <summary>标题栏图标。</summary>
     public virtual string IconKey => "Mongo.leaf";

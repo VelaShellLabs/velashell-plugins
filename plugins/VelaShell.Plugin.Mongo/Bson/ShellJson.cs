@@ -129,7 +129,7 @@ public static class ShellJson
             if (c is '"' or '\'')
             {
                 int end = SkipString(text, i);
-                output.Append(text, i, end - i);
+                _ = output.Append(text, i, end - i);
                 i = end;
                 continue;
             }
@@ -152,14 +152,14 @@ public static class ShellJson
             if (c == '/' && PreviousSignificant(output) is ':' or ',' or '[' or '(' or '\0')
             {
                 int end = SkipRegex(text, i);
-                output.Append(text, i, end - i);
+                _ = output.Append(text, i, end - i);
                 i = end;
                 continue;
             }
             if (c is '{' or '[' or '(')
             {
                 stack.Push(c);
-                output.Append(c);
+                _ = output.Append(c);
                 i++;
                 continue;
             }
@@ -169,9 +169,9 @@ public static class ShellJson
                 TrimTrailingComma(output);
                 if (stack.Count > 0)
                 {
-                    stack.Pop();
+                    _ = stack.Pop();
                 }
-                output.Append(c);
+                _ = output.Append(c);
                 i++;
                 continue;
             }
@@ -196,15 +196,15 @@ public static class ShellJson
                     {
                         found.Add(new(start, end - start, "Shell_DottedKey", word, "\"" + word + "\""));
                     }
-                    output.Append('"').Append(word).Append('"');
+                    _ = output.Append('"').Append(word).Append('"');
                     i = end;
                     continue;
                 }
-                output.Append(word);
+                _ = output.Append(word);
                 i = end;
                 continue;
             }
-            output.Append(c);
+            _ = output.Append(c);
             i++;
         }
         diagnostics = found;
@@ -235,7 +235,7 @@ public static class ShellJson
             }
             if (output[k] == ',')
             {
-                output.Remove(k, 1);
+                _ = output.Remove(k, 1);
             }
             return;
         }

@@ -25,7 +25,6 @@ internal sealed record ConflictResolution(ConflictChoice Choice, IReadOnlySet<st
 /// <summary>冲突对话框的一行:字段 · 我的 · 服务器(点哪边就保留哪边)。</summary>
 internal sealed class ConflictRow : ObservableObject
 {
-    private bool _useMine = true;
 
     /// <summary>构造。</summary>
     public ConflictRow(string path, string mine, string server, bool bothChanged)
@@ -53,18 +52,18 @@ internal sealed class ConflictRow : ObservableObject
     /// <summary>合并时保留我的。</summary>
     public bool UseMine
     {
-        get => _useMine;
+        get;
         set
         {
-            if (SetProperty(ref _useMine, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(UseServer));
             }
         }
-    }
+    } = true;
 
     /// <summary>合并时保留服务器的。</summary>
-    public bool UseServer => !_useMine;
+    public bool UseServer => !UseMine;
 
     /// <summary>选我的。</summary>
     public RelayCommand PickMineCommand { get; }
@@ -163,7 +162,7 @@ internal sealed class ConflictDialogViewModel : DialogViewModel
         _resolved = true;
         HashSet<string> keep = choice == ConflictChoice.Merge
             ? Rows.Where(static r => r.UseMine).Select(static r => r.Path).ToHashSet(StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal);
+            : [with(StringComparer.Ordinal)];
         Close();
         await _resolve(new ConflictResolution(choice, keep)).ConfigureAwait(true);
     }

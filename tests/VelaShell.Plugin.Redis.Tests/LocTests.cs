@@ -12,11 +12,9 @@ namespace VelaShell.Plugin.Redis.Tests;
 public sealed class LocTests
 {
     [TestMethod]
-    public void Tables_Initialize_WithoutDuplicateKeys()
-    {
+    public void Tables_Initialize_WithoutDuplicateKeys() =>
         // 触发静态构造。重复键会在这里抛。
         Assert.IsGreaterThan(100, Loc.AllKeys.Count);
-    }
 
     [TestMethod]
     public void BothLanguages_CoverTheSameKeys()
@@ -87,7 +85,7 @@ public sealed class LocTests
             {
                 continue;
             }
-            seen.Add(text[i + 1] - '0');
+            _ = seen.Add(text[i + 1] - '0');
         }
         return seen.Count;
     }

@@ -71,26 +71,26 @@ internal static class PipelineText
         {
             if (!first)
             {
-                b.Append('\n');
+                _ = b.Append('\n');
             }
             first = false;
             string text = FormatStage(stage.Operator, stage.Body) + ",";
             foreach (string line in text.Split('\n'))
             {
-                b.Append("  ");
+                _ = b.Append("  ");
                 if (!stage.Enabled)
                 {
-                    b.Append("// ");
+                    _ = b.Append("// ");
                 }
-                b.Append(line).Append('\n');
+                _ = b.Append(line).Append('\n');
             }
             b.Length--;
         }
         if (!first)
         {
-            b.Append('\n');
+            _ = b.Append('\n');
         }
-        b.Append(']');
+        _ = b.Append(']');
         return b.ToString();
     }
 
@@ -104,13 +104,13 @@ internal static class PipelineText
         {
             return $"{{ {op}: {lines[0]} }}";
         }
-        var b = new StringBuilder("{\n  ").Append(op).Append(": ").Append(lines[0]);
+        StringBuilder b = new StringBuilder("{\n  ").Append(op).Append(": ").Append(lines[0]);
         for (int i = 1; i < lines.Length; i++)
         {
-            b.Append('\n');
+            _ = b.Append('\n');
             if (lines[i].Length > 0)
             {
-                b.Append("  ").Append(lines[i]);
+                _ = b.Append("  ").Append(lines[i]);
             }
         }
         return b.Append("\n}").ToString();
@@ -310,7 +310,7 @@ internal static class PipelineText
                     return false;
                 }
             }
-            content.Append(line).Append('\n');
+            _ = content.Append(line).Append('\n');
             depth += BraceDelta(line, ref opened);
             if (opened && depth <= 0)
             {
@@ -426,7 +426,7 @@ internal static class PipelineText
     {
         var stack = new Stack<(char Open, int At)>();
         int result = -1;
-        Walk(text, 0, text.Length, (i, c) =>
+        _ = Walk(text, 0, text.Length, (i, c) =>
         {
             switch (c)
             {
@@ -440,7 +440,7 @@ internal static class PipelineText
                         result = i;
                         return false;
                     }
-                    stack.Pop();
+                    _ = stack.Pop();
                     break;
             }
             return true;
@@ -479,9 +479,9 @@ internal static class PipelineText
         var b = new StringBuilder(lines[0].Trim());
         for (int i = 1; i < lines.Length; i++)
         {
-            b.Append('\n');
+            _ = b.Append('\n');
             string line = lines[i];
-            b.Append(line.Trim().Length == 0 ? "" : line[Math.Min(min, Indentation(line))..].TrimEnd());
+            _ = b.Append(line.Trim().Length == 0 ? "" : line[Math.Min(min, Indentation(line))..].TrimEnd());
         }
         return b.ToString().TrimEnd();
     }
@@ -565,26 +565,26 @@ internal static class PipelineText
         switch (value)
         {
             case BsonDocument doc when doc.ElementCount > 0 && (!fits || (topLevel && doc.ElementCount > 1)):
-            {
-                var b = new StringBuilder("{");
-                int i = 0;
-                foreach (BsonElement element in doc)
                 {
-                    b.Append(i++ == 0 ? "\n" : ",\n").Append(' ', (depth + 1) * 2)
-                        .Append(BsonText.FieldName(element.Name)).Append(": ")
-                        .Append(Write(element.Value, depth + 1));
+                    var b = new StringBuilder("{");
+                    int i = 0;
+                    foreach (BsonElement element in doc)
+                    {
+                        _ = b.Append(i++ == 0 ? "\n" : ",\n").Append(' ', (depth + 1) * 2)
+                            .Append(BsonText.FieldName(element.Name)).Append(": ")
+                            .Append(Write(element.Value, depth + 1));
+                    }
+                    return b.Append('\n').Append(' ', depth * 2).Append('}').ToString();
                 }
-                return b.Append('\n').Append(' ', depth * 2).Append('}').ToString();
-            }
             case BsonArray array when array.Count > 0 && !fits:
-            {
-                var b = new StringBuilder("[");
-                for (int i = 0; i < array.Count; i++)
                 {
-                    b.Append(i == 0 ? "\n" : ",\n").Append(' ', (depth + 1) * 2).Append(Write(array[i], depth + 1));
+                    var b = new StringBuilder("[");
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        _ = b.Append(i == 0 ? "\n" : ",\n").Append(' ', (depth + 1) * 2).Append(Write(array[i], depth + 1));
+                    }
+                    return b.Append('\n').Append(' ', depth * 2).Append(']').ToString();
                 }
-                return b.Append('\n').Append(' ', depth * 2).Append(']').ToString();
-            }
             default:
                 return flat;
         }
@@ -685,7 +685,7 @@ internal static class PipelineText
     {
         int depth = 0;
         int found = -1;
-        Walk(text, open, text.Length, (i, c) =>
+        _ = Walk(text, open, text.Length, (i, c) =>
         {
             if (c is '{' or '[' or '(')
             {
@@ -710,7 +710,7 @@ internal static class PipelineText
     {
         int depth = 0;
         int found = -1;
-        Walk(text, start, end, (i, c) =>
+        _ = Walk(text, start, end, (i, c) =>
         {
             if (c is '{' or '[' or '(')
             {

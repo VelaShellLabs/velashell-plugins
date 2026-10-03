@@ -55,7 +55,7 @@ public sealed class ExplainPlanTests
     [TestMethod]
     public void Find_LinearFlowIsAccessPathFirst()
     {
-        ExplainPlan plan = ExplainPlan.Parse(DesignFind());
+        var plan = ExplainPlan.Parse(DesignFind());
         Assert.AreEqual("IXSCAN,FETCH,LIMIT,PROJECTION_DEFAULT", string.Join(",", plan.Stages.Select(static s => s.Name)));
         Assert.AreEqual("IXSCAN status_1_createdAt_-1", plan.Summary);
         Assert.AreEqual("shop.orders", plan.Namespace);
@@ -66,7 +66,7 @@ public sealed class ExplainPlanTests
     [TestMethod]
     public void Find_OwnTimesAndDiscards()
     {
-        ExplainPlan plan = ExplainPlan.Parse(DesignFind());
+        var plan = ExplainPlan.Parse(DesignFind());
         Assert.AreEqual(6L, plan.Stages[0].OwnMs);
         Assert.AreEqual(29L, plan.Stages[1].OwnMs, "FETCH 自己的耗时 = 35 − 6");
         Assert.AreEqual(1L, plan.Stages[2].OwnMs);
@@ -82,7 +82,7 @@ public sealed class ExplainPlanTests
     [TestMethod]
     public void Find_SummaryMetrics()
     {
-        ExplainPlan plan = ExplainPlan.Parse(DesignFind());
+        var plan = ExplainPlan.Parse(DesignFind());
         Assert.AreEqual(38L, plan.TotalMs);
         Assert.AreEqual(100L, plan.NReturned);
         Assert.AreEqual(412L, plan.TotalKeysExamined);
@@ -95,7 +95,7 @@ public sealed class ExplainPlanTests
     [TestMethod]
     public void Find_CandidatesMatchedToTrialStats()
     {
-        ExplainPlan plan = ExplainPlan.Parse(DesignFind());
+        var plan = ExplainPlan.Parse(DesignFind());
         Assert.HasCount(3, plan.Candidates);
         Assert.IsTrue(plan.Candidates[0].Winner);
         Assert.AreEqual("IXSCAN status_1_createdAt_-1 → FETCH → LIMIT → PROJECTION_DEFAULT", plan.Candidates[0].Chain);
@@ -109,7 +109,7 @@ public sealed class ExplainPlanTests
     [TestMethod]
     public void Find_EsrAdvicePutsTheRangeLast()
     {
-        ExplainPlan plan = ExplainPlan.Parse(DesignFind());
+        var plan = ExplainPlan.Parse(DesignFind());
         Assert.IsNotNull(plan.Advice);
         Assert.AreEqual("Query_AdviceFetchFilter", plan.Advice.ReasonKey);
         Assert.AreEqual("total", plan.Advice.ReasonArgument);
@@ -139,7 +139,7 @@ public sealed class ExplainPlanTests
               "ok": 1
             }
             """);
-        ExplainPlan plan = ExplainPlan.Parse(explain);
+        var plan = ExplainPlan.Parse(explain);
         Assert.IsTrue(plan.IsAggregate);
         Assert.AreEqual("IXSCAN,FETCH,PROJECTION_SIMPLE,$group,$sort", string.Join(",", plan.Stages.Select(static s => s.Name)));
         Assert.AreEqual(24L, plan.NReturned, "聚合的返回数取最后一个管道阶段");
@@ -165,7 +165,7 @@ public sealed class ExplainPlanTests
               "command": { "find": "reviews", "filter": { "rating": 5 }, "sort": { "at": -1 } }
             }
             """);
-        ExplainPlan plan = ExplainPlan.Parse(explain);
+        var plan = ExplainPlan.Parse(explain);
         Assert.IsTrue(plan.IsCollectionScan);
         Assert.IsTrue(plan.QueryLayerSort);
         Assert.AreEqual(ExplainTone.Bad, plan.Stages[0].Tone);
@@ -189,7 +189,7 @@ public sealed class ExplainPlanTests
               "command": { "find": "t", "filter": { "a": 1 } }
             }
             """);
-        ExplainPlan plan = ExplainPlan.Parse(explain);
+        var plan = ExplainPlan.Parse(explain);
         Assert.AreEqual("IXSCAN,FETCH,SINGLE_SHARD", string.Join(",", plan.Stages.Select(static s => s.Name)));
         Assert.AreEqual("IXSCAN a_1", plan.Summary);
         Assert.IsNull(plan.Advice, "已经用上 a_1 索引,没有可建议的");
@@ -202,7 +202,7 @@ public sealed class ExplainPlanTests
             { "queryPlanner": { "winningPlan": { "stage": "COUNT_SCAN", "indexName": "status_1_createdAt_-1" }, "rejectedPlans": [] },
               "command": { "count": "orders", "query": { "status": "paid" } } }
             """);
-        ExplainPlan plan = ExplainPlan.Parse(explain);
+        var plan = ExplainPlan.Parse(explain);
         Assert.IsFalse(plan.HasExecutionStats);
         Assert.HasCount(1, plan.Stages);
         Assert.IsNull(plan.TotalMs);

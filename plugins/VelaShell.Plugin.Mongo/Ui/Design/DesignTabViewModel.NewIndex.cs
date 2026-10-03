@@ -16,33 +16,23 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// </summary>
 internal sealed partial class DesignTabViewModel
 {
-    private bool _isCreateOpen;
-    private IndexRow? _draftIndex;
     private string _newKind = "normal";
     private bool _newUnique;
     private bool _newSparse;
     private bool _newHidden;
     private bool _newTtl;
-    private string _newTtlSeconds = "86400";
     private bool _newPartial;
     private string _newPartialText = "{ }";
-    private string _newName = "";
     private bool _nameEdited;
     private bool _settingName;
-    private string _newImpactTitle = "";
-    private string _newImpactDetail = "";
-    private string _newCommand = "";
-    private string _newError = "";
-    private bool _isCreating;
-    private IReadOnlyList<FieldOption> _fieldOptions = [];
 
     /// <summary>编辑器开着(下半部分从索引建议换成编辑器,索引表收矮、末尾挂草稿行)。</summary>
     public bool IsCreateOpen
     {
-        get => _isCreateOpen;
+        get;
         set
         {
-            if (SetProperty(ref _isCreateOpen, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasDraft));
             }
@@ -52,10 +42,10 @@ internal sealed partial class DesignTabViewModel
     /// <summary>索引表末尾的「新建」草稿行;还没有字段时为 <see langword="null" />。</summary>
     public IndexRow? DraftIndex
     {
-        get => _draftIndex;
+        get;
         private set
         {
-            if (SetProperty(ref _draftIndex, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasDraft));
             }
@@ -63,7 +53,7 @@ internal sealed partial class DesignTabViewModel
     }
 
     /// <summary>草稿行可见(创建期间表里挂的是「构建中」那一行,草稿让位)。</summary>
-    public bool HasDraft => _isCreateOpen && _draftIndex is not null && !_isCreating;
+    public bool HasDraft => IsCreateOpen && DraftIndex is not null && !IsCreating;
 
     /// <summary>编辑器底栏左侧那句「将在 shop.orders 上执行 createIndexes」。</summary>
     public string NewTarget => Loc.Format("Design_EditorTarget", Namespace);
@@ -143,19 +133,19 @@ internal sealed partial class DesignTabViewModel
     /// <summary>TTL 秒数。</summary>
     public string NewTtlSeconds
     {
-        get => _newTtlSeconds;
+        get;
         set
         {
-            if (SetProperty(ref _newTtlSeconds, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 RaisePropertyChanged(nameof(NewTtlHuman));
                 RecomputeNewIndex();
             }
         }
-    }
+    } = "86400";
 
     /// <summary>TTL 秒数换算成人话。</summary>
-    public string NewTtlHuman => long.TryParse(_newTtlSeconds, out long s) ? "= " + Duration(s) : "";
+    public string NewTtlHuman => long.TryParse(NewTtlSeconds, out long s) ? "= " + Duration(s) : "";
 
     /// <summary>部分索引。</summary>
     public bool NewPartial
@@ -186,17 +176,17 @@ internal sealed partial class DesignTabViewModel
     /// <summary>索引名(默认按键自动生成;手改过就不再跟着变)。</summary>
     public string NewName
     {
-        get => _newName;
+        get;
         set
         {
-            if (SetProperty(ref _newName, value ?? "") && !_settingName)
+            if (SetProperty(ref field, value ?? "") && !_settingName)
             {
-                _nameEdited = _newName.Length > 0;
+                _nameEdited = field.Length > 0;
                 RaisePropertyChanged(nameof(NewNameHint));
                 RecomputeNewIndex();
             }
         }
-    }
+    } = "";
 
     /// <summary>名称右侧的小字:自动生成 / 已自定义。</summary>
     public string NewNameHint => _nameEdited ? Loc["Design_NameCustom"] : Loc["Design_NameAuto"];
@@ -204,48 +194,48 @@ internal sealed partial class DesignTabViewModel
     /// <summary>预估框第一行(<c>预计大小 ≈ 140 MB · 构建约 3 分钟</c>)。</summary>
     public string NewImpactTitle
     {
-        get => _newImpactTitle;
-        private set => SetProperty(ref _newImpactTitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>预估框说明。</summary>
     public string NewImpactDetail
     {
-        get => _newImpactDetail;
-        private set => SetProperty(ref _newImpactDetail, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>命令预览。</summary>
     public string NewCommand
     {
-        get => _newCommand;
-        private set => SetProperty(ref _newCommand, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>表单错误(创建按钮因此不可用);没有为空。</summary>
     public string NewError
     {
-        get => _newError;
+        get;
         private set
         {
-            if (SetProperty(ref _newError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasNewError));
                 CreateIndexCommand.RaiseCanExecuteChanged();
             }
         }
-    }
+    } = "";
 
     /// <summary>有表单错误。</summary>
-    public bool HasNewError => _newError.Length > 0;
+    public bool HasNewError => NewError.Length > 0;
 
     /// <summary>正在创建(按钮转圈)。</summary>
     public bool IsCreating
     {
-        get => _isCreating;
+        get;
         private set
         {
-            if (SetProperty(ref _isCreating, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasDraft));
                 CreateIndexCommand.RaiseCanExecuteChanged();
@@ -256,10 +246,10 @@ internal sealed partial class DesignTabViewModel
     /// <summary>抽样到的字段(字段下拉的选项)。</summary>
     public IReadOnlyList<FieldOption> FieldOptions
     {
-        get => _fieldOptions;
+        get;
         private set
         {
-            if (SetProperty(ref _fieldOptions, value))
+            if (SetProperty(ref field, value))
             {
                 foreach (NewKeyRow row in NewKeys)
                 {
@@ -267,7 +257,7 @@ internal sealed partial class DesignTabViewModel
                 }
             }
         }
-    }
+    } = [];
 
     /// <summary>打开面板(空白表单)。</summary>
     public RelayCommand OpenCreateCommand { get; private set; } = null!;
@@ -297,13 +287,13 @@ internal sealed partial class DesignTabViewModel
         AddKeyCommand = new(() => AddKey("", 1, ""));
         RemoveKeyCommand = new(row =>
         {
-            NewKeys.Remove(row);
+            _ = NewKeys.Remove(row);
             RenumberKeys();
             RecomputeNewIndex();
         });
         MoveKeyUpCommand = new(row => MoveKey(NewKeys.IndexOf(row), NewKeys.IndexOf(row) - 1));
         MoveKeyDownCommand = new(row => MoveKey(NewKeys.IndexOf(row), NewKeys.IndexOf(row) + 1));
-        CreateIndexCommand = new(CreateIndexAsync, () => !_isCreating && _newError.Length == 0 && NewKeys.Any(static k => k.Field.Length > 0));
+        CreateIndexCommand = new(CreateIndexAsync, () => !IsCreating && NewError.Length == 0 && NewKeys.Any(static k => k.Field.Length > 0));
     }
 
     /// <summary>
@@ -386,7 +376,7 @@ internal sealed partial class DesignTabViewModel
             : value.ToString() ?? "";
 
     /// <summary>字段 → 抽样到的那一项;抽样里没有为 <see langword="null" />。</summary>
-    private FieldOption? OptionOf(string field) => _fieldOptions.FirstOrDefault(f => f.Path == field);
+    private FieldOption? OptionOf(string field) => FieldOptions.FirstOrDefault(f => f.Path == field);
 
     /// <summary>ESR 角色 → 小标签文字。</summary>
     private string RoleText(string? role) => role switch
@@ -430,7 +420,7 @@ internal sealed partial class DesignTabViewModel
             {
                 field = field == "*" ? "$**" : field + ".$**";
             }
-            key.Set(field, row.DirectionValue);
+            _ = key.Set(field, row.DirectionValue);
         }
         if (key.ElementCount == 0 && _newKind == "wildcard")
         {
@@ -461,7 +451,7 @@ internal sealed partial class DesignTabViewModel
             {
                 throw new FormatException(Loc["Design_ErrTtlSingle"]);
             }
-            if (!long.TryParse(_newTtlSeconds, NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds) || seconds < 0)
+            if (!long.TryParse(NewTtlSeconds, NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds) || seconds < 0)
             {
                 throw new FormatException(Loc["Design_ErrTtlSeconds"]);
             }
@@ -523,13 +513,13 @@ internal sealed partial class DesignTabViewModel
                 error = ex.Message;
             }
         }
-        if (error.Length == 0 && Indexes.FirstOrDefault(i => i.Name == _newName.Trim()) is { } clash)
+        if (error.Length == 0 && Indexes.FirstOrDefault(i => i.Name == NewName.Trim()) is { } clash)
         {
             error = Loc.Format("Design_ErrNameExists", clash.Name);
         }
-        if (_nameEdited && _newName.Trim() != auto && _newName.Trim().Length > 0)
+        if (_nameEdited && NewName.Trim() != auto && NewName.Trim().Length > 0)
         {
-            options["name"] = _newName.Trim();
+            options["name"] = NewName.Trim();
         }
         NewError = error;
         NewCommand = key.ElementCount == 0
@@ -543,9 +533,9 @@ internal sealed partial class DesignTabViewModel
     /// <summary>草稿行:与表里的行同一个模型,大小列写预估,使用列写「待创建」。</summary>
     private IndexRow Draft(BsonDocument key, BsonDocument options, long size)
     {
-        string name = _newName.Trim().Length > 0 ? _newName.Trim() : IndexAdvisor.DefaultName(key);
+        string name = NewName.Trim().Length > 0 ? NewName.Trim() : IndexAdvisor.DefaultName(key);
         var spec = new BsonDocument { { "key", key }, { "name", name } };
-        spec.Merge(options, overwriteExistingElements: false);
+        _ = spec.Merge(options, overwriteExistingElements: false);
         IndexForm form = IndexAdvisor.ShapeOf(spec);
         return new IndexRow
         {
@@ -612,7 +602,7 @@ internal sealed partial class DesignTabViewModel
             NewError = ex.Message;
             return;
         }
-        string name = _newName.Trim().Length > 0 ? _newName.Trim() : IndexAdvisor.DefaultName(key);
+        string name = NewName.Trim().Length > 0 ? NewName.Trim() : IndexAdvisor.DefaultName(key);
         if (Workspace.Guard.ConfirmWrites || Workspace.Guard.IsProduction)
         {
             bool ok = await Workspace.ConfirmAsync(new()
@@ -631,7 +621,7 @@ internal sealed partial class DesignTabViewModel
             }
         }
         var spec = new BsonDocument { { "key", key }, { "name", name } };
-        spec.Merge(options, overwriteExistingElements: false);
+        _ = spec.Merge(options, overwriteExistingElements: false);
         IsCreating = true;
         var placeholder = new IndexRow
         {
@@ -648,7 +638,7 @@ internal sealed partial class DesignTabViewModel
         Task progress = TrackCreateAsync(placeholder, poll.Token);
         try
         {
-            await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
             {
                 { "createIndexes", CollectionName },
                 { "indexes", new BsonArray { spec } }
@@ -676,7 +666,7 @@ internal sealed partial class DesignTabViewModel
             {
             }
             IsCreating = false;
-            Indexes.Remove(placeholder);
+            _ = Indexes.Remove(placeholder);
         }
         await LoadIndexesAsync().ConfigureAwait(true);
     }

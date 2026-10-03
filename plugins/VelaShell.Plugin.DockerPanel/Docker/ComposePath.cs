@@ -30,16 +30,16 @@ internal static class ComposePath
     /// <summary>去掉最后一段(取所在目录);没有分隔符就原样返回。</summary>
     internal static string DirectoryOf(string path)
     {
-        var trimmed = path.TrimEnd(Separators);
-        var slash = trimmed.LastIndexOfAny(Separators);
+        string trimmed = path.TrimEnd(Separators);
+        int slash = trimmed.LastIndexOfAny(Separators);
         return slash > 0 ? trimmed[..slash] : trimmed;
     }
 
     /// <summary>取最后一段(目录名 / 文件名)。</summary>
     internal static string LastSegment(string path)
     {
-        var trimmed = path.TrimEnd(Separators);
-        var slash = trimmed.LastIndexOfAny(Separators);
+        string trimmed = path.TrimEnd(Separators);
+        int slash = trimmed.LastIndexOfAny(Separators);
         return slash >= 0 ? trimmed[(slash + 1)..] : trimmed;
     }
 

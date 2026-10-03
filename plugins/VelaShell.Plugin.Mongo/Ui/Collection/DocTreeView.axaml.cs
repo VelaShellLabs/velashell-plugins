@@ -101,13 +101,13 @@ public sealed partial class DocTreeView : UserControl
             return;
         }
         e.Handled = true;
-        DatePickFlyout.Show(button, vm.Loc, editor.Text, text =>
+        _ = DatePickFlyout.Show(button, vm.Loc, editor.Text, text =>
         {
             editor.Text = text;
             if (vm.CommitEditor(editor, row.Row, row.Path))
             {
                 row.Editor = null;
-                TreeList.Focus();
+                _ = TreeList.Focus();
             }
         });
     }
@@ -126,14 +126,14 @@ public sealed partial class DocTreeView : UserControl
                 if (vm.CommitEditor(editor, editing.Row, editing.Path))
                 {
                     editing.Editor = null;
-                    TreeList.Focus();
+                    _ = TreeList.Focus();
                 }
             }
             else if (e.Key == Key.Escape)
             {
                 e.Handled = true;
                 editing.Editor = null;
-                TreeList.Focus();
+                _ = TreeList.Focus();
             }
             return;
         }

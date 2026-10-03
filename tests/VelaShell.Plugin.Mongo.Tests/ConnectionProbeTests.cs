@@ -59,7 +59,7 @@ public sealed class ConnectionProbeTests
             Text(ConnectionProbe.Preview(Draft("127.0.0.1", 27017, "", new() { ["directConnection"] = "true" }), Zh)));
         Assert.AreEqual("mongodb+srv://cluster0.example.net",
             Text(ConnectionProbe.Preview(Draft("cluster0.example.net", 27017, "", new() { ["topology"] = "srv", ["tls"] = "true" }), Zh)));
-        Assert.IsNull(ConnectionProbe.Preview(Draft(" ", 27017, "", new()), Zh), "nothing to preview before a host is typed");
+        Assert.IsNull(ConnectionProbe.Preview(Draft(" ", 27017, "", []), Zh), "nothing to preview before a host is typed");
     }
 
     /// <summary>URI 形态填了一半(解析不了)时不抛,原样脱敏摆出来;填完整的照常拆开着色。</summary>

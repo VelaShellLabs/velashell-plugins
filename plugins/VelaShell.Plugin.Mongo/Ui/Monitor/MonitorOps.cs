@@ -50,7 +50,7 @@ internal static class MonitorOps
             new("$currentOp", new BsonDocument { { "allUsers", allUsers }, { "idleConnections", false } }),
             new("$match", filter)
         ];
-        PipelineDefinition<NoPipelineInput, BsonDocument> pipeline = PipelineDefinition<NoPipelineInput, BsonDocument>.Create(stages);
+        var pipeline = PipelineDefinition<NoPipelineInput, BsonDocument>.Create(stages);
         using IAsyncCursor<BsonDocument> cursor = await connection.Database("admin")
             .AggregateAsync(pipeline, new AggregateOptions { Comment = Comment }, cancellationToken)
             .ConfigureAwait(true);

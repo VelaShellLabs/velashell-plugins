@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
 using MongoDB.Bson;
@@ -44,30 +43,16 @@ internal sealed partial class DesignTabViewModel
 
     private bool _editorReady;
     private bool _validationLoading;
-    private string _ruleText = "";
     private string _appliedText = "";
-    private string _ruleLevel = "strict";
-    private string _ruleAction = "error";
     private string _appliedLevel = "strict";
     private string _appliedAction = "error";
     private BsonDocument? _ruleValidator;
-    private IReadOnlyList<EditorDiagnostic> _ruleDiagnostics = [];
-    private bool _ruleSyntaxOk = true;
-    private string _ruleSyntaxText = "";
-    private bool _isPrechecking;
     private bool _precheckRan;
     private bool _precheckAgain;
     private bool _precheckResample;
     private List<BsonValue> _precheckIds = [];
     private long _passCount;
     private long _failCount = -1;
-    private IReadOnlyList<BarPiece> _passPieces = [];
-    private string _tryDocText = "";
-    private IReadOnlyList<EditorDiagnostic> _tryDiagnostics = [];
-    private IReadOnlyList<LineMark> _tryMarks = [];
-    private bool? _tryPassed;
-    private string _tryTitle = "";
-    private string _tryDetail = "";
     private DispatcherTimer? _tryTimer;
     private DispatcherTimer? _ruleTimer;
     private int _tryVersion;
@@ -75,10 +60,10 @@ internal sealed partial class DesignTabViewModel
     /// <summary>编辑器里的规则文本(mongosh 写法)。</summary>
     public string RuleText
     {
-        get => _ruleText;
+        get;
         set
         {
-            if (SetProperty(ref _ruleText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 ParseRule();
                 RecomputeRuleState();
@@ -86,69 +71,69 @@ internal sealed partial class DesignTabViewModel
                 Restart(ref _tryTimer, TimeSpan.FromMilliseconds(350), () => _ = EvaluateTryDocAsync());
             }
         }
-    }
+    } = "";
 
     /// <summary>validationLevel(off / moderate / strict)。</summary>
     public string RuleLevel
     {
-        get => _ruleLevel;
+        get;
         set
         {
-            if (SetProperty(ref _ruleLevel, value ?? "strict"))
+            if (SetProperty(ref field, value ?? "strict"))
             {
                 RecomputeRuleState();
             }
         }
-    }
+    } = "strict";
 
     /// <summary>validationAction(warn / error)。</summary>
     public string RuleAction
     {
-        get => _ruleAction;
+        get;
         set
         {
-            if (SetProperty(ref _ruleAction, value ?? "error"))
+            if (SetProperty(ref field, value ?? "error"))
             {
                 RecomputeRuleState();
                 Restart(ref _tryTimer, TimeSpan.FromMilliseconds(50), () => _ = EvaluateTryDocAsync());
             }
         }
-    }
+    } = "error";
 
     /// <summary>编辑器诊断(语法错误)。</summary>
     public IReadOnlyList<EditorDiagnostic> RuleDiagnostics
     {
-        get => _ruleDiagnostics;
-        private set => SetProperty(ref _ruleDiagnostics, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>语法正确。</summary>
     public bool RuleSyntaxOk
     {
-        get => _ruleSyntaxOk;
+        get;
         private set
         {
-            if (SetProperty(ref _ruleSyntaxOk, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(RuleSyntaxBad));
                 ApplyRuleCommand.RaiseCanExecuteChanged();
             }
         }
-    }
+    } = true;
 
     /// <summary>语法有误。</summary>
-    public bool RuleSyntaxBad => !_ruleSyntaxOk;
+    public bool RuleSyntaxBad => !RuleSyntaxOk;
 
     /// <summary>工具行右侧的语法状态文字。</summary>
     public string RuleSyntaxText
     {
-        get => _ruleSyntaxText;
-        private set => SetProperty(ref _ruleSyntaxText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>底部命令预览。</summary>
     public string RuleCommand =>
-        $"db.runCommand({{ collMod: {QuotedCollection}, validator: {{…}}, validationLevel: {BsonText.Quote(_ruleLevel)}, validationAction: {BsonText.Quote(_ruleAction)} }})";
+        $"db.runCommand({{ collMod: {QuotedCollection}, validator: {{…}}, validationLevel: {BsonText.Quote(RuleLevel)}, validationAction: {BsonText.Quote(RuleAction)} }})";
 
     /// <summary>子页条上验证规则旁的小字。</summary>
     public string ValidationTabHint => _live.Validator switch
@@ -164,8 +149,8 @@ internal sealed partial class DesignTabViewModel
     /// <summary>规则测试:正在预检。</summary>
     public bool IsPrechecking
     {
-        get => _isPrechecking;
-        private set => SetProperty(ref _isPrechecking, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>预检抽了多少份(<c>抽样 1,000</c>)。</summary>
@@ -180,9 +165,9 @@ internal sealed partial class DesignTabViewModel
     /// <summary>通过 / 不通过比例条。</summary>
     public IReadOnlyList<BarPiece> PassPieces
     {
-        get => _passPieces;
-        private set => SetProperty(ref _passPieces, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>不通过原因(按 关键字 + 路径 分组)。</summary>
     public ObservableCollection<FailureReasonRow> FailureReasons { get; } = [];
@@ -193,37 +178,37 @@ internal sealed partial class DesignTabViewModel
     /// <summary>试写文档(mongosh 写法)。</summary>
     public string TryDocText
     {
-        get => _tryDocText;
+        get;
         set
         {
-            if (SetProperty(ref _tryDocText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 Restart(ref _tryTimer, TimeSpan.FromMilliseconds(350), () => _ = EvaluateTryDocAsync());
             }
         }
-    }
+    } = "";
 
     /// <summary>试写文档的诊断(违规的值下面画波浪线)。</summary>
     public IReadOnlyList<EditorDiagnostic> TryDiagnostics
     {
-        get => _tryDiagnostics;
-        private set => SetProperty(ref _tryDiagnostics, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>试写文档的整行标记(违规的行红底)。</summary>
     public IReadOnlyList<LineMark> TryMarks
     {
-        get => _tryMarks;
-        private set => SetProperty(ref _tryMarks, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>试写结果:通过 / 不通过 / 未知(语法错误)。</summary>
     public bool? TryPassed
     {
-        get => _tryPassed;
+        get;
         private set
         {
-            if (SetProperty(ref _tryPassed, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(TryOk), nameof(TryFailed), nameof(TryUnknown));
             }
@@ -231,42 +216,42 @@ internal sealed partial class DesignTabViewModel
     }
 
     /// <summary>通过(绿框)。</summary>
-    public bool TryOk => _tryPassed == true;
+    public bool TryOk => TryPassed == true;
 
     /// <summary>不通过(红框)。</summary>
-    public bool TryFailed => _tryPassed == false;
+    public bool TryFailed => TryPassed == false;
 
     /// <summary>没法判断(灰框)。</summary>
-    public bool TryUnknown => _tryPassed is null && _tryTitle.Length > 0;
+    public bool TryUnknown => TryPassed is null && TryTitle.Length > 0;
 
     /// <summary>结果框标题。</summary>
     public string TryTitle
     {
-        get => _tryTitle;
+        get;
         private set
         {
-            if (SetProperty(ref _tryTitle, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(TryUnknown));
             }
         }
-    }
+    } = "";
 
     /// <summary>结果框明细(每条违规一行)。</summary>
     public string TryDetail
     {
-        get => _tryDetail;
+        get;
         private set
         {
-            if (SetProperty(ref _tryDetail, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasTryDetail));
             }
         }
-    }
+    } = "";
 
     /// <summary>有明细。</summary>
-    public bool HasTryDetail => _tryDetail.Length > 0;
+    public bool HasTryDetail => TryDetail.Length > 0;
 
     /// <summary>历史版本(新的在前)。</summary>
     public ObservableCollection<RuleVersion> RuleHistory { get; } = [];
@@ -337,7 +322,7 @@ internal sealed partial class DesignTabViewModel
         });
         ApplyRuleCommand = new(() => _ruleValidator is null
             ? Task.CompletedTask
-            : ApplyValidatorAsync(_ruleValidator, _ruleLevel, _ruleAction, _failCount), () => _ruleSyntaxOk);
+            : ApplyValidatorAsync(_ruleValidator, RuleLevel, RuleAction, _failCount), () => RuleSyntaxOk);
         RefreshPrecheckCommand = new(() => RunPrecheckAsync(resample: true));
         OpenFailureCommand = new(row => Workspace.OpenCollection(Database, CollectionName, row.Filter));
         FailureReasons.CollectionChanged += (_, _) => RaisePropertyChanged(nameof(HasFailureReasons));
@@ -366,7 +351,7 @@ internal sealed partial class DesignTabViewModel
             }
             await LoadHistoryAsync().ConfigureAwait(true);
             await RunPrecheckAsync(resample: !_precheckRan).ConfigureAwait(true);
-            if (_tryDocText.Length == 0)
+            if (TryDocText.Length == 0)
             {
                 await SeedTryDocAsync().ConfigureAwait(true);
             }
@@ -411,7 +396,7 @@ internal sealed partial class DesignTabViewModel
     private void ParseRule()
     {
         var diagnostics = new List<EditorDiagnostic>();
-        foreach (ShellDiagnostic d in ShellJson.Diagnose(_ruleText))
+        foreach (ShellDiagnostic d in ShellJson.Diagnose(RuleText))
         {
             diagnostics.Add(new(d.Offset, Math.Max(1, d.Length), Loc.Format(d.MessageKey, d.Argument), DiagnosticSeverity.Error, d.Fix));
         }
@@ -421,12 +406,12 @@ internal sealed partial class DesignTabViewModel
         {
             try
             {
-                parsed = ShellJson.ParseDocument(_ruleText);
+                parsed = ShellJson.ParseDocument(RuleText);
             }
             catch (ShellJsonException ex)
             {
                 error = ex.Message;
-                int offset = ex.Offset >= 0 ? Math.Min(ex.Offset, Math.Max(0, _ruleText.Length - 1)) : 0;
+                int offset = ex.Offset >= 0 ? Math.Min(ex.Offset, Math.Max(0, RuleText.Length - 1)) : 0;
                 diagnostics.Add(new(offset, 1, ex.Message));
             }
         }
@@ -444,8 +429,8 @@ internal sealed partial class DesignTabViewModel
     private void RecomputeRuleState()
     {
         IsModified = _editorReady
-                     && (!string.Equals(_ruleText.Trim(), _appliedText.Trim(), StringComparison.Ordinal)
-                         || _ruleLevel != _appliedLevel || _ruleAction != _appliedAction);
+                     && (!string.Equals(RuleText.Trim(), _appliedText.Trim(), StringComparison.Ordinal)
+                         || RuleLevel != _appliedLevel || RuleAction != _appliedAction);
         RaisePropertyChanged(nameof(RuleCommand));
         UpdateStatus();
     }
@@ -464,7 +449,7 @@ internal sealed partial class DesignTabViewModel
         {
             return;
         }
-        if (_isPrechecking)
+        if (IsPrechecking)
         {
             // 正在判上一版规则:记一笔,判完马上用最新的规则再判一次(而不是丢掉这次改动)。
             _precheckAgain = true;
@@ -482,7 +467,7 @@ internal sealed partial class DesignTabViewModel
             IMongoCollection<BsonDocument> collection = Workspace.Connection.Collection(Database, CollectionName);
             if (resample || _precheckIds.Count == 0)
             {
-                var pipeline = new[]
+                BsonDocument[] pipeline = new[]
                 {
                     new BsonDocument("$sample", new BsonDocument("size", PrecheckSampleSize)),
                     new BsonDocument("$project", new BsonDocument("_id", 1))
@@ -672,7 +657,7 @@ internal sealed partial class DesignTabViewModel
             return;
         }
         int version = ++_tryVersion;
-        if (_tryDocText.Trim().Length == 0)
+        if (TryDocText.Trim().Length == 0)
         {
             TryPassed = null;
             TryTitle = "";
@@ -681,12 +666,12 @@ internal sealed partial class DesignTabViewModel
             TryMarks = [];
             return;
         }
-        if (!ShellJson.TryParseDocument(_tryDocText, out BsonDocument doc, out string? error))
+        if (!ShellJson.TryParseDocument(TryDocText, out BsonDocument doc, out string? error))
         {
             TryPassed = null;
             TryTitle = Loc.Format("Design_SyntaxError", error);
             TryDetail = "";
-            TryDiagnostics = [.. ShellJson.Diagnose(_tryDocText).Select(d => new EditorDiagnostic(d.Offset, Math.Max(1, d.Length), Loc.Format(d.MessageKey, d.Argument)))];
+            TryDiagnostics = [.. ShellJson.Diagnose(TryDocText).Select(d => new EditorDiagnostic(d.Offset, Math.Max(1, d.Length), Loc.Format(d.MessageKey, d.Argument)))];
             TryMarks = [];
             return;
         }
@@ -706,14 +691,14 @@ internal sealed partial class DesignTabViewModel
         bool failed = serverFailed ?? violations.Count > 0;
         TryPassed = !failed;
         TryTitle = failed
-            ? Loc.Format("Design_TryFail", _ruleAction, Loc[_ruleAction == "warn" ? "Design_TryFailWarn" : "Design_TryFailError"])
+            ? Loc.Format("Design_TryFail", RuleAction, Loc[RuleAction == "warn" ? "Design_TryFailWarn" : "Design_TryFailError"])
             : Loc["Design_TryPass"];
         TryDetail = !failed
             ? ""
             : violations.Count > 0
                 ? string.Join("\n", violations.Take(6).Select(v => $"{ViolationPath(v)}:{v.Message}"))
                 : Loc["Design_TryServerOnly"];
-        (TryMarks, TryDiagnostics) = failed ? MarkViolations(_tryDocText, violations) : ([], []);
+        (TryMarks, TryDiagnostics) = failed ? MarkViolations(TryDocText, violations) : ([], []);
     }
 
     /// <summary><c>properties.total.minimum</c>(设计稿 16 结果框里的写法)。</summary>
@@ -876,7 +861,7 @@ internal sealed partial class DesignTabViewModel
         try
         {
             await SaveHistoryAsync().ConfigureAwait(true);
-            await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
             {
                 { "collMod", CollectionName },
                 { "validator", validator },
@@ -912,7 +897,7 @@ internal sealed partial class DesignTabViewModel
     /// <summary>Schema 分析刚完成:试写文档还空着就用抽样起头。</summary>
     private void OnSchemaForValidation()
     {
-        if (_validationLoaded && _tryDocText.Length == 0)
+        if (_validationLoaded && TryDocText.Length == 0)
         {
             _ = SeedTryDocAsync();
         }
@@ -1047,11 +1032,11 @@ internal sealed partial class DesignTabViewModel
         var failing = FailureReasons.Where(r => r.RawKeyword == word).ToList();
         if (failing.Count > 0)
         {
-            string consequence = _ruleLevel == "off"
+            string consequence = RuleLevel == "off"
                 ? Loc["Design_HoverOff"]
-                : _ruleAction == "warn"
-                    ? Loc.Format("Design_HoverWarn", _ruleLevel)
-                    : Loc[_ruleLevel == "moderate" ? "Design_HoverErrorModerate" : "Design_HoverErrorStrict"];
+                : RuleAction == "warn"
+                    ? Loc.Format("Design_HoverWarn", RuleLevel)
+                    : Loc[RuleLevel == "moderate" ? "Design_HoverErrorModerate" : "Design_HoverErrorStrict"];
             body += Loc.Format("Design_HoverFailures", BsonText.Grouped(failing.Sum(static r => r.Count)),
                 string.Join(", ", failing.Select(static r => r.Path)), consequence);
         }

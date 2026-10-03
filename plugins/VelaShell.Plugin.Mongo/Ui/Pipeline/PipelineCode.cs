@@ -59,12 +59,12 @@ internal static class PipelineCode
     private static string Mongosh(string database, string collection, IReadOnlyList<BsonDocument> stages, bool allowDiskUse)
     {
         var b = new StringBuilder();
-        b.Append("use(").Append(BsonText.Quote(database)).Append(");\n\n");
-        b.Append("db.").Append(MongoWorkspaceViewModel.ShellCollectionRef(collection)).Append(".aggregate(");
-        b.Append(List(stages.Select(s => Js(s, 1, shell: true)), "[", "]", 0, "  "));
+        _ = b.Append("use(").Append(BsonText.Quote(database)).Append(");\n\n");
+        _ = b.Append("db.").Append(MongoWorkspaceViewModel.ShellCollectionRef(collection)).Append(".aggregate(");
+        _ = b.Append(List(stages.Select(s => Js(s, 1, shell: true)), "[", "]", 0, "  "));
         if (allowDiskUse)
         {
-            b.Append(", { allowDiskUse: true }");
+            _ = b.Append(", { allowDiskUse: true }");
         }
         return b.Append(");\n").ToString();
     }
@@ -87,14 +87,14 @@ internal static class PipelineCode
             }
         }
         var b = new StringBuilder();
-        b.Append("const { ").Append(string.Join(", ", imports)).Append(" } = require(\"mongodb\");\n\n");
-        b.Append("const client = new MongoClient(process.env.MONGODB_URI ?? \"mongodb://localhost:27017\");\n\n");
-        b.Append("async function run() {\n");
-        b.Append("  const pipeline = ").Append(body).Append(";\n");
-        b.Append("  const cursor = client.db(").Append(BsonText.Quote(database)).Append(").collection(").Append(BsonText.Quote(collection))
+        _ = b.Append("const { ").Append(string.Join(", ", imports)).Append(" } = require(\"mongodb\");\n\n");
+        _ = b.Append("const client = new MongoClient(process.env.MONGODB_URI ?? \"mongodb://localhost:27017\");\n\n");
+        _ = b.Append("async function run() {\n");
+        _ = b.Append("  const pipeline = ").Append(body).Append(";\n");
+        _ = b.Append("  const cursor = client.db(").Append(BsonText.Quote(database)).Append(").collection(").Append(BsonText.Quote(collection))
             .Append(").aggregate(pipeline").Append(allowDiskUse ? ", { allowDiskUse: true }" : "").Append(");\n");
-        b.Append("  for await (const doc of cursor) {\n    console.log(doc);\n  }\n}\n\n");
-        b.Append("run().finally(() => client.close());\n");
+        _ = b.Append("  for await (const doc of cursor) {\n    console.log(doc);\n  }\n}\n\n");
+        _ = b.Append("run().finally(() => client.close());\n");
         return b.ToString();
     }
 
@@ -104,15 +104,15 @@ internal static class PipelineCode
         switch (value)
         {
             case BsonDocument doc:
-            {
-                var fields = doc.Select(e => BsonText.FieldName(e.Name) + ": " + Js(e.Value, depth + 1, shell)).ToList();
-                return Container(fields, "{ ", " }", "{}", depth, "  ");
-            }
+                {
+                    var fields = doc.Select(e => BsonText.FieldName(e.Name) + ": " + Js(e.Value, depth + 1, shell)).ToList();
+                    return Container(fields, "{ ", " }", "{}", depth, "  ");
+                }
             case BsonArray array:
-            {
-                var items = array.Select(v => Js(v, depth + 1, shell)).ToList();
-                return Container(items, "[ ", " ]", "[]", depth, "  ");
-            }
+                {
+                    var items = array.Select(v => Js(v, depth + 1, shell)).ToList();
+                    return Container(items, "[ ", " ]", "[]", depth, "  ");
+                }
         }
         if (shell)
         {
@@ -154,26 +154,26 @@ internal static class PipelineCode
         var b = new StringBuilder("import os\n");
         if (body.Contains("datetime(", StringComparison.Ordinal))
         {
-            b.Append("from datetime import datetime, timezone\n");
+            _ = b.Append("from datetime import datetime, timezone\n");
         }
         if (body.Contains("uuid.UUID(", StringComparison.Ordinal))
         {
-            b.Append("import uuid\n");
+            _ = b.Append("import uuid\n");
         }
         if (body.Contains("base64.", StringComparison.Ordinal))
         {
-            b.Append("import base64\n");
+            _ = b.Append("import base64\n");
         }
-        b.Append('\n');
+        _ = b.Append('\n');
         if (bsonImports.Count > 0)
         {
-            b.Append("from bson import ").Append(string.Join(", ", bsonImports)).Append('\n');
+            _ = b.Append("from bson import ").Append(string.Join(", ", bsonImports)).Append('\n');
         }
-        b.Append("from pymongo import MongoClient\n\n");
-        b.Append("client = MongoClient(os.environ.get(\"MONGODB_URI\", \"mongodb://localhost:27017\"))\n");
-        b.Append("collection = client[").Append(BsonText.Quote(database)).Append("][").Append(BsonText.Quote(collection)).Append("]\n\n");
-        b.Append("pipeline = ").Append(body).Append("\n\n");
-        b.Append("for doc in collection.aggregate(pipeline").Append(allowDiskUse ? ", allowDiskUse=True" : "").Append("):\n    print(doc)\n");
+        _ = b.Append("from pymongo import MongoClient\n\n");
+        _ = b.Append("client = MongoClient(os.environ.get(\"MONGODB_URI\", \"mongodb://localhost:27017\"))\n");
+        _ = b.Append("collection = client[").Append(BsonText.Quote(database)).Append("][").Append(BsonText.Quote(collection)).Append("]\n\n");
+        _ = b.Append("pipeline = ").Append(body).Append("\n\n");
+        _ = b.Append("for doc in collection.aggregate(pipeline").Append(allowDiskUse ? ", allowDiskUse=True" : "").Append("):\n    print(doc)\n");
         return b.ToString();
     }
 
@@ -182,15 +182,15 @@ internal static class PipelineCode
         switch (value)
         {
             case BsonDocument doc:
-            {
-                var fields = doc.Select(e => BsonText.Quote(e.Name) + ": " + Py(e.Value, depth + 1)).ToList();
-                return Container(fields, "{", "}", "{}", depth, "    ");
-            }
+                {
+                    var fields = doc.Select(e => BsonText.Quote(e.Name) + ": " + Py(e.Value, depth + 1)).ToList();
+                    return Container(fields, "{", "}", "{}", depth, "    ");
+                }
             case BsonArray array:
-            {
-                var items = array.Select(v => Py(v, depth + 1)).ToList();
-                return Container(items, "[", "]", "[]", depth, "    ");
-            }
+                {
+                    var items = array.Select(v => Py(v, depth + 1)).ToList();
+                    return Container(items, "[", "]", "[]", depth, "    ");
+                }
         }
         return value.BsonType switch
         {
@@ -244,19 +244,19 @@ internal static class PipelineCode
     private static string CSharp(string database, string collection, IReadOnlyList<BsonDocument> stages, bool allowDiskUse)
     {
         var b = new StringBuilder();
-        b.Append("using MongoDB.Bson;\nusing MongoDB.Driver;\n\n");
-        b.Append("var client = new MongoClient(Environment.GetEnvironmentVariable(\"MONGODB_URI\") ?? \"mongodb://localhost:27017\");\n");
-        b.Append("var collection = client.GetDatabase(").Append(CsString(database)).Append(").GetCollection<BsonDocument>(")
+        _ = b.Append("using MongoDB.Bson;\nusing MongoDB.Driver;\n\n");
+        _ = b.Append("var client = new MongoClient(Environment.GetEnvironmentVariable(\"MONGODB_URI\") ?? \"mongodb://localhost:27017\");\n");
+        _ = b.Append("var collection = client.GetDatabase(").Append(CsString(database)).Append(").GetCollection<BsonDocument>(")
             .Append(CsString(collection)).Append(");\n\n");
-        b.Append("BsonDocument[] pipeline =\n[\n");
+        _ = b.Append("BsonDocument[] pipeline =\n[\n");
         for (int i = 0; i < stages.Count; i++)
         {
-            b.Append("    ").Append(Cs(stages[i], 1)).Append(i < stages.Count - 1 ? ",\n" : "\n");
+            _ = b.Append("    ").Append(Cs(stages[i], 1)).Append(i < stages.Count - 1 ? ",\n" : "\n");
         }
-        b.Append("];\n\n");
-        b.Append("var options = new AggregateOptions { AllowDiskUse = ").Append(allowDiskUse ? "true" : "false").Append(" };\n");
-        b.Append("foreach (BsonDocument doc in collection.Aggregate(PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline), options).ToEnumerable())\n");
-        b.Append("{\n    Console.WriteLine(doc);\n}\n");
+        _ = b.Append("];\n\n");
+        _ = b.Append("var options = new AggregateOptions { AllowDiskUse = ").Append(allowDiskUse ? "true" : "false").Append(" };\n");
+        _ = b.Append("foreach (BsonDocument doc in collection.Aggregate(PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline), options).ToEnumerable())\n");
+        _ = b.Append("{\n    Console.WriteLine(doc);\n}\n");
         return b.ToString();
     }
 
@@ -271,27 +271,27 @@ internal static class PipelineCode
             case BsonDocument { ElementCount: 1 } single:
                 return $"new BsonDocument({CsString(single.GetElement(0).Name)}, {Cs(single.GetElement(0).Value, depth)})";
             case BsonDocument doc:
-            {
-                var flat = doc.Select(e => $"{{ {CsString(e.Name)}, {Cs(e.Value, depth + 1)} }}").ToList();
-                string oneLine = "new BsonDocument { " + string.Join(", ", flat) + " }";
-                if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
                 {
-                    return oneLine;
+                    var flat = doc.Select(e => $"{{ {CsString(e.Name)}, {Cs(e.Value, depth + 1)} }}").ToList();
+                    string oneLine = "new BsonDocument { " + string.Join(", ", flat) + " }";
+                    if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
+                    {
+                        return oneLine;
+                    }
+                    return "new BsonDocument\n" + pad + "{\n" + string.Join(",\n", flat.Select(f => inner + f)) + "\n" + pad + "}";
                 }
-                return "new BsonDocument\n" + pad + "{\n" + string.Join(",\n", flat.Select(f => inner + f)) + "\n" + pad + "}";
-            }
             case BsonArray { Count: 0 }:
                 return "new BsonArray()";
             case BsonArray array:
-            {
-                var items = array.Select(v => Cs(v, depth + 1)).ToList();
-                string oneLine = "new BsonArray { " + string.Join(", ", items) + " }";
-                if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
                 {
-                    return oneLine;
+                    var items = array.Select(v => Cs(v, depth + 1)).ToList();
+                    string oneLine = "new BsonArray { " + string.Join(", ", items) + " }";
+                    if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
+                    {
+                        return oneLine;
+                    }
+                    return "new BsonArray\n" + pad + "{\n" + string.Join(",\n", items.Select(f => inner + f)) + "\n" + pad + "}";
                 }
-                return "new BsonArray\n" + pad + "{\n" + string.Join(",\n", items.Select(f => inner + f)) + "\n" + pad + "}";
-            }
         }
         return value.BsonType switch
         {
@@ -344,7 +344,7 @@ internal static class PipelineCode
         var body = new StringBuilder();
         for (int i = 0; i < stages.Count; i++)
         {
-            body.Append("                ").Append(Jv(stages[i], 4)).Append(i < stages.Count - 1 ? ",\n" : "\n");
+            _ = body.Append("                ").Append(Jv(stages[i], 4)).Append(i < stages.Count - 1 ? ",\n" : "\n");
         }
         string text = body.ToString();
         var imports = new SortedSet<string>(StringComparer.Ordinal)
@@ -363,25 +363,25 @@ internal static class PipelineCode
         {
             if (text.Contains(token, StringComparison.Ordinal))
             {
-                imports.Add(import);
+                _ = imports.Add(import);
             }
         }
         var b = new StringBuilder();
         foreach (string import in imports)
         {
-            b.Append("import ").Append(import).Append(";\n");
+            _ = b.Append("import ").Append(import).Append(";\n");
         }
-        b.Append("\npublic class Pipeline {\n");
-        b.Append("    public static void main(String[] args) {\n");
-        b.Append("        String uri = System.getenv().getOrDefault(\"MONGODB_URI\", \"mongodb://localhost:27017\");\n");
-        b.Append("        try (MongoClient client = MongoClients.create(uri)) {\n");
-        b.Append("            MongoCollection<Document> collection = client.getDatabase(").Append(BsonText.Quote(database))
+        _ = b.Append("\npublic class Pipeline {\n");
+        _ = b.Append("    public static void main(String[] args) {\n");
+        _ = b.Append("        String uri = System.getenv().getOrDefault(\"MONGODB_URI\", \"mongodb://localhost:27017\");\n");
+        _ = b.Append("        try (MongoClient client = MongoClients.create(uri)) {\n");
+        _ = b.Append("            MongoCollection<Document> collection = client.getDatabase(").Append(BsonText.Quote(database))
             .Append(").getCollection(").Append(BsonText.Quote(collection)).Append(");\n\n");
-        b.Append("            List<Document> pipeline = Arrays.asList(\n");
-        b.Append(text);
-        b.Append("            );\n\n");
-        b.Append("            for (Document doc : collection.aggregate(pipeline)").Append(allowDiskUse ? ".allowDiskUse(true)" : "").Append(") {\n");
-        b.Append("                System.out.println(doc.toJson());\n            }\n        }\n    }\n}\n");
+        _ = b.Append("            List<Document> pipeline = Arrays.asList(\n");
+        _ = b.Append(text);
+        _ = b.Append("            );\n\n");
+        _ = b.Append("            for (Document doc : collection.aggregate(pipeline)").Append(allowDiskUse ? ".allowDiskUse(true)" : "").Append(") {\n");
+        _ = b.Append("                System.out.println(doc.toJson());\n            }\n        }\n    }\n}\n");
         return b.ToString();
     }
 
@@ -393,27 +393,27 @@ internal static class PipelineCode
             case BsonDocument { ElementCount: 0 }:
                 return "new Document()";
             case BsonDocument doc:
-            {
-                var parts = doc.Select((e, i) => (i == 0 ? "new Document(" : ".append(") + BsonText.Quote(e.Name) + ", " + Jv(e.Value, depth + 1) + ")").ToList();
-                string oneLine = string.Concat(parts);
-                if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
                 {
-                    return oneLine;
+                    var parts = doc.Select((e, i) => (i == 0 ? "new Document(" : ".append(") + BsonText.Quote(e.Name) + ", " + Jv(e.Value, depth + 1) + ")").ToList();
+                    string oneLine = string.Concat(parts);
+                    if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
+                    {
+                        return oneLine;
+                    }
+                    return parts[0] + string.Concat(parts.Skip(1).Select(p => "\n" + inner + p));
                 }
-                return parts[0] + string.Concat(parts.Skip(1).Select(p => "\n" + inner + p));
-            }
             case BsonArray { Count: 0 }:
                 return "Arrays.asList()";
             case BsonArray array:
-            {
-                var items = array.Select(v => Jv(v, depth + 1)).ToList();
-                string oneLine = "Arrays.asList(" + string.Join(", ", items) + ")";
-                if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
                 {
-                    return oneLine;
+                    var items = array.Select(v => Jv(v, depth + 1)).ToList();
+                    string oneLine = "Arrays.asList(" + string.Join(", ", items) + ")";
+                    if (oneLine.Length + depth * 4 <= Width && !oneLine.Contains('\n'))
+                    {
+                        return oneLine;
+                    }
+                    return "Arrays.asList(\n" + string.Join(",\n", items.Select(i => inner + i)) + ")";
                 }
-                return "Arrays.asList(\n" + string.Join(",\n", items.Select(i => inner + i)) + ")";
-            }
         }
         return value.BsonType switch
         {

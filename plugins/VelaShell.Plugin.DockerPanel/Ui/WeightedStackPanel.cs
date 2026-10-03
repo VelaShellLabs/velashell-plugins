@@ -36,10 +36,12 @@ public sealed class WeightedStackPanel : Panel
     public static readonly AttachedProperty<double> WeightProperty =
         AvaloniaProperty.RegisterAttached<WeightedStackPanel, Control, double>("Weight");
 
-    static WeightedStackPanel() =>
+    static WeightedStackPanel()
+    {
         // 权重变了要重排的是**父面板**(每一段的宽度都跟着变),不是那一段自己。
-        WeightProperty.Changed.AddClassHandler<Control>((child, _) =>
+        _ = WeightProperty.Changed.AddClassHandler<Control>((child, _) =>
             (child.GetVisualParent() as WeightedStackPanel)?.InvalidateArrange());
+    }
 
     /// <summary>读 <see cref="WeightProperty" />。</summary>
     public static double GetWeight(Control control) => control.GetValue(WeightProperty);
@@ -51,7 +53,7 @@ public sealed class WeightedStackPanel : Panel
     protected override Size MeasureOverride(Size availableSize)
     {
         double height = 0;
-        foreach (var child in Children)
+        foreach (Control child in Children)
         {
             child.Measure(availableSize);
             height = Math.Max(height, child.DesiredSize.Height);
@@ -63,10 +65,10 @@ public sealed class WeightedStackPanel : Panel
     protected override Size ArrangeOverride(Size finalSize)
     {
         double total = 0;
-        var last = -1;
-        for (var i = 0; i < Children.Count; i++)
+        int last = -1;
+        for (int i = 0; i < Children.Count; i++)
         {
-            var weight = Weight(Children[i]);
+            double weight = Weight(Children[i]);
             total += weight;
             if (weight > 0)
             {
@@ -78,13 +80,13 @@ public sealed class WeightedStackPanel : Panel
             return finalSize;
         }
         double x = 0;
-        for (var i = 0; i < Children.Count; i++)
+        for (int i = 0; i < Children.Count; i++)
         {
-            var child = Children[i];
+            Control child = Children[i];
             // 舍入误差交给**最后一段有宽度的**吃掉,免得右边留一条一像素的缝。
             // 不能简单地给最后一个孩子:一个 0 字节的构建缓存排在末尾时,
             // 它会把整条剩余宽度都画成自己的颜色 —— 明明什么都没占。
-            var width = i == last
+            double width = i == last
                 ? Math.Max(0, finalSize.Width - x)
                 : finalSize.Width * (Weight(child) / total);
             child.Arrange(new(x, 0, width, finalSize.Height));
@@ -97,6 +99,6 @@ public sealed class WeightedStackPanel : Panel
     private static double Weight(Control child) =>
         child.GetValue(WeightProperty) is var attached && attached > 0 ? attached
         : child.Tag is double weight && weight > 0 ? weight
-        : child.Tag is string text && double.TryParse(text, out var parsed) && parsed > 0 ? parsed
+        : child.Tag is string text && double.TryParse(text, out double parsed) && parsed > 0 ? parsed
         : 0;
 }

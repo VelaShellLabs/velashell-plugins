@@ -30,11 +30,6 @@ internal enum GridFsEntryKind
 /// </summary>
 internal sealed class GridFsEntry : ObservableObject
 {
-    private bool _isChecked;
-    private double _progress;
-    private string _progressText = "";
-    private Bitmap? _thumbnail;
-
     private GridFsEntry(GridFsEntryKind kind, string name, string path)
     {
         Kind = kind;
@@ -96,10 +91,10 @@ internal sealed class GridFsEntry : ObservableObject
     /// <summary>勾选。</summary>
     public bool IsChecked
     {
-        get => _isChecked;
+        get;
         set
         {
-            if (CanCheck && SetProperty(ref _isChecked, value))
+            if (CanCheck && SetProperty(ref field, value))
             {
                 CheckedChanged?.Invoke(this);
             }
@@ -171,24 +166,24 @@ internal sealed class GridFsEntry : ObservableObject
     /// <summary>上传进度(0–1)。</summary>
     public double Progress
     {
-        get => _progress;
-        set => SetProperty(ref _progress, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>上传进度的块数(<c>3 / 5</c>)。</summary>
     public string ProgressText
     {
-        get => _progressText;
-        set => SetProperty(ref _progressText, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>缩略图(缩略图视图里懒加载)。</summary>
     public Bitmap? Thumbnail
     {
-        get => _thumbnail;
+        get;
         set
         {
-            if (SetProperty(ref _thumbnail, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasThumbnail));
             }
@@ -196,7 +191,7 @@ internal sealed class GridFsEntry : ObservableObject
     }
 
     /// <summary>有缩略图。</summary>
-    public bool HasThumbnail => _thumbnail is not null;
+    public bool HasThumbnail => Thumbnail is not null;
 
     /// <summary>「..」行。</summary>
     public static GridFsEntry Parent(string parentPrefix) => new(GridFsEntryKind.Parent, "..", parentPrefix);
@@ -257,7 +252,6 @@ internal enum GridFsTransferKind
 /// </summary>
 internal sealed class GridFsTransfer
 {
-    private long _bytes;
 
     /// <summary>种类。</summary>
     public required GridFsTransferKind Kind { get; init; }
@@ -293,14 +287,14 @@ internal sealed class GridFsTransfer
     public long ChunkTotal => Math.Max(1, (Size + ChunkSize - 1) / ChunkSize);
 
     /// <summary>已走过的字节(任意线程写,UI 定时读)。</summary>
-    public long Bytes => Interlocked.Read(ref _bytes);
+    public long Bytes { get => Interlocked.Read(ref field); private set; }
 
     /// <summary>进度回调(驱动在线程池线程上调)。</summary>
     public IProgress<long> Reporter => new Sink(this);
 
     private sealed class Sink(GridFsTransfer owner) : IProgress<long>
     {
-        public void Report(long value) => Interlocked.Exchange(ref owner._bytes, value);
+        public void Report(long value) => Interlocked.Exchange(ref owner.Bytes, value);
     }
 }
 
@@ -320,22 +314,18 @@ internal sealed record GridFsCrumb(string Name, string Prefix, bool IsLast);
 /// <param name="isShown">是不是详情当前展示的那份。</param>
 internal sealed class GridFsVersionRow(GridFsFile file, int number, bool isCurrent, bool isShown) : ObservableObject
 {
-    private GridFsFile _file = file;
-    private bool _isShown = isShown;
-    private bool _isChecked;
-
     /// <summary>这一份(改了 metadata 之后换成重读的那份)。</summary>
     public GridFsFile File
     {
-        get => _file;
+        get;
         set
         {
-            if (SetProperty(ref _file, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(SizeText), nameof(DateText));
             }
         }
-    }
+    } = file;
 
     /// <summary>版本号(按上传时间从旧到新 1、2、3;GridFS 不存版本号,删掉旧的之后其余的按位置重排)。</summary>
     public int Number { get; } = number;
@@ -346,15 +336,15 @@ internal sealed class GridFsVersionRow(GridFsFile file, int number, bool isCurre
     /// <summary>是不是详情当前展示的那份。</summary>
     public bool IsShown
     {
-        get => _isShown;
-        set => SetProperty(ref _isShown, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = isShown;
 
     /// <summary>勾选了(准备一起删)。只有旧版本能勾。</summary>
     public bool IsChecked
     {
-        get => _isChecked;
-        set => SetProperty(ref _isChecked, value && !IsCurrent);
+        get;
+        set => SetProperty(ref field, value && !IsCurrent);
     }
 
     /// <summary><c>v3</c>。</summary>

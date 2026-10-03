@@ -112,7 +112,7 @@ internal sealed partial class MongoWorkspaceViewModel
         {
             if (wasConnected)
             {
-                await DisconnectAsync(entry).ConfigureAwait(true);
+                _ = await DisconnectAsync(entry).ConfigureAwait(true);
             }
             await ConnectAsync(entry).ConfigureAwait(true);
         }
@@ -178,7 +178,7 @@ internal sealed partial class MongoWorkspaceViewModel
             return;
         }
         CloseTabsWhere(t => ReferenceEquals(t, stateTab));
-        await AttachAsync(entry, link, quiet).ConfigureAwait(true);
+        _ = await AttachAsync(entry, link, quiet).ConfigureAwait(true);
         entry.Profile.LastConnectedAt = DateTimeOffset.Now;
         try
         {
@@ -231,7 +231,7 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <returns>会话。</returns>
     internal Task<MongoSession> AttachAsync(MongoProfile profile, MongoConnection connection)
     {
-        var entry = Track(new ConnectionEntry(profile, Loc));
+        ConnectionEntry entry = Track(new ConnectionEntry(profile, Loc));
         Connections.Add(entry);
         RaisePropertyChanged(nameof(HasNoConnections));
         RebuildVisible();
@@ -288,13 +288,13 @@ internal sealed partial class MongoWorkspaceViewModel
     internal async Task DeleteConnectionAsync(ConnectionEntry entry)
     {
         if (!await ConfirmAsync(new()
-            {
-                Title = Loc["Conn_DeleteTitle"],
-                Message = Loc.Format("Conn_DeleteBody", entry.Name),
-                ConfirmLabel = Loc["Conn_DeleteConfirm"],
-                IconKey = "Mongo.trash-2",
-                Danger = true
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Conn_DeleteTitle"],
+            Message = Loc.Format("Conn_DeleteBody", entry.Name),
+            ConfirmLabel = Loc["Conn_DeleteConfirm"],
+            IconKey = "Mongo.trash-2",
+            Danger = true
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -312,7 +312,7 @@ internal sealed partial class MongoWorkspaceViewModel
             return;
         }
         CloseTabsWhere(t => t is ConnectionStateTabViewModel state && ReferenceEquals(state.Entry, entry));
-        Connections.Remove(entry);
+        _ = Connections.Remove(entry);
         if (SelectedNode?.Owner == entry)
         {
             SelectedNode = Connections.FirstOrDefault()?.Root;

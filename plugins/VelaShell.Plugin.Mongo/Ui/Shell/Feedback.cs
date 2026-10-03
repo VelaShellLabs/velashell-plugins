@@ -44,7 +44,6 @@ internal sealed record ConfirmRequest
 internal sealed class ConfirmDialogViewModel : DialogViewModel
 {
     private readonly TaskCompletionSource<bool> _result = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private string _typed = "";
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -80,16 +79,16 @@ internal sealed class ConfirmDialogViewModel : DialogViewModel
     /// <summary>手打的内容。</summary>
     public string Typed
     {
-        get => _typed;
+        get;
         set
         {
-            if (SetProperty(ref _typed, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(CanConfirm));
                 ConfirmCommand.RaiseCanExecuteChanged();
             }
         }
-    }
+    } = "";
 
     /// <summary>能不能点确认。</summary>
     public bool CanConfirm => !RequiresTyping || string.Equals(Typed.Trim(), Request.TypeToConfirm, StringComparison.Ordinal);
@@ -105,14 +104,14 @@ internal sealed class ConfirmDialogViewModel : DialogViewModel
 
     private void Confirm()
     {
-        _result.TrySetResult(true);
+        _ = _result.TrySetResult(true);
         Close();
     }
 
     /// <inheritdoc />
     internal override void OnClosed()
     {
-        _result.TrySetResult(false);
+        _ = _result.TrySetResult(false);
         base.OnClosed();
     }
 }

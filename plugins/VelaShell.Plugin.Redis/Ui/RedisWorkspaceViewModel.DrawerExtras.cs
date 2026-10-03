@@ -75,7 +75,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasClusterNotice));
         }
     } = string.Empty;
@@ -151,7 +151,7 @@ public sealed partial class RedisWorkspaceViewModel
         if (ClusterSortBySlot)
         {
             // 从节点没有槽位,按主的槽位跟在主后面排 —— 单独按空串排会把它们全甩到一头去。
-            nodes = nodes.OrderBy(node => SlotKey(node), StringComparer.Ordinal);
+            nodes = nodes.OrderBy(SlotKey, StringComparer.Ordinal);
         }
         ClusterNodes.Clear();
         foreach (RedisClusterNode node in nodes)
@@ -182,7 +182,7 @@ public sealed partial class RedisWorkspaceViewModel
         var text = new StringBuilder();
         foreach (RedisClusterNode node in ClusterNodes)
         {
-            text.Append(node.Id).Append('\t').Append(node.Address).Append('\t')
+            _ = text.Append(node.Id).Append('\t').Append(node.Address).Append('\t')
                 .Append(node.RoleText).Append('\t').Append(node.Slots).Append('\t')
                 .Append(node.LinkState).Append('\n');
         }
@@ -332,7 +332,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasSlowlogThreshold));
         }
     } = string.Empty;
@@ -346,7 +346,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasSlowlogMaxLength));
         }
     } = string.Empty;
@@ -389,7 +389,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             ApplyClientFilter();
         }
     } = string.Empty;
@@ -448,7 +448,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(PubSubPauseLabel));
         }
     }
@@ -503,7 +503,7 @@ public sealed partial class RedisWorkspaceViewModel
             $"pubsub-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.jsonl");
         try
         {
-            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            _ = System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
             // 一行一条 JSON:给人看与喂给脚本都直接可用。
             IEnumerable<string> lines = Messages.Reverse().Select(message => System.Text.Json.JsonSerializer.Serialize(
                 new { at = message.At, channel = message.Channel, payload = message.Payload },
@@ -532,7 +532,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(MemoryGroupingLabel));
         }
     } = 1;

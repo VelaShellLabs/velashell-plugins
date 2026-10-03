@@ -32,7 +32,7 @@ public sealed partial class SaveQueryDialogView : UserControl
     protected override void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
-        NameBox.Focus();
+        _ = NameBox.Focus();
         NameBox.SelectAll();
     }
 }

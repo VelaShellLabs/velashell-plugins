@@ -19,14 +19,11 @@ internal sealed record MechanismOption(MechanismChoice Choice, string Label);
 /// </summary>
 internal sealed class UserEditorViewModel : ObservableObject, IDisposable
 {
-    private readonly UsersTabViewModel _owner;
-    private MongoUser? _user;
     private string _newName = "";
+
     // 新用户默认建在 admin:那是认证库的惯例,应用连接串里 authSource=admin 也是驱动的默认。
-    private string _newDb = "admin";
     private string _password = "";
     private bool _revealPassword;
-    private bool _passwordGenerated;
     private MechanismOption _mechanism;
     private string _clientSource = "";
     private string _serverAddress = "";
@@ -34,15 +31,14 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     private string _originalServerAddress = "";
     private BsonArray? _originalRestrictions;
     private bool _restrictionsLoaded;
-    private IReadOnlyList<AdminCommand> _commands = [];
 
     /// <summary>构造。</summary>
     /// <param name="owner">标签页。</param>
     /// <param name="user">要编辑的用户;<see langword="null" /> 即新建。</param>
     public UserEditorViewModel(UsersTabViewModel owner, MongoUser? user)
     {
-        _owner = owner;
-        _user = user;
+        Owner = owner;
+        User = user;
         MechanismOptions =
         [
             new(MechanismChoice.Sha256, "SCRAM-SHA-256"),
@@ -58,43 +54,43 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
             ApplyRestrictions(restrictions);
         }
 
-        SaveCommand = new(() => _owner.SaveUserAsync(this), () => CanSave);
+        SaveCommand = new(() => Owner.SaveUserAsync(this), () => CanSave);
         DiscardCommand = new(Discard, () => IsModified);
-        RotateCommand = new(() => _owner.RotatePasswordAsync(this), () => !IsNew);
-        CopyCommandsCommand = new(() => _owner.Workspace.CopyAsync(string.Join(Environment.NewLine, _commands.Select(static c => c.Shell))));
+        RotateCommand = new(() => Owner.RotatePasswordAsync(this), () => !IsNew);
+        CopyCommandsCommand = new(() => Owner.Workspace.CopyAsync(string.Join(Environment.NewLine, Commands.Select(static c => c.Shell))));
         GenerateCommand = new(() =>
         {
             Password = UserAdmin.GeneratePassword();
             RevealPassword = true;
-            _passwordGenerated = true;
+            PasswordGenerated = true;
         });
         AddRoleCommand = new(Roles.Add);
         Recompute();
     }
 
     /// <summary>标签页。</summary>
-    public UsersTabViewModel Owner => _owner;
+    public UsersTabViewModel Owner { get; }
 
     /// <summary>文案表。</summary>
-    public Loc Loc => _owner.Loc;
+    public Loc Loc => Owner.Loc;
 
     /// <summary>正在编辑的用户(新建时为空)。</summary>
-    public MongoUser? User => _user;
+    public MongoUser? User { get; private set; }
 
     /// <summary>新建状态。</summary>
-    public bool IsNew => _user is null;
+    public bool IsNew => User is null;
 
     /// <summary>是不是已有用户(新建那一节反着显示)。</summary>
-    public bool IsExisting => _user is not null;
+    public bool IsExisting => User is not null;
 
     /// <summary>草稿的键(<c>admin.ops_writer</c>;新建为空)。</summary>
-    public string Id => _user?.Id ?? "";
+    public string Id => User?.Id ?? "";
 
     /// <summary>显示名。</summary>
-    public string DisplayName => _user?.Name ?? (_newName.Length > 0 ? _newName : Loc["Users_NewUserTitle"]);
+    public string DisplayName => User?.Name ?? (_newName.Length > 0 ? _newName : Loc["Users_NewUserTitle"]);
 
     /// <summary>root 级用户(红色盾牌头像)。</summary>
-    public bool IsRoot => _user?.IsRoot == true;
+    public bool IsRoot => User?.IsRoot == true;
 
     /// <summary>头像图标。</summary>
     public string AvatarIcon => IsNew ? "Mongo.user-plus" : IsRoot ? "Mongo.shield-alert" : "Mongo.user";
@@ -107,9 +103,9 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     {
         get
         {
-            if (_user is not { } user)
+            if (User is not { } user)
             {
-                return string.Join(" · ", _newDb, _mechanism.Label, Loc["Users_NotCreated"]);
+                return string.Join(" · ", NewDb, _mechanism.Label, Loc["Users_NotCreated"]);
             }
             var parts = new List<string> { user.Db };
             if (UserAdmin.PrimaryMechanism(user.Mechanisms) is { Length: > 0 } mechanism)
@@ -120,7 +116,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
             {
                 parts.Add(Loc.Format("Users_CreatedOn", created.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
             }
-            if (_owner.IsSelf(user))
+            if (Owner.IsSelf(user))
             {
                 parts.Add(Loc["Users_CurrentIdentity"]);
             }
@@ -131,7 +127,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     // ── 密码年龄徽章 ─────────────────────────────────────────────────────
 
     private (int Days, int Policy, bool Expired)? Age =>
-        _user is null ? null : UserAdmin.PasswordAge(_user.CustomData, DateTime.UtcNow);
+        User is null ? null : UserAdmin.PasswordAge(User.CustomData, DateTime.UtcNow);
 
     /// <summary>显示徽章(customData 有修改时间、且已接近或超过策略)。</summary>
     public bool HasPasswordAge => Age is not null;
@@ -161,19 +157,18 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     /// <summary>认证库。</summary>
     public string NewDb
     {
-        get => _newDb;
-        set
+        get; set
         {
-            if (SetProperty(ref _newDb, string.IsNullOrWhiteSpace(value) ? "admin" : value.Trim()))
+            if (SetProperty(ref field, string.IsNullOrWhiteSpace(value) ? "admin" : value.Trim()))
             {
                 RaisePropertyChanged(nameof(Subtitle));
                 OnChanged();
             }
         }
-    }
+    } = "admin";
 
     /// <summary>认证库的候选(admin + 用户库)。</summary>
-    public IReadOnlyList<string> AuthDatabases => _owner.AuthDatabases;
+    public IReadOnlyList<string> AuthDatabases => Owner.AuthDatabases;
 
     /// <summary>密码。</summary>
     public string Password
@@ -183,7 +178,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _password, value))
             {
-                _passwordGenerated = false;
+                PasswordGenerated = false;
                 OnChanged();
             }
         }
@@ -206,7 +201,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     public char PasswordChar => _revealPassword ? '\0' : '•';
 
     /// <summary>密码是刚生成的(建好之后顺手复制到剪贴板)。</summary>
-    public bool PasswordGenerated => _passwordGenerated;
+    public bool PasswordGenerated { get; private set; }
 
     /// <summary>机制选项。</summary>
     public IReadOnlyList<MechanismOption> MechanismOptions { get; }
@@ -238,7 +233,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
             var have = new HashSet<RoleRef>(Roles.Current);
             return
             [
-                .. _owner.CustomRoles.Select(static r => r.Ref).Where(r => !have.Contains(r)),
+                .. Owner.CustomRoles.Select(static r => r.Ref).Where(r => !have.Contains(r)),
                 .. BuiltinRoles.Others.Select(static r => new RoleRef(r, "admin")).Where(r => !have.Contains(r))
             ];
         }
@@ -302,7 +297,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     /// </summary>
     internal void ApplyDetails(MongoUser detailed)
     {
-        _user = detailed;
+        User = detailed;
         ApplyRestrictions(detailed.Restrictions ?? []);
         RaisePropertiesChanged(nameof(Subtitle), nameof(HasPasswordAge), nameof(PasswordExpired), nameof(PasswordAgeText));
         Recompute();
@@ -330,13 +325,13 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     public EffectivePreview Effective { get; }
 
     /// <summary>将执行的命令。</summary>
-    public IReadOnlyList<AdminCommand> Commands => _commands;
+    public IReadOnlyList<AdminCommand> Commands { get; private set; } = [];
 
     /// <summary>有没有要执行的命令。</summary>
-    public bool HasCommands => _commands.Count > 0;
+    public bool HasCommands => Commands.Count > 0;
 
     /// <summary>底栏的命令预览(多条用 <c>;</c> 连成一行,完整的经复制按钮拿)。</summary>
-    public string CommandPreview => _commands.Count == 0 ? Loc["Users_NoChanges"] : string.Join(";  ", _commands.Select(static c => c.Shell));
+    public string CommandPreview => Commands.Count == 0 ? Loc["Users_NoChanges"] : string.Join(";  ", Commands.Select(static c => c.Shell));
 
     /// <summary>有未保存的改动。</summary>
     public bool IsModified =>
@@ -365,9 +360,9 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
             {
                 return Loc["Users_NeedName"];
             }
-            if (_owner.Users.Any(u => u.Name == _newName && u.Db == _newDb))
+            if (Owner.Users.Any(u => u.Name == _newName && u.Db == NewDb))
             {
-                return Loc.Format("Users_NameTaken", $"{_newName}@{_newDb}");
+                return Loc.Format("Users_NameTaken", $"{_newName}@{NewDb}");
             }
             return _password.Length == 0 ? Loc["Users_NeedPassword"] : "";
         }
@@ -403,7 +398,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     /// <summary>按当前状态拼出要执行的命令。</summary>
     public IReadOnlyList<AdminCommand> BuildCommands()
     {
-        if (_user is not { } user)
+        if (User is not { } user)
         {
             if (_newName.Length == 0)
             {
@@ -412,7 +407,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
             DateTime now = DateTime.UtcNow;
             return
             [
-                UserAdmin.CreateUser(_newName, _newDb, _password.Length > 0 ? _password : "", Roles.Current, _mechanism.Choice,
+                UserAdmin.CreateUser(_newName, NewDb, _password.Length > 0 ? _password : "", Roles.Current, _mechanism.Choice,
                     UserAdmin.BuildRestrictions(_clientSource, _serverAddress, null),
                     UserAdmin.MergeCustomData([], new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, DateTimeKind.Utc), created: true))
             ];
@@ -440,8 +435,8 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
     {
         // forAllDBs 的列表里没有登录限制:拿列表那份重建时沿用手里的(随后详情会再刷新一次),
         // 否则输入框会先闪成空、再跳回原值。
-        BsonArray? restrictions = saved.Restrictions ?? _user?.Restrictions;
-        _user = saved with { Restrictions = restrictions };
+        BsonArray? restrictions = saved.Restrictions ?? User?.Restrictions;
+        User = saved with { Restrictions = restrictions };
         Roles.Rebase(saved.Roles);
         _clientSource = "";
         _serverAddress = "";
@@ -472,7 +467,7 @@ internal sealed class UserEditorViewModel : ObservableObject, IDisposable
 
     private void Recompute()
     {
-        _commands = BuildCommands();
+        Commands = BuildCommands();
         RaisePropertiesChanged(nameof(Commands), nameof(HasCommands), nameof(CommandPreview), nameof(IsModified),
             nameof(ValidationError), nameof(ShowValidation), nameof(CanSave), nameof(AddableRoles));
         SaveCommand.RaiseCanExecuteChanged();

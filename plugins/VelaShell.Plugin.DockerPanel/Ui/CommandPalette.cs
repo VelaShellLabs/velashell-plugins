@@ -144,7 +144,7 @@ public sealed class CommandPalette : ObservableObject
             return;
         }
         // 环绕:到底了按下一次回到第一条,比停在那里不动更符合预期。
-        var next = (_selectedIndex + delta + Items.Count) % Items.Count;
+        int next = (_selectedIndex + delta + Items.Count) % Items.Count;
         Select(next);
     }
 
@@ -166,7 +166,7 @@ public sealed class CommandPalette : ObservableObject
 
     private void Select(int index)
     {
-        for (var i = 0; i < Items.Count; i++)
+        for (int i = 0; i < Items.Count; i++)
         {
             Items[i].Active = i == index;
         }
@@ -193,13 +193,13 @@ public sealed class CommandPalette : ObservableObject
     private void ApplyFilter()
     {
         Items.Clear();
-        var needle = Query.Trim();
+        string needle = Query.Trim();
         List<PaletteEntry> matched = needle.Length == 0
             ? [.. _all]
             : [.. _all.Where(e => Matches(e, needle)).OrderByDescending(e => Score(e, needle))];
 
         string? group = null;
-        foreach (var entry in matched)
+        foreach (PaletteEntry entry in matched)
         {
             var item = new PaletteItem(entry);
             if (entry.Group != group)

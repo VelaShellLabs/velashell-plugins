@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Avalonia.Threading;
-using VelaShell.Plugin.Mongo.Shell;
 using VelaShell.Plugin.Mongo.Core;
+using VelaShell.Plugin.Mongo.Shell;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -41,13 +41,7 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     private string _baseline;
     private string _database;
     private bool _runOnLoad;
-    private int _caretOffset;
-    private int _caretLine = 1;
-    private int _caretColumn = 1;
     private int _maxTimeMs;
-    private string _helperTab = "fields";
-    private string _resultView = "grid";
-    private QueryPane? _selectedPane;
     private string? _savedName;
     private bool _loaded;
 
@@ -86,9 +80,9 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
         HistoryCommand = new RelayCommand(() => HelperTab = "history");
         ExportCodeCommand = new RelayCommand(() => ExportCode(null, CodeTarget.CSharp));
         SelectPaneCommand = new RelayCommand<QueryPane>(SelectPane);
-        ExportResultCommand = new AsyncCommand(ExportSelectedAsync, () => _selectedPane is QueryResultSet or ExplainPane { HasPlan: true });
-        CopyResultCommand = new AsyncCommand(CopySelectedAsync, () => _selectedPane is not null);
-        TogglePinCommand = new RelayCommand(() => (_selectedPane as QueryResultSet)?.TogglePinCommand.Execute(null), () => _selectedPane is QueryResultSet);
+        ExportResultCommand = new AsyncCommand(ExportSelectedAsync, () => SelectedPane is QueryResultSet or ExplainPane { HasPlan: true });
+        CopyResultCommand = new AsyncCommand(CopySelectedAsync, () => SelectedPane is not null);
+        TogglePinCommand = new RelayCommand(() => (SelectedPane as QueryResultSet)?.TogglePinCommand.Execute(null), () => SelectedPane is QueryResultSet);
         SelectDatabaseCommand = new RelayCommand<string>(db => Database = db);
         InitializeTarget();
         SetMaxTimeCommand = new RelayCommand<int>(ms => MaxTimeMs = ms);
@@ -171,10 +165,10 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     /// <summary>光标位置(与编辑器双向绑定)。</summary>
     public int CaretOffset
     {
-        get => _caretOffset;
+        get;
         set
         {
-            if (SetProperty(ref _caretOffset, value))
+            if (SetProperty(ref field, value))
             {
                 ScheduleHelper();
             }
@@ -184,31 +178,31 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     /// <summary>光标行(1 起)。</summary>
     public int CaretLine
     {
-        get => _caretLine;
+        get;
         set
         {
-            if (SetProperty(ref _caretLine, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(CaretText));
             }
         }
-    }
+    } = 1;
 
     /// <summary>光标列(1 起)。</summary>
     public int CaretColumn
     {
-        get => _caretColumn;
+        get;
         set
         {
-            if (SetProperty(ref _caretColumn, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(CaretText));
             }
         }
-    }
+    } = 1;
 
     /// <summary>状态条右侧的 <c>Ln 12, Col 8</c>。</summary>
-    public string CaretText => string.Create(CultureInfo.InvariantCulture, $"Ln {_caretLine}, Col {_caretColumn}");
+    public string CaretText => string.Create(CultureInfo.InvariantCulture, $"Ln {CaretLine}, Col {CaretColumn}");
 
     /// <summary>已知的库(下拉)。</summary>
     public ObservableCollection<string> Databases { get; } = [];
@@ -232,10 +226,10 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     /// <summary>右侧面板页签(<c>fields</c> / <c>snippets</c> / <c>history</c>)。</summary>
     public string HelperTab
     {
-        get => _helperTab;
+        get;
         set
         {
-            if (SetProperty(ref _helperTab, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsFieldsTab));
                 RaisePropertyChanged(nameof(IsSnippetsTab));
@@ -246,24 +240,24 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
                 }
             }
         }
-    }
+    } = "fields";
 
     /// <summary>字段页。</summary>
-    public bool IsFieldsTab => _helperTab == "fields";
+    public bool IsFieldsTab => HelperTab == "fields";
 
     /// <summary>片段页。</summary>
-    public bool IsSnippetsTab => _helperTab == "snippets";
+    public bool IsSnippetsTab => HelperTab == "snippets";
 
     /// <summary>历史页。</summary>
-    public bool IsHistoryTab => _helperTab == "history";
+    public bool IsHistoryTab => HelperTab == "history";
 
     /// <summary>结果的看法(<c>grid</c> / <c>tree</c> / <c>json</c>),所有结果页签共用。</summary>
     public string ResultView
     {
-        get => _resultView;
+        get;
         set
         {
-            if (SetProperty(ref _resultView, value))
+            if (SetProperty(ref field, value))
             {
                 foreach (QueryResultSet set in Panes.OfType<QueryResultSet>())
                 {
@@ -271,7 +265,7 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
                 }
             }
         }
-    }
+    } = "grid";
 
     /// <summary>结果区页签(结果在前,执行计划与消息固定在最后)。</summary>
     public ObservableCollection<QueryPane> Panes { get; }
@@ -285,10 +279,10 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     /// <summary>选中的页签。</summary>
     public QueryPane? SelectedPane
     {
-        get => _selectedPane;
+        get;
         private set
         {
-            if (SetProperty(ref _selectedPane, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsResultSelected));
                 RaisePropertyChanged(nameof(IsExplainSelected));
@@ -300,10 +294,10 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     }
 
     /// <summary>选中的是一份结果(网格 / 树 / JSON 切换只对结果有意义)。</summary>
-    public bool IsResultSelected => _selectedPane is QueryResultSet;
+    public bool IsResultSelected => SelectedPane is QueryResultSet;
 
     /// <summary>选中的是执行计划。</summary>
-    public bool IsExplainSelected => _selectedPane is ExplainPane;
+    public bool IsExplainSelected => SelectedPane is ExplainPane;
 
     /// <summary>运行全部(F5;有选区时只运行选区)。</summary>
     public AsyncCommand RunCommand { get; }
@@ -446,7 +440,7 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
         SelectedPane = pane;
         if (pane is QueryResultSet set)
         {
-            set.ViewMode = _resultView;
+            set.ViewMode = ResultView;
         }
     }
 

@@ -75,10 +75,6 @@ internal sealed class IndexRow : ObservableObject
     /// <summary>使用列比例条的满宽。</summary>
     public const double BarWidth = 60;
 
-    private bool _isBuilding;
-    private double _buildPercent;
-    private string _buildText = "";
-
     /// <summary>索引名。</summary>
     public required string Name { get; init; }
 
@@ -139,10 +135,10 @@ internal sealed class IndexRow : ObservableObject
     /// <summary>正在构建。</summary>
     public bool IsBuilding
     {
-        get => _isBuilding;
+        get;
         set
         {
-            if (SetProperty(ref _isBuilding, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IconKey), nameof(IconToken), nameof(IsReady));
             }
@@ -150,15 +146,15 @@ internal sealed class IndexRow : ObservableObject
     }
 
     /// <summary>已建好(使用列画 ops 而不是进度)。</summary>
-    public bool IsReady => !_isBuilding;
+    public bool IsReady => !IsBuilding;
 
     /// <summary>构建进度(0–100)。</summary>
     public double BuildPercent
     {
-        get => _buildPercent;
+        get;
         set
         {
-            if (SetProperty(ref _buildPercent, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(BuildWidth));
             }
@@ -166,20 +162,20 @@ internal sealed class IndexRow : ObservableObject
     }
 
     /// <summary>进度条像素宽。</summary>
-    public double BuildWidth => Math.Clamp(_buildPercent, 0, 100) / 100 * BarWidth;
+    public double BuildWidth => Math.Clamp(BuildPercent, 0, 100) / 100 * BarWidth;
 
     /// <summary>进度文字(<c>构建中 64% · 约 2 分</c>)。</summary>
     public string BuildText
     {
-        get => _buildText;
-        set => SetProperty(ref _buildText, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>名称列图标。</summary>
-    public string IconKey => _isBuilding ? "Mongo.loader-circle" : IsHidden ? "Mongo.eye-off" : "Mongo.key-round";
+    public string IconKey => IsBuilding ? "Mongo.loader-circle" : IsHidden ? "Mongo.eye-off" : "Mongo.key-round";
 
     /// <summary>名称列图标颜色。</summary>
-    public string IconToken => _isBuilding ? "VelaAccent" : IsUnused ? "VelaWarning" : "VelaTextTertiary";
+    public string IconToken => IsBuilding ? "VelaAccent" : IsUnused ? "VelaWarning" : "VelaTextTertiary";
 
     /// <summary>名称颜色。</summary>
     public string NameToken => IsUnused ? "VelaWarning" : IsHidden ? "VelaTextTertiary" : "VelaTextPrimary";
@@ -234,10 +230,6 @@ internal sealed class NewKeyRow : ObservableObject
     private string _field;
     private int _direction;
     private string _role;
-    private string _kind = "normal";
-    private bool _isFirst;
-    private bool _isLast;
-    private int _number;
 
     /// <summary>构造。</summary>
     /// <param name="field">字段。</param>
@@ -273,17 +265,17 @@ internal sealed class NewKeyRow : ObservableObject
     /// <summary>序号(1 起;表里第一列)。</summary>
     public int Number
     {
-        get => _number;
-        set => SetProperty(ref _number, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>是最后一行(「下移」不可用)。</summary>
     public bool IsLast
     {
-        get => _isLast;
+        get;
         set
         {
-            if (SetProperty(ref _isLast, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(CanMoveDown));
             }
@@ -291,10 +283,10 @@ internal sealed class NewKeyRow : ObservableObject
     }
 
     /// <summary>能上移。</summary>
-    public bool CanMoveUp => !_isFirst;
+    public bool CanMoveUp => !IsFirst;
 
     /// <summary>能下移。</summary>
-    public bool CanMoveDown => !_isLast;
+    public bool CanMoveDown => !IsLast;
 
     /// <summary>方向(1 / -1)。</summary>
     public int Direction
@@ -338,23 +330,23 @@ internal sealed class NewKeyRow : ObservableObject
     /// <summary>当前索引类型(面板的分段:normal / text / 2dsphere / hashed / wildcard)。</summary>
     public string Kind
     {
-        get => _kind;
+        get;
         set
         {
-            if (SetProperty(ref _kind, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(DirectionValue), nameof(HasDirection), nameof(DirectionText));
             }
         }
-    }
+    } = "normal";
 
     /// <summary>是第一行(哈希索引只把第一行设成 hashed)。</summary>
     public bool IsFirst
     {
-        get => _isFirst;
+        get;
         set
         {
-            if (SetProperty(ref _isFirst, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(DirectionValue), nameof(HasDirection), nameof(DirectionText), nameof(CanMoveUp));
             }
@@ -362,17 +354,17 @@ internal sealed class NewKeyRow : ObservableObject
     }
 
     /// <summary>这一行的键值能不能选方向(普通索引、哈希索引的非首行)。</summary>
-    public bool HasDirection => _kind == "normal" || (_kind == "hashed" && !_isFirst) || _kind == "wildcard";
+    public bool HasDirection => Kind == "normal" || (Kind == "hashed" && !IsFirst) || Kind == "wildcard";
 
     /// <summary>方向下拉上的字。</summary>
     public string DirectionText => _label(DirectionValue);
 
     /// <summary>这一行在键模式里的值。</summary>
-    public BsonValue DirectionValue => _kind switch
+    public BsonValue DirectionValue => Kind switch
     {
         "text" => "text",
         "2dsphere" => "2dsphere",
-        "hashed" when _isFirst => "hashed",
+        "hashed" when IsFirst => "hashed",
         "wildcard" => 1,
         _ => _direction
     };

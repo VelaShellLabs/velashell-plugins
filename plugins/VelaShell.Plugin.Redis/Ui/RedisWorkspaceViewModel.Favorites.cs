@@ -46,7 +46,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             if (field is { Length: > 0 } key)
             {
                 _ = JumpToAsync(key);
@@ -84,7 +84,7 @@ public sealed partial class RedisWorkspaceViewModel
         string display = key.Display;
         if (Favorites.Contains(display, StringComparer.Ordinal))
         {
-            Favorites.Remove(display);
+            _ = Favorites.Remove(display);
         }
         else
         {

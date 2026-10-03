@@ -34,7 +34,7 @@ internal sealed class MongoProfile
     public string Username { get; set; } = "";
 
     /// <summary>其余设置(键见 <see cref="MongoSettings" />)。</summary>
-    public Dictionary<string, string> Settings { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> Settings { get; set; } = [with(StringComparer.Ordinal)];
 
     /// <summary>最近一次连上的时间(对象树按它排,常用的在上面)。</summary>
     public DateTimeOffset? LastConnectedAt { get; set; }
@@ -87,7 +87,7 @@ internal sealed class MongoProfile
     {
         if (string.IsNullOrEmpty(value))
         {
-            Settings.Remove(key);
+            _ = Settings.Remove(key);
         }
         else
         {
@@ -141,7 +141,7 @@ internal sealed class MongoProfileStore(IPluginContext context)
         }
         if (password.Length == 0)
         {
-            await context.Secrets.DeleteAsync(SecretName(profile.Id), cancellationToken).ConfigureAwait(false);
+            _ = await context.Secrets.DeleteAsync(SecretName(profile.Id), cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -160,7 +160,7 @@ internal sealed class MongoProfileStore(IPluginContext context)
         {
             await context.Storage.SetAsync(ProfilesKey, list, cancellationToken).ConfigureAwait(false);
         }
-        await context.Secrets.DeleteAsync(SecretName(id), cancellationToken).ConfigureAwait(false);
+        _ = await context.Secrets.DeleteAsync(SecretName(id), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>取口令;没存过是空串。</summary>

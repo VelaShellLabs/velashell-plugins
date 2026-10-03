@@ -134,7 +134,7 @@ internal static class CollectionMenus
 
     private static Control Header(string label, string? hint, bool danger)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), MinWidth = 190 };
+        var grid = new Grid { ColumnDefinitions = [with("*,Auto")], MinWidth = 190 };
         var text = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
         if (danger)
         {

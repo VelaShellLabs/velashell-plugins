@@ -79,7 +79,7 @@ internal sealed class MongoConnector(IPluginContext context, Loc loc)
     {
         ArgumentNullException.ThrowIfNull(profile);
         WorkspaceConnectRequest request = profile.ToRequest(password);
-        MongoSettings settings = MongoSettings.From(request);
+        var settings = MongoSettings.From(request);
         IMongoTunnel? tunnel = null;
         if (UsesTunnel(settings))
         {
@@ -123,7 +123,7 @@ internal sealed class MongoConnector(IPluginContext context, Loc loc)
     {
         ArgumentNullException.ThrowIfNull(profile);
         WorkspaceConnectRequest request = profile.ToRequest(password);
-        MongoSettings settings = MongoSettings.From(request);
+        var settings = MongoSettings.From(request);
         Func<CancellationToken, Task<IMongoTunnel>>? openTunnel = UsesTunnel(settings)
             ? ct => OpenTunnelAsync(profile, request, settings, ct)
             : null;

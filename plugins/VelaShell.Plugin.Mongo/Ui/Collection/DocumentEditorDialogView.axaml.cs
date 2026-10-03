@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -119,7 +118,7 @@ public sealed partial class DocumentEditorDialogView : UserControl
         {
             return;
         }
-        box.Focus();
+        _ = box.Focus();
         // 占位名(newField)全选:一打字就替换掉。
         box.SelectAll();
     }
@@ -152,11 +151,11 @@ public sealed partial class DocumentEditorDialogView : UserControl
             {
                 if (FocusedRow() is { } row)
                 {
-                    vm.AddAfter(row);
+                    _ = vm.AddAfter(row);
                 }
                 else
                 {
-                    vm.AddFieldAtEnd();
+                    _ = vm.AddFieldAtEnd();
                 }
             }
             e.Handled = true;
@@ -194,7 +193,7 @@ public sealed partial class DocumentEditorDialogView : UserControl
     /// <summary>焦点所在的那一行(焦点控件的数据上下文)。</summary>
     private DocumentEditorRow? FocusedRow()
     {
-        for (Visual? visual = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual;
+        for (var visual = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual;
              visual is not null && !ReferenceEquals(visual, this);
              visual = visual.GetVisualParent())
         {
@@ -281,7 +280,7 @@ public sealed partial class DocumentEditorDialogView : UserControl
     {
         if (_dragRow is { } row && _dropRow is { } target && !ReferenceEquals(row, target))
         {
-            ViewModel?.Move(row, target, _dropAfter);
+            _ = (ViewModel?.Move(row, target, _dropAfter));
         }
         EndDrag();
         e.Pointer.Capture(null);
@@ -315,7 +314,7 @@ public sealed partial class DocumentEditorDialogView : UserControl
 
     private async Task SuggestAfterSampleAsync(DocumentEditorDialogViewModel vm, TextBox box)
     {
-        await vm.EnsureSampleAsync(reportErrors: false).ConfigureAwait(true);
+        _ = await vm.EnsureSampleAsync(reportErrors: false).ConfigureAwait(true);
         if (ReferenceEquals(_suggestBox, box) && box.IsFocused)
         {
             UpdateSuggestions();

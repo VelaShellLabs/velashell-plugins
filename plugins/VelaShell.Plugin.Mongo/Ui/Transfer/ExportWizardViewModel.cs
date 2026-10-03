@@ -46,39 +46,18 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     private IReadOnlyList<BsonDocument> _head = [];
     private ExportFormat _format;
     private string _filterText = "";
-    private bool _filterInvalid;
     private bool _useQuery;
     private long _count;
     private bool _countKnown;
-    private string _countText = "";
     private XferOption _delimiter;
     private XferOption _encoding;
     private XferOption _nested;
     private XferOption _nullMode;
-    private bool _writeHeader = true;
-    private bool _jsonLines = true;
     private EjsonMode _jsonMode = EjsonMode.Relaxed;
     private string _sheetName = "";
-    private bool _freezeHeader = true;
-    private bool _gzip;
-    private string _shellBatch = "1000";
-    private string _estimateDocs = "—";
-    private string _estimateSize = "—";
-    private string _estimateTime = "—";
-    private string _targetPath = "";
-    private bool _revealWhenDone;
-    private double _progress;
-    private string _progressText = "";
-    private string _percentText = "0%";
-    private string _rateText = "";
-    private string _bytesText = "";
-    private string _resultText = "";
-    private string _resultTone = "ok";
     private IReadOnlyList<string> _resultFiles = [];
     private CancellationTokenSource? _run;
     private CancellationTokenSource? _countDebounce;
-    private bool _loading = true;
-    private XferOption? _profile;
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -176,9 +155,9 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>首次加载中。</summary>
     public bool Loading
     {
-        get => _loading;
-        private set => SetProperty(ref _loading, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = true;
 
     // ── 第一步:数据来源 ─────────────────────────────────────────────────
 
@@ -237,8 +216,8 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>筛选条件写错了。</summary>
     public bool FilterInvalid
     {
-        get => _filterInvalid;
-        private set => SetProperty(ref _filterInvalid, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>来源卡片里的那行灰字(条件原文;全部文档时为空)。</summary>
@@ -263,9 +242,9 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>右上角「约 312 份文档」。</summary>
     public string CountText
     {
-        get => _countText;
-        private set => SetProperty(ref _countText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>已保存的导出配置(下拉)。</summary>
     public ObservableCollection<XferOption> Profiles { get; } = [];
@@ -276,10 +255,10 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>选中一份配置即套用。</summary>
     public XferOption? Profile
     {
-        get => _profile;
+        get;
         set
         {
-            if (SetProperty(ref _profile, value) && value?.Value is SavedItem item && ExportProfile.Parse(item.Content) is { } profile)
+            if (SetProperty(ref field, value) && value?.Value is SavedItem item && ExportProfile.Parse(item.Content) is { } profile)
             {
                 ApplyProfile(profile);
             }
@@ -420,34 +399,34 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>首行写入列名。</summary>
     public bool WriteHeader
     {
-        get => _writeHeader;
+        get;
         set
         {
-            if (SetProperty(ref _writeHeader, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = true;
 
     /// <summary>JSON:行分隔。</summary>
     public bool JsonLines
     {
-        get => _jsonLines;
+        get;
         set
         {
-            if (SetProperty(ref _jsonLines, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(JsonArray));
                 OnOptionsChanged();
             }
         }
-    }
+    } = true;
 
     /// <summary>JSON:数组。</summary>
     public bool JsonArray
     {
-        get => !_jsonLines;
+        get => !JsonLines;
         set => JsonLines = !value;
     }
 
@@ -488,17 +467,17 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>Excel 冻结首行。</summary>
     public bool FreezeHeader
     {
-        get => _freezeHeader;
-        set => SetProperty(ref _freezeHeader, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = true;
 
     /// <summary>转储 gzip。</summary>
     public bool Gzip
     {
-        get => _gzip;
+        get;
         set
         {
-            if (SetProperty(ref _gzip, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
@@ -508,15 +487,15 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>Shell:每条 insertMany 的文档数。</summary>
     public string ShellBatch
     {
-        get => _shellBatch;
+        get;
         set
         {
-            if (SetProperty(ref _shellBatch, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = "1000";
 
     /// <summary>输出预览。</summary>
     public ObservableCollection<XferPreviewLine> PreviewLines { get; } = [];
@@ -524,42 +503,42 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>预估:文档数。</summary>
     public string EstimateDocs
     {
-        get => _estimateDocs;
-        private set => SetProperty(ref _estimateDocs, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     /// <summary>预估:文件大小。</summary>
     public string EstimateSize
     {
-        get => _estimateSize;
-        private set => SetProperty(ref _estimateSize, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     /// <summary>预估:耗时。</summary>
     public string EstimateTime
     {
-        get => _estimateTime;
-        private set => SetProperty(ref _estimateTime, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     // ── 第三步:目标 ─────────────────────────────────────────────────────
 
     /// <summary>目标路径(文件,或转储 / 多集合时的目录)。</summary>
     public string TargetPath
     {
-        get => _targetPath;
+        get;
         set
         {
-            if (SetProperty(ref _targetPath, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(TargetExists), nameof(HasTarget));
                 UpdateSummaries();
             }
         }
-    }
+    } = "";
 
     /// <summary>选了目标。</summary>
-    public bool HasTarget => _targetPath.Trim().Length > 0;
+    public bool HasTarget => TargetPath.Trim().Length > 0;
 
     /// <summary>目标是目录(转储、多集合的 JSON / CSV)。</summary>
     public bool TargetIsFolder => _format == ExportFormat.BsonDump || IsMulti && _format is ExportFormat.Json or ExportFormat.Csv;
@@ -572,7 +551,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     {
         get
         {
-            string path = _targetPath.Trim();
+            string path = TargetPath.Trim();
             if (path.Length == 0)
             {
                 return false;
@@ -590,8 +569,8 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>完成后在资源管理器中显示。</summary>
     public bool RevealWhenDone
     {
-        get => _revealWhenDone;
-        set => SetProperty(ref _revealWhenDone, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>浏览…</summary>
@@ -603,8 +582,8 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
         Formats.First(f => f.Format == _format).Title,
         ShowColumnEditing && IsSingle ? Loc.Format("Exp_FieldsCount", IncludedCount) : null,
         IsMulti ? Loc.Format("Exp_CollectionsCount", SelectedSources().Count) : null,
-        _estimateDocs.Length > 1 ? Loc.Format("Exp_DocsShort", _estimateDocs) : null,
-        _estimateSize
+        EstimateDocs.Length > 1 ? Loc.Format("Exp_DocsShort", EstimateDocs) : null,
+        EstimateSize
     }.Where(static s => !string.IsNullOrEmpty(s) && s != "—"));
 
     // ── 第四步:执行 ─────────────────────────────────────────────────────
@@ -612,72 +591,72 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     /// <summary>进度 0–100。</summary>
     public double Progress
     {
-        get => _progress;
-        private set => SetProperty(ref _progress, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>进度说明(<c>908,330 / 1,812,640 文档 · 已用 50 s · 预计剩余 50 s</c>)。</summary>
     public string ProgressText
     {
-        get => _progressText;
-        private set => SetProperty(ref _progressText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>百分比。</summary>
     public string PercentText
     {
-        get => _percentText;
-        private set => SetProperty(ref _percentText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "0%";
 
     /// <summary>速率(<c>18.2k 文档/s</c>)。</summary>
     public string RateText
     {
-        get => _rateText;
-        private set => SetProperty(ref _rateText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>已写出字节。</summary>
     public string BytesText
     {
-        get => _bytesText;
-        private set => SetProperty(ref _bytesText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>结果说明。</summary>
     public string ResultText
     {
-        get => _resultText;
+        get;
         private set
         {
-            if (SetProperty(ref _resultText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasResult));
             }
         }
-    }
+    } = "";
 
     /// <summary>有结果。</summary>
-    public bool HasResult => _resultText.Length > 0;
+    public bool HasResult => ResultText.Length > 0;
 
     /// <summary>结果的语气(<c>ok</c> / <c>warn</c> / <c>err</c>)。</summary>
     public string ResultTone
     {
-        get => _resultTone;
+        get;
         private set
         {
-            if (SetProperty(ref _resultTone, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ResultOk), nameof(ResultFailed));
             }
         }
-    }
+    } = "ok";
 
     /// <summary>成功。</summary>
-    public bool ResultOk => _resultTone == "ok";
+    public bool ResultOk => ResultTone == "ok";
 
     /// <summary>失败或取消。</summary>
-    public bool ResultFailed => _resultTone != "ok";
+    public bool ResultFailed => ResultTone != "ok";
 
     /// <summary>执行日志。</summary>
     public ObservableCollection<XferLogLine> RunLog { get; } = [];
@@ -891,7 +870,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
             nameof(FormatNotice), nameof(TargetIsFolder), nameof(TargetLabel), nameof(TargetExists));
         RebuildFields();
         // 换了格式,原先选的目标扩展名就不对了:清空,让用户重选(而不是悄悄写出一个 .csv 名字的 xlsx)。
-        if (_targetPath.Length > 0)
+        if (TargetPath.Length > 0)
         {
             TargetPath = "";
         }
@@ -971,16 +950,16 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
         Encoding = (TextEncodingKind)_encoding.Value,
         Nested = (NestedMode)_nested.Value,
         NullAsEmpty = (bool)_nullMode.Value,
-        WriteHeader = _writeHeader
+        WriteHeader = WriteHeader
     };
 
-    private JsonOptions JsonOptionsValue => new() { Lines = _jsonLines, Mode = _jsonMode };
+    private JsonOptions JsonOptionsValue => new() { Lines = JsonLines, Mode = _jsonMode };
 
-    private ExcelOptions ExcelOptionsValue => new() { SheetName = _sheetName, FreezeHeader = _freezeHeader, WriteHeader = _writeHeader };
+    private ExcelOptions ExcelOptionsValue => new() { SheetName = _sheetName, FreezeHeader = FreezeHeader, WriteHeader = WriteHeader };
 
     private ShellOptions ShellOptionsValue => new()
     {
-        BatchSize = int.TryParse(_shellBatch, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n > 0 ? n : 1000
+        BatchSize = int.TryParse(ShellBatch, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n > 0 ? n : 1000
     };
 
     private IReadOnlyList<ExportColumn> Columns => [.. Fields.Where(static f => f.Include).Select(static f => f.ToColumn())];
@@ -1015,69 +994,69 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
         switch (_format)
         {
             case ExportFormat.Csv:
-            {
-                CsvOptions csv = CsvOptionsValue;
-                IReadOnlyList<ExportColumn> columns = Columns;
-                if (csv.WriteHeader && columns.Count > 0)
                 {
-                    PreviewLines.Add(new(CsvWriter.FormatRow([.. columns.Select(static c => c.Header)], csv.Delimiter), true));
-                }
-                foreach (BsonDocument doc in docs)
-                {
-                    PreviewLines.Add(new(CsvWriter.FormatRow([.. columns.Select(c => PreviewCell(CellFormatter.Format(BsonPath.Get(doc, c.Path), c.Conversion, csv.NullAsEmpty)))], csv.Delimiter), false));
-                }
-                break;
-            }
-            case ExportFormat.Excel:
-            {
-                IReadOnlyList<ExportColumn> columns = Columns;
-                if (_writeHeader && columns.Count > 0)
-                {
-                    PreviewLines.Add(new(string.Join(" │ ", columns.Select(static c => c.Header)), true));
-                }
-                foreach (BsonDocument doc in docs)
-                {
-                    PreviewLines.Add(new(string.Join(" │ ", columns.Select(c => PreviewCell(CellFormatter.Format(BsonPath.Get(doc, c.Path), c.Conversion, true)))), false));
-                }
-                break;
-            }
-            case ExportFormat.Json:
-            {
-                if (!_jsonLines)
-                {
-                    PreviewLines.Add(new("[", true));
-                }
-                BsonDocument? projection = Projection;
-                foreach (BsonDocument doc in docs)
-                {
-                    PreviewLines.Add(new(BsonText.Compact(Project(doc, projection), _jsonMode) + (_jsonLines ? "" : ","), false));
-                }
-                break;
-            }
-            case ExportFormat.Shell:
-            {
-                PreviewLines.Add(new($"db.getSiblingDB({BsonText.Quote(Database)}).getCollection({BsonText.Quote(collection)}).insertMany([", true));
-                BsonDocument? projection = Projection;
-                foreach (BsonDocument doc in docs)
-                {
-                    PreviewLines.Add(new("  " + BsonText.Literal(Project(doc, projection)) + ",", false));
-                }
-                break;
-            }
-            default:
-            {
-                foreach (CollectionInfo info in SelectedSources().Take(3))
-                {
-                    string db = TransferText.SafeFileName(Database);
-                    string name = TransferText.SafeFileName(info.Name);
-                    if (info.Kind != CollectionKind.View)
+                    CsvOptions csv = CsvOptionsValue;
+                    IReadOnlyList<ExportColumn> columns = Columns;
+                    if (csv.WriteHeader && columns.Count > 0)
                     {
-                        PreviewLines.Add(new($"{db}/{name}.bson{(_gzip ? ".gz" : "")}", true));
+                        PreviewLines.Add(new(CsvWriter.FormatRow([.. columns.Select(static c => c.Header)], csv.Delimiter), true));
                     }
-                    PreviewLines.Add(new($"{db}/{name}.metadata.json{(_gzip ? ".gz" : "")}", false));
+                    foreach (BsonDocument doc in docs)
+                    {
+                        PreviewLines.Add(new(CsvWriter.FormatRow([.. columns.Select(c => PreviewCell(CellFormatter.Format(BsonPath.Get(doc, c.Path), c.Conversion, csv.NullAsEmpty)))], csv.Delimiter), false));
+                    }
+                    break;
                 }
-                break;
-            }
+            case ExportFormat.Excel:
+                {
+                    IReadOnlyList<ExportColumn> columns = Columns;
+                    if (WriteHeader && columns.Count > 0)
+                    {
+                        PreviewLines.Add(new(string.Join(" │ ", columns.Select(static c => c.Header)), true));
+                    }
+                    foreach (BsonDocument doc in docs)
+                    {
+                        PreviewLines.Add(new(string.Join(" │ ", columns.Select(c => PreviewCell(CellFormatter.Format(BsonPath.Get(doc, c.Path), c.Conversion, true)))), false));
+                    }
+                    break;
+                }
+            case ExportFormat.Json:
+                {
+                    if (!JsonLines)
+                    {
+                        PreviewLines.Add(new("[", true));
+                    }
+                    BsonDocument? projection = Projection;
+                    foreach (BsonDocument doc in docs)
+                    {
+                        PreviewLines.Add(new(BsonText.Compact(Project(doc, projection), _jsonMode) + (JsonLines ? "" : ","), false));
+                    }
+                    break;
+                }
+            case ExportFormat.Shell:
+                {
+                    PreviewLines.Add(new($"db.getSiblingDB({BsonText.Quote(Database)}).getCollection({BsonText.Quote(collection)}).insertMany([", true));
+                    BsonDocument? projection = Projection;
+                    foreach (BsonDocument doc in docs)
+                    {
+                        PreviewLines.Add(new("  " + BsonText.Literal(Project(doc, projection)) + ",", false));
+                    }
+                    break;
+                }
+            default:
+                {
+                    foreach (CollectionInfo info in SelectedSources().Take(3))
+                    {
+                        string db = TransferText.SafeFileName(Database);
+                        string name = TransferText.SafeFileName(info.Name);
+                        if (info.Kind != CollectionKind.View)
+                        {
+                            PreviewLines.Add(new($"{db}/{name}.bson{(Gzip ? ".gz" : "")}", true));
+                        }
+                        PreviewLines.Add(new($"{db}/{name}.metadata.json{(Gzip ? ".gz" : "")}", false));
+                    }
+                    break;
+                }
         }
     }
 
@@ -1096,7 +1075,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
         {
             if (element.Value.ToInt32() == 1 && BsonPath.Get(doc, element.Name) is { } value)
             {
-                BsonPath.Set(result, element.Name, value);
+                _ = BsonPath.Set(result, element.Name, value);
             }
         }
         return result;
@@ -1136,7 +1115,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
             }
             double factor = _format switch
             {
-                ExportFormat.BsonDump => _gzip ? 0.35 : 1.0,
+                ExportFormat.BsonDump => Gzip ? 0.35 : 1.0,
                 ExportFormat.Json => 1.3,
                 ExportFormat.Shell => 1.4,
                 ExportFormat.Excel => 0.5,
@@ -1154,9 +1133,9 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
             if (_format == ExportFormat.BsonDump)
             {
                 double raw = docs.Average(static d => (double)d.ToBson().Length);
-                return _gzip ? raw * 0.35 : raw;
+                return Gzip ? raw * 0.35 : raw;
             }
-            var job = BuildJob("estimate");
+            ExportJob job = BuildJob("estimate");
             using var sink = new CountingStream(Stream.Null);
             using (ExportWriter writer = ExportRunner.CreateWriter(job, sink))
             {
@@ -1185,7 +1164,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
             : Loc.Format("Exp_SummarySingle", Subtitle, _useQuery && _filterText.Trim().Length > 0 ? Loc["Exp_CurrentFilter"] : Loc["Exp_AllDocuments"]);
         string formatName = Formats.First(f => f.Format == _format).Title;
         Steps[1].Summary = ShowColumnEditing && IsSingle ? $"{formatName} · {Loc.Format("Exp_FieldsCount", IncludedCount)}" : formatName;
-        Steps[2].Summary = HasTarget ? Path.GetFileName(_targetPath.TrimEnd('\\', '/')) : Loc["Exp_LocalFile"];
+        Steps[2].Summary = HasTarget ? Path.GetFileName(TargetPath.TrimEnd('\\', '/')) : Loc["Exp_LocalFile"];
         RaisePropertyChanged(nameof(PlanSummary));
     }
 
@@ -1258,16 +1237,16 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     protected override async Task StartAsync()
     {
         if (TargetExists && !await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Exp_OverwriteTitle"],
-                Message = Loc.Format("Exp_OverwriteBody", _targetPath),
-                ConfirmLabel = Loc["Exp_Overwrite"],
-                IconKey = "Mongo.triangle-alert"
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Exp_OverwriteTitle"],
+            Message = Loc.Format("Exp_OverwriteBody", TargetPath),
+            ConfirmLabel = Loc["Exp_Overwrite"],
+            IconKey = "Mongo.triangle-alert"
+        }).ConfigureAwait(true))
         {
             return;
         }
-        ExportJob job = BuildJob(_targetPath.Trim());
+        ExportJob job = BuildJob(TargetPath.Trim());
         EnterRunStep();
         RunLog.Clear();
         OutputFiles.Clear();
@@ -1298,7 +1277,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
             ResultText = Loc.Format("Exp_Done", BsonText.Grouped(result.Documents), BsonText.Bytes(result.Bytes), TransferText.Duration(result.Elapsed));
             Steps[RunStep].Summary = Loc["Xfer_Completed"];
             AddLog(ResultText, XferTone.Ok);
-            if (_revealWhenDone && result.Files.Count > 0)
+            if (RevealWhenDone && result.Files.Count > 0)
             {
                 Reveal(result.Files.Count == 1 ? result.Files[0] : job.Target);
             }
@@ -1359,7 +1338,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
         Csv = CsvOptionsValue,
         Json = JsonOptionsValue,
         Excel = ExcelOptionsValue,
-        Dump = new DumpOptions { Gzip = _gzip },
+        Dump = new DumpOptions { Gzip = Gzip },
         Shell = ShellOptionsValue,
         EstimatedTotal = _countKnown ? _count : 0
     };
@@ -1394,13 +1373,13 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
                     { "encoding", ((TextEncodingKind)_encoding.Value).ToString() },
                     { "nested", ((NestedMode)_nested.Value).ToString() },
                     { "nullAsEmpty", (bool)_nullMode.Value },
-                    { "header", _writeHeader }
+                    { "header", WriteHeader }
                 }
             },
-            { "json", new BsonDocument { { "lines", _jsonLines }, { "mode", _jsonMode.ToString() } } },
-            { "excel", new BsonDocument { { "sheet", _sheetName }, { "freeze", _freezeHeader } } },
-            { "dump", new BsonDocument("gzip", _gzip) },
-            { "shell", new BsonDocument("batch", _shellBatch) },
+            { "json", new BsonDocument { { "lines", JsonLines }, { "mode", _jsonMode.ToString() } } },
+            { "excel", new BsonDocument { { "sheet", _sheetName }, { "freeze", FreezeHeader } } },
+            { "dump", new BsonDocument("gzip", Gzip) },
+            { "shell", new BsonDocument("batch", ShellBatch) },
             { "fields", new BsonArray(Fields.Select(static f => new BsonDocument
                 {
                     { "path", f.Path },
@@ -1416,7 +1395,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
         XferOption? existing = Profiles.FirstOrDefault(p => p.Label == name);
         if (existing is not null)
         {
-            Profiles.Remove(existing);
+            _ = Profiles.Remove(existing);
         }
         Profiles.Insert(0, new XferOption(item, name));
         RaisePropertyChanged(nameof(HasProfiles));

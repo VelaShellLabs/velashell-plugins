@@ -116,7 +116,7 @@ public sealed class TelnetNegotiatorTests
     {
         // NAWS 启用后不立刻上报,对端会一直按 80x24 画,直到用户碰巧拉一下窗口。
         TelnetNegotiator negotiator = Create();
-        negotiator.BuildInitialRequests(120, 32);
+        _ = negotiator.BuildInitialRequests(120, 32);
         (_, byte[] responses) = Process(negotiator, Iac, Do, 31);
         Assert.AreSequenceEqual(
             new byte[] { Iac, Will, 31, Iac, Sb, 31, 0, 120, 0, 32, Iac, Se }, responses);
@@ -129,8 +129,8 @@ public sealed class TelnetNegotiatorTests
         // RFC 1073:"any occurrence of 255 in the subnegotiation must be doubled"。
         // 只在宽或高恰为 255(或 65280+)时才踩到 —— 教科书级的潜伏 bug。
         TelnetNegotiator negotiator = Create();
-        negotiator.BuildInitialRequests(80, 24);
-        Process(negotiator, Iac, Do, 31);
+        _ = negotiator.BuildInitialRequests(80, 24);
+        _ = Process(negotiator, Iac, Do, 31);
         byte[]? frame = negotiator.BuildWindowSize(255, 24);
         Assert.IsNotNull(frame);
         Assert.AreSequenceEqual(
@@ -141,9 +141,9 @@ public sealed class TelnetNegotiatorTests
     public void Naws_IsSilentWhenTheSizeDidNotChange_OrWhenNotNegotiated()
     {
         TelnetNegotiator negotiator = Create();
-        negotiator.BuildInitialRequests(80, 24);
+        _ = negotiator.BuildInitialRequests(80, 24);
         Assert.IsNull(negotiator.BuildWindowSize(100, 40), "对端没 DO 过 NAWS 时不该发。");
-        Process(negotiator, Iac, Do, 31);
+        _ = Process(negotiator, Iac, Do, 31);
         Assert.IsNull(negotiator.BuildWindowSize(100, 40), "尺寸没变(上一步已记住)时不该重发。");
         Assert.IsNotNull(negotiator.BuildWindowSize(100, 41));
     }
@@ -153,7 +153,7 @@ public sealed class TelnetNegotiatorTests
     {
         // RFC 1091:SEND=1、IS=0。回错方向的话对端拿不到 TERM,curses 程序全按 dumb 走。
         TelnetNegotiator negotiator = Create(term: "vt100");
-        Process(negotiator, Iac, Do, 24);
+        _ = Process(negotiator, Iac, Do, 24);
         (_, byte[] responses) = Process(negotiator, Iac, Sb, 24, 1, Iac, Se);
         Assert.AreSequenceEqual(
             new byte[] { Iac, Sb, 24, 0, (byte)'v', (byte)'t', (byte)'1', (byte)'0', (byte)'0', Iac, Se }, responses);
@@ -191,7 +191,7 @@ public sealed class TelnetNegotiatorTests
         // 这条是 ZMODEM 与粘贴内容不被打坏的保证:出方向一旦 8 位透明就不再改写,
         // 只保留 IAC 双写(那是协议层面绕不开的)。
         TelnetNegotiator negotiator = Create();
-        Process(negotiator, Iac, Do, 0); // 对端同意我方 BINARY
+        _ = Process(negotiator, Iac, Do, 0); // 对端同意我方 BINARY
         Assert.IsTrue(negotiator.BinaryOutbound);
         Assert.AreSequenceEqual(new byte[] { 0x0D, 0xFF, 0xFF }, negotiator.EncodeOutbound([0x0D, 0xFF]));
     }
@@ -206,7 +206,7 @@ public sealed class TelnetNegotiatorTests
         Assert.AreSequenceEqual("a\rb"u8.ToArray(), data);
 
         // 谈成入方向 BINARY 之后就不能再动:那时 0x00 是真实数据。
-        Process(negotiator, Iac, Will, 0);
+        _ = Process(negotiator, Iac, Will, 0);
         Assert.IsTrue(negotiator.BinaryInbound);
         (byte[] binaryData, _) = Process(negotiator, 0x0D, 0x00);
         Assert.AreSequenceEqual(new byte[] { 0x0D, 0x00 }, binaryData);
@@ -225,7 +225,7 @@ public sealed class TelnetNegotiatorTests
     public void Wont_AfterWill_TurnsTheOptionBackOff()
     {
         TelnetNegotiator negotiator = Create();
-        Process(negotiator, Iac, Will, 1);
+        _ = Process(negotiator, Iac, Will, 1);
         Assert.IsTrue(negotiator.RemoteEcho);
         (_, byte[] responses) = Process(negotiator, Iac, Wont, 1);
         Assert.AreSequenceEqual(new byte[] { Iac, Dont, 1 }, responses);

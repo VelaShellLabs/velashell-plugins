@@ -7,7 +7,7 @@ public sealed partial class DockerClient
     /// <summary>列卷。</summary>
     public async Task<VolumeSummary[]> ListVolumesAsync(CancellationToken cancellationToken = default)
     {
-        var response = await GetJsonAsync<VolumeListResponse>("/volumes", cancellationToken).ConfigureAwait(false);
+        VolumeListResponse response = await GetJsonAsync<VolumeListResponse>("/volumes", cancellationToken).ConfigureAwait(false);
         return response.Volumes ?? [];
     }
 

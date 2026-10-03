@@ -26,8 +26,6 @@ public sealed class CodeEditor : UserControl
 {
     private static readonly Lock RegistrationGate = new();
     private static bool _registered;
-
-    private readonly TextEditor _editor;
     private readonly DecorationRenderer _decorations;
     private readonly MarkerMargin _markers;
     private readonly Popup _popup;
@@ -99,7 +97,7 @@ public sealed class CodeEditor : UserControl
     /// <summary>构造。</summary>
     public CodeEditor()
     {
-        _editor = new TextEditor
+        Editor = new TextEditor
         {
             Background = Brushes.Transparent,
             BorderThickness = new(0),
@@ -108,21 +106,21 @@ public sealed class CodeEditor : UserControl
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
-        _editor.Options.IndentationSize = 2;
-        _editor.Options.ConvertTabsToSpaces = true;
-        _editor.Options.HighlightCurrentLine = true;
-        _editor.Options.EnableHyperlinks = false;
-        _editor.Options.EnableEmailHyperlinks = false;
+        Editor.Options.IndentationSize = 2;
+        Editor.Options.ConvertTabsToSpaces = true;
+        Editor.Options.HighlightCurrentLine = true;
+        Editor.Options.EnableHyperlinks = false;
+        Editor.Options.EnableEmailHyperlinks = false;
         // 文档末尾之下不留空白可滚:小块编辑器(阶段体、metadata、筛选框)里那一截空白只会让内容跑出视野。
-        _editor.Options.AllowScrollBelowDocument = false;
-        _editor.TextArea.TextView.LinkTextForegroundBrush = Brushes.Transparent;
+        Editor.Options.AllowScrollBelowDocument = false;
+        Editor.TextArea.TextView.LinkTextForegroundBrush = Brushes.Transparent;
 
         _decorations = new DecorationRenderer(Brush, () => FontFamily, () => FontSize);
-        _editor.TextArea.TextView.BackgroundRenderers.Add(_decorations);
+        Editor.TextArea.TextView.BackgroundRenderers.Add(_decorations);
         _markers = new MarkerMargin(Brush);
-        _editor.TextArea.LeftMargins.Insert(0, _markers);
+        Editor.TextArea.LeftMargins.Insert(0, _markers);
 
-        _editor.TextChanged += (_, _) =>
+        Editor.TextChanged += (_, _) =>
         {
             if (FitContent)
             {
@@ -133,28 +131,28 @@ public sealed class CodeEditor : UserControl
                 return;
             }
             _syncing = true;
-            SetCurrentValue(TextProperty, _editor.Text);
+            SetCurrentValue(TextProperty, Editor.Text);
             _syncing = false;
         };
-        _editor.TextArea.Caret.PositionChanged += (_, _) =>
+        Editor.TextArea.Caret.PositionChanged += (_, _) =>
         {
-            AvaloniaEdit.Document.TextLocation location = _editor.TextArea.Caret.Location;
+            AvaloniaEdit.Document.TextLocation location = Editor.TextArea.Caret.Location;
             _syncing = true;
-            SetCurrentValue(CaretOffsetProperty, _editor.CaretOffset);
+            SetCurrentValue(CaretOffsetProperty, Editor.CaretOffset);
             _syncing = false;
             SetCurrentValue(CaretLineProperty, location.Line);
             SetCurrentValue(CaretColumnProperty, location.Column);
             CaretMoved?.Invoke(this, EventArgs.Empty);
-            if (_session is not null && (_editor.CaretOffset < _session.ReplaceOffset))
+            if (_session is not null && (Editor.CaretOffset < _session.ReplaceOffset))
             {
                 ClosePopup();
             }
         };
-        _editor.TextArea.TextEntered += OnTextEntered;
-        _editor.TextArea.AddHandler(KeyDownEvent, OnEditorKeyDown, RoutingStrategies.Tunnel);
-        _editor.TextArea.LostFocus += (_, _) => Dispatcher.UIThread.Post(() =>
+        Editor.TextArea.TextEntered += OnTextEntered;
+        Editor.TextArea.AddHandler(KeyDownEvent, OnEditorKeyDown, RoutingStrategies.Tunnel);
+        Editor.TextArea.LostFocus += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (_popupView?.IsKeyboardFocusWithin != true && !_editor.TextArea.IsKeyboardFocusWithin)
+            if (_popupView?.IsKeyboardFocusWithin != true && !Editor.TextArea.IsKeyboardFocusWithin)
             {
                 ClosePopup();
             }
@@ -169,13 +167,13 @@ public sealed class CodeEditor : UserControl
             {
                 _session.Selected = item;
                 Accept();
-                _editor.TextArea.Focus();
+                _ = Editor.TextArea.Focus();
             }
         };
         _popup = new Popup
         {
             Child = _popupView,
-            PlacementTarget = _editor.TextArea.TextView,
+            PlacementTarget = Editor.TextArea.TextView,
             Placement = PlacementMode.AnchorAndGravity,
             PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.BottomLeft,
             PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight,
@@ -183,15 +181,15 @@ public sealed class CodeEditor : UserControl
         };
 
         var host = new Panel();
-        host.Children.Add(_editor);
+        host.Children.Add(Editor);
         host.Children.Add(_popup);
         Content = host;
         Focusable = false;
 
         // 默认字体与前景按**样式优先级**绑:调用方在 AXAML 里写的 FontSize / FontFamily(本地值)要能盖过它。
-        Bind(FontFamilyProperty, this.GetResourceObservable("VelaUiMonoFont"), Avalonia.Data.BindingPriority.Style);
-        Bind(FontSizeProperty, this.GetResourceObservable("VelaFontSize12"), Avalonia.Data.BindingPriority.Style);
-        Bind(ForegroundProperty, this.GetResourceObservable("VelaTextPrimary"), Avalonia.Data.BindingPriority.Style);
+        _ = Bind(FontFamilyProperty, this.GetResourceObservable("VelaUiMonoFont"), Avalonia.Data.BindingPriority.Style);
+        _ = Bind(FontSizeProperty, this.GetResourceObservable("VelaFontSize12"), Avalonia.Data.BindingPriority.Style);
+        _ = Bind(ForegroundProperty, this.GetResourceObservable("VelaTextPrimary"), Avalonia.Data.BindingPriority.Style);
 
         // 高亮配色是一次性取值(xshd 要 Color 不要 Brush),换肤时必须有人叫醒它 ——
         // 应用级资源变更覆盖全部三种换肤情形(与 DockerPanel 的 CodeEditor 同一个理由)。
@@ -203,7 +201,7 @@ public sealed class CodeEditor : UserControl
     public event EventHandler? CaretMoved;
 
     /// <summary>里面那个编辑器(查询编辑器要直接用它取选区、按语句定位)。</summary>
-    public TextEditor Editor => _editor;
+    public TextEditor Editor { get; }
 
     /// <inheritdoc cref="TextProperty" />
     public string? Text
@@ -290,13 +288,13 @@ public sealed class CodeEditor : UserControl
         {
             return measured;
         }
-        double lineHeight = _editor.TextArea.TextView.DefaultLineHeight;
+        double lineHeight = Editor.TextArea.TextView.DefaultLineHeight;
         if (double.IsNaN(lineHeight) || lineHeight <= 0)
         {
             lineHeight = FontSize * 1.4;
         }
-        int lines = Math.Clamp(_editor.Document.LineCount, 1, Math.Max(1, MaxFitLines));
-        double height = (lines * lineHeight) + _editor.Padding.Top + _editor.Padding.Bottom + 2;
+        int lines = Math.Clamp(Editor.Document.LineCount, 1, Math.Max(1, MaxFitLines));
+        double height = (lines * lineHeight) + Editor.Padding.Top + Editor.Padding.Bottom + 2;
         return new Size(measured.Width, Math.Min(height, availableSize.Height));
     }
 
@@ -322,20 +320,20 @@ public sealed class CodeEditor : UserControl
     }
 
     /// <summary>选中的文本(没选中为空串)。</summary>
-    public string SelectedText => _editor.SelectedText;
+    public string SelectedText => Editor.SelectedText;
 
     /// <summary>在光标处插入文本(<c>|</c> 标出插入后光标落点)。</summary>
-    public void InsertAtCaret(string text) => Replace(_editor.CaretOffset, 0, text);
+    public void InsertAtCaret(string text) => Replace(Editor.CaretOffset, 0, text);
 
     /// <summary>替换一段文本(<c>|</c> 标出替换后光标落点)。</summary>
     public void Replace(int offset, int length, string text)
     {
         int caret = text.IndexOf('|', StringComparison.Ordinal);
         string clean = caret >= 0 ? text.Remove(caret, 1) : text;
-        offset = Math.Clamp(offset, 0, _editor.Document.TextLength);
-        length = Math.Clamp(length, 0, _editor.Document.TextLength - offset);
-        _editor.Document.Replace(offset, length, clean);
-        _editor.CaretOffset = offset + (caret >= 0 ? caret : clean.Length);
+        offset = Math.Clamp(offset, 0, Editor.Document.TextLength);
+        length = Math.Clamp(length, 0, Editor.Document.TextLength - offset);
+        Editor.Document.Replace(offset, length, clean);
+        Editor.CaretOffset = offset + (caret >= 0 ? caret : clean.Length);
     }
 
     /// <summary>
@@ -347,24 +345,24 @@ public sealed class CodeEditor : UserControl
     /// <param name="caretInText">替换后光标落在新文本里的位置;为 null 则落在末尾。</param>
     public void ReplaceRaw(int offset, int length, string text, int? caretInText = null)
     {
-        offset = Math.Clamp(offset, 0, _editor.Document.TextLength);
-        length = Math.Clamp(length, 0, _editor.Document.TextLength - offset);
-        _editor.Document.Replace(offset, length, text);
-        _editor.CaretOffset = offset + Math.Clamp(caretInText ?? text.Length, 0, text.Length);
+        offset = Math.Clamp(offset, 0, Editor.Document.TextLength);
+        length = Math.Clamp(length, 0, Editor.Document.TextLength - offset);
+        Editor.Document.Replace(offset, length, text);
+        Editor.CaretOffset = offset + Math.Clamp(caretInText ?? text.Length, 0, text.Length);
     }
 
     /// <summary>选中一段。</summary>
     public void Select(int offset, int length)
     {
-        offset = Math.Clamp(offset, 0, _editor.Document.TextLength);
-        _editor.Select(offset, Math.Clamp(length, 0, _editor.Document.TextLength - offset));
+        offset = Math.Clamp(offset, 0, Editor.Document.TextLength);
+        Editor.Select(offset, Math.Clamp(length, 0, Editor.Document.TextLength - offset));
     }
 
     /// <summary>滚到某一行。</summary>
-    public void ScrollToLine(int line) => _editor.ScrollToLine(Math.Max(1, line));
+    public void ScrollToLine(int line) => Editor.ScrollToLine(Math.Max(1, line));
 
     /// <summary>把焦点给编辑区。</summary>
-    public void FocusEditor() => _editor.TextArea.Focus();
+    public void FocusEditor() => Editor.TextArea.Focus();
 
     /// <summary>
     /// 应用光标所在(或光标所在行第一条)诊断的一键修复;没有可修的返回 false。
@@ -375,12 +373,12 @@ public sealed class CodeEditor : UserControl
         {
             return false;
         }
-        int caret = _editor.CaretOffset;
-        int line = _editor.Document.GetLineByOffset(caret).LineNumber;
+        int caret = Editor.CaretOffset;
+        int line = Editor.Document.GetLineByOffset(caret).LineNumber;
         EditorDiagnostic? fix = diagnostics.FirstOrDefault(d => d.FixText is not null && caret >= d.Offset && caret <= d.Offset + d.Length)
                                 ?? diagnostics.FirstOrDefault(d => d.FixText is not null
-                                                                   && d.Offset <= _editor.Document.TextLength
-                                                                   && _editor.Document.GetLineByOffset(d.Offset).LineNumber == line);
+                                                                   && d.Offset <= Editor.Document.TextLength
+                                                                   && Editor.Document.GetLineByOffset(d.Offset).LineNumber == line);
         if (fix is null)
         {
             return false;
@@ -407,15 +405,15 @@ public sealed class CodeEditor : UserControl
             _syncing = true;
             string incoming = Text ?? "";
             // 只在真不一样时才写:同一份文本写回去会把光标顶到开头,用户打一个字就跳一次。
-            if (_editor.Text != incoming)
+            if (Editor.Text != incoming)
             {
-                _editor.Text = incoming;
+                Editor.Text = incoming;
             }
             _syncing = false;
         }
         else if (change.Property == CaretOffsetProperty && !_syncing)
         {
-            _editor.CaretOffset = Math.Clamp(CaretOffset, 0, _editor.Document.TextLength);
+            Editor.CaretOffset = Math.Clamp(CaretOffset, 0, Editor.Document.TextLength);
         }
         else if (change.Property == LanguageProperty || change.Property == ForegroundProperty
                  || change.Property == FontFamilyProperty || change.Property == FontSizeProperty)
@@ -424,33 +422,33 @@ public sealed class CodeEditor : UserControl
         }
         else if (change.Property == IsReadOnlyProperty)
         {
-            _editor.IsReadOnly = IsReadOnly;
+            Editor.IsReadOnly = IsReadOnly;
         }
         else if (change.Property == WordWrapProperty)
         {
-            _editor.WordWrap = WordWrap;
+            Editor.WordWrap = WordWrap;
         }
         else if (change.Property == ShowLineNumbersProperty)
         {
-            _editor.ShowLineNumbers = ShowLineNumbers;
+            Editor.ShowLineNumbers = ShowLineNumbers;
         }
         else if (change.Property == FitContentProperty || change.Property == MaxFitLinesProperty)
         {
-            _editor.VerticalScrollBarVisibility = FitContent && _editor.Document.LineCount <= MaxFitLines
+            Editor.VerticalScrollBarVisibility = FitContent && Editor.Document.LineCount <= MaxFitLines
                 ? ScrollBarVisibility.Disabled
                 : ScrollBarVisibility.Auto;
             InvalidateMeasure();
         }
         else if (change.Property == HighlightCurrentLineProperty)
         {
-            _editor.Options.HighlightCurrentLine = HighlightCurrentLine;
+            Editor.Options.HighlightCurrentLine = HighlightCurrentLine;
         }
         else if (change.Property == DiagnosticsProperty || change.Property == LineMarksProperty)
         {
             _decorations.Diagnostics = Diagnostics ?? [];
             _decorations.LineMarks = LineMarks ?? [];
-            _markers.Update(_editor.Document, _decorations.Diagnostics, _decorations.LineMarks);
-            _editor.TextArea.TextView.InvalidateLayer(AvaloniaEdit.Rendering.KnownLayer.Background);
+            _markers.Update(Editor.Document, _decorations.Diagnostics, _decorations.LineMarks);
+            Editor.TextArea.TextView.InvalidateLayer(AvaloniaEdit.Rendering.KnownLayer.Background);
         }
     }
 
@@ -567,7 +565,7 @@ public sealed class CodeEditor : UserControl
             case Key.Back:
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (_session is not null && (_editor.CaretOffset <= _session.ReplaceOffset || !_session.Filter(CurrentPrefix())))
+                    if (_session is not null && (Editor.CaretOffset <= _session.ReplaceOffset || !_session.Filter(CurrentPrefix())))
                     {
                         ClosePopup();
                     }
@@ -589,7 +587,7 @@ public sealed class CodeEditor : UserControl
         CompletionSet? set;
         try
         {
-            set = await provider(new CompletionRequest(_editor.Text, _editor.CaretOffset, explicitRequest)).ConfigureAwait(true);
+            set = await provider(new CompletionRequest(Editor.Text, Editor.CaretOffset, explicitRequest)).ConfigureAwait(true);
         }
         catch (Exception)
         {
@@ -599,9 +597,9 @@ public sealed class CodeEditor : UserControl
         {
             return;
         }
-        int prefixLength = Math.Max(0, _editor.CaretOffset - set.ReplaceOffset);
-        string prefix = _editor.Document.GetText(Math.Clamp(set.ReplaceOffset, 0, _editor.Document.TextLength),
-            Math.Min(prefixLength, _editor.Document.TextLength - set.ReplaceOffset));
+        int prefixLength = Math.Max(0, Editor.CaretOffset - set.ReplaceOffset);
+        string prefix = Editor.Document.GetText(Math.Clamp(set.ReplaceOffset, 0, Editor.Document.TextLength),
+            Math.Min(prefixLength, Editor.Document.TextLength - set.ReplaceOffset));
         var session = new CompletionSession(set) { InitialPrefix = prefix };
         if (prefix.Length > 0 && !session.Filter(prefix))
         {
@@ -615,8 +613,8 @@ public sealed class CodeEditor : UserControl
 
     private void PlacePopup()
     {
-        Rect caret = _editor.TextArea.Caret.CalculateCaretRectangle();
-        Vector scroll = _editor.TextArea.TextView.ScrollOffset;
+        Rect caret = Editor.TextArea.Caret.CalculateCaretRectangle();
+        Vector scroll = Editor.TextArea.TextView.ScrollOffset;
         _popup.PlacementRect = new Rect(caret.X - scroll.X, caret.Y - scroll.Y, Math.Max(1, caret.Width), caret.Height);
     }
 
@@ -628,7 +626,7 @@ public sealed class CodeEditor : UserControl
             return;
         }
         int start = _session.ReplaceOffset;
-        int length = Math.Max(0, _editor.CaretOffset - start);
+        int length = Math.Max(0, Editor.CaretOffset - start);
         ClosePopup();
         Replace(start, length, item.InsertText ?? item.Label);
     }
@@ -644,22 +642,22 @@ public sealed class CodeEditor : UserControl
     {
         if (_session is null)
         {
-            int start = _editor.CaretOffset;
-            while (start > 0 && IsWordChar(_editor.Document.GetCharAt(start - 1)))
+            int start = Editor.CaretOffset;
+            while (start > 0 && IsWordChar(Editor.Document.GetCharAt(start - 1)))
             {
                 start--;
             }
-            return _editor.Document.GetText(start, _editor.CaretOffset - start);
+            return Editor.Document.GetText(start, Editor.CaretOffset - start);
         }
-        int from = Math.Clamp(_session.ReplaceOffset, 0, _editor.Document.TextLength);
-        return _editor.Document.GetText(from, Math.Max(0, _editor.CaretOffset - from));
+        int from = Math.Clamp(_session.ReplaceOffset, 0, Editor.Document.TextLength);
+        return Editor.Document.GetText(from, Math.Max(0, Editor.CaretOffset - from));
     }
 
     private char PreviousNonSpace()
     {
-        for (int i = _editor.CaretOffset - 1; i >= 0; i--)
+        for (int i = Editor.CaretOffset - 1; i >= 0; i--)
         {
-            char c = _editor.Document.GetCharAt(i);
+            char c = Editor.Document.GetCharAt(i);
             if (!char.IsWhiteSpace(c))
             {
                 return c;
@@ -676,20 +674,20 @@ public sealed class CodeEditor : UserControl
 
     private void ApplyLanguage()
     {
-        _editor.FontFamily = FontFamily;
-        _editor.FontSize = FontSize;
+        Editor.FontFamily = FontFamily;
+        Editor.FontSize = FontSize;
         if (Foreground is { } foreground)
         {
-            _editor.Foreground = foreground;
+            Editor.Foreground = foreground;
         }
-        _editor.TextArea.Caret.CaretBrush = Brush("VelaAccent");
-        _editor.TextArea.SelectionBrush = ThemeBrushes.GetDim("VelaAccent", 0.25);
-        _editor.TextArea.SelectionBorder = null;
-        _editor.TextArea.SelectionForeground = null;
-        _editor.LineNumbersForeground = Brush("VelaTextMuted");
-        _editor.TextArea.TextView.CurrentLineBackground = ThemeBrushes.GetDim("VelaTextPrimary", 0.04);
-        _editor.TextArea.TextView.CurrentLineBorder = null;
-        _editor.SyntaxHighlighting = Definition(Language) is { } definition ? Recolor(definition) : null;
+        Editor.TextArea.Caret.CaretBrush = Brush("VelaAccent");
+        Editor.TextArea.SelectionBrush = ThemeBrushes.GetDim("VelaAccent", 0.25);
+        Editor.TextArea.SelectionBorder = null;
+        Editor.TextArea.SelectionForeground = null;
+        Editor.LineNumbersForeground = Brush("VelaTextMuted");
+        Editor.TextArea.TextView.CurrentLineBackground = ThemeBrushes.GetDim("VelaTextPrimary", 0.04);
+        Editor.TextArea.TextView.CurrentLineBorder = null;
+        Editor.SyntaxHighlighting = Definition(Language) is { } definition ? Recolor(definition) : null;
     }
 
     private IHighlightingDefinition Recolor(IHighlightingDefinition definition)

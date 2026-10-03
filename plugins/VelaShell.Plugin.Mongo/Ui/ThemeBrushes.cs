@@ -42,7 +42,7 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal static class ThemeBrushes
 {
     /// <summary>令牌名 → 那支长期有效的画刷。只在 UI 线程上读写(转换器与资源事件都在 UI 线程)。</summary>
-    private static readonly Dictionary<string, SolidColorBrush> Tracked = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, SolidColorBrush> Tracked = [with(StringComparer.Ordinal)];
 
     private static EventHandler<ResourcesChangedEventArgs>? _hook;
 
@@ -135,7 +135,7 @@ internal static class ThemeBrushes
         {
             if (Resolve(token) is { } seed)
             {
-                Color tinted = Color.FromArgb(alpha, seed.R, seed.G, seed.B);
+                var tinted = Color.FromArgb(alpha, seed.R, seed.G, seed.B);
                 if (brush.Color != tinted)
                 {
                     brush.Color = tinted;
@@ -171,7 +171,6 @@ internal static class ThemeBrushes
             : null;
     }
 
-    private static ResourceDictionary? _pluginTheme;
     private static bool _pluginThemeLoaded;
 
     /// <summary>插件自带的主题字典(惰性装载一次;装不上就当没有)。</summary>
@@ -184,15 +183,15 @@ internal static class ThemeBrushes
                 _pluginThemeLoaded = true;
                 try
                 {
-                    _pluginTheme = Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(
+                    field = Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(
                         new Uri("avares://VelaShell.Plugin.Mongo/Ui/MongoTheme.axaml")) as ResourceDictionary;
                 }
                 catch (Exception)
                 {
-                    _pluginTheme = null;
+                    field = null;
                 }
             }
-            return _pluginTheme;
+            return field;
         }
     }
 }

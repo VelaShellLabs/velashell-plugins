@@ -24,7 +24,6 @@ internal enum QueryPaneKind
 /// </summary>
 internal abstract class QueryPane(Loc loc) : ObservableObject
 {
-    private bool _isSelected;
 
     /// <summary>文案表。</summary>
     public Loc Loc { get; } = loc;
@@ -45,15 +44,15 @@ internal abstract class QueryPane(Loc loc) : ObservableObject
     public abstract string IconKey { get; }
 
     /// <summary>图标颜色(选中时信息色)。</summary>
-    public string IconToken => _isSelected ? "VelaInfo" : "VelaTextTertiary";
+    public string IconToken => IsSelected ? "VelaInfo" : "VelaTextTertiary";
 
     /// <summary>选中。</summary>
     public bool IsSelected
     {
-        get => _isSelected;
+        get;
         set
         {
-            if (SetProperty(ref _isSelected, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IconToken));
             }
@@ -89,12 +88,9 @@ internal sealed record ResultColumn(string Name, BsonKind Kind)
 internal sealed class QueryResultSet : QueryPane
 {
     private readonly EjsonMode _ejson;
-    private IReadOnlyList<ResultColumn>? _columns;
     private ObservableCollection<ResultTreeRow>? _treeRows;
     private string? _json;
     private int _number;
-    private bool _isPinned;
-    private string _viewMode = "grid";
 
     /// <summary>构造。</summary>
     public QueryResultSet(Loc loc, EjsonMode ejson, int number, ShellResult result, ShellStatement statement)
@@ -139,15 +135,15 @@ internal sealed class QueryResultSet : QueryPane
     public override string Detail => $"{Result.Operation} · {Documents.Count.ToString(CultureInfo.InvariantCulture)}{(Result.Truncated ? "+" : "")}";
 
     /// <inheritdoc />
-    public override string IconKey => _isPinned ? "Mongo.pin" : "Mongo.table";
+    public override string IconKey => IsPinned ? "Mongo.pin" : "Mongo.table";
 
     /// <summary>固定了(下次运行不覆盖)。</summary>
     public bool IsPinned
     {
-        get => _isPinned;
+        get;
         set
         {
-            if (SetProperty(ref _isPinned, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IconKey));
             }
@@ -169,10 +165,10 @@ internal sealed class QueryResultSet : QueryPane
     /// <summary>当前看法(<c>grid</c> / <c>tree</c> / <c>json</c>)。</summary>
     public string ViewMode
     {
-        get => _viewMode;
+        get;
         set
         {
-            if (SetProperty(ref _viewMode, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsGrid));
                 RaisePropertyChanged(nameof(IsTree));
@@ -181,16 +177,16 @@ internal sealed class QueryResultSet : QueryPane
                 RaisePropertyChanged(nameof(JsonText));
             }
         }
-    }
+    } = "grid";
 
     /// <summary>网格。</summary>
-    public bool IsGrid => _viewMode == "grid";
+    public bool IsGrid => ViewMode == "grid";
 
     /// <summary>树。</summary>
-    public bool IsTree => _viewMode == "tree";
+    public bool IsTree => ViewMode == "tree";
 
     /// <summary>JSON。</summary>
-    public bool IsJson => _viewMode == "json";
+    public bool IsJson => ViewMode == "json";
 
     /// <summary>JSON 视图的语法(Shell 写法按 mongosh 着色,其余按 JSON)。</summary>
     public CodeLanguage JsonLanguage => _ejson == EjsonMode.Shell ? CodeLanguage.Shell : CodeLanguage.Json;
@@ -198,7 +194,7 @@ internal sealed class QueryResultSet : QueryPane
     /// <summary>
     /// 列:所有文档顶层字段的并集,按首次出现排序,<c>_id</c> 最前;列头类型取出现最多的那种。
     /// </summary>
-    public IReadOnlyList<ResultColumn> Columns => _columns ??= BuildColumns(Documents);
+    public IReadOnlyList<ResultColumn> Columns => field ??= BuildColumns(Documents);
 
     /// <summary>树的行(展开 / 折叠就地增删);只在切到树视图时才建。</summary>
     public ObservableCollection<ResultTreeRow> TreeRows
@@ -232,8 +228,8 @@ internal sealed class QueryResultSet : QueryPane
         var builder = new System.Text.StringBuilder("[\n");
         for (int i = 0; i < documents.Count; i++)
         {
-            builder.Append("  ").Append(BsonText.Pretty(documents[i], mode).Replace("\n", "\n  ", StringComparison.Ordinal));
-            builder.Append(i < documents.Count - 1 ? ",\n" : "\n");
+            _ = builder.Append("  ").Append(BsonText.Pretty(documents[i], mode).Replace("\n", "\n  ", StringComparison.Ordinal));
+            _ = builder.Append(i < documents.Count - 1 ? ",\n" : "\n");
         }
         return builder.Append(']').ToString();
     }
@@ -311,7 +307,6 @@ internal sealed class QueryResultSet : QueryPane
 internal sealed class ResultTreeRow : ObservableObject
 {
     private readonly QueryResultSet _owner;
-    private bool _isExpanded;
 
     /// <summary>构造。</summary>
     public ResultTreeRow(QueryResultSet owner, int depth, string key, BsonValue value, bool isDocument = false)
@@ -362,10 +357,10 @@ internal sealed class ResultTreeRow : ObservableObject
     /// <summary>展开着。</summary>
     public bool IsExpanded
     {
-        get => _isExpanded;
+        get;
         set
         {
-            if (SetProperty(ref _isExpanded, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(ChevronKey));
             }
@@ -373,7 +368,7 @@ internal sealed class ResultTreeRow : ObservableObject
     }
 
     /// <summary>展开箭头。</summary>
-    public string ChevronKey => _isExpanded ? "Mongo.chevron-down" : "Mongo.chevron-right";
+    public string ChevronKey => IsExpanded ? "Mongo.chevron-down" : "Mongo.chevron-right";
 
     /// <summary>左缩进。</summary>
     public double Indent => 8 + Depth * 16;

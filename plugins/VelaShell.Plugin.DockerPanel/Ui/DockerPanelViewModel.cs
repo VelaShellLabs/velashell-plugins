@@ -446,9 +446,9 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         }
 
         // ── 动作:对具体容器的高频操作。放最前面,因为它们是"要做一件事"而不是"要看一眼"。
-        foreach (var row in Containers.View.Where(r => r.IsRunning).Take(20))
+        foreach (ContainerRow? row in Containers.View.Where(r => r.IsRunning).Take(20))
         {
-            var target = row;
+            ContainerRow target = row;
             entries.Add(new("动作", $"重启 {target.Name}", DescribeContainer(target), "Docker.rotate-cw",
                 RowTone.Ok, false, () => { Containers.RestartCommand.Execute(target); return Task.CompletedTask; }));
             entries.Add(new("动作", $"停止 {target.Name}", DescribeContainer(target), "Icon.square",
@@ -456,24 +456,24 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         }
 
         // ── 容器 / 镜像 / 卷:导航到某个对象。
-        foreach (var row in Containers.View.Take(40))
+        foreach (ContainerRow? row in Containers.View.Take(40))
         {
-            var target = row;
+            ContainerRow target = row;
             entries.Add(new("容器", target.Name, DescribeContainer(target), "Docker.box",
                 target.Tone, false, () => Containers.OpenDetailCommand is { } open
                     ? Task.Run(() => Ui.Post(() => open.Execute(target)))
                     : Task.CompletedTask));
         }
-        foreach (var row in Images.View.Take(40))
+        foreach (ImageRow? row in Images.View.Take(40))
         {
-            var target = row;
+            ImageRow target = row;
             entries.Add(new("镜像 / 卷", $"{target.Repository}:{target.Tag}", $"镜像 · {target.SizeText}",
                 "Icon.layers", RowTone.Idle, false,
                 () => { Images.OpenDetailCommand.Execute(target); return Task.CompletedTask; }));
         }
-        foreach (var row in Volumes.View.Take(40))
+        foreach (VolumeRow? row in Volumes.View.Take(40))
         {
-            var target = row;
+            VolumeRow target = row;
             entries.Add(new("镜像 / 卷", target.Name, $"卷 · {target.SizeText}", "Icon.hard-drive",
                 RowTone.Idle, false, () => { Volumes.SelectCommand.Execute(target); return Task.CompletedTask; }));
         }
@@ -487,7 +487,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
             RowTone.Idle, true, () => { Images.PruneDanglingCommand.Execute(null); return Task.CompletedTask; }));
         entries.Add(new("面板命令", "打开设置", "连接、显示、行为", "Icon.settings",
             RowTone.Idle, false, () => { SettingsOpen = true; return Task.CompletedTask; }));
-        foreach ((var page, var title, var icon) in ((PanelPage, string, string)[])
+        foreach ((PanelPage page, string? title, string? icon) in ((PanelPage, string, string)[])
                  [
                      (PanelPage.Overview, "总览", "Docker.layout-dashboard"),
                      (PanelPage.Containers, "容器", "Docker.box"),
@@ -497,7 +497,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
                      (PanelPage.System, "系统", "Icon.gauge")
                  ])
         {
-            var target = page;
+            PanelPage target = page;
             entries.Add(new("面板命令", $"转到{title}", "切换页面", icon, RowTone.Idle, false,
                 () => GoToAsync(target)));
         }
@@ -574,9 +574,9 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         [
             new(DockerEndpoint.Local("本机 Docker"), true, "可用", FeedbackKind.Info)
         ];
-        foreach (var session in sessions.OrderBy(s => s.Host, StringComparer.OrdinalIgnoreCase))
+        foreach (SessionInfo? session in sessions.OrderBy(s => s.Host, StringComparer.OrdinalIgnoreCase))
         {
-            var connected = session.State == SessionState.Connected;
+            bool connected = session.State == SessionState.Connected;
             items.Add(new(
                 DockerEndpoint.Remote(session.SessionId, session.Host, $"{session.Username}@{session.Host}:{session.Port}"),
                 connected,
@@ -586,7 +586,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         Ui.Post(() =>
         {
             Endpoints.Clear();
-            foreach (var item in items)
+            foreach (EndpointItem item in items)
             {
                 Endpoints.Add(item);
             }
@@ -618,7 +618,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         // 点进去却是上一台机器的项目。
         Compose = null;
         OnPropertyChanged(nameof(ComposeAvailable));
-        foreach (var page in AllPages)
+        foreach (PageViewModel page in AllPages)
         {
             page.Reset();
         }
@@ -626,8 +626,8 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         State = PanelConnectionState.Connecting;
         RecoveryActions.Clear();
 
-        var endpoint = item.Endpoint;
-        var remembered = await Settings.GetSocketPathAsync(endpoint.DisplayName, _lifetime.Token).ConfigureAwait(true);
+        DockerEndpoint endpoint = item.Endpoint;
+        string? remembered = await Settings.GetSocketPathAsync(endpoint.DisplayName, _lifetime.Token).ConfigureAwait(true);
         if (!string.IsNullOrWhiteSpace(remembered) && remembered != endpoint.SocketPath)
         {
             endpoint = endpoint with { SocketPath = remembered };
@@ -640,7 +640,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         var client = new DockerClient(endpoint, transport);
         try
         {
-            var version = await client.PingAsync(_lifetime.Token).ConfigureAwait(true);
+            SystemVersion version = await client.PingAsync(_lifetime.Token).ConfigureAwait(true);
             Client = client;
             RegistryAuth = new(Context.RemoteFs, endpoint);
             // compose 只有 CLI,所以要一条"跑命令"的通道:远端是 SSH,本机是本地进程。
@@ -679,7 +679,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         {
             return;
         }
-        var path = SocketPathInput.Trim();
+        string path = SocketPathInput.Trim();
         if (path.Length == 0)
         {
             Feedback.Status(FeedbackKind.Warning, "socket 路径不能为空。");
@@ -706,18 +706,18 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
     {
         if (SelectedEndpoint?.Endpoint is not { Kind: DockerEndpointKind.Remote } endpoint)
         {
-            Feedback.Notify(FeedbackKind.Info, "本机端点没有终端可送", $"自己执行:{command}");
+            _ = Feedback.Notify(FeedbackKind.Info, "本机端点没有终端可送", $"自己执行:{command}");
             return;
         }
         try
         {
             await Context.Terminal.WriteAsync(endpoint.SessionId, command + "\n", _lifetime.Token)
                           .ConfigureAwait(true);
-            Feedback.Notify(FeedbackKind.Info, "已送到宿主终端", command);
+            _ = Feedback.Notify(FeedbackKind.Info, "已送到宿主终端", command);
         }
         catch (PluginPermissionDeniedException)
         {
-            Feedback.Notify(FeedbackKind.Warning, "没有向终端回写的授权", $"可以自己执行:{command}");
+            _ = Feedback.Notify(FeedbackKind.Warning, "没有向终端回写的授权", $"可以自己执行:{command}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -843,7 +843,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
     /// </summary>
     private async Task RefineFailureAsync(EndpointItem item)
     {
-        var probe = await SocketProbe
+        SocketProbeResult probe = await SocketProbe
             .RunAsync(Context.RemoteExec, item.Endpoint, _lifetime.Token).ConfigureAwait(true);
         // 探测期间用户可能已经换了端点、或者又连上了 —— 那就别再动这一屏。
         if (State != PanelConnectionState.Failed || !ReferenceEquals(SelectedEndpoint, item))
@@ -882,7 +882,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
     /// </summary>
     private void ShowTunnelBlocked(EndpointItem item)
     {
-        var path = item.Endpoint.SocketPath;
+        string path = item.Endpoint.SocketPath;
         RecoveryActions.Clear();
         // 本机端点压根没有 SSH 这一层,上面那套话术套不上去。
         if (item.Endpoint.Kind == DockerEndpointKind.Local)
@@ -927,8 +927,8 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
     /// </summary>
     private void ShowPermissionDenied(EndpointItem item, SocketProbeResult probe)
     {
-        var account = probe.Account is { Length: > 0 } a ? a : "当前账号";
-        var group = probe.Group is { Length: > 0 } g ? g : "docker";
+        string account = probe.Account is { Length: > 0 } a ? a : "当前账号";
+        string group = probe.Group is { Length: > 0 } g ? g : "docker";
         ErrorIcon = "Docker.lock";
         ErrorTitle = $"账号「{account}」还不被允许使用这台机器上的 Docker";
         ErrorDetail = $"Docker 装着、也在跑,只是它只对 {group} 组开放,而 {account} 不在这个组里" +
@@ -1063,7 +1063,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         Tasks.CancelAll();
         await _lifetime.CancelAsync().ConfigureAwait(false);
         await StopEventStreamAsync().ConfigureAwait(false);
-        foreach (var page in AllPages)
+        foreach (PageViewModel page in AllPages)
         {
             if (page is IAsyncDisposable disposable)
             {

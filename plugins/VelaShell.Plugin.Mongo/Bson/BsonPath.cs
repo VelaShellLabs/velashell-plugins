@@ -73,7 +73,7 @@ public static class BsonPath
                 list[at] = value;
                 return true;
             case BsonArray append when last == append.Count.ToString(CultureInfo.InvariantCulture):
-                append.Add(value);
+                _ = append.Add(value);
                 return true;
             default:
                 return false;

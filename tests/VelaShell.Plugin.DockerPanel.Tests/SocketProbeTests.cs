@@ -26,7 +26,7 @@ public sealed class SocketProbeTests
         // 真机上的形态:socket 属于 root:docker,而登录账号只在 Users / Administrators 里。
         var exec = new StubExec("DENIED|docker|joes|Users Administrators\n");
 
-        var result = await SocketProbe.RunAsync(exec, Remote, TestContext.CancellationToken);
+        SocketProbeResult result = await SocketProbe.RunAsync(exec, Remote, TestContext.CancellationToken);
 
         Assert.AreEqual(SocketProbeKind.PermissionDenied, result.Kind);
         // 名字要是具体的 —— 界面要把它们直接写进"账号 joes 不在 docker 组里"这句话。
@@ -75,7 +75,7 @@ public sealed class SocketProbeTests
         var exec = new StubExec("OK\n");
         var custom = DockerEndpoint.Remote("s", "n", "d", "/run/user/1000/docker.sock");
 
-        await SocketProbe.RunAsync(exec, custom, TestContext.CancellationToken);
+        _ = await SocketProbe.RunAsync(exec, custom, TestContext.CancellationToken);
 
         Assert.Contains("/run/user/1000/docker.sock", exec.LastCommand);
     }

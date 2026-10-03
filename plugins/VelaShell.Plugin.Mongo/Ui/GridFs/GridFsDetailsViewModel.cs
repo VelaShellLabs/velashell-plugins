@@ -20,16 +20,7 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
 {
     private readonly GridFsTabViewModel _owner;
     private CancellationTokenSource? _loadCts;
-    private GridFsEntry? _entry;
     private GridFsFile? _file;
-    private Bitmap? _image;
-    private string _previewMessage = "";
-    private string _imageInfo = "";
-    private bool _isPreviewLoading;
-    private string _metadataText = "";
-    private string _metadataDraft = "";
-    private string? _metadataError;
-    private bool _isEditing;
 
     /// <summary>构造。</summary>
     /// <param name="owner">所属标签页。</param>
@@ -39,7 +30,7 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
         DownloadCommand = new(() => _file is { } f ? _owner.DownloadFileAsync(f) : Task.CompletedTask, () => _file is not null);
         OpenExternalCommand = new(() => _file is { } f ? _owner.OpenExternalAsync(f) : Task.CompletedTask, () => _file is not null);
         DeleteCommand = new(() => _file is { } f ? _owner.DeleteVersionAsync(f, [.. Versions]) : Task.CompletedTask, () => _file is not null);
-        ZoomCommand = new(Zoom, () => _image is not null);
+        ZoomCommand = new(Zoom, () => Image is not null);
         EditMetadataCommand = new(BeginEdit, () => _file is not null);
         SaveMetadataCommand = new(SaveMetadataAsync);
         CancelMetadataCommand = new(() => IsEditing = false);
@@ -60,10 +51,10 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     /// <summary>当前行(文件或目录);没选为 <see langword="null" />。</summary>
     public GridFsEntry? Entry
     {
-        get => _entry;
+        get;
         private set
         {
-            if (SetProperty(ref _entry, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(HasEntry), nameof(IsEmpty), nameof(IsFolder), nameof(IsFile), nameof(Name),
                     nameof(IconKey), nameof(IconToken), nameof(FolderSummary), nameof(FolderLastUpload));
@@ -90,25 +81,25 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>有选中。</summary>
-    public bool HasEntry => _entry is not null;
+    public bool HasEntry => Entry is not null;
 
     /// <summary>空态(没选)。</summary>
-    public bool IsEmpty => _entry is null;
+    public bool IsEmpty => Entry is null;
 
     /// <summary>选的是文件。</summary>
-    public bool IsFile => _entry?.IsFile == true;
+    public bool IsFile => Entry?.IsFile == true;
 
     /// <summary>选的是目录。</summary>
-    public bool IsFolder => _entry?.IsFolder == true;
+    public bool IsFolder => Entry?.IsFolder == true;
 
     /// <summary>头部名字。</summary>
-    public string Name => _file?.BaseName ?? _entry?.Name ?? "";
+    public string Name => _file?.BaseName ?? Entry?.Name ?? "";
 
     /// <summary>头部图标。</summary>
-    public string IconKey => _entry?.IconKey ?? "Fs.file";
+    public string IconKey => Entry?.IconKey ?? "Fs.file";
 
     /// <summary>头部图标颜色。</summary>
-    public string IconToken => _entry?.IconToken ?? "VelaTextTertiary";
+    public string IconToken => Entry?.IconToken ?? "VelaTextTertiary";
 
     /// <summary>头部徽章:最新版本「v3 · 最新」,旧版本「v2」。</summary>
     public string BadgeText
@@ -130,12 +121,12 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     // ── 目录 ───────────────────────────────────────────────────────────────
 
     /// <summary>目录摘要「12 个文件 · 61.9 MB」。</summary>
-    public string FolderSummary => _entry is { IsFolder: true } folder
+    public string FolderSummary => Entry is { IsFolder: true } folder
         ? Loc.Format("Fs_FolderSummary", BsonText.Grouped(folder.FileCount), BsonText.Bytes(folder.Size))
         : "";
 
     /// <summary>目录里最近一次上传。</summary>
-    public string FolderLastUpload => _entry is { IsFolder: true, Uploaded: { } at }
+    public string FolderLastUpload => Entry is { IsFolder: true, Uploaded: { } at }
         ? Loc.Format("Fs_LastUpload", GridFsEntry.FormatLocal(at, "yyyy-MM-dd HH:mm"))
         : "";
 
@@ -147,10 +138,10 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     /// </summary>
     public Bitmap? Image
     {
-        get => _image;
+        get;
         private set
         {
-            if (SetProperty(ref _image, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasImage));
                 ZoomCommand.RaiseCanExecuteChanged();
@@ -159,28 +150,28 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>有图。</summary>
-    public bool HasImage => _image is not null;
+    public bool HasImage => Image is not null;
 
     /// <summary>没图时预览框里那句(「无法预览」「超过 8 MB,不预览」「正在加载预览…」)。</summary>
     public string PreviewMessage
     {
-        get => _previewMessage;
-        private set => SetProperty(ref _previewMessage, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>预览加载中。</summary>
     public bool IsPreviewLoading
     {
-        get => _isPreviewLoading;
-        private set => SetProperty(ref _isPreviewLoading, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>「1600 × 1600 · JPEG」。</summary>
     public string ImageInfo
     {
-        get => _imageInfo;
-        private set => SetProperty(ref _imageInfo, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     // ── fs.files 字段 ──────────────────────────────────────────────────────
 
@@ -212,44 +203,44 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     /// <summary>metadata 的 mongosh 写法(只读显示)。</summary>
     public string MetadataText
     {
-        get => _metadataText;
+        get;
         private set
         {
-            if (SetProperty(ref _metadataText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(MetadataHeight));
             }
         }
-    }
+    } = "";
 
     /// <summary>
     /// 只读 metadata 框的高度:按行数撑开(每行 14px + 编辑器上下内边距与边框),最多 180 再滚动。
     /// 编辑器(AvaloniaEdit)放在 StackPanel 里拿到的是无限高,量不出内容高度 —— 只能由这里给。
     /// </summary>
-    public double MetadataHeight => Math.Clamp(((_metadataText.Count(static c => c == '\n') + 1) * 14) + 18, 40, 180);
+    public double MetadataHeight => Math.Clamp(((MetadataText.Count(static c => c == '\n') + 1) * 14) + 18, 40, 180);
 
     /// <summary>编辑中的草稿。</summary>
     public string MetadataDraft
     {
-        get => _metadataDraft;
+        get;
         set
         {
-            if (SetProperty(ref _metadataDraft, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
-                MetadataError = ShellJson.TryParseDocument(_metadataDraft, out _, out string? error)
+                MetadataError = ShellJson.TryParseDocument(field, out _, out string? error)
                     ? null
                     : Loc.Format("Fs_MetadataInvalid", error);
             }
         }
-    }
+    } = "";
 
     /// <summary>草稿解析错误;没有为 <see langword="null" />。</summary>
     public string? MetadataError
     {
-        get => _metadataError;
+        get;
         private set
         {
-            if (SetProperty(ref _metadataError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasMetadataError));
             }
@@ -257,15 +248,15 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>有解析错误。</summary>
-    public bool HasMetadataError => _metadataError is not null;
+    public bool HasMetadataError => MetadataError is not null;
 
     /// <summary>正在编辑 metadata。</summary>
     public bool IsEditing
     {
-        get => _isEditing;
+        get;
         private set
         {
-            if (SetProperty(ref _isEditing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsViewing));
             }
@@ -273,7 +264,7 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>只读显示中。</summary>
-    public bool IsViewing => !_isEditing;
+    public bool IsViewing => !IsEditing;
 
     // ── 版本 ───────────────────────────────────────────────────────────────
 
@@ -524,7 +515,7 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
 
     private void Zoom()
     {
-        if (_image is { } image && _file is { } file)
+        if (Image is { } image && _file is { } file)
         {
             _owner.Workspace.ShowDialog(new GridFsImageDialogViewModel(_owner, file, image, ImageInfo));
         }
@@ -548,7 +539,7 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
         {
             return;
         }
-        if (!ShellJson.TryParseDocument(_metadataDraft, out BsonDocument parsed, out string? error))
+        if (!ShellJson.TryParseDocument(MetadataDraft, out BsonDocument parsed, out string? error))
         {
             MetadataError = Loc.Format("Fs_MetadataInvalid", error);
             return;

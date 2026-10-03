@@ -11,13 +11,8 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// <summary>集合设计 · 索引与建议(设计稿 07)。</summary>
 internal sealed partial class DesignTabViewModel
 {
-    private IndexRow? _selectedIndex;
     private long _totalIndexSize;
-    private int _readyIndexCount;
-    private string _indexStatsSince = "";
     private Task? _indexesTask;
-    private bool _hasAdvice;
-    private string _adviceEmpty = "";
     private CancellationTokenSource? _buildPoll;
     private CollectionStats? _indexStats;
 
@@ -30,10 +25,10 @@ internal sealed partial class DesignTabViewModel
     /// <summary>选中的索引(隐藏 / 删除作用的对象)。</summary>
     public IndexRow? SelectedIndex
     {
-        get => _selectedIndex;
+        get;
         set
         {
-            if (SetProperty(ref _selectedIndex, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(CanHideSelected), nameof(CanDropSelected), nameof(HideLabel), nameof(HideIcon));
                 ToggleHiddenCommand.RaiseCanExecuteChanged();
@@ -45,51 +40,51 @@ internal sealed partial class DesignTabViewModel
     /// <summary>已建好的索引个数(子页条上的计数)。</summary>
     public int ReadyIndexCount
     {
-        get => _readyIndexCount;
-        private set => SetProperty(ref _readyIndexCount, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>工具行右侧:<c>$indexStats · 自 2026-09-12 起统计</c>。</summary>
     public string IndexStatsSince
     {
-        get => _indexStatsSince;
-        private set => SetProperty(ref _indexStatsSince, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>有建议卡片。</summary>
     public bool HasAdvice
     {
-        get => _hasAdvice;
-        private set => SetProperty(ref _hasAdvice, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>没有建议时的那行说明。</summary>
     public string AdviceEmpty
     {
-        get => _adviceEmpty;
+        get;
         private set
         {
-            if (SetProperty(ref _adviceEmpty, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasAdviceEmpty));
             }
         }
-    }
+    } = "";
 
     /// <summary>显示空态说明。</summary>
-    public bool HasAdviceEmpty => _adviceEmpty.Length > 0;
+    public bool HasAdviceEmpty => AdviceEmpty.Length > 0;
 
     /// <summary>选中的索引能隐藏 / 取消隐藏(<c>_id_</c> 与构建中的不行)。</summary>
-    public bool CanHideSelected => _selectedIndex is { IsId: false, IsBuilding: false };
+    public bool CanHideSelected => SelectedIndex is { IsId: false, IsBuilding: false };
 
     /// <summary>选中的索引能删(<c>_id_</c> 不行)。</summary>
-    public bool CanDropSelected => _selectedIndex is { IsId: false };
+    public bool CanDropSelected => SelectedIndex is { IsId: false };
 
     /// <summary>隐藏按钮的字:选中的已隐藏就是「取消隐藏」。</summary>
-    public string HideLabel => _selectedIndex?.IsHidden == true ? Loc["Design_Unhide"] : Loc["Design_Hide"];
+    public string HideLabel => SelectedIndex?.IsHidden == true ? Loc["Design_Unhide"] : Loc["Design_Hide"];
 
     /// <summary>隐藏按钮的图标。</summary>
-    public string HideIcon => _selectedIndex?.IsHidden == true ? "Mongo.eye" : "Mongo.eye-off";
+    public string HideIcon => SelectedIndex?.IsHidden == true ? "Mongo.eye" : "Mongo.eye-off";
 
     /// <summary>隐藏 / 取消隐藏选中的索引。</summary>
     public AsyncCommand ToggleHiddenCommand { get; private set; } = null!;
@@ -105,8 +100,8 @@ internal sealed partial class DesignTabViewModel
 
     private void InitializeIndexes()
     {
-        ToggleHiddenCommand = new(() => _selectedIndex is { } row ? SetHiddenAsync(row, !row.IsHidden) : Task.CompletedTask, () => CanHideSelected);
-        DropIndexCommand = new(() => _selectedIndex is { } row ? DropIndexAsync(row) : Task.CompletedTask, () => CanDropSelected);
+        ToggleHiddenCommand = new(() => SelectedIndex is { } row ? SetHiddenAsync(row, !row.IsHidden) : Task.CompletedTask, () => CanHideSelected);
+        DropIndexCommand = new(() => SelectedIndex is { } row ? DropIndexAsync(row) : Task.CompletedTask, () => CanDropSelected);
         RefreshIndexesCommand = new(LoadIndexesAsync);
         AdviceActionCommand = new(static card => card.Action());
     }
@@ -160,7 +155,7 @@ internal sealed partial class DesignTabViewModel
             {
                 if (!building && await IsMultiKeyAsync(spec).ConfigureAwait(true))
                 {
-                    multiKey.Add(spec.GetValue("name", "").ToString()!);
+                    _ = multiKey.Add(spec.GetValue("name", "").ToString()!);
                 }
             }
 
@@ -170,7 +165,7 @@ internal sealed partial class DesignTabViewModel
             foreach ((BsonDocument spec, bool building) in specs)
             {
                 string name = spec.GetValue("name", "").ToString()!;
-                bool hasUsage = usage.TryGetValue(name, out var u);
+                bool hasUsage = usage.TryGetValue(name, out (long Ops, DateTime Since) u);
                 bool unused = hasUsage && u.Ops == 0 && name != "_id_" && !building
                               && (now - u.Since).TotalDays >= IndexAdvisor.UnusedWindowDays;
                 IndexForm form = IndexAdvisor.ShapeOf(spec, multiKey.Contains(name));
@@ -199,7 +194,7 @@ internal sealed partial class DesignTabViewModel
                 rows.Add(row);
             }
 
-            string? selected = _selectedIndex?.Name;
+            string? selected = SelectedIndex?.Name;
             Indexes.Clear();
             foreach (IndexRow row in rows)
             {
@@ -474,45 +469,45 @@ internal sealed partial class DesignTabViewModel
         switch (s.Kind)
         {
             case AdvisorKind.CreateIndex:
-            {
-                AdvisorQueryGroup q = s.Queries!;
-                return new AdviceCard
                 {
-                    Suggestion = s,
-                    IconKey = "Mongo.zap",
-                    IconToken = "VelaWarning",
-                    Title = Loc.Format("Design_AdviceCreateTitle", FieldSet(q.Shape.Fields), PlanLabel(q)),
-                    Detail = Loc.Format("Design_AdviceCreateDetail", BsonText.Grouped(q.Count), Math.Round(q.AverageMillis),
-                        BsonText.Count((long)q.AverageExamined), BsonText.Count((long)Math.Round(q.AverageReturned))),
-                    Code = BsonText.Literal(s.Key!),
-                    ActionLabel = Loc["Design_AdviceCreate"],
-                    IsPrimary = true,
-                    Action = () =>
+                    AdvisorQueryGroup q = s.Queries!;
+                    return new AdviceCard
                     {
-                        OpenCreatePanel(s.Key!, q.Shape);
-                        return Task.CompletedTask;
-                    }
-                };
-            }
+                        Suggestion = s,
+                        IconKey = "Mongo.zap",
+                        IconToken = "VelaWarning",
+                        Title = Loc.Format("Design_AdviceCreateTitle", FieldSet(q.Shape.Fields), PlanLabel(q)),
+                        Detail = Loc.Format("Design_AdviceCreateDetail", BsonText.Grouped(q.Count), Math.Round(q.AverageMillis),
+                            BsonText.Count((long)q.AverageExamined), BsonText.Count((long)Math.Round(q.AverageReturned))),
+                        Code = BsonText.Literal(s.Key!),
+                        ActionLabel = Loc["Design_AdviceCreate"],
+                        IsPrimary = true,
+                        Action = () =>
+                        {
+                            OpenCreatePanel(s.Key!, q.Shape);
+                            return Task.CompletedTask;
+                        }
+                    };
+                }
             case AdvisorKind.ExtendIndex:
-            {
-                AdvisorQueryGroup q = s.Queries!;
-                return new AdviceCard
                 {
-                    Suggestion = s,
-                    IconKey = "Mongo.copy-minus",
-                    IconToken = "VelaTextTertiary",
-                    Title = Loc.Format("Design_AdviceExtendTitle", s.Index!.Name),
-                    Detail = Loc.Format("Design_AdviceExtendDetail", BsonText.Grouped(q.Count),
-                        q.InMemorySort ? Loc["Design_AdviceInMemorySort"] : Loc["Design_AdviceOverScan"], BsonText.Literal(s.Key!)),
-                    ActionLabel = Loc["Design_AdviceViewQuery"],
-                    Action = () =>
+                    AdvisorQueryGroup q = s.Queries!;
+                    return new AdviceCard
                     {
-                        Workspace.OpenQuery(Database, QueryText(q));
-                        return Task.CompletedTask;
-                    }
-                };
-            }
+                        Suggestion = s,
+                        IconKey = "Mongo.copy-minus",
+                        IconToken = "VelaTextTertiary",
+                        Title = Loc.Format("Design_AdviceExtendTitle", s.Index!.Name),
+                        Detail = Loc.Format("Design_AdviceExtendDetail", BsonText.Grouped(q.Count),
+                            q.InMemorySort ? Loc["Design_AdviceInMemorySort"] : Loc["Design_AdviceOverScan"], BsonText.Literal(s.Key!)),
+                        ActionLabel = Loc["Design_AdviceViewQuery"],
+                        Action = () =>
+                        {
+                            Workspace.OpenQuery(Database, QueryText(q));
+                            return Task.CompletedTask;
+                        }
+                    };
+                }
             case AdvisorKind.RedundantIndex:
                 return new AdviceCard
                 {
@@ -525,19 +520,19 @@ internal sealed partial class DesignTabViewModel
                     Action = () => Indexes.FirstOrDefault(r => r.Name == s.Index.Name) is { } row ? SetHiddenAsync(row, true) : Task.CompletedTask
                 };
             default:
-            {
-                double share = _totalIndexSize > 0 ? s.Index!.Size * 100.0 / _totalIndexSize : 0;
-                return new AdviceCard
                 {
-                    Suggestion = s,
-                    IconKey = "Mongo.archive-x",
-                    IconToken = "VelaWarning",
-                    Title = Loc.Format("Design_AdviceUnusedTitle", s.Index!.Name, s.UnusedDays),
-                    Detail = Loc.Format("Design_AdviceUnusedDetail", BsonText.Bytes(s.Index.Size), share.ToString("0.#", CultureInfo.InvariantCulture)),
-                    ActionLabel = Loc["Design_AdviceHide"],
-                    Action = () => Indexes.FirstOrDefault(r => r.Name == s.Index.Name) is { } row ? SetHiddenAsync(row, true) : Task.CompletedTask
-                };
-            }
+                    double share = _totalIndexSize > 0 ? s.Index!.Size * 100.0 / _totalIndexSize : 0;
+                    return new AdviceCard
+                    {
+                        Suggestion = s,
+                        IconKey = "Mongo.archive-x",
+                        IconToken = "VelaWarning",
+                        Title = Loc.Format("Design_AdviceUnusedTitle", s.Index!.Name, s.UnusedDays),
+                        Detail = Loc.Format("Design_AdviceUnusedDetail", BsonText.Bytes(s.Index.Size), share.ToString("0.#", CultureInfo.InvariantCulture)),
+                        ActionLabel = Loc["Design_AdviceHide"],
+                        Action = () => Indexes.FirstOrDefault(r => r.Name == s.Index.Name) is { } row ? SetHiddenAsync(row, true) : Task.CompletedTask
+                    };
+                }
         }
     }
 
@@ -673,19 +668,19 @@ internal sealed partial class DesignTabViewModel
             return;
         }
         if (Workspace.Guard.ConfirmWrites && !await Workspace.ConfirmAsync(new()
-            {
-                Title = hidden ? Loc["Design_HideTitle"] : Loc["Design_UnhideTitle"],
-                Message = Loc.Format(hidden ? "Design_HideBody" : "Design_UnhideBody", row.Name, Namespace),
-                ConfirmLabel = hidden ? Loc["Design_Hide"] : Loc["Design_Unhide"],
-                IconKey = hidden ? "Mongo.eye-off" : "Mongo.eye",
-                Danger = false
-            }).ConfigureAwait(true))
+        {
+            Title = hidden ? Loc["Design_HideTitle"] : Loc["Design_UnhideTitle"],
+            Message = Loc.Format(hidden ? "Design_HideBody" : "Design_UnhideBody", row.Name, Namespace),
+            ConfirmLabel = hidden ? Loc["Design_Hide"] : Loc["Design_Unhide"],
+            IconKey = hidden ? "Mongo.eye-off" : "Mongo.eye",
+            Danger = false
+        }).ConfigureAwait(true))
         {
             return;
         }
         try
         {
-            await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
             {
                 { "collMod", CollectionName },
                 { "index", new BsonDocument { { "name", row.Name }, { "hidden", hidden } } }
@@ -744,7 +739,7 @@ internal sealed partial class DesignTabViewModel
         }
         try
         {
-            await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
             {
                 { "dropIndexes", CollectionName },
                 { "index", row.Name }

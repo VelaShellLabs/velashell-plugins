@@ -69,7 +69,6 @@ internal sealed class ExportSourceRow : ObservableObject
 {
     private readonly Action _changed;
     private bool _isChecked;
-    private string _countText = "";
 
     /// <summary>构造。</summary>
     public ExportSourceRow(CollectionInfo info, bool isChecked, Action changed)
@@ -112,9 +111,9 @@ internal sealed class ExportSourceRow : ObservableObject
     /// <summary>估算文档数(<c>1,500</c>)。</summary>
     public string CountText
     {
-        get => _countText;
-        set => SetProperty(ref _countText, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>估算文档数。</summary>
     public long Count { get; set; }

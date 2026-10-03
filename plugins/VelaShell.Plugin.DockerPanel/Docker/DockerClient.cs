@@ -79,13 +79,13 @@ public sealed partial class DockerClient : IAsyncDisposable
     internal static string Query(params (string Key, string? Value)[] items)
     {
         var sb = new StringBuilder();
-        foreach ((var key, var value) in items)
+        foreach ((string? key, string? value) in items)
         {
             if (value is null)
             {
                 continue;
             }
-            sb.Append(sb.Length == 0 ? '?' : '&')
+            _ = sb.Append(sb.Length == 0 ? '?' : '&')
               .Append(Uri.EscapeDataString(key))
               .Append('=')
               .Append(Uri.EscapeDataString(value));
@@ -101,7 +101,7 @@ public sealed partial class DockerClient : IAsyncDisposable
             return null;
         }
         var map = new Dictionary<string, string[]>();
-        foreach (var group in items.GroupBy(i => i.Key))
+        foreach (IGrouping<string, (string Key, string Value)> group in items.GroupBy(i => i.Key))
         {
             map[group.Key] = [.. group.Select(g => g.Value)];
         }
@@ -111,42 +111,42 @@ public sealed partial class DockerClient : IAsyncDisposable
     /// <summary>GET 一段 JSON 并反序列化。</summary>
     internal async Task<T> GetJsonAsync<T>(string path, CancellationToken cancellationToken)
     {
-        using var response = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
         return await ReadJsonAsync<T>(response, path, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>GET 一段原始文本(inspect 的完整 JSON 直接给界面看)。</summary>
     internal async Task<string> GetStringAsync(string path, CancellationToken cancellationToken)
     {
-        using var response = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>POST,不关心响应体。</summary>
     internal async Task PostAsync(string path, object? body = null, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Post, path, JsonBody(body), cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendAsync(HttpMethod.Post, path, JsonBody(body), cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, path, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>POST 并反序列化响应。</summary>
     internal async Task<T> PostJsonAsync<T>(string path, object? body = null, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Post, path, JsonBody(body), cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendAsync(HttpMethod.Post, path, JsonBody(body), cancellationToken).ConfigureAwait(false);
         return await ReadJsonAsync<T>(response, path, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>DELETE,不关心响应体。</summary>
     internal async Task DeleteAsync(string path, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Delete, path, null, cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendAsync(HttpMethod.Delete, path, null, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, path, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>DELETE 并反序列化响应。</summary>
     internal async Task<T> DeleteJsonAsync<T>(string path, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Delete, path, null, cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendAsync(HttpMethod.Delete, path, null, cancellationToken).ConfigureAwait(false);
         return await ReadJsonAsync<T>(response, path, cancellationToken).ConfigureAwait(false);
     }
 
@@ -208,7 +208,7 @@ public sealed partial class DockerClient : IAsyncDisposable
     private static async Task<T> ReadJsonAsync<T>(HttpResponseMessage response, string path, CancellationToken cancellationToken)
     {
         await EnsureSuccessAsync(response, path, cancellationToken).ConfigureAwait(false);
-        var value = await response.Content.ReadFromJsonAsync<T>(DockerJson.Options, cancellationToken).ConfigureAwait(false);
+        T? value = await response.Content.ReadFromJsonAsync<T>(DockerJson.Options, cancellationToken).ConfigureAwait(false);
         return value ?? throw new DockerApiException(response.StatusCode, "daemon 返回了空响应体。", path);
     }
 
@@ -225,7 +225,7 @@ public sealed partial class DockerClient : IAsyncDisposable
         {
             return;
         }
-        var body = "";
+        string body = "";
         try
         {
             body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -234,7 +234,7 @@ public sealed partial class DockerClient : IAsyncDisposable
         {
             // 连错误响应体都读不回来时,至少还有状态码可报。
         }
-        var message = DockerJson.TryDeserialize<DockerErrorBody>(body)?.Message
+        string message = DockerJson.TryDeserialize<DockerErrorBody>(body)?.Message
                          ?? (body.Length > 0 ? body.Trim() : $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
         throw new DockerApiException(response.StatusCode, message, path);
     }
@@ -248,10 +248,10 @@ public sealed partial class DockerClient : IAsyncDisposable
     /// </summary>
     private DockerUnreachableException Unreachable(Exception ex)
     {
-        var text = Flatten(ex);
+        string text = Flatten(ex);
         // 权限先判:它是明说的,而下面那组"通道开不起来"是笼统的 ——
         // 一条同时带着两者的消息,按"没权限"处理才对得上用户要做的事。
-        var reason =
+        DockerUnreachableReason reason =
             text.Contains("permission denied", StringComparison.OrdinalIgnoreCase) ||
             text.Contains("access is denied", StringComparison.OrdinalIgnoreCase) ||
             text.Contains("EACCES", StringComparison.OrdinalIgnoreCase)
@@ -272,7 +272,7 @@ public sealed partial class DockerClient : IAsyncDisposable
                           text.Contains("not found", StringComparison.OrdinalIgnoreCase)
                             ? DockerUnreachableReason.SessionUnavailable
                             : DockerUnreachableReason.Unknown;
-        var message = reason switch
+        string message = reason switch
         {
             DockerUnreachableReason.SocketMissing =>
                 $"连不上 {Transport.Description}:打不开到它的通道。远端可能没装 Docker、daemon 没在跑,或者这条路径不对。",
@@ -290,13 +290,13 @@ public sealed partial class DockerClient : IAsyncDisposable
     private static string Flatten(Exception ex)
     {
         var sb = new StringBuilder();
-        for (var current = ex; current is not null; current = current.InnerException)
+        for (Exception? current = ex; current is not null; current = current.InnerException)
         {
             if (sb.Length > 0)
             {
-                sb.Append(" → ");
+                _ = sb.Append(" → ");
             }
-            sb.Append(current.Message);
+            _ = sb.Append(current.Message);
         }
         return sb.ToString();
     }
@@ -309,7 +309,7 @@ public sealed partial class DockerClient : IAsyncDisposable
     /// </summary>
     public async Task<SystemVersion> PingAsync(CancellationToken cancellationToken = default)
     {
-        var version = await GetJsonAsync<SystemVersion>("/version", cancellationToken).ConfigureAwait(false);
+        SystemVersion version = await GetJsonAsync<SystemVersion>("/version", cancellationToken).ConfigureAwait(false);
         return version;
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Platform.Storage;
 
 namespace VelaShell.Plugin.DockerPanel.Ui;
 
@@ -164,7 +165,7 @@ public sealed class ChoiceField : FormField
 
     private void SyncPicked()
     {
-        foreach (var option in Options)
+        foreach (ChoiceOption option in Options)
         {
             option.Picked = option.Value == Value;
         }
@@ -219,7 +220,7 @@ public sealed class RadioListField : FormField
 
     private void SyncPicked()
     {
-        foreach (var option in Options)
+        foreach (ChoiceOption option in Options)
         {
             option.Picked = option.Value == Value;
         }
@@ -264,18 +265,18 @@ public sealed class PairListField : FormField
         {
             if (p is PairRow row)
             {
-                Rows.Remove(row);
+                _ = Rows.Remove(row);
             }
         });
         // 增删行、以及行里任一格的改动,都要把"等效命令"重算一遍 ——
         // 那条预览存在的全部意义就是让用户核对自己填的东西,它一旦滞后就成了误导。
         Rows.CollectionChanged += (_, e) =>
         {
-            foreach (var added in e.NewItems?.OfType<PairRow>() ?? [])
+            foreach (PairRow added in e.NewItems?.OfType<PairRow>() ?? [])
             {
                 added.PropertyChanged += OnRowChanged;
             }
-            foreach (var removed in e.OldItems?.OfType<PairRow>() ?? [])
+            foreach (PairRow removed in e.OldItems?.OfType<PairRow>() ?? [])
             {
                 removed.PropertyChanged -= OnRowChanged;
             }
@@ -295,11 +296,11 @@ public sealed class PairListField : FormField
     /// </summary>
     public (int Imported, int Skipped) ImportDotEnv(string text)
     {
-        var imported = 0;
-        var skipped = 0;
-        foreach (var raw in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        int imported = 0;
+        int skipped = 0;
+        foreach (string raw in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
-            var line = raw.Trim();
+            string line = raw.Trim();
             if (line.Length == 0 || line.StartsWith('#'))
             {
                 continue;
@@ -309,14 +310,14 @@ public sealed class PairListField : FormField
             {
                 line = line[7..].TrimStart();
             }
-            var equals = line.IndexOf('=', StringComparison.Ordinal);
+            int equals = line.IndexOf('=', StringComparison.Ordinal);
             if (equals <= 0)
             {
                 skipped++;
                 continue;
             }
-            var key = line[..equals].Trim();
-            var value = line[(equals + 1)..].Trim();
+            string key = line[..equals].Trim();
+            string value = line[(equals + 1)..].Trim();
             if (value.Length >= 2 && ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\'')))
             {
                 value = value[1..^1];
@@ -333,9 +334,9 @@ public sealed class PairListField : FormField
             imported++;
         }
         // 空的占位行留着没意义,导完清一遍。
-        foreach (var blank in Rows.Where(r => r.Key.Length == 0 && r.Value.Length == 0).ToList())
+        foreach (PairRow? blank in Rows.Where(r => r.Key.Length == 0 && r.Value.Length == 0).ToList())
         {
-            Rows.Remove(blank);
+            _ = Rows.Remove(blank);
         }
         return (imported, skipped);
     }
@@ -369,16 +370,16 @@ public sealed class PairListField : FormField
     /// </summary>
     public RelayCommand ImportCommand => field ??= new(async _ =>
     {
-        var file =
+        IStorageFile? file =
             await FilePicker.PickOpenAsync("选一个 .env 文件").ConfigureAwait(true);
         if (file is null)
         {
             return;
         }
-        await using var stream = await file.OpenReadAsync().ConfigureAwait(true);
+        await using Stream stream = await file.OpenReadAsync().ConfigureAwait(true);
         using var reader = new StreamReader(stream);
-        var text = await reader.ReadToEndAsync().ConfigureAwait(true);
-        (var imported, var skipped) = ImportDotEnv(text);
+        string text = await reader.ReadToEndAsync().ConfigureAwait(true);
+        (int imported, int skipped) = ImportDotEnv(text);
         ImportReport = skipped == 0
             ? $"已导入 {imported} 条"
             : $"已导入 {imported} 条 · 跳过 {skipped} 行(不是 KEY=VALUE)";
@@ -427,7 +428,7 @@ public sealed class SelectItem(string id, string label, string meta, bool enable
         {
             if (Enabled)
             {
-                SetField(ref field, value);
+                _ = SetField(ref field, value);
             }
         }
     }
@@ -466,7 +467,7 @@ public sealed class SelectListField(string label) : FormField(label)
     public void ApplyFilter()
     {
         View.Clear();
-        foreach (var item in Items.Where(i =>
+        foreach (SelectItem? item in Items.Where(i =>
                      Search.Length == 0 || i.Label.Contains(Search, StringComparison.OrdinalIgnoreCase)))
         {
             View.Add(item);

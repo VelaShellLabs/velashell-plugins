@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -8,9 +7,7 @@ using Avalonia.VisualTree;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Shell;
-using VelaShell.Plugin.Mongo.Staging;
 using VelaShell.Plugin.Mongo.Ui;
-using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 
 namespace VelaShell.Plugin.Mongo.Tests;
@@ -37,7 +34,7 @@ public sealed class GridDrillTests
     [TestMethod]
     public void Show_system_databases_defaults_off()
     {
-        Assert.IsFalse(MongoSettings.From(Request(new())).ShowSystemDatabases);
+        Assert.IsFalse(MongoSettings.From(Request([])).ShowSystemDatabases);
         Assert.IsTrue(MongoSettings.From(Request(new() { ["showSystemDatabases"] = "true" })).ShowSystemDatabases);
     }
 
@@ -315,7 +312,7 @@ public sealed class GridDrillTests
             tab.SelectedRow = first;
             tab.CurrentColumn = tab.Columns.Single(static c => c.Name == "items");
             await Screens.PumpAsync(5);
-            ((Control)GridOf(bench).List.ContainerFromItem(first)!).Focus();
+            _ = GridOf(bench).List.ContainerFromItem(first)!.Focus();
             await Screens.PumpAsync(5);
 
             bench.Window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
@@ -406,7 +403,7 @@ public sealed class GridDrillTests
 
         ResultCellEventArgs? seen = null;
         grid.CellActivated += (_, e) => seen = e;
-        grid.Focus();
+        _ = grid.Focus();
         window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
         window.KeyPressQwerty(PhysicalKey.C, RawInputModifiers.Control);
         await Screens.PumpAsync(2);
@@ -425,12 +422,12 @@ public sealed class GridDrillTests
     [TestMethod]
     public void Table_columns_share_widths_between_header_and_rows() => Screens.OnUi(async () =>
     {
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("120,80,*") };
+        var header = new Grid { ColumnDefinitions = [with("120,80,*")] };
         TableColumns.SetHeader(header, "t");
         header.Children.Add(new TextBlock { Text = "名称" });
-        Grid Row(string name)
+        static Grid Row(string name)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("120,80,*") };
+            var row = new Grid { ColumnDefinitions = [with("120,80,*")] };
             TableColumns.SetRow(row, "t");
             var cell = new TextBlock { Text = name };
             Grid.SetColumn(cell, 0);

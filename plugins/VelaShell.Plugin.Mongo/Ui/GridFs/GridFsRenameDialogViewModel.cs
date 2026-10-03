@@ -15,7 +15,6 @@ internal sealed class GridFsRenameDialogViewModel : DialogViewModel, IViewFactor
 {
     private readonly Func<string, Task<string?>> _apply;
     private string _name;
-    private string? _error;
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -65,10 +64,10 @@ internal sealed class GridFsRenameDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>错误(重名、移进自己…)。</summary>
     public string? Error
     {
-        get => _error;
+        get;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
@@ -76,7 +75,7 @@ internal sealed class GridFsRenameDialogViewModel : DialogViewModel, IViewFactor
     }
 
     /// <summary>有错误。</summary>
-    public bool HasError => _error is not null;
+    public bool HasError => Error is not null;
 
     /// <summary>重命名。</summary>
     public AsyncCommand ConfirmCommand { get; }

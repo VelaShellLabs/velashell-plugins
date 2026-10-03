@@ -32,12 +32,12 @@ public static class TableColumns
     public static readonly AttachedProperty<string?> FixedProperty =
         AvaloniaProperty.RegisterAttached<Grid, string?>("Fixed", typeof(TableColumns));
 
-    private static readonly ConditionalWeakTable<Control, Dictionary<string, Group>> Scopes = new();
+    private static readonly ConditionalWeakTable<Control, Dictionary<string, Group>> Scopes = [];
 
     static TableColumns()
     {
-        HeaderProperty.Changed.AddClassHandler<Grid>((grid, e) => Hook(grid, e.NewValue as string, isHeader: true));
-        RowProperty.Changed.AddClassHandler<Grid>((grid, e) => Hook(grid, e.NewValue as string, isHeader: false));
+        _ = HeaderProperty.Changed.AddClassHandler<Grid>((grid, e) => Hook(grid, e.NewValue as string, isHeader: true));
+        _ = RowProperty.Changed.AddClassHandler<Grid>((grid, e) => Hook(grid, e.NewValue as string, isHeader: false));
     }
 
     /// <summary>取列头组名。</summary>
@@ -141,7 +141,7 @@ public static class TableColumns
         {
             get
             {
-                _members.RemoveAll(static w => !w.TryGetTarget(out _));
+                _ = _members.RemoveAll(static w => !w.TryGetTarget(out _));
                 foreach (WeakReference<Grid> member in _members)
                 {
                     if (member.TryGetTarget(out Grid? grid))

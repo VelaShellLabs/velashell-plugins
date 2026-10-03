@@ -16,11 +16,11 @@ public sealed partial class ConfirmDialogView : UserControl
         {
             if (viewModel.RequiresTyping)
             {
-                TypedBox.Focus();
+                _ = TypedBox.Focus();
             }
             else
             {
-                ConfirmButton.Focus();
+                _ = ConfirmButton.Focus();
             }
         });
         KeyDown += (_, e) =>

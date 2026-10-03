@@ -23,88 +23,88 @@ public static class RunCommandBuilder
     public static string Build(ContainerInspect inspect, IReadOnlyCollection<string>? imageEnv)
     {
         var sb = new StringBuilder("docker run");
-        var config = inspect.Config;
-        var host = inspect.HostConfig;
+        ContainerConfig? config = inspect.Config;
+        ContainerHostConfig? host = inspect.HostConfig;
 
         // -d 是面板起容器的默认形态,也是绝大多数长期容器的形态。
-        sb.Append(" -d");
+        _ = sb.Append(" -d");
         if (host?.AutoRemove == true)
         {
-            sb.Append(" --rm");
+            _ = sb.Append(" --rm");
         }
         if (inspect.Name is { Length: > 0 } name)
         {
-            sb.Append(" --name ").Append(Sh.Quote(name.TrimStart('/')));
+            _ = sb.Append(" --name ").Append(Sh.Quote(name.TrimStart('/')));
         }
 
-        foreach ((var port, var bindings) in Ordered(host?.PortBindings))
+        foreach ((string? port, PortBinding[]? bindings) in Ordered(host?.PortBindings))
         {
             // tcp 是 -p 的默认协议,写出来只是噪音;udp / sctp 必须留着。
-            var spec = port.EndsWith("/tcp", StringComparison.Ordinal) ? port[..^4] : port;
-            foreach (var binding in bindings ?? [])
+            string spec = port.EndsWith("/tcp", StringComparison.Ordinal) ? port[..^4] : port;
+            foreach (PortBinding binding in bindings ?? [])
             {
-                var hostPart = string.IsNullOrEmpty(binding.HostIp)
+                string hostPart = string.IsNullOrEmpty(binding.HostIp)
                     ? binding.HostPort ?? ""
                     : $"{binding.HostIp}:{binding.HostPort}";
-                sb.Append(" -p ").Append(Sh.Quote(hostPart.Length > 0 ? $"{hostPart}:{spec}" : spec));
+                _ = sb.Append(" -p ").Append(Sh.Quote(hostPart.Length > 0 ? $"{hostPart}:{spec}" : spec));
             }
         }
 
-        foreach (var bind in host?.Binds ?? [])
+        foreach (string bind in host?.Binds ?? [])
         {
-            sb.Append(" -v ").Append(Sh.Quote(bind));
+            _ = sb.Append(" -v ").Append(Sh.Quote(bind));
         }
         // Binds 只覆盖 -v 起的那些;命名卷经 Mounts 出现,别漏掉。
-        foreach (var mount in inspect.Mounts ?? [])
+        foreach (DockerMount mount in inspect.Mounts ?? [])
         {
             if (mount.Type != "volume" || mount.Name is not { Length: > 0 } volume)
             {
                 continue;
             }
-            var spec = $"{volume}:{mount.Destination}{(mount.RW ? "" : ":ro")}";
-            sb.Append(" -v ").Append(Sh.Quote(spec));
+            string spec = $"{volume}:{mount.Destination}{(mount.RW ? "" : ":ro")}";
+            _ = sb.Append(" -v ").Append(Sh.Quote(spec));
         }
 
-        foreach (var entry in UserEnv(config?.Env, imageEnv))
+        foreach (string entry in UserEnv(config?.Env, imageEnv))
         {
-            sb.Append(" -e ").Append(Sh.Quote(entry));
+            _ = sb.Append(" -e ").Append(Sh.Quote(entry));
         }
 
         if (host?.NetworkMode is { Length: > 0 } network && network != "default" && !network.StartsWith("container:", StringComparison.Ordinal))
         {
-            sb.Append(" --network ").Append(Sh.Quote(network));
+            _ = sb.Append(" --network ").Append(Sh.Quote(network));
         }
         if (host?.RestartPolicy?.Name is { Length: > 0 } policy && policy != "no")
         {
-            sb.Append(" --restart ")
+            _ = sb.Append(" --restart ")
               .Append(policy == "on-failure" && host.RestartPolicy.MaximumRetryCount > 0
                   ? $"on-failure:{host.RestartPolicy.MaximumRetryCount}"
                   : policy);
         }
         if (config?.User is { Length: > 0 } user)
         {
-            sb.Append(" -u ").Append(Sh.Quote(user));
+            _ = sb.Append(" -u ").Append(Sh.Quote(user));
         }
         if (config?.WorkingDir is { Length: > 0 } workdir)
         {
-            sb.Append(" -w ").Append(Sh.Quote(workdir));
+            _ = sb.Append(" -w ").Append(Sh.Quote(workdir));
         }
         if (host?.Privileged == true)
         {
-            sb.Append(" --privileged");
+            _ = sb.Append(" --privileged");
         }
         if (host?.Memory > 0)
         {
-            sb.Append(" -m ").Append(host.Memory);
+            _ = sb.Append(" -m ").Append(host.Memory);
         }
 
-        sb.Append(' ').Append(Sh.Quote(config?.Image ?? inspect.Image ?? "<image>"));
+        _ = sb.Append(' ').Append(Sh.Quote(config?.Image ?? inspect.Image ?? "<image>"));
 
         // Cmd 只有在覆盖了镜像默认值时才该出现,但面板拿不到镜像的默认 Cmd 来比对,
         // 所以照原样附上 —— 多写一次等价的命令,好过漏掉一个真正被覆盖过的。
-        foreach (var arg in config?.Cmd ?? [])
+        foreach (string arg in config?.Cmd ?? [])
         {
-            sb.Append(' ').Append(Sh.Quote(arg));
+            _ = sb.Append(' ').Append(Sh.Quote(arg));
         }
         return sb.ToString();
     }
@@ -128,7 +128,7 @@ public static class RunCommandBuilder
             yield break;
         }
         HashSet<string> fromImage = imageEnv is null ? [] : [.. imageEnv];
-        foreach (var entry in containerEnv)
+        foreach (string entry in containerEnv)
         {
             if (!fromImage.Contains(entry))
             {

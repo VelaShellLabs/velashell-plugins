@@ -630,24 +630,24 @@ internal static partial class ShellCompletion
                     shape = new PipelineShape([.. group.Names], "$group");
                     break;
                 case "$project" when element.Value is BsonDocument project:
-                {
-                    bool inclusion = project.Elements.Any(static e => e.Name != "_id" && !(e.Value.IsNumeric && e.Value.ToDouble() == 0)
-                                                                      && !(e.Value is BsonBoolean { Value: false }));
-                    if (inclusion)
                     {
-                        List<string> fields = [.. project.Elements.Where(static e => !(e.Value.IsNumeric && e.Value.ToDouble() == 0) && e.Value is not BsonBoolean { Value: false }).Select(static e => e.Name)];
-                        if (!project.Contains("_id"))
+                        bool inclusion = project.Elements.Any(static e => e.Name != "_id" && !(e.Value.IsNumeric && e.Value.ToDouble() == 0)
+                                                                          && !(e.Value is BsonBoolean { Value: false }));
+                        if (inclusion)
                         {
-                            fields.Insert(0, "_id");
+                            List<string> fields = [.. project.Elements.Where(static e => !(e.Value.IsNumeric && e.Value.ToDouble() == 0) && e.Value is not BsonBoolean { Value: false }).Select(static e => e.Name)];
+                            if (!project.Contains("_id"))
+                            {
+                                fields.Insert(0, "_id");
+                            }
+                            shape = new PipelineShape(fields, "$project");
                         }
-                        shape = new PipelineShape(fields, "$project");
+                        else if (shape is not null)
+                        {
+                            shape = shape with { Fields = [.. shape.Fields.Where(f => !project.Contains(f))] };
+                        }
+                        break;
                     }
-                    else if (shape is not null)
-                    {
-                        shape = shape with { Fields = [.. shape.Fields.Where(f => !project.Contains(f))] };
-                    }
-                    break;
-                }
                 case "$addFields" or "$set" when element.Value is BsonDocument added && shape is not null:
                     shape = new PipelineShape([.. shape.Fields, .. added.Names.Where(n => !shape.Fields.Contains(n))], shape.Source);
                     break;

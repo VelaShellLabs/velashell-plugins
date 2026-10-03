@@ -8,7 +8,10 @@ namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
 public sealed partial class OverviewPageView : UserControl
 {
     /// <summary>建视图。</summary>
-    public OverviewPageView() => AvaloniaXamlLoader.Load(this);
+    public OverviewPageView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 
     /// <summary>“需要关注”里那条的动作天生是个 Action,不必为它造一个 ICommand。</summary>
     private void OnAttentionClick(object? sender, RoutedEventArgs e)

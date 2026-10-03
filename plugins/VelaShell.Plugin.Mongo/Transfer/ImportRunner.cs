@@ -278,7 +278,7 @@ internal static class ImportRunner
             if (_errors is null)
             {
                 ErrorPath = Path.Combine(job.ReportDirectory, $"{Path.GetFileNameWithoutExtension(job.Source.Path)}.errors-{_stamp}.jsonl");
-                Directory.CreateDirectory(job.ReportDirectory);
+                _ = Directory.CreateDirectory(job.ReportDirectory);
                 _errors = new StreamWriter(ErrorPath, append: false, new UTF8Encoding(false));
             }
             var entry = new BsonDocument
@@ -311,7 +311,7 @@ internal static class ImportRunner
             if (_backup is null)
             {
                 BackupPath = Path.Combine(job.ReportDirectory, $"{job.Database}.{job.Collection}.backup-{_stamp}.jsonl");
-                Directory.CreateDirectory(job.ReportDirectory);
+                _ = Directory.CreateDirectory(job.ReportDirectory);
                 _backup = new StreamWriter(BackupPath, append: false, new UTF8Encoding(false));
             }
             // Canonical:备份是要能原样恢复的,类型一个都不能丢(Int64 / Decimal128 / 日期)。

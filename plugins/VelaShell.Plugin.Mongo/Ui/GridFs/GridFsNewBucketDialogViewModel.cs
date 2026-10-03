@@ -12,8 +12,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed class GridFsNewBucketDialogViewModel : DialogViewModel, IViewFactory
 {
     private readonly string _database;
-    private string _name = "";
-    private string? _error;
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -24,7 +22,7 @@ internal sealed class GridFsNewBucketDialogViewModel : DialogViewModel, IViewFac
         _database = database;
         Title = Loc["Fs_NewBucketTitle"];
         Subtitle = database;
-        CreateCommand = new AsyncCommand(CreateAsync, () => GridFsPaths.ValidateBucketName(_name) is null);
+        CreateCommand = new AsyncCommand(CreateAsync, () => GridFsPaths.ValidateBucketName(Name) is null);
     }
 
     /// <inheritdoc />
@@ -39,32 +37,32 @@ internal sealed class GridFsNewBucketDialogViewModel : DialogViewModel, IViewFac
     /// <summary>桶名。</summary>
     public string Name
     {
-        get => _name;
+        get;
         set
         {
-            if (SetProperty(ref _name, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
-                string? key = _name.Length == 0 ? null : GridFsPaths.ValidateBucketName(_name);
+                string? key = field.Length == 0 ? null : GridFsPaths.ValidateBucketName(field);
                 Error = key is null ? null : Loc[key];
                 RaisePropertiesChanged(nameof(FilesName), nameof(ChunksName));
                 CreateCommand.RaiseCanExecuteChanged();
             }
         }
-    }
+    } = "";
 
     /// <summary>预览:<c>images.files</c>。</summary>
-    public string FilesName => (_name.Trim().Length == 0 ? "…" : _name.Trim()) + ".files";
+    public string FilesName => (Name.Trim().Length == 0 ? "…" : Name.Trim()) + ".files";
 
     /// <summary>预览:<c>images.chunks</c>。</summary>
-    public string ChunksName => (_name.Trim().Length == 0 ? "…" : _name.Trim()) + ".chunks";
+    public string ChunksName => (Name.Trim().Length == 0 ? "…" : Name.Trim()) + ".chunks";
 
     /// <summary>错误。</summary>
     public string? Error
     {
-        get => _error;
+        get;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
@@ -72,14 +70,14 @@ internal sealed class GridFsNewBucketDialogViewModel : DialogViewModel, IViewFac
     }
 
     /// <summary>有错误。</summary>
-    public bool HasError => _error is not null;
+    public bool HasError => Error is not null;
 
     /// <summary>新建。</summary>
     public AsyncCommand CreateCommand { get; }
 
     private async Task CreateAsync()
     {
-        string name = _name.Trim();
+        string name = Name.Trim();
         if (GridFsPaths.ValidateBucketName(name) is { } invalid)
         {
             Error = Loc[invalid];

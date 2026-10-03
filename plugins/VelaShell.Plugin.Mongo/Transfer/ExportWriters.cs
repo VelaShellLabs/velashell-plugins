@@ -325,14 +325,14 @@ internal sealed class CountingStream(Stream inner) : Stream
     public override void Write(byte[] buffer, int offset, int count)
     {
         inner.Write(buffer, offset, count);
-        Interlocked.Add(ref _written, count);
+        _ = Interlocked.Add(ref _written, count);
     }
 
     /// <inheritdoc />
     public override void Write(ReadOnlySpan<byte> buffer)
     {
         inner.Write(buffer);
-        Interlocked.Add(ref _written, buffer.Length);
+        _ = Interlocked.Add(ref _written, buffer.Length);
     }
 
     /// <inheritdoc />

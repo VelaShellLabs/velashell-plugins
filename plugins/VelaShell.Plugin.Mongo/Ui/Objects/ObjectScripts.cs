@@ -31,8 +31,8 @@ internal static class ObjectScripts
             return $"db.createCollection({BsonText.Quote(name)})";
         }
         var b = new StringBuilder();
-        b.Append("db.createCollection(\n  ").Append(BsonText.Quote(name)).Append(",\n");
-        b.Append(Indent(BsonText.Pretty(Simplify(options)), "  ")).Append("\n)");
+        _ = b.Append("db.createCollection(\n  ").Append(BsonText.Quote(name)).Append(",\n");
+        _ = b.Append(Indent(BsonText.Pretty(Simplify(options)), "  ")).Append("\n)");
         return b.ToString();
     }
 
@@ -44,13 +44,13 @@ internal static class ObjectScripts
     public static string CreateView(string name, string viewOn, BsonArray pipeline, BsonDocument? collation = null)
     {
         var b = new StringBuilder();
-        b.Append("db.createView(\n  ").Append(BsonText.Quote(name)).Append(",\n  ").Append(BsonText.Quote(viewOn)).Append(",\n");
-        b.Append(Indent(BsonText.Pretty(Simplify(pipeline)), "  "));
+        _ = b.Append("db.createView(\n  ").Append(BsonText.Quote(name)).Append(",\n  ").Append(BsonText.Quote(viewOn)).Append(",\n");
+        _ = b.Append(Indent(BsonText.Pretty(Simplify(pipeline)), "  "));
         if (collation is { ElementCount: > 0 })
         {
-            b.Append(",\n").Append(Indent(BsonText.Pretty(new BsonDocument("collation", Simplify(collation))), "  "));
+            _ = b.Append(",\n").Append(Indent(BsonText.Pretty(new BsonDocument("collation", Simplify(collation))), "  "));
         }
-        b.Append("\n)");
+        _ = b.Append("\n)");
         return b.ToString();
     }
 
@@ -77,7 +77,7 @@ internal static class ObjectScripts
             {
                 continue;
             }
-            options.Add(element);
+            _ = options.Add(element);
         }
         return options;
     }
@@ -113,26 +113,26 @@ internal static class ObjectScripts
                 case "validator" or "validationLevel" or "validationAction" or "viewOn" or "pipeline":
                     continue;
                 case "timeseries" when element.Value.IsBsonDocument:
-                {
-                    // 给了粒度时 bucketMaxSpanSeconds 是它的派生值;两个都写,6.3 起服务器会拒绝。
-                    BsonDocument ts = element.Value.AsBsonDocument.DeepClone().AsBsonDocument;
-                    if (ts.Contains("granularity"))
                     {
-                        ts.Remove("bucketMaxSpanSeconds");
-                        ts.Remove("bucketRoundingSeconds");
+                        // 给了粒度时 bucketMaxSpanSeconds 是它的派生值;两个都写,6.3 起服务器会拒绝。
+                        BsonDocument ts = element.Value.AsBsonDocument.DeepClone().AsBsonDocument;
+                        if (ts.Contains("granularity"))
+                        {
+                            ts.Remove("bucketMaxSpanSeconds");
+                            ts.Remove("bucketRoundingSeconds");
+                        }
+                        _ = result.Add("timeseries", ts);
+                        continue;
                     }
-                    result.Add("timeseries", ts);
-                    continue;
-                }
                 case "clusteredIndex" when element.Value.IsBsonDocument:
-                {
-                    BsonDocument clustered = element.Value.AsBsonDocument.DeepClone().AsBsonDocument;
-                    clustered.Remove("v");
-                    result.Add("clusteredIndex", clustered);
-                    continue;
-                }
+                    {
+                        BsonDocument clustered = element.Value.AsBsonDocument.DeepClone().AsBsonDocument;
+                        clustered.Remove("v");
+                        _ = result.Add("clusteredIndex", clustered);
+                        continue;
+                    }
                 default:
-                    result.Add(element);
+                    _ = result.Add(element);
                     continue;
             }
         }

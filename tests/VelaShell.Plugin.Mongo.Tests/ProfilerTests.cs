@@ -16,7 +16,7 @@ public sealed class ProfilerTests
     [TestMethod]
     public void Profile_entry_reads_plan_and_in_memory_sort_size()
     {
-        ProfileEntry e = ProfileEntry.Parse(FindEntry(T0, 820, docs: 1_284_902, returned: 38, plan: "COLLSCAN", sort: true));
+        var e = ProfileEntry.Parse(FindEntry(T0, 820, docs: 1_284_902, returned: 38, plan: "COLLSCAN", sort: true));
         Assert.AreEqual(820, e.Millis, 1e-9);
         Assert.AreEqual(1_284_902, e.DocsExamined);
         Assert.AreEqual(38, e.Returned);
@@ -70,7 +70,7 @@ public sealed class ProfilerTests
     public void Detail_suggests_an_esr_index_for_a_collscan()
     {
         var loc = new Loc("zh-CN");
-        ProfileEntry e = ProfileEntry.Parse(FindEntry(T0, 820, docs: 1_284_902, returned: 38, plan: "COLLSCAN", sort: true));
+        var e = ProfileEntry.Parse(FindEntry(T0, 820, docs: 1_284_902, returned: 38, plan: "COLLSCAN", sort: true));
         var detail = new ProfilerDetail(new ProfilerShapeRow([e], 820), e, loc);
         Assert.AreEqual("orders.find · COLLSCAN", detail.Title);
         Assert.AreEqual("1 次 · 占慢查询总耗时 100%", detail.Subtitle);
@@ -85,7 +85,7 @@ public sealed class ProfilerTests
     public void Detail_does_not_push_an_index_on_a_healthy_ixscan()
     {
         var loc = new Loc("zh-CN");
-        ProfileEntry e = ProfileEntry.Parse(FindEntry(T0, 188, docs: 6, returned: 6, plan: "IXSCAN { customer.level: 1, total: -1 }", sort: false));
+        var e = ProfileEntry.Parse(FindEntry(T0, 188, docs: 6, returned: 6, plan: "IXSCAN { customer.level: 1, total: -1 }", sort: false));
         var detail = new ProfilerDetail(new ProfilerShapeRow([e], 188), e, loc);
         Assert.IsFalse(detail.CanCreateIndex);
         Assert.IsFalse(detail.HasAdviceKeys);
@@ -157,7 +157,7 @@ public sealed class ProfilerTests
         {
             await SeedAsync(load, db);
             // level 2 只作用于这个临时库(slowms / sampleRate 是全局的,不碰)。
-            await load.RunCommandAsync(db, new BsonDocument("profile", 2));
+            _ = await load.RunCommandAsync(db, new BsonDocument("profile", 2));
             await RunWorkloadAsync(load, db);
 
             // 两条长时间运行的操作:一条超过 10 秒(红行),一条短一些 —— 截图时它们正在 $currentOp 里。
@@ -194,7 +194,7 @@ public sealed class ProfilerTests
         }
         finally
         {
-            await load.KillByCommentAsync(tag);
+            _ = await load.KillByCommentAsync(tag);
             foreach (Task task in background)
             {
                 try
@@ -206,7 +206,7 @@ public sealed class ProfilerTests
                     // 被 killOp 打断的那两条查询会抛 Interrupted —— 正是预期。
                 }
             }
-            await load.RunCommandAsync(db, new BsonDocument("profile", 0));
+            _ = await load.RunCommandAsync(db, new BsonDocument("profile", 0));
             await load.Client.DropDatabaseAsync(db);
         }
     });
@@ -240,7 +240,7 @@ public sealed class ProfilerTests
             { "createdAt", DateTime.UtcNow.AddMinutes(-i) },
             { "tags", new BsonArray { "a", i % 2 == 0 ? "red" : "blue" } }
         }));
-        await c.Collection(db, "orders").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("customer.id", 1)));
+        _ = await c.Collection(db, "orders").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("customer.id", 1)));
         await c.Collection(db, "events").InsertManyAsync(Enumerable.Range(0, 20_000).Select(i => new BsonDocument
         {
             { "day", $"2026-09-{1 + (i % 30):00}" }, { "device", $"d{i % 12}" }, { "v", i }
@@ -249,12 +249,12 @@ public sealed class ProfilerTests
         {
             { "sku", $"SKU-{i % 300}" }, { "rating", 1 + (i % 5) }
         }));
-        await c.Collection(db, "reviews").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument { { "sku", 1 }, { "rating", 1 } }));
+        _ = await c.Collection(db, "reviews").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument { { "sku", 1 }, { "rating", 1 } }));
         await c.Collection(db, "carts").InsertManyAsync(Enumerable.Range(0, 3_000).Select(i => new BsonDocument
         {
             { "expireAt", DateTime.UtcNow.AddMinutes(i - 1500) }, { "items", i % 4 }
         }));
-        await c.Collection(db, "carts").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("expireAt", 1)));
+        _ = await c.Collection(db, "carts").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("expireAt", 1)));
         await c.Collection(db, "products").InsertManyAsync(Enumerable.Range(0, 8_000).Select(i => new BsonDocument
         {
             { "name", $"p{i}" }, { "tags", new BsonArray { i % 3 == 0 ? "sale" : "new", "x" } }
@@ -267,13 +267,13 @@ public sealed class ProfilerTests
         IMongoCollection<BsonDocument> orders = c.Collection(db, "orders");
         for (int i = 0; i < 12; i++)
         {
-            await orders.Find(BsonDocument.Parse($$"""{ "customer.level": "SVIP", total: { $gte: {{5000 + i}} } }"""))
+            _ = await orders.Find(BsonDocument.Parse($$"""{ "customer.level": "SVIP", total: { $gte: {{5000 + i}} } }"""))
                 .Sort(new BsonDocument("total", -1)).Limit(40).ToListAsync();
         }
         IMongoCollection<BsonDocument> events = c.Collection(db, "events");
         for (int i = 0; i < 6; i++)
         {
-            await events.Aggregate<BsonDocument>(new[]
+            _ = await events.Aggregate<BsonDocument>(new[]
             {
                 new BsonDocument("$match", new BsonDocument("day", $"2026-09-{10 + i}")),
                 new BsonDocument("$group", new BsonDocument { { "_id", "$device" }, { "n", new BsonDocument("$sum", 1) } })
@@ -281,30 +281,30 @@ public sealed class ProfilerTests
         }
         for (int i = 0; i < 8; i++)
         {
-            await orders.Find(new BsonDocument("customer.id", 40 + i)).Sort(new BsonDocument("createdAt", -1)).ToListAsync();
+            _ = await orders.Find(new BsonDocument("customer.id", 40 + i)).Sort(new BsonDocument("createdAt", -1)).ToListAsync();
         }
         IMongoCollection<BsonDocument> reviews = c.Collection(db, "reviews");
         for (int i = 0; i < 5; i++)
         {
-            await reviews.Find(BsonDocument.Parse($$"""{ sku: "SKU-{{i}}", rating: { $gte: 4 } }""")).ToListAsync();
+            _ = await reviews.Find(BsonDocument.Parse($$"""{ sku: "SKU-{{i}}", rating: { $gte: 4 } }""")).ToListAsync();
         }
         IMongoCollection<BsonDocument> carts = c.Collection(db, "carts");
         for (int i = 0; i < 3; i++)
         {
-            await carts.UpdateManyAsync(new BsonDocument("expireAt", new BsonDocument("$lt", DateTime.UtcNow.AddMinutes(-i))),
+            _ = await carts.UpdateManyAsync(new BsonDocument("expireAt", new BsonDocument("$lt", DateTime.UtcNow.AddMinutes(-i))),
                 new BsonDocument("$set", new BsonDocument("expired", true)));
         }
         IMongoCollection<BsonDocument> products = c.Collection(db, "products");
         for (int i = 0; i < 4; i++)
         {
-            await products.Find(new BsonDocument("tags", "sale")).Limit(50).ToListAsync();
+            _ = await products.Find(new BsonDocument("tags", "sale")).Limit(50).ToListAsync();
         }
     }
 
     /// <summary>一条按文档 sleep 的慢查询(<c>$where</c>),跑在后台,打上标记以便收尾时 killOp。</summary>
     private static async Task SlowFindAsync(MongoConnection c, string db, string collection, int sleepMs, int docs, string tag)
     {
-        await c.Collection(db, collection)
+        _ = await c.Collection(db, collection)
             .Find(new BsonDocument("$where", $"sleep({sleepMs}) || true"), new FindOptions { Comment = tag, BatchSize = docs })
             .Limit(docs)
             .ToListAsync();

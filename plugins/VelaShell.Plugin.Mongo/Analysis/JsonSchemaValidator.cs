@@ -30,12 +30,13 @@ internal static class JsonSchemaValidator
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
 
     /// <summary>认作"这是一份 schema 本身"的关键字(区分整个 validator 与其中的 schema)。</summary>
-    private static readonly HashSet<string> SchemaKeywords = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> SchemaKeywords =
+    [
+        with(StringComparer.Ordinal),
         "bsonType", "type", "properties", "required", "additionalProperties", "patternProperties",
         "items", "enum", "minimum", "maximum", "minLength", "maxLength", "pattern", "anyOf", "allOf", "oneOf", "not",
         "minItems", "maxItems", "minProperties", "maxProperties", "title", "description"
-    };
+    ];
 
     /// <summary>
     /// 校验一份文档。<paramref name="validator" /> 可以是整个 <c>validator</c>(含 <c>$jsonSchema</c>)
@@ -133,9 +134,7 @@ internal static class JsonSchemaValidator
     /// <summary>一趟递归校验。<c>collect = false</c> 时只数违规(anyOf / oneOf / not 的试探分支用)。</summary>
     private sealed class Walker(Loc loc, bool collect)
     {
-        private readonly List<SchemaViolation> _found = [];
-
-        public List<SchemaViolation> Found => _found;
+        public List<SchemaViolation> Found { get; } = [];
 
         public int Count { get; private set; }
 
@@ -167,7 +166,7 @@ internal static class JsonSchemaValidator
             Count++;
             if (collect)
             {
-                _found.Add(new(path, keyword, message));
+                Found.Add(new(path, keyword, message));
             }
         }
 

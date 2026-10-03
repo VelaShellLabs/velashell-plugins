@@ -107,12 +107,13 @@ internal sealed record ProfileEntry
         }
     }
 
-    private static readonly HashSet<string> DiagnosticVerbs = new(StringComparer.OrdinalIgnoreCase)
-    {
+    private static readonly HashSet<string> DiagnosticVerbs =
+    [
+        with(StringComparer.OrdinalIgnoreCase),
         "listIndexes", "listCollections", "listDatabases", "collStats", "dbStats", "profile", "ping", "hello", "isMaster",
         "buildInfo", "serverStatus", "getParameter", "connectionStatus", "killCursors", "endSessions", "explain",
         "replSetGetStatus", "replSetGetConfig", "getCmdLineOpts", "hostInfo", "usersInfo", "rolesInfo", "validate"
-    };
+    ];
 
     /// <summary>解析一条记录。</summary>
     public static ProfileEntry Parse(BsonDocument doc)

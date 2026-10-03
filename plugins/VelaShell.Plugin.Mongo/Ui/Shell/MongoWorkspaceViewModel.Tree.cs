@@ -17,12 +17,8 @@ internal sealed record DetailRow(string Label, string Value);
 /// </summary>
 internal sealed partial class MongoWorkspaceViewModel
 {
-    private TreeNode? _selectedNode;
-    private string _treeFilter = "";
-    private string _detailTitle = "";
-    private string _detailKind = "";
     private CancellationTokenSource? _detailLoad;
-    private readonly Dictionary<string, TreeNode> _groups = new(StringComparer.CurrentCultureIgnoreCase);
+    private readonly Dictionary<string, TreeNode> _groups = [with(StringComparer.CurrentCultureIgnoreCase)];
 
     /// <summary>拍平后的可见行(虚拟化的 ListBox 直接绑它)。</summary>
     public ObservableCollection<TreeNode> VisibleNodes { get; } = [];
@@ -30,10 +26,10 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>选中的行(底部信息区与工具栏的作用范围跟着它)。</summary>
     public TreeNode? SelectedNode
     {
-        get => _selectedNode;
+        get;
         set
         {
-            if (SetProperty(ref _selectedNode, value))
+            if (SetProperty(ref field, value))
             {
                 UpdateCurrentSession();
                 RaisePropertiesChanged(nameof(StatusScope), nameof(StatusDetail));
@@ -45,29 +41,29 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>对象树筛选(只按名字;连接行永远留着)。</summary>
     public string TreeFilter
     {
-        get => _treeFilter;
+        get;
         set
         {
-            if (SetProperty(ref _treeFilter, value))
+            if (SetProperty(ref field, value))
             {
                 RebuildVisible();
             }
         }
-    }
+    } = "";
 
     /// <summary>信息区标题。</summary>
     public string DetailTitle
     {
-        get => _detailTitle;
-        private set => SetProperty(ref _detailTitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>信息区标题右边的小字。</summary>
     public string DetailKind
     {
-        get => _detailKind;
-        private set => SetProperty(ref _detailKind, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>信息区的行。</summary>
     public ObservableCollection<DetailRow> DetailRows { get; } = [];
@@ -98,9 +94,9 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>重新拍平可见行。只在真变了时替换 —— 整表重设会让列表丢掉滚动位置。</summary>
     internal void RebuildVisible()
     {
-        TreeNode? selected = _selectedNode;
+        TreeNode? selected = SelectedNode;
         var rows = new List<TreeNode>();
-        string filter = _treeFilter.Trim();
+        string filter = TreeFilter.Trim();
         // 不分组的连接在最上面;分了组的按组名排,每组一行可收起的节标题(设计稿 10 的「分组」)。
         foreach (ConnectionEntry entry in Connections.Where(static c => c.Profile.Group.Length == 0))
         {
@@ -140,7 +136,7 @@ internal sealed partial class MongoWorkspaceViewModel
             }
             else
             {
-                WalkFiltered(entry.Root, into, filter);
+                _ = WalkFiltered(entry.Root, into, filter);
             }
         }
         if (rows.SequenceEqual(VisibleNodes))
@@ -217,7 +213,7 @@ internal sealed partial class MongoWorkspaceViewModel
                 .SelectMany(static folder => folder.Children)
                 .FirstOrDefault(n => n.Name == name && n.Kind is NodeKind.Collection or NodeKind.View or NodeKind.Bucket);
         }
-        if (target is not null && !ReferenceEquals(target, _selectedNode) && VisibleNodes.Contains(target))
+        if (target is not null && !ReferenceEquals(target, SelectedNode) && VisibleNodes.Contains(target))
         {
             SelectedNode = target;
         }
@@ -327,7 +323,7 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>一条连接的状态变了(连上、没连上、断开):选中的正是它那一行就重读底部信息区。</summary>
     internal void RefreshDetailsFor(ConnectionEntry entry)
     {
-        if (_selectedNode is { Kind: NodeKind.Connection } node && node.Owner == entry)
+        if (SelectedNode is { Kind: NodeKind.Connection } node && node.Owner == entry)
         {
             _ = LoadDetailsAsync(node);
         }
@@ -365,55 +361,55 @@ internal sealed partial class MongoWorkspaceViewModel
             switch (node.Kind)
             {
                 case NodeKind.Collection:
-                {
-                    DetailKind = "WiredTiger";
-                    CollectionStats stats = await session.GetStatsCachedAsync(node.Database, node.Name, cts.Token).ConfigureAwait(true);
-                    if (cts.IsCancellationRequested)
                     {
-                        return;
+                        DetailKind = "WiredTiger";
+                        CollectionStats stats = await session.GetStatsCachedAsync(node.Database, node.Name, cts.Token).ConfigureAwait(true);
+                        if (cts.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        DetailRows.Add(new(Loc["Detail_Documents"], BsonText.Grouped(stats.Count)));
+                        DetailRows.Add(new(Loc["Detail_StorageIndex"], $"{BsonText.Bytes(stats.Size)} / {BsonText.Bytes(stats.TotalIndexSize)}"));
+                        DetailRows.Add(new(Loc["Detail_Indexes"], Loc.Format("Detail_IndexSummary", stats.IndexCount, BsonText.Bytes(stats.AvgObjSize))));
+                        break;
                     }
-                    DetailRows.Add(new(Loc["Detail_Documents"], BsonText.Grouped(stats.Count)));
-                    DetailRows.Add(new(Loc["Detail_StorageIndex"], $"{BsonText.Bytes(stats.Size)} / {BsonText.Bytes(stats.TotalIndexSize)}"));
-                    DetailRows.Add(new(Loc["Detail_Indexes"], Loc.Format("Detail_IndexSummary", stats.IndexCount, BsonText.Bytes(stats.AvgObjSize))));
-                    break;
-                }
                 case NodeKind.View:
                     DetailKind = Loc["Detail_View"];
                     DetailRows.Add(new(Loc["Detail_ViewOn"], node.Collection?.ViewOn ?? "—"));
                     DetailRows.Add(new(Loc["Detail_Stages"], (node.Collection?.Pipeline?.Count ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)));
                     break;
                 case NodeKind.Database:
-                {
-                    DetailKind = Loc["Detail_Database"];
-                    BsonDocument stats = await session.Connection.GetDatabaseStatsAsync(node.Name, cts.Token).ConfigureAwait(true);
-                    if (cts.IsCancellationRequested)
                     {
-                        return;
+                        DetailKind = Loc["Detail_Database"];
+                        BsonDocument stats = await session.Connection.GetDatabaseStatsAsync(node.Name, cts.Token).ConfigureAwait(true);
+                        if (cts.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        IReadOnlyList<CollectionInfo> all = session.CollectionsOf(node.Name);
+                        int views = all.Count(static c => c.Kind == CollectionKind.View);
+                        int buckets = MongoConnection.FindBuckets(node.Name, all).Count;
+                        DetailRows.Add(new(Loc["Detail_CollectionsViews"], $"{stats.GetValue("collections", 0).ToInt64() - (buckets * 2)} / {views}"));
+                        DetailRows.Add(new(Loc["Detail_DataIndex"],
+                            $"{BsonText.Bytes(stats.GetValue("dataSize", 0).ToInt64())} / {BsonText.Bytes(stats.GetValue("indexSize", 0).ToInt64())}"));
+                        DetailRows.Add(new("GridFS", Loc.Format("Detail_Buckets", buckets)));
+                        break;
                     }
-                    IReadOnlyList<CollectionInfo> all = session.CollectionsOf(node.Name);
-                    int views = all.Count(static c => c.Kind == CollectionKind.View);
-                    int buckets = MongoConnection.FindBuckets(node.Name, all).Count;
-                    DetailRows.Add(new(Loc["Detail_CollectionsViews"], $"{stats.GetValue("collections", 0).ToInt64() - (buckets * 2)} / {views}"));
-                    DetailRows.Add(new(Loc["Detail_DataIndex"],
-                        $"{BsonText.Bytes(stats.GetValue("dataSize", 0).ToInt64())} / {BsonText.Bytes(stats.GetValue("indexSize", 0).ToInt64())}"));
-                    DetailRows.Add(new("GridFS", Loc.Format("Detail_Buckets", buckets)));
-                    break;
-                }
                 case NodeKind.Bucket:
-                {
-                    DetailKind = Loc["Detail_Bucket"];
-                    GridFsBucketInfo bucket = node.Bucket!;
-                    CollectionStats files = await session.GetStatsCachedAsync(node.Database, bucket.FilesCollection, cts.Token).ConfigureAwait(true);
-                    CollectionStats chunks = await session.GetStatsCachedAsync(node.Database, bucket.ChunksCollection, cts.Token).ConfigureAwait(true);
-                    if (cts.IsCancellationRequested)
                     {
-                        return;
+                        DetailKind = Loc["Detail_Bucket"];
+                        GridFsBucketInfo bucket = node.Bucket!;
+                        CollectionStats files = await session.GetStatsCachedAsync(node.Database, bucket.FilesCollection, cts.Token).ConfigureAwait(true);
+                        CollectionStats chunks = await session.GetStatsCachedAsync(node.Database, bucket.ChunksCollection, cts.Token).ConfigureAwait(true);
+                        if (cts.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        DetailRows.Add(new(Loc["Detail_Files"], BsonText.Grouped(files.Count)));
+                        DetailRows.Add(new(Loc["Detail_TotalSize"], BsonText.Bytes(chunks.Size)));
+                        DetailRows.Add(new(Loc["Detail_Chunks"], $"{BsonText.Grouped(chunks.Count)} × 255 KB"));
+                        break;
                     }
-                    DetailRows.Add(new(Loc["Detail_Files"], BsonText.Grouped(files.Count)));
-                    DetailRows.Add(new(Loc["Detail_TotalSize"], BsonText.Bytes(chunks.Size)));
-                    DetailRows.Add(new(Loc["Detail_Chunks"], $"{BsonText.Grouped(chunks.Count)} × 255 KB"));
-                    break;
-                }
                 case NodeKind.Connection:
                     DetailKind = session.Connection.Server.Badge;
                     DetailRows.Add(new(Loc["Detail_Version"], session.Connection.Server.Version));

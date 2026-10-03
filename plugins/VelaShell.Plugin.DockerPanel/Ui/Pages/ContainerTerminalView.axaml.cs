@@ -14,5 +14,8 @@ namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
 public sealed partial class ContainerTerminalView : UserControl
 {
     /// <summary>建视图。</summary>
-    public ContainerTerminalView() => AvaloniaXamlLoader.Load(this);
+    public ContainerTerminalView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

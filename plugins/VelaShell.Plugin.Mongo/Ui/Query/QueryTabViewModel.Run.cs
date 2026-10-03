@@ -3,8 +3,8 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Analysis;
 using VelaShell.Plugin.Mongo.Bson;
-using VelaShell.Plugin.Mongo.Shell;
 using VelaShell.Plugin.Mongo.Core;
+using VelaShell.Plugin.Mongo.Shell;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -16,24 +16,20 @@ internal sealed record LensRecord(long ElapsedMs, int? Count, bool Ok);
 
 internal sealed partial class QueryTabViewModel
 {
-    private readonly Dictionary<string, LensRecord> _lens = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LensRecord> _lens = [with(StringComparer.Ordinal)];
     private CancellationTokenSource? _runCts;
     private string? _runComment;
-    private bool _isRunning;
     private string _runningText = "";
     private string? _lastRunSummary;
-    private string _execText = "";
-    private string _execTimes = "";
-    private string _planText = "";
     private string _execState = "idle";
 
     /// <summary>正在运行。</summary>
     public bool IsRunning
     {
-        get => _isRunning;
+        get;
         private set
         {
-            if (SetProperty(ref _isRunning, value))
+            if (SetProperty(ref field, value))
             {
                 RunCommand.RaiseCanExecuteChanged();
                 RunCurrentCommand.RaiseCanExecuteChanged();
@@ -49,33 +45,33 @@ internal sealed partial class QueryTabViewModel
     /// <summary>状态条左侧的主文字(<c>2 条语句执行完成</c> / <c>正在执行 1/2…</c>)。</summary>
     public string ExecText
     {
-        get => _isRunning ? _runningText : _execText;
+        get => IsRunning ? _runningText : field;
         private set
         {
-            _execText = value;
+            field = value;
             RaisePropertyChanged();
         }
-    }
+    } = "";
 
     /// <summary>各语句耗时(<c>find 38 ms · aggregate 112 ms</c>)。</summary>
     public string ExecTimes
     {
-        get => _execTimes;
-        private set => SetProperty(ref _execTimes, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>最近一条查询的计划摘要(<c>IXSCAN status_1_createdAt_-1 · 扫描 1,284 / 返回 24</c>)。</summary>
     public string PlanText
     {
-        get => _planText;
-        private set => SetProperty(ref _planText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>停止按钮的图标颜色(运行时红)。</summary>
-    public string StopIconToken => _isRunning ? "VelaError" : "VelaTextMuted";
+    public string StopIconToken => IsRunning ? "VelaError" : "VelaTextMuted";
 
     /// <summary>状态条图标。</summary>
-    public string ExecIconKey => _isRunning ? "Mongo.loader-circle" : _execState switch
+    public string ExecIconKey => IsRunning ? "Mongo.loader-circle" : _execState switch
     {
         "ok" => "Mongo.circle-check",
         "error" => "Mongo.circle-x",
@@ -84,7 +80,7 @@ internal sealed partial class QueryTabViewModel
     };
 
     /// <summary>状态条图标颜色。</summary>
-    public string ExecIconToken => _isRunning ? "VelaAccent" : _execState switch
+    public string ExecIconToken => IsRunning ? "VelaAccent" : _execState switch
     {
         "ok" => "VelaStatusConnected",
         "error" => "VelaError",
@@ -103,7 +99,7 @@ internal sealed partial class QueryTabViewModel
     /// <summary>运行:全部(有选区时只跑选区)或光标所在的那条。</summary>
     public async Task RunAsync(bool all)
     {
-        if (_isRunning)
+        if (IsRunning)
         {
             return;
         }
@@ -129,7 +125,7 @@ internal sealed partial class QueryTabViewModel
     /// <summary>逐条运行一组语句。</summary>
     internal async Task RunStatementsAsync(IReadOnlyList<ShellStatement> targets)
     {
-        if (_isRunning)
+        if (IsRunning)
         {
             return;
         }
@@ -148,7 +144,7 @@ internal sealed partial class QueryTabViewModel
         // 未固定的旧结果让位给这一次;固定的留着。
         foreach (QueryResultSet stale in Panes.OfType<QueryResultSet>().Where(static p => !p.IsPinned).ToList())
         {
-            Panes.Remove(stale);
+            _ = Panes.Remove(stale);
         }
         int nextNumber = Panes.OfType<QueryResultSet>().Select(static p => p.Number).DefaultIfEmpty(0).Max() + 1;
         var timings = new List<string>();
@@ -181,7 +177,7 @@ internal sealed partial class QueryTabViewModel
                     break;
                 }
                 ShellResult result;
-                System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+                var watch = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     ShellRunOptions run = options;
@@ -226,18 +222,18 @@ internal sealed partial class QueryTabViewModel
                 switch (result.Kind)
                 {
                     case ShellResultKind.Documents:
-                    {
-                        var set = new QueryResultSet(Loc, Workspace.Connection.Settings.Ejson, nextNumber++, result, statement) { ViewMode = _resultView };
-                        Panes.Insert(Panes.IndexOf(Explain), set);
-                        lastSet = set;
-                        if (command.Method?.Name is "find" or "findOne" or "aggregate" && command.Kind == ShellCommandKind.Collection
-                            && command.Modifier("count") is null)
                         {
-                            lastQuery = result;
-                            lastQueryCommand = command;
+                            var set = new QueryResultSet(Loc, Workspace.Connection.Settings.Ejson, nextNumber++, result, statement) { ViewMode = _resultView };
+                            Panes.Insert(Panes.IndexOf(Explain), set);
+                            lastSet = set;
+                            if (command.Method?.Name is "find" or "findOne" or "aggregate" && command.Kind == ShellCommandKind.Collection
+                                && command.Modifier("count") is null)
+                            {
+                                lastQuery = result;
+                                lastQueryCommand = command;
+                            }
+                            break;
                         }
-                        break;
-                    }
                     case ShellResultKind.Explain when result.Explain is { } explain:
                         Explain.Begin(command, result.Database);
                         ShowExplain(explain);
@@ -344,7 +340,7 @@ internal sealed partial class QueryTabViewModel
             {
                 return;
             }
-            ExplainPlan plan = ExplainPlan.Parse(explain);
+            var plan = ExplainPlan.Parse(explain);
             long examined = Math.Max(plan.TotalKeysExamined ?? 0, plan.TotalDocsExamined ?? 0);
             PlanText = plan.NReturned is { } returned
                 ? $"{plan.Summary} · {Loc.Format("Query_PlanScan", BsonText.Grouped(examined), BsonText.Grouped(returned))}"
@@ -415,7 +411,7 @@ internal sealed partial class QueryTabViewModel
 
     private void ShowExplain(BsonDocument explain)
     {
-        ExplainPlan plan = ExplainPlan.Parse(explain);
+        var plan = ExplainPlan.Parse(explain);
         Explain.Show(plan);
         if (plan.NReturned is { } returned)
         {
@@ -456,7 +452,7 @@ internal sealed partial class QueryTabViewModel
         }
         try
         {
-            await Workspace.Connection.RunCommandAsync(database, new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(database, new BsonDocument
             {
                 { "createIndexes", collection },
                 { "indexes", new BsonArray { new BsonDocument { { "key", keys }, { "name", name } } } }
@@ -517,7 +513,7 @@ internal sealed partial class QueryTabViewModel
     /// <summary>语句压成一行(消息页、历史页)。</summary>
     internal static string OneLine(string text)
     {
-        string line = string.Join(' ', text.Split((char[])['\n', '\r'], StringSplitOptions.RemoveEmptyEntries).Select(static l => l.Trim()));
+        string line = string.Join(' ', text.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries).Select(static l => l.Trim()));
         return line.Length > 160 ? line[..159] + "…" : line;
     }
 

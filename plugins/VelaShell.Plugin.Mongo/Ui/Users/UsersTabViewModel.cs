@@ -19,22 +19,16 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// </summary>
 internal sealed class UsersTabViewModel : WorkspaceTab
 {
-    private readonly Dictionary<string, UserEditorViewModel> _userDrafts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, RoleEditorViewModel> _roleDrafts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, UserEditorViewModel> _userDrafts = [with(StringComparer.Ordinal)];
+    private readonly Dictionary<string, RoleEditorViewModel> _roleDrafts = [with(StringComparer.Ordinal)];
     private readonly Dictionary<RoleRef, IReadOnlyList<Privilege>> _privilegeCache = [];
     private bool _showRoles;
-    private bool _isLoading;
     private bool _loaded;
-    private string _notice = "";
     private UserRowViewModel? _selectedUser;
     private RoleRowViewModel? _selectedRole;
-    private UserEditorViewModel? _userEditor;
-    private RoleEditorViewModel? _roleEditor;
     private UserEditorViewModel? _newUser;
     private RoleEditorViewModel? _newRole;
     private IReadOnlyList<(string User, string Db)> _authenticated = [];
-    private IReadOnlyList<string> _databases = [];
-    private IReadOnlyList<MongoRole> _customRoles = [];
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -48,7 +42,7 @@ internal sealed class UsersTabViewModel : WorkspaceTab
         Title = workspace.Loc["Tree_Users"];
         NewUserCommand = new(StartNewUser);
         NewRoleCommand = new(StartNewRole);
-        ResetPasswordCommand = new(ResetPassword, () => !_showRoles && _userEditor is { IsNew: false });
+        ResetPasswordCommand = new(ResetPassword, () => !_showRoles && UserEditor is { IsNew: false });
         DeleteCommand = new(DeleteAsync, () => _showRoles ? _selectedRole is not null : _selectedUser is not null);
     }
 
@@ -117,24 +111,23 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     public ObservableCollection<RoleRowViewModel> Roles { get; } = [];
 
     /// <summary>全部自定义角色(各库)。</summary>
-    public IReadOnlyList<MongoRole> CustomRoles => _customRoles;
+    public IReadOnlyList<MongoRole> CustomRoles { get; private set; } = [];
 
     /// <summary>用户库(矩阵的行;不含 admin / config / local)。</summary>
-    public IReadOnlyList<string> MatrixDatabases => _databases;
+    public IReadOnlyList<string> MatrixDatabases => Databases;
 
     /// <summary>用户库(<see cref="MatrixDatabases" /> 的别名,给角色编辑器判断"是不是现有库")。</summary>
-    public IReadOnlyList<string> Databases => _databases;
+    public IReadOnlyList<string> Databases { get; private set; } = [];
 
     /// <summary>认证库 / 角色所在库的候选:admin 在前,其后是用户库。</summary>
-    public IReadOnlyList<string> AuthDatabases => ["admin", .. _databases];
+    public IReadOnlyList<string> AuthDatabases => ["admin", .. Databases];
 
     /// <summary>正在加载。</summary>
     public bool IsLoading
     {
-        get => _isLoading;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _isLoading, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsListEmpty), nameof(EmptyText));
             }
@@ -144,24 +137,23 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     /// <summary>列表顶上的一条说明(没有 forAllDBs 权限时只列了当前库)。</summary>
     public string Notice
     {
-        get => _notice;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _notice, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasNotice));
             }
         }
-    }
+    } = "";
 
     /// <summary>有没有那条说明。</summary>
-    public bool HasNotice => _notice.Length > 0;
+    public bool HasNotice => Notice.Length > 0;
 
     /// <summary>当前模式的列表是空的(加载完之后)。</summary>
-    public bool IsListEmpty => !_isLoading && _loaded && (_showRoles ? Roles.Count == 0 : Users.Count == 0);
+    public bool IsListEmpty => !IsLoading && _loaded && (_showRoles ? Roles.Count == 0 : Users.Count == 0);
 
     /// <summary>空态文字。</summary>
-    public string EmptyText => _isLoading ? Loc["Common_Loading"] : _showRoles ? Loc["Users_NoRoles"] : Loc["Users_NoUsers"];
+    public string EmptyText => IsLoading ? Loc["Common_Loading"] : _showRoles ? Loc["Users_NoRoles"] : Loc["Users_NoUsers"];
 
     /// <summary>列头第一列(用户 / 角色)。</summary>
     public string NameHeader => _showRoles ? Loc["Users_ColRole"] : Loc["Users_ColUser"];
@@ -217,10 +209,9 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     /// <summary>右侧的用户编辑器。</summary>
     public UserEditorViewModel? UserEditor
     {
-        get => _userEditor;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _userEditor, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShowUserEditor), nameof(ShowEmptyEditor));
                 RefreshCommands();
@@ -231,10 +222,9 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     /// <summary>右侧的角色编辑器。</summary>
     public RoleEditorViewModel? RoleEditor
     {
-        get => _roleEditor;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _roleEditor, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShowRoleEditor), nameof(ShowEmptyEditor));
                 RefreshCommands();
@@ -243,10 +233,10 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     }
 
     /// <summary>右侧显示用户编辑器。</summary>
-    public bool ShowUserEditor => !_showRoles && _userEditor is not null;
+    public bool ShowUserEditor => !_showRoles && UserEditor is not null;
 
     /// <summary>右侧显示角色编辑器。</summary>
-    public bool ShowRoleEditor => _showRoles && _roleEditor is not null;
+    public bool ShowRoleEditor => _showRoles && RoleEditor is not null;
 
     /// <summary>右侧什么也没选(空态)。</summary>
     public bool ShowEmptyEditor => !ShowUserEditor && !ShowRoleEditor;
@@ -274,13 +264,13 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     public override async Task RefreshAsync()
     {
         if (IsModified && !await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Users_RefreshDiscardTitle"],
-                Message = Loc["Users_RefreshDiscardBody"],
-                ConfirmLabel = Loc["Tab_CloseDiscard"],
-                IconKey = "Mongo.triangle-alert",
-                Danger = true
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Users_RefreshDiscardTitle"],
+            Message = Loc["Users_RefreshDiscardBody"],
+            ConfirmLabel = Loc["Tab_CloseDiscard"],
+            IconKey = "Mongo.triangle-alert",
+            Danger = true
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -299,9 +289,9 @@ internal sealed class UsersTabViewModel : WorkspaceTab
         try
         {
             _authenticated = await LoadIdentityAsync().ConfigureAwait(true);
-            _databases = await LoadDatabasesAsync().ConfigureAwait(true);
+            Databases = await LoadDatabasesAsync().ConfigureAwait(true);
             (IReadOnlyList<MongoUser> users, string notice) = await LoadUsersAsync().ConfigureAwait(true);
-            _customRoles = await LoadCustomRolesAsync(users).ConfigureAwait(true);
+            CustomRoles = await LoadCustomRolesAsync(users).ConfigureAwait(true);
             _privilegeCache.Clear();
             Notice = notice;
 
@@ -334,10 +324,10 @@ internal sealed class UsersTabViewModel : WorkspaceTab
             foreach (string stale in _userDrafts.Keys.Where(id => users.All(u => u.Id != id)).ToList())
             {
                 _userDrafts[stale].Dispose();
-                _userDrafts.Remove(stale);
+                _ = _userDrafts.Remove(stale);
             }
             Roles.Clear();
-            foreach (MongoRole role in _customRoles)
+            foreach (MongoRole role in CustomRoles)
             {
                 var row = new RoleRowViewModel(role, Loc, Database, HoldersOf(role.Ref).Count);
                 if (_roleDrafts.TryGetValue(RoleId(role), out RoleEditorViewModel? draft))
@@ -350,17 +340,17 @@ internal sealed class UsersTabViewModel : WorkspaceTab
                 }
                 Roles.Add(row);
             }
-            foreach (string stale in _roleDrafts.Keys.Where(id => _customRoles.All(c => RoleId(c) != id)).ToList())
+            foreach (string stale in _roleDrafts.Keys.Where(id => CustomRoles.All(c => RoleId(c) != id)).ToList())
             {
                 _roleDrafts[stale].Dispose();
-                _roleDrafts.Remove(stale);
+                _ = _roleDrafts.Remove(stale);
             }
             _loaded = true;
 
             RaisePropertiesChanged(nameof(SelectedUser), nameof(SelectedRole), nameof(CustomRoles), nameof(MatrixDatabases),
                 nameof(AuthDatabases), nameof(IsListEmpty));
-            bool editingNewUser = _userEditor is not null && ReferenceEquals(_userEditor, _newUser);
-            bool editingNewRole = _roleEditor is not null && ReferenceEquals(_roleEditor, _newRole);
+            bool editingNewUser = UserEditor is not null && ReferenceEquals(UserEditor, _newUser);
+            bool editingNewRole = RoleEditor is not null && ReferenceEquals(RoleEditor, _newRole);
             SelectedUser = Users.FirstOrDefault(u => u.User.Id == userId) ?? (editingNewUser ? null : Users.FirstOrDefault());
             if (_selectedUser is null && !editingNewUser)
             {
@@ -458,7 +448,7 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     private async Task<IReadOnlyList<MongoRole>> LoadCustomRolesAsync(IReadOnlyList<MongoUser> users)
     {
         var databases = new SortedSet<string>(StringComparer.Ordinal) { "admin" };
-        databases.UnionWith(_databases);
+        databases.UnionWith(Databases);
         databases.UnionWith(users.SelectMany(static u => u.Roles).Where(static r => !BuiltinRoles.IsBuiltin(r.Role)).Select(static r => r.Db));
         IEnumerable<Task<IReadOnlyList<MongoRole>>> tasks = databases.Select(async db =>
         {
@@ -623,8 +613,8 @@ internal sealed class UsersTabViewModel : WorkspaceTab
         }
         _userDrafts.Clear();
         _roleDrafts.Clear();
-        UserEditor = ReferenceEquals(_userEditor, _newUser) ? _newUser : null;
-        RoleEditor = ReferenceEquals(_roleEditor, _newRole) ? _newRole : null;
+        UserEditor = ReferenceEquals(UserEditor, _newUser) ? _newUser : null;
+        RoleEditor = ReferenceEquals(RoleEditor, _newRole) ? _newRole : null;
     }
 
     /// <summary>所有未保存的对象名(状态栏「未保存:ops_writer」)。</summary>
@@ -648,7 +638,7 @@ internal sealed class UsersTabViewModel : WorkspaceTab
     private void UpdateStatus()
     {
         string ns = _showRoles ? "admin.system.roles" : "admin.system.users";
-        string text = Loc.Format("Users_Status", ns, Users.Count, _customRoles.Count);
+        string text = Loc.Format("Users_Status", ns, Users.Count, CustomRoles.Count);
         IReadOnlyList<string> pending = PendingNames;
         if (pending.Count > 0)
         {
@@ -663,11 +653,11 @@ internal sealed class UsersTabViewModel : WorkspaceTab
             nameof(ShowUserEditor), nameof(ShowRoleEditor), nameof(ShowEmptyEditor), nameof(IsListEmpty), nameof(EmptyText));
         if (_loaded)
         {
-            if (_showRoles && _roleEditor is null && Roles.Count > 0)
+            if (_showRoles && RoleEditor is null && Roles.Count > 0)
             {
                 SelectedRole = Roles[0];
             }
-            else if (!_showRoles && _userEditor is null && Users.Count > 0)
+            else if (!_showRoles && UserEditor is null && Users.Count > 0)
             {
                 SelectedUser = Users[0];
             }
@@ -733,7 +723,7 @@ internal sealed class UsersTabViewModel : WorkspaceTab
         {
             try
             {
-                await Workspace.Connection.RunCommandAsync(command.Database, command.Command).ConfigureAwait(true);
+                _ = await Workspace.Connection.RunCommandAsync(command.Database, command.Command).ConfigureAwait(true);
                 Workspace.Log.Info($"users: {command.Shell}");
             }
             catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -943,18 +933,18 @@ internal sealed class UsersTabViewModel : WorkspaceTab
             return;
         }
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Users_DeleteUserTitle"],
-                Message = Loc.Format("Users_DeleteUserBody", $"{user.Name}@{user.Db}"),
-                ConfirmLabel = Loc["Users_DeleteUserTitle"],
-                IconKey = "Mongo.user-x",
-                Facts =
+        {
+            Title = Loc["Users_DeleteUserTitle"],
+            Message = Loc.Format("Users_DeleteUserBody", $"{user.Name}@{user.Db}"),
+            ConfirmLabel = Loc["Users_DeleteUserTitle"],
+            IconKey = "Mongo.user-x",
+            Facts =
                 [
                     new(Loc["Users_ColAuthDb"], user.Db),
                     new(Loc["Users_ColRoles"], user.Roles.Count == 0 ? Loc["Common_None"] : string.Join(", ", user.Roles))
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites || user.IsRoot ? user.Name : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites || user.IsRoot ? user.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -986,18 +976,18 @@ internal sealed class UsersTabViewModel : WorkspaceTab
         }
         IReadOnlyList<string> holders = HoldersOf(role.Ref);
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Users_DeleteRoleTitle"],
-                Message = Loc.Format("Users_DeleteRoleBody", role.Ref, holders.Count),
-                ConfirmLabel = Loc["Users_DeleteRoleTitle"],
-                IconKey = "Mongo.shield-alert",
-                Facts =
+        {
+            Title = Loc["Users_DeleteRoleTitle"],
+            Message = Loc.Format("Users_DeleteRoleBody", role.Ref, holders.Count),
+            ConfirmLabel = Loc["Users_DeleteRoleTitle"],
+            IconKey = "Mongo.shield-alert",
+            Facts =
                 [
                     new(Loc["Users_Privileges"], role.Privileges.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                     new(Loc["Users_Holders"], holders.Count == 0 ? Loc["Common_None"] : string.Join(", ", holders))
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites || holders.Count > 0 ? role.Name : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites || holders.Count > 0 ? role.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -1017,7 +1007,7 @@ internal sealed class UsersTabViewModel : WorkspaceTab
 
     private void ResetPassword()
     {
-        if (_userEditor?.User is not { } user)
+        if (UserEditor?.User is not { } user)
         {
             return;
         }
@@ -1046,14 +1036,14 @@ internal sealed class UsersTabViewModel : WorkspaceTab
             return;
         }
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc.Format("Users_RotateTitle", user.Name),
-                Message = Loc.Format("Users_RotateBody", $"{user.Name}@{user.Db}"),
-                ConfirmLabel = Loc["Users_Rotate"],
-                IconKey = "Mongo.key-round",
-                Danger = false,
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? user.Name : null
-            }).ConfigureAwait(true))
+        {
+            Title = Loc.Format("Users_RotateTitle", user.Name),
+            Message = Loc.Format("Users_RotateBody", $"{user.Name}@{user.Db}"),
+            ConfirmLabel = Loc["Users_Rotate"],
+            IconKey = "Mongo.key-round",
+            Danger = false,
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? user.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }

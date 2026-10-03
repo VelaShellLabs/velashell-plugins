@@ -65,7 +65,7 @@ public sealed class S3ActionHandler(IPluginContext context) : IS3ActionHandler
             foreach (string token in _panels.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
             {
                 closing.Add(_panels[token]);
-                _panels.Remove(token);
+                _ = _panels.Remove(token);
             }
         }
         // 出锁再关:CloseAsync 会回调 panel.Closed,而那个回调也要拿 _gate。
@@ -87,7 +87,7 @@ public sealed class S3ActionHandler(IPluginContext context) : IS3ActionHandler
         IPluginPanel? opened;
         lock (_gate)
         {
-            _panels.TryGetValue(token, out opened);
+            _ = _panels.TryGetValue(token, out opened);
         }
         if (opened is { IsOpen: true })
         {
@@ -122,7 +122,7 @@ public sealed class S3ActionHandler(IPluginContext context) : IS3ActionHandler
                 // 按引用比对再删:晚一步关闭的旧面板不该把新面板的条目抹掉,那样去重就永久失效了。
                 if (_panels.TryGetValue(token, out IPluginPanel? current) && ReferenceEquals(current, panel))
                 {
-                    _panels.Remove(token);
+                    _ = _panels.Remove(token);
                 }
             }
         };
@@ -152,7 +152,7 @@ public sealed class S3ActionHandler(IPluginContext context) : IS3ActionHandler
             {
                 if (_panels.TryGetValue(token, out IPluginPanel? current) && ReferenceEquals(current, panel))
                 {
-                    _panels.Remove(token);
+                    _ = _panels.Remove(token);
                 }
             }
         }

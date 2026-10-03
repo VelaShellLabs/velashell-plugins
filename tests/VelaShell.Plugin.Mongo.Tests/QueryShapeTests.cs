@@ -10,15 +10,15 @@ public sealed class QueryShapeTests
     [TestMethod]
     public void Literals_become_question_marks_but_operators_stay()
     {
-        BsonDocument filter = BsonDocument.Parse("""{ "customer.level": "SVIP", total: { $gte: 5000 } }""");
+        var filter = BsonDocument.Parse("""{ "customer.level": "SVIP", total: { $gte: 5000 } }""");
         Assert.AreEqual("{ customer.level: ?, total: { $gte: ? } }", QueryShape.Normalize(filter));
     }
 
     [TestMethod]
     public void In_arrays_collapse_to_one_placeholder()
     {
-        BsonDocument a = BsonDocument.Parse("{ status: { $in: ['paid', 'shipped'] } }");
-        BsonDocument b = BsonDocument.Parse("{ status: { $in: ['paid', 'shipped', 'void', 'new'] } }");
+        var a = BsonDocument.Parse("{ status: { $in: ['paid', 'shipped'] } }");
+        var b = BsonDocument.Parse("{ status: { $in: ['paid', 'shipped', 'void', 'new'] } }");
         Assert.AreEqual("{ status: { $in: ? } }", QueryShape.Normalize(a));
         Assert.AreEqual(QueryShape.Normalize(a), QueryShape.Normalize(b));
     }
@@ -26,22 +26,19 @@ public sealed class QueryShapeTests
     [TestMethod]
     public void Logical_branches_keep_their_structure()
     {
-        BsonDocument filter = BsonDocument.Parse("{ $or: [ { a: 1 }, { b: { $gt: 2 } } ], c: { $exists: true } }");
+        var filter = BsonDocument.Parse("{ $or: [ { a: 1 }, { b: { $gt: 2 } } ], c: { $exists: true } }");
         Assert.AreEqual("{ $or: [{ a: ? }, { b: { $gt: ? } }], c: { $exists: true } }", QueryShape.Normalize(filter));
     }
 
     [TestMethod]
     public void Expr_keeps_field_paths()
     {
-        BsonDocument filter = BsonDocument.Parse("{ $expr: { $gt: ['$spent', '$budget'] }, kind: 'x' }");
+        var filter = BsonDocument.Parse("{ $expr: { $gt: ['$spent', '$budget'] }, kind: 'x' }");
         Assert.AreEqual("{ $expr: { $gt: [$spent, $budget] }, kind: ? }", QueryShape.Normalize(filter));
     }
 
     [TestMethod]
-    public void Empty_filter_is_braces()
-    {
-        Assert.AreEqual("{}", QueryShape.Normalize(new BsonDocument()));
-    }
+    public void Empty_filter_is_braces() => Assert.AreEqual("{}", QueryShape.Normalize(new BsonDocument()));
 
     [TestMethod]
     public void Pipeline_masks_match_values_and_keeps_group_paths()
@@ -61,7 +58,7 @@ public sealed class QueryShapeTests
     public void Find_entry_shape_has_sort_and_limit()
     {
         BsonDocument entry = Find("""{ "customer.level": "SVIP", total: { $gte: 5000 } }""", "{ total: -1 }", limit: 50);
-        QueryShape shape = QueryShape.FromProfile(entry);
+        var shape = QueryShape.FromProfile(entry);
         Assert.AreEqual("orders.find", shape.Title);
         Assert.AreEqual("{ customer.level: ?, total: { $gte: ? } }  sort { total: -1 }  limit 50", shape.Summary);
     }
@@ -69,9 +66,9 @@ public sealed class QueryShapeTests
     [TestMethod]
     public void Different_literals_share_a_shape_but_different_sorts_do_not()
     {
-        QueryShape a = QueryShape.FromProfile(Find("""{ "customer.level": "SVIP", total: { $gte: 5000 } }""", "{ total: -1 }"));
-        QueryShape b = QueryShape.FromProfile(Find("""{ "customer.level": "VIP", total: { $gte: 12 } }""", "{ total: -1 }"));
-        QueryShape c = QueryShape.FromProfile(Find("""{ "customer.level": "VIP", total: { $gte: 12 } }""", "{ total: 1 }"));
+        var a = QueryShape.FromProfile(Find("""{ "customer.level": "SVIP", total: { $gte: 5000 } }""", "{ total: -1 }"));
+        var b = QueryShape.FromProfile(Find("""{ "customer.level": "VIP", total: { $gte: 12 } }""", "{ total: -1 }"));
+        var c = QueryShape.FromProfile(Find("""{ "customer.level": "VIP", total: { $gte: 12 } }""", "{ total: 1 }"));
         Assert.AreEqual(a.Key, b.Key);
         Assert.AreNotEqual(a.Key, c.Key);
     }
@@ -119,7 +116,7 @@ public sealed class QueryShapeTests
             { "ns", "shop.events" },
             { "command", BsonDocument.Parse("{ aggregate: 'events', pipeline: [ { $match: { day: 'x' } }, { $group: { _id: '$device' } } ], cursor: {} }") }
         };
-        QueryShape shape = QueryShape.FromProfile(entry);
+        var shape = QueryShape.FromProfile(entry);
         Assert.AreEqual("events.aggregate", shape.Title);
         Assert.AreEqual("[$match { day: ? }, $group { _id: $device }]", shape.Summary);
     }
@@ -172,7 +169,7 @@ public sealed class QueryShapeTests
     [TestMethod]
     public void Esr_puts_equality_then_sort_then_range()
     {
-        IndexAdvice? advice = IndexAdvice.Suggest(
+        var advice = IndexAdvice.Suggest(
             BsonDocument.Parse("{ status: 'paid', createdAt: { $gt: 1 }, region: { $in: ['a', 'b'] } }"),
             BsonDocument.Parse("{ amount: -1 }"));
         Assert.IsNotNull(advice);
@@ -185,7 +182,7 @@ public sealed class QueryShapeTests
     [TestMethod]
     public void A_field_used_for_sort_and_range_sits_in_the_sort_slot()
     {
-        IndexAdvice? advice = IndexAdvice.Suggest(
+        var advice = IndexAdvice.Suggest(
             BsonDocument.Parse("""{ "customer.level": "SVIP", total: { $gte: 5000 } }"""),
             BsonDocument.Parse("{ total: -1 }"));
         Assert.IsNotNull(advice);
@@ -195,15 +192,12 @@ public sealed class QueryShapeTests
     }
 
     [TestMethod]
-    public void Or_filters_get_no_single_index()
-    {
-        Assert.IsNull(IndexAdvice.Suggest(BsonDocument.Parse("{ $or: [ { a: 1 }, { b: 2 } ] }"), null));
-    }
+    public void Or_filters_get_no_single_index() => Assert.IsNull(IndexAdvice.Suggest(BsonDocument.Parse("{ $or: [ { a: 1 }, { b: 2 } ] }"), null));
 
     [TestMethod]
     public void And_branches_are_flattened()
     {
-        IndexAdvice? advice = IndexAdvice.Suggest(BsonDocument.Parse("{ $and: [ { a: 1 }, { b: { $lt: 3 } } ] }"), null);
+        var advice = IndexAdvice.Suggest(BsonDocument.Parse("{ $and: [ { a: 1 }, { b: { $lt: 3 } } ] }"), null);
         Assert.IsNotNull(advice);
         Assert.AreEqual("{ a: 1, b: 1 }", advice.KeysText);
     }

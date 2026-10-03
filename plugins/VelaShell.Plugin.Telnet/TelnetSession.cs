@@ -134,7 +134,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
         // 回显的是**用户原始字节**,不是编码后的线上字节(那里可能刚补过 LF、双写过 0xFF)。
         if (ShouldEchoLocally())
         {
-            _output.Writer.TryWrite(data.ToArray());
+            _ = _output.Writer.TryWrite(data.ToArray());
         }
     }
 
@@ -184,7 +184,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
                 _log.Debug("Telnet read pump did not finish within the shutdown timeout.");
             }
         }
-        _output.Writer.TryComplete();
+        _ = _output.Writer.TryComplete();
         _stream.Dispose();
         _client.Dispose();
         _writeGate.Dispose();
@@ -222,7 +222,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
             // Dispose 与写并发时信号量可能已释放,吞掉这一次。
             try
             {
-                _writeGate.Release();
+                _ = _writeGate.Release();
             }
             catch (ObjectDisposedException)
             {
@@ -257,7 +257,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
                 }
                 if (data.Count > 0)
                 {
-                    _output.Writer.TryWrite([.. data]);
+                    _ = _output.Writer.TryWrite([.. data]);
                 }
             }
         }
@@ -272,7 +272,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
         }
         finally
         {
-            _output.Writer.TryComplete();
+            _ = _output.Writer.TryComplete();
         }
     }
 }

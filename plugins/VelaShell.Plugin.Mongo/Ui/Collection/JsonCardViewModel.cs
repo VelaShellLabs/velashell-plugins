@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using MongoDB.Bson;
 using VelaShell.Plugin.Mongo.Analysis;
 using VelaShell.Plugin.Mongo.Bson;
@@ -69,21 +70,9 @@ internal sealed class JsonOutlineItem
 internal sealed class JsonCardViewModel : ObservableObject
 {
     private readonly CollectionTabViewModel _owner;
-    private PrintedCard? _printed;
-    private IReadOnlyList<LineMark>? _marks;
-    private bool _isEditing;
     private string _editText = "";
     private string _editStart = "";
-    private IReadOnlyList<EditorDiagnostic> _diagnostics = [];
-    private IReadOnlyList<LineMark> _editMarks = [];
-    private string _validity = "";
-    private bool _isValid = true;
-    private int _caretLine = 1;
-    private int _caretColumn = 1;
-    private int _caretOffset;
-    private string _caretText = "";
     private int _changeCount;
-    private IReadOnlyList<JsonOutlineItem> _outline = [];
     private BsonDocument? _parsed;
 
     /// <summary>构造。</summary>
@@ -122,13 +111,15 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>
     /// 只读排版(按需算:JSON 视图里一页几万张卡片,虚拟化只会让看得见的那几张来取它)。
     /// </summary>
-    private PrintedCard Printed => _printed ??= CardPrinter.Print(Row.Document, _owner.Ejson, Fold);
+    [AllowNull]
+    private PrintedCard Printed { get => field ??= CardPrinter.Print(Row.Document, _owner.Ejson, Fold); set; }
 
     /// <summary>只读时的文本。</summary>
     public string Text => Printed.Text;
 
     /// <summary>只读时的行标记(暂存修改)。</summary>
-    public IReadOnlyList<LineMark> Marks => _marks ??= BuildMarks();
+    [AllowNull]
+    public IReadOnlyList<LineMark> Marks { get => field ??= BuildMarks(); private set; }
 
     /// <summary>编辑器的语法:Shell 写法用 mongosh 着色,另外两种用 JSON。</summary>
     public CodeLanguage Language => _owner.Ejson == EjsonMode.Shell ? CodeLanguage.Shell : CodeLanguage.Json;
@@ -142,10 +133,10 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>编辑中。</summary>
     public bool IsEditing
     {
-        get => _isEditing;
+        get;
         private set
         {
-            if (SetProperty(ref _isEditing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsReadOnlyView), nameof(EditBadge));
                 _owner.OnCardEditingChanged(this);
@@ -154,7 +145,7 @@ internal sealed class JsonCardViewModel : ObservableObject
     }
 
     /// <summary>只读显示中。</summary>
-    public bool IsReadOnlyView => !_isEditing;
+    public bool IsReadOnlyView => !IsEditing;
 
     /// <summary>编辑中的文本。</summary>
     public string EditText
@@ -173,76 +164,76 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>编辑器上的诊断。</summary>
     public IReadOnlyList<EditorDiagnostic> Diagnostics
     {
-        get => _diagnostics;
-        private set => SetProperty(ref _diagnostics, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>编辑器上的行标记(与原文档相比改了 / 加了的字段)。</summary>
     public IReadOnlyList<LineMark> EditMarks
     {
-        get => _editMarks;
-        private set => SetProperty(ref _editMarks, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary><c>语法正确 · 符合验证规则</c>。</summary>
     public string ValidityText
     {
-        get => _validity;
-        private set => SetProperty(ref _validity, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>语法与验证都通过。</summary>
     public bool IsValid
     {
-        get => _isValid;
+        get;
         private set
         {
-            if (SetProperty(ref _isValid, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ValidityIcon), nameof(ValidityToken));
             }
         }
-    }
+    } = true;
 
     /// <summary>校验图标。</summary>
-    public string ValidityIcon => _isValid ? "Mongo.circle-check" : "Mongo.circle-x";
+    public string ValidityIcon => IsValid ? "Mongo.circle-check" : "Mongo.circle-x";
 
     /// <summary>校验图标颜色。</summary>
-    public string ValidityToken => _isValid ? "VelaStatusConnected" : "VelaError";
+    public string ValidityToken => IsValid ? "VelaStatusConnected" : "VelaError";
 
     /// <summary>光标行(编辑器双向写回)。</summary>
     public int CaretLine
     {
-        get => _caretLine;
+        get;
         set
         {
-            if (SetProperty(ref _caretLine, value))
+            if (SetProperty(ref field, value))
             {
                 UpdateCaret();
             }
         }
-    }
+    } = 1;
 
     /// <summary>光标列。</summary>
     public int CaretColumn
     {
-        get => _caretColumn;
+        get;
         set
         {
-            if (SetProperty(ref _caretColumn, value))
+            if (SetProperty(ref field, value))
             {
                 UpdateCaret();
             }
         }
-    }
+    } = 1;
 
     /// <summary>光标偏移。</summary>
     public int CaretOffset
     {
-        get => _caretOffset;
+        get;
         set
         {
-            if (SetProperty(ref _caretOffset, value))
+            if (SetProperty(ref field, value))
             {
                 UpdateCaret();
             }
@@ -252,9 +243,9 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary><c>Ln 11, Col 13 · status: String · Shell 语法</c>。</summary>
     public string CaretText
     {
-        get => _caretText;
-        private set => SetProperty(ref _caretText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>头部「编辑中 · 2 处修改」。</summary>
     public string EditBadge => Loc.Format("Cw_CardEditing", _changeCount);
@@ -262,9 +253,9 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>大纲。</summary>
     public IReadOnlyList<JsonOutlineItem> Outline
     {
-        get => _outline;
-        private set => SetProperty(ref _outline, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>补全(键位置给字段名,值位置给抽样里的取值分布)。</summary>
     public Func<CompletionRequest, Task<CompletionSet?>> Completion { get; }
@@ -296,10 +287,10 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>暂存区 / 写法变了:重排只读文本与行标记。</summary>
     public void Refresh()
     {
-        _printed = null;
-        _marks = null;
+        Printed = null;
+        Marks = null;
         RaisePropertiesChanged(nameof(Text), nameof(Marks), nameof(IdText), nameof(MetaText), nameof(Language), nameof(LineCount));
-        if (!_isEditing)
+        if (!IsEditing)
         {
             RefreshOutline();
         }
@@ -308,7 +299,7 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>进入编辑(当前写法的排版文本)。</summary>
     public void BeginEdit()
     {
-        if (_isEditing || !_owner.EnsureCanWrite())
+        if (IsEditing || !_owner.EnsureCanWrite())
         {
             return;
         }
@@ -326,7 +317,7 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>取消编辑。</summary>
     public void CancelEdit()
     {
-        if (!_isEditing)
+        if (!IsEditing)
         {
             return;
         }
@@ -339,7 +330,7 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>「更新文档」:解析、比对原文档、差异写进暂存区。有错不关编辑器。</summary>
     public bool Update()
     {
-        if (!_isEditing)
+        if (!IsEditing)
         {
             return false;
         }
@@ -392,9 +383,9 @@ internal sealed class JsonCardViewModel : ObservableObject
     {
         string type = "";
         string path = "";
-        if (_isEditing)
+        if (IsEditing)
         {
-            CaretPathScanner.Result at = CaretPathScanner.Scan(_editText, Math.Clamp(_caretOffset, 0, _editText.Length));
+            CaretPathScanner.Result at = CaretPathScanner.Scan(_editText, Math.Clamp(CaretOffset, 0, _editText.Length));
             path = at.Path;
             if (_owner.InlineTypeHints && path.Length > 0 && _parsed is not null)
             {
@@ -402,8 +393,8 @@ internal sealed class JsonCardViewModel : ObservableObject
                 type = value is null ? "" : $"{path}: {BsonKinds.Name(BsonKinds.Of(value))} · ";
             }
         }
-        CaretText = Loc.Format("Cw_CardCaret", _caretLine, _caretColumn, type, Language == CodeLanguage.Shell ? Loc["Cw_SyntaxShell"] : Loc["Cw_SyntaxJson"]);
-        if (_isEditing)
+        CaretText = Loc.Format("Cw_CardCaret", CaretLine, CaretColumn, type, Language == CodeLanguage.Shell ? Loc["Cw_SyntaxShell"] : Loc["Cw_SyntaxJson"]);
+        if (IsEditing)
         {
             RefreshOutline(path);
         }
@@ -412,9 +403,9 @@ internal sealed class JsonCardViewModel : ObservableObject
     /// <summary>重建大纲(<paramref name="currentPath" /> 高亮)。</summary>
     public void RefreshOutline(string? currentPath = null)
     {
-        BsonDocument doc = _isEditing && _parsed is not null ? _parsed : Row.Document;
+        BsonDocument doc = IsEditing && _parsed is not null ? _parsed : Row.Document;
         BsonDocument? baseline = Row.Original;
-        IReadOnlyDictionary<string, int> lines = _isEditing
+        IReadOnlyDictionary<string, int> lines = IsEditing
             ? CaretPathScanner.Scan(_editText, -1).KeyLines
             : Printed.LinePaths.Select((p, i) => (p, i)).Where(static t => t.p is not null)
                 .GroupBy(static t => t.p!).ToDictionary(static g => g.Key, static g => g.First().i + 1);

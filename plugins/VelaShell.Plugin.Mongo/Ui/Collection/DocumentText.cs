@@ -69,40 +69,40 @@ internal static class CardPrinter
             IReadOnlyList<(string Name, BsonValue Value)> children = container is BsonDocument doc
                 ? [.. doc.Elements.Select(static e => (e.Name, e.Value))]
                 : [.. container.AsBsonArray.Select(static (v, i) => (i.ToString(CultureInfo.InvariantCulture), v))];
-            b.Append(isArray ? '[' : '{');
+            _ = b.Append(isArray ? '[' : '{');
             if (children.Count == 0)
             {
-                b.Append(isArray ? ']' : '}');
+                _ = b.Append(isArray ? ']' : '}');
                 return;
             }
             for (int i = 0; i < children.Count; i++)
             {
                 (string name, BsonValue value) = children[i];
                 string childPath = BsonPath.Join(path, name);
-                b.Append('\n');
+                _ = b.Append('\n');
                 lines.Add(childPath);
                 Indent(depth + 1);
                 if (!isArray)
                 {
-                    b.Append(Key(name)).Append(": ");
+                    _ = b.Append(Key(name)).Append(": ");
                 }
                 Value(value, childPath, depth + 1);
                 if (i < children.Count - 1)
                 {
-                    b.Append(',');
+                    _ = b.Append(',');
                 }
             }
-            b.Append('\n');
+            _ = b.Append('\n');
             lines.Add(null);
             Indent(depth);
-            b.Append(isArray ? ']' : '}');
+            _ = b.Append(isArray ? ']' : '}');
         }
 
         private void Value(BsonValue value, string path, int depth)
         {
             if (Compact && value is BsonArray { Count: > 0 } array && array.Any(static v => v is BsonDocument or BsonArray))
             {
-                b.Append("[ ").Append(fold!(array.Count)).Append(" ]");
+                _ = b.Append("[ ").Append(fold!(array.Count)).Append(" ]");
                 return;
             }
             if (value is BsonDocument or BsonArray && !Fits(value))
@@ -110,27 +110,22 @@ internal static class CardPrinter
                 Container(value, path, depth);
                 return;
             }
-            b.Append(Inline(value, nested: false));
+            _ = b.Append(Inline(value, nested: false));
         }
 
         /// <summary>单行写法;<paramref name="nested" /> 为真时(容器内部)预览写法会截短 ObjectId 与长字符串。</summary>
         public string Inline(BsonValue value, bool nested)
         {
-            switch (value)
+            return value switch
             {
-                case BsonDocument doc:
-                    return doc.ElementCount == 0
-                        ? "{}"
-                        : "{ " + string.Join(", ", doc.Elements.Select(e => Key(e.Name) + ": " + Inline(e.Value, nested: true))) + " }";
-                case BsonArray array:
-                    return array.Count == 0 ? "[]" : "[ " + string.Join(", ", array.Select(v => Inline(v, nested: true))) + " ]";
-                case BsonObjectId id when Compact && nested && mode == EjsonMode.Shell:
-                    return $"ObjectId(\"{id.Value.ToString()[..12]}…\")";
-                case BsonString text when Compact && nested && text.Value.Length > 24:
-                    return BsonText.Quote(text.Value[..20] + "…");
-                default:
-                    return mode == EjsonMode.Shell ? BsonText.Literal(value) : BsonText.Compact(value, mode);
-            }
+                BsonDocument doc => doc.ElementCount == 0
+                                        ? "{}"
+                                        : "{ " + string.Join(", ", doc.Elements.Select(e => Key(e.Name) + ": " + Inline(e.Value, nested: true))) + " }",
+                BsonArray array => array.Count == 0 ? "[]" : "[ " + string.Join(", ", array.Select(v => Inline(v, nested: true))) + " ]",
+                BsonObjectId id when Compact && nested && mode == EjsonMode.Shell => $"ObjectId(\"{id.Value.ToString()[..12]}…\")",
+                BsonString text when Compact && nested && text.Value.Length > 24 => BsonText.Quote(text.Value[..20] + "…"),
+                _ => mode == EjsonMode.Shell ? BsonText.Literal(value) : BsonText.Compact(value, mode),
+            };
         }
 
         /// <summary>压成一行放得下吗:只含标量、且不超过一行的宽度。</summary>
@@ -150,7 +145,6 @@ internal static class CardPrinter
         private void Indent(int depth) => b.Append(' ', depth * 2);
     }
 }
-
 
 /// <summary>
 /// 在一段(可能写了一半的)mongosh / JSON 文本里认出"光标落在哪个字段的键或值上",以及每个键在第几行。
@@ -192,7 +186,6 @@ internal static class CaretPathScanner
         var lines = new Dictionary<string, int>(StringComparer.Ordinal);
         int line = 1;
         int i = 0;
-        int tokenStart = 0;
         while (i < (caret < 0 ? text.Length : end))
         {
             char c = text[i];
@@ -200,7 +193,6 @@ internal static class CaretPathScanner
             {
                 line++;
                 i++;
-                tokenStart = i;
                 continue;
             }
             if (c is '"' or '\'')
@@ -211,9 +203,9 @@ internal static class CaretPathScanner
                     // 带引号的键。
                     string key = text[(i + 1)..Math.Max(i + 1, close - 1)];
                     frame.Key = key;
-                    lines.TryAdd(Join(frame.Path, key), line);
+                    _ = lines.TryAdd(Join(frame.Path, key), line);
                 }
-                tokenStart = i;
+
                 i = close;
                 continue;
             }
@@ -234,24 +226,21 @@ internal static class CaretPathScanner
                 }
                 stack.Push(new Frame(path, c == '['));
                 i++;
-                tokenStart = i;
                 continue;
             }
             if (c is '}' or ']')
             {
                 if (stack.Count > 0)
                 {
-                    stack.Pop();
+                    _ = stack.Pop();
                 }
                 i++;
-                tokenStart = i;
                 continue;
             }
             if (c == ':' && stack.TryPeek(out Frame? obj) && !obj.IsArray)
             {
                 obj.InValue = true;
                 i++;
-                tokenStart = i;
                 continue;
             }
             if (c == ',' && stack.TryPeek(out Frame? current))
@@ -266,7 +255,6 @@ internal static class CaretPathScanner
                     current.InValue = false;
                 }
                 i++;
-                tokenStart = i;
                 continue;
             }
             if (ShellJson.IsIdentifierStart(c) && stack.TryPeek(out Frame? holder) && !holder.IsArray && !holder.InValue)
@@ -277,14 +265,12 @@ internal static class CaretPathScanner
                     i++;
                 }
                 holder.Key = text[start..i];
-                lines.TryAdd(Join(holder.Path, holder.Key), line);
-                tokenStart = start;
+                _ = lines.TryAdd(Join(holder.Path, holder.Key), line);
                 continue;
             }
             if (char.IsWhiteSpace(c))
             {
                 i++;
-                tokenStart = i;
                 continue;
             }
             i++;
@@ -296,7 +282,7 @@ internal static class CaretPathScanner
         }
         // 光标所在的那个词:往回找到空白 / 标点为止。
         int wordStart = end;
-        while (wordStart > 0 && !char.IsWhiteSpace(text[wordStart - 1]) && text[wordStart - 1] is not (',' or ':' or '{' or '[' or '(' ))
+        while (wordStart > 0 && !char.IsWhiteSpace(text[wordStart - 1]) && text[wordStart - 1] is not (',' or ':' or '{' or '[' or '('))
         {
             wordStart--;
         }

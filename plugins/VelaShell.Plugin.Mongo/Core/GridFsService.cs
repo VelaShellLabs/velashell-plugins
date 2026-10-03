@@ -126,20 +126,50 @@ internal static partial class GridFsPaths
 {
     private static readonly Dictionary<string, string> MimeByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
-        [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png", [".gif"] = "image/gif",
-        [".webp"] = "image/webp", [".bmp"] = "image/bmp", [".svg"] = "image/svg+xml", [".ico"] = "image/x-icon",
-        [".tif"] = "image/tiff", [".tiff"] = "image/tiff", [".avif"] = "image/avif", [".heic"] = "image/heic",
-        [".pdf"] = "application/pdf", [".txt"] = "text/plain", [".md"] = "text/markdown", [".csv"] = "text/csv",
-        [".json"] = "application/json", [".xml"] = "application/xml", [".html"] = "text/html", [".htm"] = "text/html",
-        [".doc"] = "application/msword", [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        [".xls"] = "application/vnd.ms-excel", [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        [".ppt"] = "application/vnd.ms-powerpoint", [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        [".rtf"] = "application/rtf", [".odt"] = "application/vnd.oasis.opendocument.text",
-        [".mp4"] = "video/mp4", [".m4v"] = "video/mp4", [".mov"] = "video/quicktime", [".webm"] = "video/webm",
-        [".mkv"] = "video/x-matroska", [".avi"] = "video/x-msvideo", [".wmv"] = "video/x-ms-wmv",
-        [".mp3"] = "audio/mpeg", [".wav"] = "audio/wav", [".ogg"] = "audio/ogg",
-        [".zip"] = "application/zip", [".gz"] = "application/gzip", [".tar"] = "application/x-tar",
-        [".js"] = "text/javascript", [".css"] = "text/css", [".bin"] = "application/octet-stream"
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".png"] = "image/png",
+        [".gif"] = "image/gif",
+        [".webp"] = "image/webp",
+        [".bmp"] = "image/bmp",
+        [".svg"] = "image/svg+xml",
+        [".ico"] = "image/x-icon",
+        [".tif"] = "image/tiff",
+        [".tiff"] = "image/tiff",
+        [".avif"] = "image/avif",
+        [".heic"] = "image/heic",
+        [".pdf"] = "application/pdf",
+        [".txt"] = "text/plain",
+        [".md"] = "text/markdown",
+        [".csv"] = "text/csv",
+        [".json"] = "application/json",
+        [".xml"] = "application/xml",
+        [".html"] = "text/html",
+        [".htm"] = "text/html",
+        [".doc"] = "application/msword",
+        [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        [".xls"] = "application/vnd.ms-excel",
+        [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        [".ppt"] = "application/vnd.ms-powerpoint",
+        [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        [".rtf"] = "application/rtf",
+        [".odt"] = "application/vnd.oasis.opendocument.text",
+        [".mp4"] = "video/mp4",
+        [".m4v"] = "video/mp4",
+        [".mov"] = "video/quicktime",
+        [".webm"] = "video/webm",
+        [".mkv"] = "video/x-matroska",
+        [".avi"] = "video/x-msvideo",
+        [".wmv"] = "video/x-ms-wmv",
+        [".mp3"] = "audio/mpeg",
+        [".wav"] = "audio/wav",
+        [".ogg"] = "audio/ogg",
+        [".zip"] = "application/zip",
+        [".gz"] = "application/gzip",
+        [".tar"] = "application/x-tar",
+        [".js"] = "text/javascript",
+        [".css"] = "text/css",
+        [".bin"] = "application/octet-stream"
     };
 
     private static readonly string[] ImageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "tif", "tiff", "avif", "heic"];
@@ -286,15 +316,15 @@ internal static partial class GridFsPaths
         var any = new BsonArray { new BsonDocument(field, new BsonRegularExpression(Regex.Escape(value), "i")) };
         if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long integer))
         {
-            any.Add(new BsonDocument(field, integer));
+            _ = any.Add(new BsonDocument(field, integer));
         }
         else if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double real))
         {
-            any.Add(new BsonDocument(field, real));
+            _ = any.Add(new BsonDocument(field, real));
         }
         else if (bool.TryParse(value, out bool flag))
         {
-            any.Add(new BsonDocument(field, flag));
+            _ = any.Add(new BsonDocument(field, flag));
         }
         return any.Count == 1 ? any[0].AsBsonDocument : new BsonDocument("$or", any);
     }
@@ -407,16 +437,16 @@ internal sealed class GridFsService
         BsonDocument prefixFilter = GridFsPaths.PrefixFilter(prefix);
         if (prefixFilter.ElementCount > 0)
         {
-            clauses.Add(prefixFilter);
+            _ = clauses.Add(prefixFilter);
         }
         if (GridFsPaths.TypeFilter(type) is { } typeFilter)
         {
-            clauses.Add(typeFilter);
+            _ = clauses.Add(typeFilter);
         }
         BsonDocument? searchFilter = GridFsPaths.SearchFilter(search);
         if (searchFilter is not null)
         {
-            clauses.Add(searchFilter);
+            _ = clauses.Add(searchFilter);
         }
         BsonDocument match = clauses.Count switch
         {
@@ -474,7 +504,7 @@ internal sealed class GridFsService
         var items = new List<GridFsListItem>(rows.Count);
         foreach (BsonDocument row in rows.Take(ListLimit))
         {
-            GridFsFile latest = GridFsFile.From(row["doc"].AsBsonDocument);
+            var latest = GridFsFile.From(row["doc"].AsBsonDocument);
             int versions = row["versions"].ToInt32();
             if (tree && row["_id"].AsBsonDocument.TryGetValue("dir", out BsonValue dir))
             {
@@ -583,7 +613,7 @@ internal sealed class GridFsService
                 // 取消时最后那一批块的 insert 可能已经发到服务器、只是客户端不再等它 ——
                 // 它会在 Abort 的 deleteMany 之后才落地。隔一小会儿按 files_id 再扫一遍,不留孤儿块。
                 await Task.Delay(300, CancellationToken.None).ConfigureAwait(false);
-                await Chunks.DeleteManyAsync(new BsonDocument("files_id", upload.Id), CancellationToken.None).ConfigureAwait(false);
+                _ = await Chunks.DeleteManyAsync(new BsonDocument("files_id", upload.Id), CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception abort) when (abort is MongoException or InvalidOperationException or TimeoutException)
             {
@@ -662,7 +692,7 @@ internal sealed class GridFsService
         {
             var inBatch = new BsonDocument("$in", new BsonArray(batch));
             DeleteResult files = await Files.DeleteManyAsync(new BsonDocument("_id", inBatch), cancellationToken).ConfigureAwait(false);
-            await Chunks.DeleteManyAsync(new BsonDocument("files_id", inBatch), cancellationToken).ConfigureAwait(false);
+            _ = await Chunks.DeleteManyAsync(new BsonDocument("files_id", inBatch), cancellationToken).ConfigureAwait(false);
             deleted += files.DeletedCount;
         }
         return deleted;
@@ -674,7 +704,7 @@ internal sealed class GridFsService
         BsonDocument update = metadata is null
             ? new BsonDocument("$unset", new BsonDocument("metadata", ""))
             : new BsonDocument("$set", new BsonDocument("metadata", metadata));
-        await Files.UpdateOneAsync(new BsonDocument("_id", id), update, cancellationToken: cancellationToken).ConfigureAwait(false);
+        _ = await Files.UpdateOneAsync(new BsonDocument("_id", id), update, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     // ── 孤儿块 ─────────────────────────────────────────────────────────────
@@ -689,7 +719,7 @@ internal sealed class GridFsService
     /// </summary>
     public async Task<IReadOnlyList<GridFsOrphan>> FindOrphansAsync(CancellationToken cancellationToken = default)
     {
-        var pipeline = new[]
+        BsonDocument[] pipeline = new[]
         {
             new BsonDocument("$sort", new BsonDocument("files_id", 1)),
             new BsonDocument("$group", new BsonDocument("_id", "$files_id")),
@@ -714,7 +744,7 @@ internal sealed class GridFsService
         var orphans = new List<GridFsOrphan>(ids.Count);
         foreach (BsonValue[] batch in ids.Chunk(1000))
         {
-            var stats = new[]
+            BsonDocument[] stats = new[]
             {
                 new BsonDocument("$match", new BsonDocument("files_id", new BsonDocument("$in", new BsonArray(batch)))),
                 new BsonDocument("$group", new BsonDocument
@@ -783,10 +813,10 @@ internal sealed class GridFsService
                 // NamespaceExists:集合已在(比如只建了一半的桶),补索引即可。
             }
         }
-        await db.GetCollection<BsonDocument>(name + ".files").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+        _ = await db.GetCollection<BsonDocument>(name + ".files").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             new BsonDocument { { "filename", 1 }, { "uploadDate", 1 } },
             new CreateIndexOptions { Name = "filename_1_uploadDate_1" }), cancellationToken: cancellationToken).ConfigureAwait(false);
-        await db.GetCollection<BsonDocument>(name + ".chunks").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+        _ = await db.GetCollection<BsonDocument>(name + ".chunks").Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             new BsonDocument { { "files_id", 1 }, { "n", 1 } },
             new CreateIndexOptions { Name = "files_id_1_n_1", Unique = true }), cancellationToken: cancellationToken).ConfigureAwait(false);
     }
@@ -840,21 +870,21 @@ internal sealed class ProgressStream(Stream inner, IProgress<long> progress) : S
     public override void Write(byte[] buffer, int offset, int count)
     {
         inner.Write(buffer, offset, count);
-        Count(count);
+        _ = Count(count);
     }
 
     /// <inheritdoc />
     public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         await inner.WriteAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
-        Count(count);
+        _ = Count(count);
     }
 
     /// <inheritdoc />
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
         await inner.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
-        Count(buffer.Length);
+        _ = Count(buffer.Length);
     }
 
     /// <inheritdoc />

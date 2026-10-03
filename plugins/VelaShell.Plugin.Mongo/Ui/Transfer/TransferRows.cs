@@ -61,14 +61,8 @@ internal sealed class TransferObjectRow : ObservableObject
 {
     private readonly Loc _loc;
     private readonly Action _changed;
-    private bool _isChecked = true;
     private XferOption _action;
-    private bool _existsOnTarget;
-    private long _total;
     private long _done;
-    private long _bytes;
-    private TransferObjectState _state = TransferObjectState.Queued;
-    private bool _running;
 
     /// <summary>构造。</summary>
     public TransferObjectRow(string name, XferObjectKind kind, CollectionInfo? info, IReadOnlyList<XferOption> actions, Loc loc, Action changed)
@@ -113,19 +107,19 @@ internal sealed class TransferObjectRow : ObservableObject
     /// <summary>勾选。</summary>
     public bool IsChecked
     {
-        get => _isChecked;
+        get;
         set
         {
-            if (SetProperty(ref _isChecked, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(RowOpacity));
                 _changed();
             }
         }
-    }
+    } = true;
 
     /// <summary>没勾、或跳过的行淡一点。</summary>
-    public double RowOpacity => _isChecked ? 1 : 0.5;
+    public double RowOpacity => IsChecked ? 1 : 0.5;
 
     /// <summary>目标动作候选。</summary>
     public IReadOnlyList<XferOption> Actions { get; }
@@ -164,10 +158,10 @@ internal sealed class TransferObjectRow : ObservableObject
     /// <summary>目标上已有同名对象。</summary>
     public bool ExistsOnTarget
     {
-        get => _existsOnTarget;
+        get;
         set
         {
-            if (SetProperty(ref _existsOnTarget, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(Note), nameof(HasNote));
             }
@@ -175,7 +169,7 @@ internal sealed class TransferObjectRow : ObservableObject
     }
 
     /// <summary>进度那一格的灰字(<c>目标已存在同名集合</c>)。</summary>
-    public string Note => _existsOnTarget && ActionValue == XferAction.Skip ? _loc["Xfer_ExistsOnTarget"] : "";
+    public string Note => ExistsOnTarget && ActionValue == XferAction.Skip ? _loc["Xfer_ExistsOnTarget"] : "";
 
     /// <summary>有灰字。</summary>
     public bool HasNote => Note.Length > 0;
@@ -183,10 +177,10 @@ internal sealed class TransferObjectRow : ObservableObject
     /// <summary>总文档数(桶是 files + chunks)。</summary>
     public long Total
     {
-        get => _total;
+        get;
         set
         {
-            if (SetProperty(ref _total, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(CountText), nameof(Fraction));
             }
@@ -199,10 +193,10 @@ internal sealed class TransferObjectRow : ObservableObject
     /// <summary>桶的数据量(字节)。</summary>
     public long Bytes
     {
-        get => _bytes;
+        get;
         set
         {
-            if (SetProperty(ref _bytes, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(CountText));
             }
@@ -215,7 +209,7 @@ internal sealed class TransferObjectRow : ObservableObject
         get => Interlocked.Read(ref _done);
         set
         {
-            Interlocked.Exchange(ref _done, value);
+            _ = Interlocked.Exchange(ref _done, value);
             RaisePropertiesChanged(nameof(Done), nameof(CountText), nameof(Fraction));
         }
     }
@@ -223,61 +217,61 @@ internal sealed class TransferObjectRow : ObservableObject
     /// <summary>加一批(线程池线程上调)。</summary>
     public void Add(long count)
     {
-        Interlocked.Add(ref _done, count);
+        _ = Interlocked.Add(ref _done, count);
         RaisePropertiesChanged(nameof(Done), nameof(CountText), nameof(Fraction));
     }
 
     /// <summary>进度 0–1。</summary>
-    public double Fraction => _total <= 0
-        ? _state == TransferObjectState.Done ? 1 : 0
-        : Math.Min(1, (double)Done / _total);
+    public double Fraction => Total <= 0
+        ? State == TransferObjectState.Done ? 1 : 0
+        : Math.Min(1, (double)Done / Total);
 
     /// <summary>进度条旁的计数(<c>796,112 / 1,284,902</c>、<c>86,410</c>、<c>1,204 个文件 · 18.4 GB</c>)。</summary>
     public string CountText
     {
         get
         {
-            if (Kind == XferObjectKind.Bucket && _state is TransferObjectState.Queued)
+            if (Kind == XferObjectKind.Bucket && State is TransferObjectState.Queued)
             {
-                return _loc.Format("Xfer_BucketCount", BsonText.Grouped(Files), BsonText.Bytes(_bytes));
+                return _loc.Format("Xfer_BucketCount", BsonText.Grouped(Files), BsonText.Bytes(Bytes));
             }
             if (Kind == XferObjectKind.View)
             {
                 return _loc["Xfer_ViewDefinition"];
             }
-            return _state == TransferObjectState.Running
-                ? $"{BsonText.Grouped(Done)} / {BsonText.Grouped(_total)}"
-                : _state == TransferObjectState.Done ? BsonText.Grouped(Math.Max(Done, 0)) : BsonText.Grouped(_total);
+            return State == TransferObjectState.Running
+                ? $"{BsonText.Grouped(Done)} / {BsonText.Grouped(Total)}"
+                : State == TransferObjectState.Done ? BsonText.Grouped(Math.Max(Done, 0)) : BsonText.Grouped(Total);
         }
     }
 
     /// <summary>执行页状态。</summary>
     public TransferObjectState State
     {
-        get => _state;
+        get;
         set
         {
-            if (SetProperty(ref _state, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(StatusText), nameof(StatusIcon), nameof(StatusToken), nameof(IsActive), nameof(CountText),
                     nameof(Fraction), nameof(IsDone));
             }
         }
-    }
+    } = TransferObjectState.Queued;
 
     /// <summary>传输中(那一行 VelaBgHover 底)。</summary>
-    public bool IsActive => _state == TransferObjectState.Running;
+    public bool IsActive => State == TransferObjectState.Running;
 
     /// <summary>完成(进度条绿)。</summary>
-    public bool IsDone => _state == TransferObjectState.Done;
+    public bool IsDone => State == TransferObjectState.Done;
 
     /// <summary>执行中(表里显示进度与状态,不显示勾选与下拉)。</summary>
     public bool Running
     {
-        get => _running;
+        get;
         set
         {
-            if (SetProperty(ref _running, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(Editing));
             }
@@ -285,10 +279,10 @@ internal sealed class TransferObjectRow : ObservableObject
     }
 
     /// <summary>设置阶段(可勾选、可改动作)。</summary>
-    public bool Editing => !_running;
+    public bool Editing => !Running;
 
     /// <summary>状态字。</summary>
-    public string StatusText => _state switch
+    public string StatusText => State switch
     {
         TransferObjectState.Running => _loc["Xfer_StateRunning"],
         TransferObjectState.Done => _loc["Xfer_StateDone"],
@@ -299,7 +293,7 @@ internal sealed class TransferObjectRow : ObservableObject
     };
 
     /// <summary>状态图标。</summary>
-    public string StatusIcon => _state switch
+    public string StatusIcon => State switch
     {
         TransferObjectState.Running => "Mongo.loader-circle",
         TransferObjectState.Done => "Mongo.circle-check",
@@ -310,7 +304,7 @@ internal sealed class TransferObjectRow : ObservableObject
     };
 
     /// <summary>状态颜色。</summary>
-    public string StatusToken => _state switch
+    public string StatusToken => State switch
     {
         TransferObjectState.Running => "VelaAccent",
         TransferObjectState.Done => "VelaStatusConnected",

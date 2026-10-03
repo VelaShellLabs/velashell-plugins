@@ -42,7 +42,6 @@ internal enum CollectionRowState
 internal sealed class CollectionColumn : ObservableObject
 {
     private double _width;
-    private int _sortDirection;
 
     /// <summary>构造。</summary>
     /// <param name="name">字段名(<paramref name="isElementValue" /> 时只是列头文字)。</param>
@@ -87,10 +86,9 @@ internal sealed class CollectionColumn : ObservableObject
     /// <summary>排序方向:1 升序、-1 降序、0 不排序(列头的箭头)。</summary>
     public int SortDirection
     {
-        get => _sortDirection;
-        set
+        get; set
         {
-            if (SetProperty(ref _sortDirection, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsSorted), nameof(SortIcon));
             }
@@ -98,10 +96,10 @@ internal sealed class CollectionColumn : ObservableObject
     }
 
     /// <summary>按这一列排序着。</summary>
-    public bool IsSorted => _sortDirection != 0;
+    public bool IsSorted => SortDirection != 0;
 
     /// <summary>排序箭头图标。</summary>
-    public string SortIcon => _sortDirection > 0 ? "Mongo.arrow-up" : "Mongo.arrow-down";
+    public string SortIcon => SortDirection > 0 ? "Mongo.arrow-up" : "Mongo.arrow-down";
 }
 
 /// <summary>
@@ -109,30 +107,27 @@ internal sealed class CollectionColumn : ObservableObject
 /// </summary>
 internal sealed class CollectionRow : ObservableObject
 {
-    private readonly CollectionTabViewModel _owner;
     private IReadOnlyList<CollectionCell>? _cells;
-    private BsonDocument _document;
-    private CollectionRowState _state;
 
     /// <summary>服务器上读到的一行。</summary>
     public CollectionRow(CollectionTabViewModel owner, int number, BsonDocument original)
     {
-        _owner = owner;
+        Owner = owner;
         Root = this;
         Number = number;
         Original = original;
-        _document = original;
+        Document = original;
         Recompute();
     }
 
     /// <summary>暂存的新文档那一行。</summary>
     public CollectionRow(CollectionTabViewModel owner, int number, StagedInsert insert)
     {
-        _owner = owner;
+        Owner = owner;
         Root = this;
         Number = number;
         Insert = insert;
-        _document = insert.Document;
+        Document = insert.Document;
         Recompute();
     }
 
@@ -146,13 +141,13 @@ internal sealed class CollectionRow : ObservableObject
     /// </summary>
     public CollectionRow(CollectionTabViewModel owner, CollectionRow root, GridDrill drill, int index)
     {
-        _owner = owner;
+        Owner = owner;
         Root = root;
         Drill = drill;
         Number = index;
         Original = root.Original;
         Insert = root.Insert;
-        _document = root.Document;
+        Document = root.Document;
         Recompute();
     }
 
@@ -193,31 +188,31 @@ internal sealed class CollectionRow : ObservableObject
     public BsonValue? Id => Original?.GetValue("_id", BsonNull.Value);
 
     /// <summary>所属工作台(单元格取文案用)。</summary>
-    internal CollectionTabViewModel Owner => _owner;
+    internal CollectionTabViewModel Owner { get; }
 
     /// <summary>界面上该显示的版本(原像 + 暂存修改)。</summary>
-    public BsonDocument Document => _document;
+    public BsonDocument Document { get; private set; }
 
     /// <summary>状态。</summary>
-    public CollectionRowState State => _state;
+    public CollectionRowState State { get; private set; }
 
     /// <summary>有暂存修改。</summary>
-    public bool IsModified => _state == CollectionRowState.Modified;
+    public bool IsModified => State == CollectionRowState.Modified;
 
     /// <summary>暂存的新文档。</summary>
-    public bool IsAdded => _state == CollectionRowState.Added;
+    public bool IsAdded => State == CollectionRowState.Added;
 
     /// <summary>暂存删除。</summary>
-    public bool IsDeleted => _state == CollectionRowState.Deleted;
+    public bool IsDeleted => State == CollectionRowState.Deleted;
 
     /// <summary>行号格里的状态图标(删除 <c>−</c>、新增 <c>+</c>)。</summary>
-    public bool HasStateIcon => _state is CollectionRowState.Added or CollectionRowState.Deleted;
+    public bool HasStateIcon => State is CollectionRowState.Added or CollectionRowState.Deleted;
 
     /// <summary>行号格状态图标的键。</summary>
-    public string StateIcon => _state == CollectionRowState.Added ? "Mongo.plus" : "Mongo.minus";
+    public string StateIcon => State == CollectionRowState.Added ? "Mongo.plus" : "Mongo.minus";
 
     /// <summary>行号格状态图标的颜色令牌。</summary>
-    public string StateIconToken => _state == CollectionRowState.Added ? "VelaStatusConnected" : "VelaError";
+    public string StateIconToken => State == CollectionRowState.Added ? "VelaStatusConnected" : "VelaError";
 
     /// <summary>单元格。</summary>
     public IReadOnlyList<CollectionCell> Cells => _cells ??= BuildCells();
@@ -225,21 +220,21 @@ internal sealed class CollectionRow : ObservableObject
     /// <summary>暂存区变了之后重算这一行(只对已经生成过单元格的行做实事)。</summary>
     public void Recompute()
     {
-        StagingArea staging = _owner.Staging;
+        StagingArea staging = Owner.Staging;
         if (Insert is not null)
         {
-            _document = Insert.Document;
-            _state = CollectionRowState.Added;
+            Document = Insert.Document;
+            State = CollectionRowState.Added;
         }
         else if (staging.IsDeleted(Id))
         {
-            _document = Original!;
-            _state = CollectionRowState.Deleted;
+            Document = Original!;
+            State = CollectionRowState.Deleted;
         }
         else
         {
-            _document = staging.Current(Original!);
-            _state = staging.EditOf(Id) is { IsEmpty: false } ? CollectionRowState.Modified : CollectionRowState.Normal;
+            Document = staging.Current(Original!);
+            State = staging.EditOf(Id) is { IsEmpty: false } ? CollectionRowState.Modified : CollectionRowState.Normal;
         }
         if (_cells is not null)
         {
@@ -255,19 +250,19 @@ internal sealed class CollectionRow : ObservableObject
 
     private List<CollectionCell> BuildCells()
     {
-        StagedEdit? edit = Insert is null ? _owner.Staging.EditOf(Id) : null;
-        IReadOnlyList<CollectionColumn> columns = Drill?.Columns ?? _owner.Columns;
+        StagedEdit? edit = Insert is null ? Owner.Staging.EditOf(Id) : null;
+        IReadOnlyList<CollectionColumn> columns = Drill?.Columns ?? Owner.Columns;
         var cells = new List<CollectionCell>(columns.Count);
         foreach (CollectionColumn column in columns)
         {
             string path = PathOf(column);
             // 顶层按字段名直取(字段名里带点也取得到);子表按绝对路径走。
             BsonValue? value = Drill is null
-                ? _document.TryGetValue(column.Name, out BsonValue v) ? v : null
-                : BsonPath.Get(_document, path);
+                ? Document.TryGetValue(column.Name, out BsonValue v) ? v : null
+                : BsonPath.Get(Document, path);
             ChangeRelation relation = edit?.RelationOf(path) ?? ChangeRelation.None;
             cells.Add(new CollectionCell(this, column, path, value, relation != ChangeRelation.None,
-                _owner.CurrentColumn == column && _owner.IsCurrentRow(this)));
+                Owner.CurrentColumn == column && Owner.IsCurrentRow(this)));
         }
         return cells;
     }
@@ -279,7 +274,6 @@ internal sealed class CollectionRow : ObservableObject
 internal sealed class CollectionCell : ObservableObject
 {
     private bool _isCurrent;
-    private InlineValueEditor? _editor;
 
     /// <summary>构造。</summary>
     public CollectionCell(CollectionRow row, CollectionColumn column, string path, BsonValue? value, bool isModified, bool isCurrent)
@@ -362,33 +356,27 @@ internal sealed class CollectionCell : ObservableObject
     /// <summary>编辑器;不在编辑为 <see langword="null" />。</summary>
     public InlineValueEditor? Editor
     {
-        get => _editor;
+        get;
         set
         {
-            InlineValueEditor? previous = _editor;
-            if (SetProperty(ref _editor, value))
+            InlineValueEditor? previous = field;
+            if (SetProperty(ref field, value))
             {
-                if (previous is not null)
-                {
-                    previous.PropertyChanged -= OnEditorChanged;
-                }
-                if (value is not null)
-                {
-                    value.PropertyChanged += OnEditorChanged;
-                }
+                previous?.PropertyChanged -= OnEditorChanged;
+                value?.PropertyChanged += OnEditorChanged;
                 RaisePropertiesChanged(nameof(IsEditing), nameof(HasEditorError));
             }
         }
     }
 
     /// <summary>正在编辑。</summary>
-    public bool IsEditing => _editor is not null;
+    public bool IsEditing => Editor is not null;
 
     /// <summary>
     /// 编辑器里的值解析不了(单元格红框)。单元格模板绑它而不是 <c>Editor.HasError</c>:
     /// 绝大多数格子不在编辑,路径中段的 null 每一格都会报一条绑定错误。
     /// </summary>
-    public bool HasEditorError => _editor?.HasError == true;
+    public bool HasEditorError => Editor?.HasError == true;
 
     private void OnEditorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -414,15 +402,15 @@ internal sealed class CollectionCell : ObservableObject
         switch (kind)
         {
             case BsonKind.Object:
-            {
-                BsonDocument doc = value!.AsBsonDocument;
-                return doc.ElementCount == 0 ? ("{ }", loc["Cw_EmptyObject"]) : ($"{{{doc.ElementCount}}}", BsonText.Summary(doc));
-            }
+                {
+                    BsonDocument doc = value!.AsBsonDocument;
+                    return doc.ElementCount == 0 ? ("{ }", loc["Cw_EmptyObject"]) : ($"{{{doc.ElementCount}}}", BsonText.Summary(doc));
+                }
             case BsonKind.Array:
-            {
-                BsonArray array = value!.AsBsonArray;
-                return array.Count == 0 ? ("[ ]", loc.Format("Cw_ItemCount", 0)) : ($"[{array.Count}]", BsonText.ArraySummary(array));
-            }
+                {
+                    BsonArray array = value!.AsBsonArray;
+                    return array.Count == 0 ? ("[ ]", loc.Format("Cw_ItemCount", 0)) : ($"[{array.Count}]", BsonText.ArraySummary(array));
+                }
             default:
                 return ("", BsonText.Cell(value));
         }
@@ -448,7 +436,6 @@ internal sealed class CollectionCell : ObservableObject
 internal sealed class InlineValueEditor : ObservableObject
 {
     private string _text;
-    private string? _error;
 
     /// <summary>构造。</summary>
     /// <param name="text">初始文本(<see cref="BsonEdit.EditText" />)。</param>
@@ -495,10 +482,10 @@ internal sealed class InlineValueEditor : ObservableObject
     /// <summary>解析失败的原因;没有为 <see langword="null" />。</summary>
     public string? Error
     {
-        get => _error;
+        get;
         set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
@@ -506,5 +493,5 @@ internal sealed class InlineValueEditor : ObservableObject
     }
 
     /// <summary>有错。</summary>
-    public bool HasError => _error is not null;
+    public bool HasError => Error is not null;
 }

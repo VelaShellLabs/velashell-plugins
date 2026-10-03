@@ -100,7 +100,7 @@ public sealed class CollectionTests
         var area = new StagingArea();
         BsonDocument order = Order();
         area.SetField(order, "status", "shipped");
-        area.AddInsert(new BsonDocument("orderNo", "SO-NEW"));
+        _ = area.AddInsert(new BsonDocument("orderNo", "SO-NEW"));
         StagingArea.Snapshot snapshot = area.TakeSnapshot();
 
         area.MarkDeleted(order);
@@ -131,7 +131,7 @@ public sealed class CollectionTests
         Assert.AreEqual(1, onlyA.Count);
         Assert.AreEqual(a["_id"], ((UpdateOperation)onlyA[0]).Edit.Id);
         IReadOnlyList<StagedOperation> onlyInsert = StagingCommitter.Plan(area, new CommitScope(OnlyInsert: insert));
-        Assert.IsInstanceOfType<InsertOperation>(onlyInsert.Single());
+        _ = Assert.IsInstanceOfType<InsertOperation>(onlyInsert.Single());
     }
 
     [TestMethod]
@@ -193,13 +193,13 @@ public sealed class CollectionTests
     [TestMethod]
     public void Plan_summary_names_the_winning_scan()
     {
-        BsonDocument classic = BsonDocument.Parse("""
+        var classic = BsonDocument.Parse("""
             { queryPlanner: { winningPlan: { stage: "LIMIT", inputStage: { stage: "FETCH",
               inputStage: { stage: "IXSCAN", indexName: "status_1_createdAt_-1" } } } } }
             """);
         Assert.AreEqual("IXSCAN status_1_createdAt_-1", CollectionTabViewModel.SummarizePlan(classic));
 
-        BsonDocument sbe = BsonDocument.Parse("{ queryPlanner: { winningPlan: { queryPlan: { stage: \"COLLSCAN\" } } } }");
+        var sbe = BsonDocument.Parse("{ queryPlanner: { winningPlan: { queryPlan: { stage: \"COLLSCAN\" } } } }");
         Assert.AreEqual("COLLSCAN", CollectionTabViewModel.SummarizePlan(sbe));
     }
 
@@ -256,7 +256,7 @@ public sealed class CollectionTests
             area.SetField(docs[0], "status", "shipped");
             area.SetField(docs[0], "customer.name", "陈立(改)");
             area.MarkDeleted(docs[1]);
-            area.AddInsert(new BsonDocument { { "status", "new" }, { "qty", 9 } });
+            _ = area.AddInsert(new BsonDocument { { "status", "new" }, { "qty", 9 } });
 
             CommitOutcome outcome = await StagingCommitter.CommitAsync(collection, area, CommitScope.All);
             Assert.AreEqual(1, outcome.Updated);
@@ -299,7 +299,7 @@ public sealed class CollectionTests
             area.SetField(docs[0], "status", "shipped");
             area.SetField(docs[2], "qty", 6);
             // 另一个会话在我提交前改了 #1 的 status。
-            await collection.UpdateOneAsync(new BsonDocument("_id", 1), new BsonDocument("$set", new BsonDocument("status", "refunded")));
+            _ = await collection.UpdateOneAsync(new BsonDocument("_id", 1), new BsonDocument("$set", new BsonDocument("status", "refunded")));
 
             CommitOutcome outcome = await StagingCommitter.CommitAsync(collection, area, CommitScope.All);
             Assert.AreEqual(1, outcome.Updated, "the unrelated document still goes through");
@@ -473,7 +473,7 @@ public sealed class CollectionTests
         await Screens.PumpAsync(20);
         Popup popup = filter.GetVisualDescendants().OfType<Popup>().Single();
         Assert.IsTrue(popup.IsOpen, "typing the first letter of a key opens the field completion");
-        var session = (CompletionSession)((Control)popup.Child!).DataContext!;
+        var session = (CompletionSession)popup.Child!.DataContext!;
         Assert.IsGreaterThan(1, session.Items.Count, "orders has several fields starting with s");
         bench.Window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
         await Screens.PumpAsync(5);
@@ -497,7 +497,7 @@ public sealed class CollectionTests
         tab.SelectedRow = row;
         tab.CurrentColumn = tab.Columns.Single(static c => c.Name == "status");
         await Screens.PumpAsync(5);
-        ((Control)ViewOf(bench).Grid.List.ContainerFromItem(row)!).Focus();
+        _ = ViewOf(bench).Grid.List.ContainerFromItem(row)!.Focus();
         await Screens.PumpAsync(5);
         bench.Window.KeyPressQwerty(PhysicalKey.F2, RawInputModifiers.None);
         await Screens.PumpAsync(10);
@@ -540,7 +540,7 @@ public sealed class CollectionTests
             Assert.IsTrue(watch.Elapsed < TimeSpan.FromSeconds(8), $"50k rows took {watch.Elapsed}");
 
             var stage = System.Diagnostics.Stopwatch.StartNew();
-            tab.Stage(tab.Rows[10], "name", "changed");
+            _ = tab.Stage(tab.Rows[10], "name", "changed");
             stage.Stop();
             Assert.IsTrue(stage.Elapsed < TimeSpan.FromMilliseconds(500), $"staging one cell in a 50k page took {stage.Elapsed}");
             ViewOf(bench).Grid.List.ScrollIntoView(tab.Rows[40_000]);
@@ -585,13 +585,13 @@ public sealed class CollectionTests
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
         CollectionTabViewModel tab = await PrepareOrdersAsync(bench);
         CollectionColumn total = tab.Columns.Single(static c => c.Name == "total");
-        tab.Stage(tab.Rows[2], "status", OtherStatus(tab.Rows[2]));
+        _ = tab.Stage(tab.Rows[2], "status", OtherStatus(tab.Rows[2]));
         tab.StageDelete([tab.Rows[8]]);
         tab.AddRowCommand.Execute(null);
         await Screens.PumpAsync(10);
         CollectionRow added = tab.Rows[^1];
-        tab.Stage(added, "orderNo", "SO2609-10418");
-        tab.Stage(added, "status", "pending");
+        _ = tab.Stage(added, "orderNo", "SO2609-10418");
+        _ = tab.Stage(added, "status", "pending");
 
         tab.SelectedRow = tab.Rows[3];
         await Screens.PumpAsync(10);
@@ -612,7 +612,7 @@ public sealed class CollectionTests
 
         tab.Inspector.Page = 1;
         await Screens.PumpAsync(20);
-        Screens.Capture(bench.Window, "01-collection-inspector-json");
+        _ = Screens.Capture(bench.Window, "01-collection-inspector-json");
         StringAssert.Contains(tab.Inspector.JsonText, "SO2609-10403");
         tab.Inspector.Page = 2;
         for (int i = 0; i < 60 && tab.Stats is null; i++)
@@ -620,7 +620,7 @@ public sealed class CollectionTests
             await Screens.PumpAsync(5);
         }
         await Screens.PumpAsync(10);
-        Screens.Capture(bench.Window, "01-collection-inspector-info");
+        _ = Screens.Capture(bench.Window, "01-collection-inspector-info");
         Assert.IsTrue(tab.Inspector.InfoLines.Count > 5, "the collection page lists count, sizes and indexes");
         tab.Staging.Clear();
     });
@@ -633,7 +633,7 @@ public sealed class CollectionTests
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
         CollectionTabViewModel tab = await PrepareOrdersAsync(bench);
         tab.Ejson = EjsonMode.Shell;
-        tab.Stage(tab.Rows[2], "status", OtherStatus(tab.Rows[2]));
+        _ = tab.Stage(tab.Rows[2], "status", OtherStatus(tab.Rows[2]));
         tab.ViewMode = CollectionViewMode.Json;
         await Screens.PumpAsync(20);
         JsonCardViewModel card = tab.Cards[3];
@@ -668,7 +668,7 @@ public sealed class CollectionTests
         tab.ExpandTreePath(second, "customer");
         tab.ExpandTreePath(second, "items.0");
         int qty = second.Document["items"][0]["qty"].ToInt32();
-        tab.Stage(second, "items.0.qty", qty + 1);
+        _ = tab.Stage(second, "items.0.qty", qty + 1);
         await Screens.PumpAsync(10);
         tab.SelectedTreeRow = tab.TreeRows.FirstOrDefault(r => ReferenceEquals(r.Row, second) && r.Path == "items.0.sku");
         await Screens.PumpAsync(30);

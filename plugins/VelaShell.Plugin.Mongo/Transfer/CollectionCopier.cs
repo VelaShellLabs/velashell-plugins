@@ -107,7 +107,7 @@ internal sealed class XferPauseGate
             paused = _paused;
             _paused = null;
         }
-        paused?.TrySetResult();
+        _ = (paused?.TrySetResult());
     }
 
     /// <summary>暂停中就等到恢复(或取消)。</summary>
@@ -165,14 +165,14 @@ internal static class CollectionCopier
                 await CopyViewAsync(target, targetDb, item, cancellationToken).ConfigureAwait(false);
                 return new(0, 0, 0);
             case XferObjectKind.Bucket:
-            {
-                // 先 chunks 后 files:读者从 files 找文件,files 晚到就不会看见"有文件没数据"的半截桶。
-                XferOutcome chunks = await CopyCollectionAsync(source, sourceDb, target, targetDb, $"{item.Name}.chunks",
-                    new BsonDocument(), item.Action, options, gate, onDocuments, log, loc, cancellationToken).ConfigureAwait(false);
-                XferOutcome files = await CopyCollectionAsync(source, sourceDb, target, targetDb, $"{item.Name}.files",
-                    new BsonDocument(), item.Action, options, gate, onDocuments, log, loc, cancellationToken).ConfigureAwait(false);
-                return new(chunks.Copied + files.Copied, chunks.Failed + files.Failed, chunks.Indexes + files.Indexes);
-            }
+                {
+                    // 先 chunks 后 files:读者从 files 找文件,files 晚到就不会看见"有文件没数据"的半截桶。
+                    XferOutcome chunks = await CopyCollectionAsync(source, sourceDb, target, targetDb, $"{item.Name}.chunks",
+                        [], item.Action, options, gate, onDocuments, log, loc, cancellationToken).ConfigureAwait(false);
+                    XferOutcome files = await CopyCollectionAsync(source, sourceDb, target, targetDb, $"{item.Name}.files",
+                        [], item.Action, options, gate, onDocuments, log, loc, cancellationToken).ConfigureAwait(false);
+                    return new(chunks.Copied + files.Copied, chunks.Failed + files.Failed, chunks.Indexes + files.Indexes);
+                }
             default:
                 return await CopyCollectionAsync(source, sourceDb, target, targetDb, item.Name, item.Info?.Options ?? [],
                     item.Action, options, gate, onDocuments, log, loc, cancellationToken).ConfigureAwait(false);
@@ -239,14 +239,14 @@ internal static class CollectionCopier
             try
             {
                 await to.InsertManyAsync(documents, new InsertManyOptions { IsOrdered = false }, cancellationToken).ConfigureAwait(false);
-                Interlocked.Add(ref copied, documents.Count);
+                _ = Interlocked.Add(ref copied, documents.Count);
                 onDocuments(documents.Count);
             }
             catch (MongoBulkWriteException<BsonDocument> ex)
             {
                 long bad = ex.WriteErrors.Count;
-                Interlocked.Add(ref copied, documents.Count - bad);
-                Interlocked.Add(ref failed, bad);
+                _ = Interlocked.Add(ref copied, documents.Count - bad);
+                _ = Interlocked.Add(ref failed, bad);
                 onDocuments(documents.Count);
             }
             catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -258,7 +258,7 @@ internal static class CollectionCopier
             }
             finally
             {
-                slots.Release();
+                _ = slots.Release();
             }
         }
 
@@ -282,8 +282,8 @@ internal static class CollectionCopier
                         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                         await slots.WaitAsync(cancellationToken).ConfigureAwait(false);
                         inflight.Add(InsertAsync(buffer));
-                        buffer = new List<BsonDocument>(options.BatchSize);
-                        inflight.RemoveAll(static t => t.IsCompleted);
+                        buffer = [with(options.BatchSize)];
+                        _ = inflight.RemoveAll(static t => t.IsCompleted);
                         ThrowIfFailed(errors);
                     }
                 }
@@ -349,30 +349,30 @@ internal static class CollectionCopier
                 case "viewOn" or "pipeline":
                     continue;
                 case "timeseries" when element.Value is BsonDocument series:
-                {
-                    BsonDocument copy = series.DeepClone().AsBsonDocument;
-                    if (copy.Contains("granularity"))
                     {
-                        copy.Remove("bucketMaxSpanSeconds");
-                        copy.Remove("bucketRoundingSeconds");
+                        BsonDocument copy = series.DeepClone().AsBsonDocument;
+                        if (copy.Contains("granularity"))
+                        {
+                            copy.Remove("bucketMaxSpanSeconds");
+                            copy.Remove("bucketRoundingSeconds");
+                        }
+                        command[element.Name] = copy;
+                        continue;
                     }
-                    command[element.Name] = copy;
-                    continue;
-                }
                 case "clusteredIndex" when element.Value is BsonDocument clustered:
-                {
-                    var copy = new BsonDocument
+                    {
+                        var copy = new BsonDocument
                     {
                         { "key", clustered.GetValue("key", new BsonDocument("_id", 1)) },
                         { "unique", clustered.GetValue("unique", true) }
                     };
-                    if (clustered.TryGetValue("name", out BsonValue clusteredName))
-                    {
-                        copy["name"] = clusteredName;
+                        if (clustered.TryGetValue("name", out BsonValue clusteredName))
+                        {
+                            copy["name"] = clusteredName;
+                        }
+                        command[element.Name] = copy;
+                        continue;
                     }
-                    command[element.Name] = copy;
-                    continue;
-                }
                 default:
                     command[element.Name] = element.Value;
                     continue;
@@ -407,7 +407,7 @@ internal static class CollectionCopier
         {
             command["collation"] = collation;
         }
-        await target.RunCommandAsync(database, command, cancellationToken).ConfigureAwait(false);
+        _ = await target.RunCommandAsync(database, command, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<int> CopyIndexesAsync(
@@ -431,7 +431,7 @@ internal static class CollectionCopier
             BsonDocument spec = index.DeepClone().AsBsonDocument;
             spec.Remove("ns");
             spec.Remove("v");
-            specs.Add(spec);
+            _ = specs.Add(spec);
         }
         if (specs.Count == 0)
         {
@@ -439,7 +439,7 @@ internal static class CollectionCopier
         }
         try
         {
-            await target.RunCommandAsync(targetDb, new BsonDocument { { "createIndexes", name }, { "indexes", specs } }, cancellationToken)
+            _ = await target.RunCommandAsync(targetDb, new BsonDocument { { "createIndexes", name }, { "indexes", specs } }, cancellationToken)
                 .ConfigureAwait(false);
             return specs.Count;
         }

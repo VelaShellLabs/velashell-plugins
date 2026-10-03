@@ -23,7 +23,7 @@ internal sealed record CollectionSampleField(string Path, BsonKind Kind, int Cou
 internal sealed class CollectionSample
 {
     private readonly IReadOnlyList<BsonDocument> _documents;
-    private readonly Dictionary<string, List<(string Label, string Insert, BsonKind Kind, double Ratio)>> _valueCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<(string Label, string Insert, BsonKind Kind, double Ratio)>> _valueCache = [with(StringComparer.Ordinal)];
 
     private CollectionSample(IReadOnlyList<BsonDocument> documents)
     {
@@ -65,7 +65,7 @@ internal sealed class CollectionSample
     /// <summary>抽一批。视图与时序集合同样支持 <c>$sample</c>。</summary>
     public static async Task<CollectionSample> LoadAsync(MongoConnection connection, string database, string collection, int size, CancellationToken cancellationToken)
     {
-        var pipeline = new[] { new BsonDocument("$sample", new BsonDocument("size", Math.Clamp(size, 50, 5000))) };
+        BsonDocument[] pipeline = new[] { new BsonDocument("$sample", new BsonDocument("size", Math.Clamp(size, 50, 5000))) };
         using IAsyncCursor<BsonDocument> cursor = await connection.Collection(database, collection)
             .AggregateAsync<BsonDocument>(pipeline, new AggregateOptions { MaxTime = TimeSpan.FromSeconds(10) }, cancellationToken)
             .ConfigureAwait(false);

@@ -211,13 +211,14 @@ internal static class BuiltinRoles
     public static IReadOnlyList<string> Others { get; } =
         ["clusterMonitor", "clusterManager", "clusterAdmin", "hostManager", "backup", "restore", "enableSharding", "root"];
 
-    private static readonly HashSet<string> All = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> All =
+    [
+        with(StringComparer.Ordinal),
         "read", "readWrite", "dbAdmin", "userAdmin", "dbOwner",
         "readAnyDatabase", "readWriteAnyDatabase", "dbAdminAnyDatabase", "userAdminAnyDatabase",
         "clusterMonitor", "clusterManager", "clusterAdmin", "hostManager", "backup", "restore",
         "enableSharding", "root", "__system", "__queryableBackup", "directShardOperations", "searchCoordinator"
-    };
+    ];
 
     /// <summary>是不是内置角色(按名字;内置角色名不会与自定义角色撞 —— 服务器不让建同名的)。</summary>
     public static bool IsBuiltin(string role) => All.Contains(role);
@@ -473,13 +474,13 @@ internal static class UserAdmin
             {
                 first["serverAddress"] = new BsonArray(servers);
             }
-            result.Add(first);
+            _ = result.Add(first);
         }
         if (original is not null)
         {
             foreach (BsonValue rest in original.Skip(1))
             {
-                result.Add(rest.DeepClone());
+                _ = result.Add(rest.DeepClone());
             }
         }
         return result;
@@ -609,16 +610,16 @@ internal static class UserAdmin
             { "customData", customData }
         };
         var shell = new StringBuilder();
-        shell.Append(Sibling(db)).Append(".createUser({ user: ").Append(BsonText.Quote(user))
+        _ = shell.Append(Sibling(db)).Append(".createUser({ user: ").Append(BsonText.Quote(user))
             .Append(", pwd: passwordPrompt(), roles: ").Append(Js(rolesArray))
             .Append(", mechanisms: ").Append(Js(mechanisms))
             .Append(", customData: ").Append(Js(customData));
         if (restrictions.Count > 0)
         {
             command["authenticationRestrictions"] = restrictions;
-            shell.Append(", authenticationRestrictions: ").Append(Js(restrictions));
+            _ = shell.Append(", authenticationRestrictions: ").Append(Js(restrictions));
         }
-        shell.Append(" })");
+        _ = shell.Append(" })");
         return new(db, command, shell.ToString());
     }
 
@@ -669,7 +670,7 @@ internal static class UserAdmin
         var revoke = new List<Privilege>();
         foreach ((string key, (BsonDocument resource, HashSet<string> actions)) in after)
         {
-            IEnumerable<string> added = before.TryGetValue(key, out var old) ? actions.Except(old.Actions) : actions;
+            IEnumerable<string> added = before.TryGetValue(key, out (BsonDocument Resource, HashSet<string> Actions) old) ? actions.Except(old.Actions) : actions;
             List<string> list = OrderActions(added);
             if (list.Count > 0)
             {
@@ -678,7 +679,7 @@ internal static class UserAdmin
         }
         foreach ((string key, (BsonDocument resource, HashSet<string> actions)) in before)
         {
-            IEnumerable<string> removed = after.TryGetValue(key, out var now) ? actions.Except(now.Actions) : actions;
+            IEnumerable<string> removed = after.TryGetValue(key, out (BsonDocument Resource, HashSet<string> Actions) now) ? actions.Except(now.Actions) : actions;
             List<string> list = OrderActions(removed);
             if (list.Count > 0)
             {
@@ -694,7 +695,7 @@ internal static class UserAdmin
         foreach (Privilege privilege in privileges)
         {
             string key = ResourceKey(privilege.Resource);
-            if (!map.TryGetValue(key, out var entry))
+            if (!map.TryGetValue(key, out (BsonDocument, HashSet<string>) entry))
             {
                 entry = (privilege.Resource, new HashSet<string>(StringComparer.Ordinal));
                 map[key] = entry;
@@ -746,7 +747,7 @@ internal static class UserAdmin
             string label = ResourceLabel(privilege.Resource);
             if (!map.TryGetValue(label, out SortedSet<string>? set))
             {
-                set = new(StringComparer.Ordinal);
+                set = [with(StringComparer.Ordinal)];
                 map[label] = set;
             }
             set.UnionWith(privilege.Actions);
@@ -760,7 +761,7 @@ internal static class UserAdmin
             }
             if (map.TryGetValue(label[..dot] + ".*", out SortedSet<string>? parent) && map[label].IsSubsetOf(parent))
             {
-                map.Remove(label);
+                _ = map.Remove(label);
             }
         }
         return map;
@@ -779,8 +780,8 @@ internal static class UserAdmin
         var lines = new List<EffectiveLine>();
         foreach (string label in original.Keys.Union(current.Keys).OrderBy(LineOrder, StringComparer.Ordinal))
         {
-            original.TryGetValue(label, out SortedSet<string>? before);
-            current.TryGetValue(label, out SortedSet<string>? after);
+            _ = original.TryGetValue(label, out SortedSet<string>? before);
+            _ = current.TryGetValue(label, out SortedSet<string>? after);
             if (after is null || after.Count == 0)
             {
                 if (before is { Count: > 0 })

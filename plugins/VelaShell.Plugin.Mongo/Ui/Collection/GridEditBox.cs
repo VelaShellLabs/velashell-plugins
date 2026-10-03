@@ -25,7 +25,7 @@ public sealed class GridEditBox : TextBox
         {
             if (IsEffectivelyVisible)
             {
-                Focus();
+                _ = Focus();
                 SelectAll();
             }
         }, DispatcherPriority.Input);

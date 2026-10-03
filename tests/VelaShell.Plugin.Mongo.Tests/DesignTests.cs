@@ -115,7 +115,7 @@ public sealed class DesignTests
             Assert.IsFalse(tab.HasDraft);
 
             // 多键:tags 是数组,执行计划里 isMultiKey 为真。
-            await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("tags", 1)));
+            _ = await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("tags", 1)));
             await tab.LoadIndexesAsync();
             Assert.AreEqual("多键", tab.Indexes.Single(static r => r.Name == "tags_1").TypeText);
 
@@ -196,7 +196,7 @@ public sealed class DesignTests
             Assert.AreEqual("moderate", tab.RuleHistory[0].Level);
 
             // ── 选项:TTL 秒数(collMod index)──
-            await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("updatedAt", 1),
+            _ = await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("updatedAt", 1),
                 new CreateIndexOptions { ExpireAfter = TimeSpan.FromDays(30) }));
             tab.Page = DesignPage.Options;
             await tab.RefreshAsync();
@@ -248,18 +248,18 @@ public sealed class DesignTests
         int level = (await bench.Connection.RunCommandAsync(Screens.Database, new BsonDocument("profile", -1)))["was"].ToInt32();
         if (level == 0)
         {
-            await bench.Connection.RunCommandAsync(Screens.Database, new BsonDocument { { "profile", 1 }, { "slowms", 100 } });
+            _ = await bench.Connection.RunCommandAsync(Screens.Database, new BsonDocument { { "profile", 1 }, { "slowms", 100 } });
         }
         try
         {
             for (int i = 0; i < 2; i++)
             {
-                await orders.Find(BsonDocument.Parse("{ status: 'paid', total: { $gte: NumberDecimal('100') }, $where: 'sleep(1) || true' }"),
+                _ = await orders.Find(BsonDocument.Parse("{ status: 'paid', total: { $gte: NumberDecimal('100') }, $where: 'sleep(1) || true' }"),
                         new FindOptions { Hint = new BsonDocument("$natural", 1) })
                     .Sort(new BsonDocument("total", -1)).Limit(300).ToListAsync();
             }
             BsonValue customerId = sample["customer"]["id"];
-            await orders.Find(new BsonDocument { { "customer.id", customerId }, { "$where", "sleep(5) || true" } },
+            _ = await orders.Find(new BsonDocument { { "customer.id", customerId }, { "$where", "sleep(5) || true" } },
                     new FindOptions { Hint = "customer.id_1" })
                 .Sort(new BsonDocument("createdAt", -1)).ToListAsync();
         }
@@ -267,7 +267,7 @@ public sealed class DesignTests
         {
             if (level == 0)
             {
-                await bench.Connection.RunCommandAsync(Screens.Database, new BsonDocument("profile", 0));
+                _ = await bench.Connection.RunCommandAsync(Screens.Database, new BsonDocument("profile", 0));
             }
         }
 
@@ -307,7 +307,7 @@ public sealed class DesignTests
         DesignTabViewModel carts = await OpenDesignAsync(bench, Screens.Database, "carts", DesignPage.Options);
         await WaitAsync(() => carts.TtlRows.Count > 0);
         await Screens.PumpAsync(20);
-        Screens.Capture(bench.Window, "design-options");
+        _ = Screens.Capture(bench.Window, "design-options");
         Assert.AreEqual("updatedAt", carts.TtlRows.Single().Field);
 
         bench.Session.OpenDesign(Screens.Database, "events", DesignPage.Options);
@@ -321,7 +321,7 @@ public sealed class DesignTests
         DesignTabViewModel orders = await OpenDesignAsync(bench, Screens.Database, "orders", DesignPage.Stats);
         await WaitAsync(() => orders.StatCards.Count > 0);
         await Screens.PumpAsync(20);
-        Screens.Capture(bench.Window, "design-stats");
+        _ = Screens.Capture(bench.Window, "design-stats");
         Assert.AreEqual(6, orders.StatCards.Count);
         StringAssert.Contains(orders.StatsRaw, "indexSizes");
     });

@@ -87,27 +87,27 @@ public static class BsonEdit
                 error = "Edit_NotDate";
                 return false;
             case BsonKind.ObjectId:
-            {
-                string hex = Unwrap(trimmed, "ObjectId");
-                if (ObjectId.TryParse(hex, out ObjectId id))
                 {
-                    value = id;
-                    return true;
+                    string hex = Unwrap(trimmed, "ObjectId");
+                    if (ObjectId.TryParse(hex, out ObjectId id))
+                    {
+                        value = id;
+                        return true;
+                    }
+                    error = "Edit_NotObjectId";
+                    return false;
                 }
-                error = "Edit_NotObjectId";
-                return false;
-            }
             case BsonKind.Uuid:
-            {
-                string guid = Unwrap(trimmed, "UUID");
-                if (Guid.TryParse(guid, out Guid g))
                 {
-                    value = new BsonBinaryData(g, GuidRepresentation.Standard);
-                    return true;
+                    string guid = Unwrap(trimmed, "UUID");
+                    if (Guid.TryParse(guid, out Guid g))
+                    {
+                        value = new BsonBinaryData(g, GuidRepresentation.Standard);
+                        return true;
+                    }
+                    error = "Edit_NotUuid";
+                    return false;
                 }
-                error = "Edit_NotUuid";
-                return false;
-            }
             case BsonKind.Object or BsonKind.Array:
                 try
                 {

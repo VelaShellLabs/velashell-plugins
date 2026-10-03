@@ -71,15 +71,15 @@ internal static class SigV4Verifier
             char c = (char)b;
             if (char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '~')
             {
-                builder.Append(c);
+                _ = builder.Append(c);
             }
             else if (c == '/' && !encodeSlash)
             {
-                builder.Append('/');
+                _ = builder.Append('/');
             }
             else
             {
-                builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+                _ = builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
             }
         }
         return builder.ToString();
@@ -132,16 +132,16 @@ internal static class SigV4Verifier
         signedHeaders = string.Join(';', names);
 
         var builder = new StringBuilder(256);
-        builder.Append(method).Append('\n');
-        builder.Append(string.IsNullOrEmpty(canonicalUri) ? "/" : canonicalUri).Append('\n');
-        builder.Append(canonicalQueryString).Append('\n');
+        _ = builder.Append(method).Append('\n');
+        _ = builder.Append(string.IsNullOrEmpty(canonicalUri) ? "/" : canonicalUri).Append('\n');
+        _ = builder.Append(canonicalQueryString).Append('\n');
         foreach (string name in names)
         {
-            builder.Append(name).Append(':').Append(NormalizeHeaderValue(headers[name])).Append('\n');
+            _ = builder.Append(name).Append(':').Append(NormalizeHeaderValue(headers[name])).Append('\n');
         }
-        builder.Append('\n');
-        builder.Append(signedHeaders).Append('\n');
-        builder.Append(payloadHash);
+        _ = builder.Append('\n');
+        _ = builder.Append(signedHeaders).Append('\n');
+        _ = builder.Append(payloadHash);
         return builder.ToString();
     }
 
@@ -197,12 +197,12 @@ internal static class SigV4Verifier
             {
                 if (!previousSpace)
                 {
-                    builder.Append(' ');
+                    _ = builder.Append(' ');
                 }
             }
             else
             {
-                builder.Append(c);
+                _ = builder.Append(c);
             }
             previousSpace = isSpace;
         }

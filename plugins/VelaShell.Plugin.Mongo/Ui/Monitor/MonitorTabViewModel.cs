@@ -34,7 +34,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
 
     private readonly SampleHistory _history = new();
     private readonly MonitorPoller _poller;
-    private readonly Dictionary<string, string> _indexBuilds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _indexBuilds = [with(StringComparer.Ordinal)];
     private readonly SemaphoreSlim _tickGate = new(1, 1);
     private ServerSample? _last;
     private BsonDocument? _lastStatus;
@@ -48,7 +48,6 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     private DateTime _slowCheckedAt;
     private List<(string Database, int SlowMs)> _profiled = [];
     private bool _loaded;
-    private bool _paused;
     private bool _disposed;
     private bool _failureShown;
     private bool _currentOpDenied;
@@ -56,30 +55,6 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     private MonitorEvent? _lagEvent;
     private DateTime _lastOpsSpike = DateTime.MinValue;
     private DateTime _lastConnSpike = DateTime.MinValue;
-    private string _window = "15m";
-    private int _intervalSeconds = 2;
-    private TimeSpan? _intervalOverride;
-    private string _serverLine = "";
-    private string _errorText = "";
-    private IReadOnlyList<ChartSeries> _opsSeries = [];
-    private IReadOnlyList<string> _opsLabels = [];
-    private string _opsSubtitle = "";
-    private IReadOnlyList<MonitorLegend> _legend = [];
-    private IReadOnlyList<ChartSeries> _connSeries = [];
-    private double _opsMax = 3;
-    private double _connMax = 3;
-    private IReadOnlyList<string> _connLabels = [];
-    private string _connSubtitle = "";
-    private string _replicaTitle = "";
-    private string _replicaSubtitle = "";
-    private bool _majorityLost;
-    private IReadOnlyList<MonitorMember> _members = [];
-    private string _replicaEmptyTitle = "";
-    private string _replicaEmptyHint = "";
-    private IReadOnlyList<MonitorStorageRow> _storage = [];
-    private string _storageSubtitle = "";
-    private bool _storageLoaded;
-    private bool _showAllEvents;
 
     /// <summary>构造。不在这里发任何请求:同键标签已开着时,外壳会把新建的这个直接丢掉。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -118,10 +93,10 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     /// <summary>暂停中(「● 实时」变灰,按钮变「继续」)。</summary>
     public bool IsPaused
     {
-        get => _paused;
+        get;
         private set
         {
-            if (SetProperty(ref _paused, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(PauseLabel), nameof(PauseIcon));
                 UpdatePolling();
@@ -131,32 +106,32 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     }
 
     /// <summary>暂停按钮文字。</summary>
-    public string PauseLabel => _paused ? Loc["Mon_Resume"] : Loc["Mon_Pause"];
+    public string PauseLabel => IsPaused ? Loc["Mon_Resume"] : Loc["Mon_Pause"];
 
     /// <summary>暂停按钮图标。</summary>
-    public string PauseIcon => _paused ? "Mongo.play" : "Mongo.pause";
+    public string PauseIcon => IsPaused ? "Mongo.play" : "Mongo.pause";
 
     /// <summary>时间窗(<c>5m</c> / <c>15m</c> / <c>1h</c> / <c>6h</c>;分段按钮直接绑字符串)。</summary>
     public string Window
     {
-        get => _window;
+        get;
         set
         {
-            if (value is "5m" or "15m" or "1h" or "6h" && SetProperty(ref _window, value))
+            if (value is "5m" or "15m" or "1h" or "6h" && SetProperty(ref field, value))
             {
                 UpdateCharts();
             }
         }
-    }
+    } = "15m";
 
     /// <summary>采样间隔(秒)。</summary>
     public int IntervalSeconds
     {
-        get => _intervalSeconds;
+        get;
         set
         {
             value = Math.Clamp(value, 1, 60);
-            if (SetProperty(ref _intervalSeconds, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IntervalText));
                 _poller.Interval = Interval;
@@ -167,51 +142,51 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
                 UpdateStatus();
             }
         }
-    }
+    } = 2;
 
     /// <summary>可选的采样间隔。</summary>
     public static IReadOnlyList<int> IntervalChoices { get; } = [1, 2, 5, 10];
 
     /// <summary>下拉上的字(<c>每 2 s</c>)。</summary>
-    public string IntervalText => Loc.Format("Mon_Every", _intervalSeconds);
+    public string IntervalText => Loc.Format("Mon_Every", IntervalSeconds);
 
     /// <summary>
     /// 测试用:把采样间隔压到 1 秒以下(截图要先攒 15 个以上的采样点,按 2 秒一次就得干等半分钟)。
     /// </summary>
     internal TimeSpan? IntervalOverride
     {
-        get => _intervalOverride;
+        get;
         set
         {
-            _intervalOverride = value;
+            field = value;
             _poller.Interval = Interval;
         }
     }
 
-    private TimeSpan Interval => _intervalOverride ?? TimeSpan.FromSeconds(_intervalSeconds);
+    private TimeSpan Interval => IntervalOverride ?? TimeSpan.FromSeconds(IntervalSeconds);
 
     /// <summary>右侧灰字(<c>uptime 14 天 6 小时 · WiredTiger · featureCompatibilityVersion 7.0</c>)。</summary>
     public string ServerLine
     {
-        get => _serverLine;
-        private set => SetProperty(ref _serverLine, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>采样失败的说明(权限不够、连接断了);空 = 正常。</summary>
     public string ErrorText
     {
-        get => _errorText;
+        get;
         private set
         {
-            if (SetProperty(ref _errorText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
         }
-    }
+    } = "";
 
     /// <summary>有没有失败说明。</summary>
-    public bool HasError => _errorText.Length > 0;
+    public bool HasError => ErrorText.Length > 0;
 
     /// <summary>暂停 / 继续。</summary>
     public RelayCommand PauseCommand { get; }
@@ -244,44 +219,44 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     /// <summary>操作 / 秒 的四组堆叠数据。</summary>
     public IReadOnlyList<ChartSeries> OpsSeries
     {
-        get => _opsSeries;
-        private set => SetProperty(ref _opsSeries, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>操作 / 秒 的横轴标签。</summary>
     public IReadOnlyList<string> OpsLabels
     {
-        get => _opsLabels;
-        private set => SetProperty(ref _opsLabels, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>操作 / 秒 的副标题(<c>opcounters · 近 15 分钟 · 每柱 30 s</c>)。</summary>
     public string OpsSubtitle
     {
-        get => _opsSubtitle;
-        private set => SetProperty(ref _opsSubtitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>右上图例(带当前值)。</summary>
     public IReadOnlyList<MonitorLegend> Legend
     {
-        get => _legend;
-        private set => SetProperty(ref _legend, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>操作 / 秒 的纵轴上限(三等分后刻度好读)。</summary>
     public double OpsMax
     {
-        get => _opsMax;
-        private set => SetProperty(ref _opsMax, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = 3;
 
     /// <summary>连接数的纵轴上限。</summary>
     public double ConnMax
     {
-        get => _connMax;
-        private set => SetProperty(ref _connMax, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = 3;
 
     /// <summary>两张柱状图至少分几格(满窗口的柱数;刚开始采样时柱子也保持最终宽度,靠右排)。</summary>
     public int ChartSlots => Bars;
@@ -289,105 +264,105 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     /// <summary>连接数柱状图。</summary>
     public IReadOnlyList<ChartSeries> ConnSeries
     {
-        get => _connSeries;
-        private set => SetProperty(ref _connSeries, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>连接数横轴标签。</summary>
     public IReadOnlyList<string> ConnLabels
     {
-        get => _connLabels;
-        private set => SetProperty(ref _connLabels, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>连接数副标题(<c>当前 128 · 峰值 164</c>)。</summary>
     public string ConnSubtitle
     {
-        get => _connSubtitle;
-        private set => SetProperty(ref _connSubtitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     // ── 副本集 ────────────────────────────────────────────────────────────
 
     /// <summary>成员卡标题(<c>副本集 rs0</c>)。</summary>
     public string ReplicaTitle
     {
-        get => _replicaTitle;
-        private set => SetProperty(ref _replicaTitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>成员卡副标题(<c>3 成员 · 多数派健康</c>)。</summary>
     public string ReplicaSubtitle
     {
-        get => _replicaSubtitle;
-        private set => SetProperty(ref _replicaSubtitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>多数派不可用(副标题转红)。</summary>
     public bool MajorityLost
     {
-        get => _majorityLost;
-        private set => SetProperty(ref _majorityLost, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>成员。</summary>
     public IReadOnlyList<MonitorMember> Members
     {
-        get => _members;
+        get;
         private set
         {
-            if (SetProperty(ref _members, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasMembers));
             }
         }
-    }
+    } = [];
 
     /// <summary>有没有成员可列(单机 / mongos 时显示空态)。</summary>
-    public bool HasMembers => _members.Count > 0;
+    public bool HasMembers => Members.Count > 0;
 
     /// <summary>空态标题(<c>单机部署</c>)。</summary>
     public string ReplicaEmptyTitle
     {
-        get => _replicaEmptyTitle;
-        private set => SetProperty(ref _replicaEmptyTitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>空态说明。</summary>
     public string ReplicaEmptyHint
     {
-        get => _replicaEmptyHint;
-        private set => SetProperty(ref _replicaEmptyHint, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     // ── 存储 Top ──────────────────────────────────────────────────────────
 
     /// <summary>存储 Top 的行(前 6)。</summary>
     public IReadOnlyList<MonitorStorageRow> Storage
     {
-        get => _storage;
+        get;
         private set
         {
-            if (SetProperty(ref _storage, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasStorage));
                 RaisePropertyChanged(nameof(StorageEmpty));
             }
         }
-    }
+    } = [];
 
     /// <summary>有没有行。</summary>
-    public bool HasStorage => _storage.Count > 0;
+    public bool HasStorage => Storage.Count > 0;
 
     /// <summary>加载过但一行都没有(空库)。</summary>
-    public bool StorageEmpty => _storageLoaded && _storage.Count == 0;
+    public bool StorageEmpty { get => field && Storage.Count == 0; private set; }
 
     /// <summary>存储 Top 副标题(<c>shop · 数据 + 索引</c>)。</summary>
     public string StorageSubtitle
     {
-        get => _storageSubtitle;
-        private set => SetProperty(ref _storageSubtitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     // ── 事件 ──────────────────────────────────────────────────────────────
 
@@ -397,10 +372,10 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     /// <summary>展开「全部」。</summary>
     public bool ShowAllEvents
     {
-        get => _showAllEvents;
+        get;
         set
         {
-            if (SetProperty(ref _showAllEvents, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(VisibleEvents), nameof(EventsToggleText));
             }
@@ -408,13 +383,13 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     }
 
     /// <summary>列出来的事件(收起时前 5 条)。</summary>
-    public IReadOnlyList<MonitorEvent> VisibleEvents => _showAllEvents ? Events.ToList() : Events.Take(5).ToList();
+    public IReadOnlyList<MonitorEvent> VisibleEvents => ShowAllEvents ? Events.ToList() : Events.Take(5).ToList();
 
     /// <summary>有没有事件。</summary>
     public bool HasEvents => Events.Count > 0;
 
     /// <summary>「全部」/「收起」。</summary>
-    public string EventsToggleText => _showAllEvents ? Loc["Mon_EventsLess"] : Loc["Mon_EventsAll"];
+    public string EventsToggleText => ShowAllEvents ? Loc["Mon_EventsLess"] : Loc["Mon_EventsAll"];
 
     /// <summary>展开 / 收起事件。</summary>
     public RelayCommand ToggleEventsCommand { get; }
@@ -464,7 +439,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     /// <summary>只在"加载过、可见、没暂停、没关掉"时采样。</summary>
     private void UpdatePolling(bool delayFirst = false)
     {
-        if (_loaded && IsActive && !_paused && !_disposed)
+        if (_loaded && IsActive && !IsPaused && !_disposed)
         {
             _poller.Start(delayFirst);
         }
@@ -496,7 +471,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         }
         finally
         {
-            _tickGate.Release();
+            _ = _tickGate.Release();
         }
     }
 
@@ -521,7 +496,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         ErrorText = "";
         _failureShown = false;
         _lastStatus = status;
-        ServerSample sample = ServerSample.Parse(status, now);
+        var sample = ServerSample.Parse(status, now);
         ServerSample? previous = _last;
         RateSample? rate = previous is null ? null : RateSample.Between(previous, sample);
         if (previous is not null && sample.Uptime < previous.Uptime)
@@ -657,7 +632,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
                     // 没有 replSetGetConfig 权限:优先级与票数按默认值显示,不影响别的。
                 }
             }
-            ReplicaSnapshot snapshot = ReplicaSnapshot.Parse(status, _replConfig);
+            var snapshot = ReplicaSnapshot.Parse(status, _replConfig);
             DetectReplicaEvents(_replica, snapshot, now);
             _replica = snapshot;
             ApplyReplica(snapshot, now);
@@ -747,7 +722,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
             }
             CollectionStats stats = await Workspace.Connection.GetStatsAsync("local", "oplog.rs", token).ConfigureAwait(true);
             long size = stats.Raw.TryGetValue("maxSize", out BsonValue max) && max.IsNumeric ? max.ToInt64() : stats.Size;
-            TimeSpan window = TimeSpan.FromSeconds(Math.Max(0, to.Timestamp - from.Timestamp));
+            var window = TimeSpan.FromSeconds(Math.Max(0, to.Timestamp - from.Timestamp));
             (string value, string unit) = OplogSpan(window);
             // 24 小时是常见的底线:够一次周末维护或一次大批量导入期间从节点掉线后追平。
             bool shortWindow = window < TimeSpan.FromHours(24);
@@ -813,7 +788,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         {
             StorageSubtitle = MongoConnector.Describe(ex);
         }
-        _storageLoaded = true;
+        StorageEmpty = true;
         RaisePropertyChanged(nameof(StorageEmpty));
     }
 
@@ -924,7 +899,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
                 foreach (BsonDocument op in ops)
                 {
                     string opid = MonitorOps.OpId(op);
-                    seen.Add(opid);
+                    _ = seen.Add(opid);
                     if (!_indexBuilds.ContainsKey(opid) && op.GetValue("command", new BsonDocument()) is BsonDocument cmd)
                     {
                         string coll = cmd.GetValue("createIndexes", "").ToString() ?? "";
@@ -937,7 +912,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
                 foreach (string opid in _indexBuilds.Keys.Where(k => !seen.Contains(k)).ToList())
                 {
                     finished.Add(_indexBuilds[opid]);
-                    _indexBuilds.Remove(opid);
+                    _ = _indexBuilds.Remove(opid);
                 }
             }
             catch (MongoCommandException)
@@ -1103,7 +1078,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         }
     }
 
-    private TimeSpan WindowSpan => _window switch
+    private TimeSpan WindowSpan => Window switch
     {
         "5m" => TimeSpan.FromMinutes(5),
         "1h" => TimeSpan.FromHours(1),
@@ -1111,7 +1086,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         _ => TimeSpan.FromMinutes(15)
     };
 
-    private string WindowText => _window switch
+    private string WindowText => Window switch
     {
         "5m" => Loc.Format("Mon_DurMinutes", 5),
         "1h" => Loc.Format("Mon_DurHoursOnly", 1),
@@ -1191,9 +1166,9 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         ServerInfo server = Workspace.Connection.Server;
         string who = server.SetName is { Length: > 0 } set ? set : server.Role;
         string commands = IsReplicaSet ? " · replSetGetStatus" : "";
-        StatusText = _paused
+        StatusText = IsPaused
             ? Loc.Format("Mon_StatusPaused", who, commands)
-            : Loc.Format("Mon_Status", who, commands, _intervalOverride is { } o ? o.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) : _intervalSeconds.ToString(CultureInfo.InvariantCulture));
+            : Loc.Format("Mon_Status", who, commands, IntervalOverride is { } o ? o.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) : IntervalSeconds.ToString(CultureInfo.InvariantCulture));
     }
 
     // ── 导出快照 ──────────────────────────────────────────────────────────

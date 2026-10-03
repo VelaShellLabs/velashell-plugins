@@ -48,7 +48,7 @@ public sealed partial class JsonCardsView : UserControl
                 {
                     card.Format();
                 }
-                card.Update();
+                _ = card.Update();
                 break;
             case Key.Escape:
                 e.Handled = true;

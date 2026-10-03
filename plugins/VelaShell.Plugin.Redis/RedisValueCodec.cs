@@ -418,37 +418,37 @@ public static class RedisValueCodec
             case RedisSerialization.None:
                 return true;
             case RedisSerialization.MsgPack:
-            {
-                var reader = new MsgPackReader(raw);
-                if (!reader.TryReadValue(out string? dump) || !reader.AtEnd)
                 {
-                    error = "not a complete MessagePack document";
-                    return false;
+                    var reader = new MsgPackReader(raw);
+                    if (!reader.TryReadValue(out string? dump) || !reader.AtEnd)
+                    {
+                        error = "not a complete MessagePack document";
+                        return false;
+                    }
+                    text = dump!;
+                    return true;
                 }
-                text = dump!;
-                return true;
-            }
             case RedisSerialization.Protobuf:
-            {
-                if (!ProtobufDump.TryDump(raw, 0, out string? dump))
                 {
-                    error = "not a valid protobuf message";
-                    return false;
+                    if (!ProtobufDump.TryDump(raw, 0, out string? dump))
+                    {
+                        error = "not a valid protobuf message";
+                        return false;
+                    }
+                    text = dump!;
+                    return true;
                 }
-                text = dump!;
-                return true;
-            }
             case RedisSerialization.Php:
-            {
-                var reader = new PhpReader(Encoding.UTF8.GetString(raw));
-                if (!reader.TryReadValue(0, out string? dump) || !reader.AtEnd)
                 {
-                    error = "not a complete PHP serialize() payload";
-                    return false;
+                    var reader = new PhpReader(Encoding.UTF8.GetString(raw));
+                    if (!reader.TryReadValue(0, out string? dump) || !reader.AtEnd)
+                    {
+                        error = "not a complete PHP serialize() payload";
+                        return false;
+                    }
+                    text = dump!;
+                    return true;
                 }
-                text = dump!;
-                return true;
-            }
             default:
                 error = $"{Label(serialization)} decoder is not bundled";
                 return false;
@@ -473,7 +473,7 @@ public static class RedisValueCodec
         }
         try
         {
-            using JsonDocument document = JsonDocument.Parse(text,
+            using var document = JsonDocument.Parse(text,
                 new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
             pretty = JsonSerializer.Serialize(document.RootElement,
                 new JsonSerializerOptions
@@ -537,15 +537,15 @@ public static class RedisValueCodec
                     text = "true";
                     return true;
                 case 0xC4 or 0xC5 or 0xC6:
-                {
-                    int width = head == 0xC4 ? 1 : head == 0xC5 ? 2 : 4;
-                    return TryReadLength(width, out int length) && TryReadBinary(length, out text);
-                }
+                    {
+                        int width = head == 0xC4 ? 1 : head == 0xC5 ? 2 : 4;
+                        return TryReadLength(width, out int length) && TryReadBinary(length, out text);
+                    }
                 case 0xC7 or 0xC8 or 0xC9:
-                {
-                    int width = head == 0xC7 ? 1 : head == 0xC8 ? 2 : 4;
-                    return TryReadLength(width, out int length) && TryReadExt(length, out text);
-                }
+                    {
+                        int width = head == 0xC7 ? 1 : head == 0xC8 ? 2 : 4;
+                        return TryReadLength(width, out int length) && TryReadExt(length, out text);
+                    }
                 case 0xCA:
                     return TryTake(4, out ReadOnlySpan<byte> f32)
                            && Set(BinaryPrimitives.ReadSingleBigEndian(f32).ToString("R", CultureInfo.InvariantCulture), out text);
@@ -553,34 +553,34 @@ public static class RedisValueCodec
                     return TryTake(8, out ReadOnlySpan<byte> f64)
                            && Set(BinaryPrimitives.ReadDoubleBigEndian(f64).ToString("R", CultureInfo.InvariantCulture), out text);
                 case 0xCC or 0xCD or 0xCE or 0xCF:
-                {
-                    int width = 1 << (head - 0xCC);
-                    return TryReadUnsigned(width, out ulong value)
-                           && Set(value.ToString(CultureInfo.InvariantCulture), out text);
-                }
+                    {
+                        int width = 1 << (head - 0xCC);
+                        return TryReadUnsigned(width, out ulong value)
+                               && Set(value.ToString(CultureInfo.InvariantCulture), out text);
+                    }
                 case 0xD0 or 0xD1 or 0xD2 or 0xD3:
-                {
-                    int width = 1 << (head - 0xD0);
-                    return TryReadSigned(width, out long value)
-                           && Set(value.ToString(CultureInfo.InvariantCulture), out text);
-                }
+                    {
+                        int width = 1 << (head - 0xD0);
+                        return TryReadSigned(width, out long value)
+                               && Set(value.ToString(CultureInfo.InvariantCulture), out text);
+                    }
                 case 0xD4 or 0xD5 or 0xD6 or 0xD7 or 0xD8:
                     return TryReadExt(1 << (head - 0xD4), out text);
                 case 0xD9 or 0xDA or 0xDB:
-                {
-                    int width = head == 0xD9 ? 1 : head == 0xDA ? 2 : 4;
-                    return TryReadLength(width, out int length) && TryReadString(length, out text);
-                }
+                    {
+                        int width = head == 0xD9 ? 1 : head == 0xDA ? 2 : 4;
+                        return TryReadLength(width, out int length) && TryReadString(length, out text);
+                    }
                 case 0xDC or 0xDD:
-                {
-                    int width = head == 0xDC ? 2 : 4;
-                    return TryReadLength(width, out int count) && TryReadArray(count, depth, out text);
-                }
+                    {
+                        int width = head == 0xDC ? 2 : 4;
+                        return TryReadLength(width, out int count) && TryReadArray(count, depth, out text);
+                    }
                 case 0xDE or 0xDF:
-                {
-                    int width = head == 0xDE ? 2 : 4;
-                    return TryReadLength(width, out int count) && TryReadMap(count, depth, out text);
-                }
+                    {
+                        int width = head == 0xDE ? 2 : 4;
+                        return TryReadLength(width, out int count) && TryReadMap(count, depth, out text);
+                    }
                 default:
                     // 0xC1 在规范里是"永不使用"。碰上它就说明这段字节压根不是 MessagePack。
                     return false;
@@ -688,7 +688,7 @@ public static class RedisValueCodec
                 {
                     return false;
                 }
-                builder.Append(i == 0 ? string.Empty : ", ").Append(item);
+                _ = builder.Append(i == 0 ? string.Empty : ", ").Append(item);
             }
             text = builder.Append(']').ToString();
             return true;
@@ -704,7 +704,7 @@ public static class RedisValueCodec
                 {
                     return false;
                 }
-                builder.Append(i == 0 ? string.Empty : ", ").Append(key).Append(": ").Append(value);
+                _ = builder.Append(i == 0 ? string.Empty : ", ").Append(key).Append(": ").Append(value);
             }
             text = builder.Append('}').ToString();
             return true;
@@ -745,7 +745,7 @@ public static class RedisValueCodec
                 {
                     return false;
                 }
-                builder.Append(pad).Append(field).Append(": ");
+                _ = builder.Append(pad).Append(field).Append(": ");
                 switch (wire)
                 {
                     case 0:
@@ -753,7 +753,7 @@ public static class RedisValueCodec
                         {
                             return false;
                         }
-                        builder.Append(varint.ToString(CultureInfo.InvariantCulture))
+                        _ = builder.Append(varint.ToString(CultureInfo.InvariantCulture))
                             .Append("            # varint");
                         break;
                     case 1:
@@ -761,7 +761,7 @@ public static class RedisValueCodec
                         {
                             return false;
                         }
-                        builder.Append(BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(at, 8))
+                        _ = builder.Append(BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(at, 8))
                                 .ToString(CultureInfo.InvariantCulture))
                             .Append("            # fixed64");
                         at += 8;
@@ -771,28 +771,28 @@ public static class RedisValueCodec
                         {
                             return false;
                         }
-                        builder.Append(BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(at, 4))
+                        _ = builder.Append(BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(at, 4))
                                 .ToString(CultureInfo.InvariantCulture))
                             .Append("            # fixed32");
                         at += 4;
                         break;
                     case 2:
-                    {
-                        if (!TryReadVarint(data, ref at, out ulong length) || length > int.MaxValue
-                            || at + (int)length > data.Length)
                         {
-                            return false;
+                            if (!TryReadVarint(data, ref at, out ulong length) || length > int.MaxValue
+                                || at + (int)length > data.Length)
+                            {
+                                return false;
+                            }
+                            ReadOnlySpan<byte> body = data.Slice(at, (int)length);
+                            at += (int)length;
+                            AppendLengthDelimited(builder, body, depth, pad);
+                            break;
                         }
-                        ReadOnlySpan<byte> body = data.Slice(at, (int)length);
-                        at += (int)length;
-                        AppendLengthDelimited(builder, body, depth, pad);
-                        break;
-                    }
                     default:
                         // 3 / 4 是废弃的 group,6 / 7 不存在:碰上就说明这不是 protobuf。
                         return false;
                 }
-                builder.Append('\n');
+                _ = builder.Append('\n');
             }
             text = depth == 0
                 ? builder.ToString().TrimEnd('\n')
@@ -809,16 +809,16 @@ public static class RedisValueCodec
             // 两个方向的误判都存在,但这一个方向的结果对人有用得多。
             if (IsPrintableUtf8(body))
             {
-                builder.Append(JsonSerializer.Serialize(Encoding.UTF8.GetString(body), DumpText))
+                _ = builder.Append(JsonSerializer.Serialize(Encoding.UTF8.GetString(body), DumpText))
                     .Append("  # string(").Append(body.Length).Append(" B)");
                 return;
             }
             if (body.Length > 0 && TryDump(body, depth + 1, out string? nested))
             {
-                builder.Append(nested).Append("  # message(").Append(body.Length).Append(" B)");
+                _ = builder.Append(nested).Append("  # message(").Append(body.Length).Append(" B)");
                 return;
             }
-            builder.Append("0x").Append(Convert.ToHexString(body[..Math.Min(body.Length, 32)]).ToLowerInvariant())
+            _ = builder.Append("0x").Append(Convert.ToHexString(body[..Math.Min(body.Length, 32)]).ToLowerInvariant())
                 .Append(body.Length > 32 ? "…" : string.Empty)
                 .Append("  # bytes(").Append(body.Length).Append(" B)");
         }
@@ -913,19 +913,19 @@ public static class RedisValueCodec
                     _at += 2;
                     return TryReadCollection(depth, header: null, out result);
                 case 'O' when text[_at + 1] == ':':
-                {
-                    _at += 2;
-                    if (!TryReadUntil(':', out string nameLength)
-                        || !int.TryParse(nameLength, NumberStyles.Integer, CultureInfo.InvariantCulture, out int length)
-                        || _at + length + 2 > text.Length)
                     {
-                        return false;
+                        _at += 2;
+                        if (!TryReadUntil(':', out string nameLength)
+                            || !int.TryParse(nameLength, NumberStyles.Integer, CultureInfo.InvariantCulture, out int length)
+                            || _at + length + 2 > text.Length)
+                        {
+                            return false;
+                        }
+                        // 类名带引号:"MyClass":
+                        string className = text.Substring(_at + 1, length);
+                        _at += length + 3;
+                        return TryReadCollection(depth, className, out result);
                     }
-                    // 类名带引号:"MyClass":
-                    string className = text.Substring(_at + 1, length);
-                    _at += length + 3;
-                    return TryReadCollection(depth, className, out result);
-                }
                 default:
                     return false;
             }
@@ -980,7 +980,7 @@ public static class RedisValueCodec
                 {
                     return false;
                 }
-                builder.Append(i == 0 ? string.Empty : ", ").Append(key).Append(": ").Append(value);
+                _ = builder.Append(i == 0 ? string.Empty : ", ").Append(key).Append(": ").Append(value);
             }
             if (_at >= text.Length || text[_at] != '}')
             {

@@ -29,9 +29,6 @@ internal sealed partial class GridFsTabViewModel
     private CancellationTokenSource? _thumbCts;
     private GridFsTransfer? _current;
     private string? _reselectPath;
-    private string _lastTransfer = "";
-    private double _transferProgress;
-    private string _transferStats = "";
 
     /// <summary>上传文件(多选)。</summary>
     public AsyncCommand UploadFilesCommand { get; private set; } = null!;
@@ -97,23 +94,26 @@ internal sealed partial class GridFsTabViewModel
     public string TransferIconToken => _current is null ? "VelaTextMuted" : "VelaAccent";
 
     /// <summary>「正在上传 detail-07.jpg」;空闲时是上一批的结果或「无传输任务」。</summary>
-    public string TransferTitle => _current is { } job
+    public string TransferTitle
+    {
+        get => _current is { } job
         ? Loc.Format(job.Kind == GridFsTransferKind.Upload ? "Fs_Uploading" : "Fs_Downloading", job.Name)
-        : _lastTransfer.Length > 0 ? _lastTransfer : Loc["Fs_Idle"];
+        : field.Length > 0 ? field : Loc["Fs_Idle"]; private set;
+    } = "";
 
     /// <summary>当前这一个的进度(0–1)。</summary>
     public double TransferProgress
     {
-        get => _transferProgress;
-        private set => SetProperty(ref _transferProgress, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>「62% · 3.1 MB/s · 剩余 1 s」。</summary>
     public string TransferStats
     {
-        get => _transferStats;
-        private set => SetProperty(ref _transferStats, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>「队列:2 个文件」;队列空为空。</summary>
     public string QueueText => _queue.Count > 0 ? Loc.Format("Fs_Queue", _queue.Count) : "";
@@ -243,7 +243,7 @@ internal sealed partial class GridFsTabViewModel
     /// <summary>某个文件的 metadata:模板里没写 contentType 的,按这个文件的扩展名补上。</summary>
     internal static BsonDocument MetadataFor(BsonDocument template, string relative)
     {
-        var doc = template.DeepClone().AsBsonDocument;
+        BsonDocument doc = template.DeepClone().AsBsonDocument;
         if (!doc.Contains("contentType"))
         {
             doc.InsertAt(0, new BsonElement("contentType", GridFsPaths.GuessContentType(relative)));
@@ -442,13 +442,13 @@ internal sealed partial class GridFsTabViewModel
                     {
                         await using var source = new FileStream(job.LocalPath, FileMode.Open, FileAccess.Read, FileShare.Read,
                             1 << 16, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                        await _service.UploadAsync(job.Filename, source, job.Metadata, job.Reporter, job.ChunkSize, cts.Token)
+                        _ = await _service.UploadAsync(job.Filename, source, job.Metadata, job.Reporter, job.ChunkSize, cts.Token)
                             .ConfigureAwait(true);
                         uploaded = true;
                     }
                     else
                     {
-                        Directory.CreateDirectory(Path.GetDirectoryName(job.LocalPath)!);
+                        _ = Directory.CreateDirectory(Path.GetDirectoryName(job.LocalPath)!);
                         await using (var target = new FileStream(job.LocalPath, FileMode.Create, FileAccess.Write, FileShare.None,
                                          1 << 16, FileOptions.Asynchronous))
                         {
@@ -502,7 +502,7 @@ internal sealed partial class GridFsTabViewModel
                 _queue.Clear();
                 _pendingRows.Clear();
             }
-            _lastTransfer = cancelled
+            TransferTitle = cancelled
                 ? Loc["Fs_TransfersCancelled"]
                 : done == 0 ? "" : Loc.Format(kind == GridFsTransferKind.Upload ? "Fs_UploadDone" : "Fs_DownloadDone", done, BsonText.Bytes(bytes));
             TransferProgress = 0;
@@ -551,8 +551,8 @@ internal sealed partial class GridFsTabViewModel
         GridFsEntry? row = _pendingRows.FirstOrDefault(r => ReferenceEquals(r.Transfer, job));
         if (row is not null)
         {
-            _pendingRows.Remove(row);
-            Entries.Remove(row);
+            _ = _pendingRows.Remove(row);
+            _ = Entries.Remove(row);
         }
     }
 
@@ -578,8 +578,8 @@ internal sealed partial class GridFsTabViewModel
         _queue.Clear();
         foreach (GridFsEntry row in _pendingRows.Where(r => !ReferenceEquals(r.Transfer, _current)).ToList())
         {
-            _pendingRows.Remove(row);
-            Entries.Remove(row);
+            _ = _pendingRows.Remove(row);
+            _ = Entries.Remove(row);
         }
         RaiseTransfer();
     }
@@ -773,18 +773,18 @@ internal sealed partial class GridFsTabViewModel
             message = Loc.Format("Fs_DeleteOldBody", label, file.BaseName, date, versions.Count - 1);
         }
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Fs_DeleteVersionTitle"],
-                Message = message,
-                ConfirmLabel = versions.Count <= 1 ? Loc["Fs_DeleteTitle"] : Loc["Fs_DeleteVersionTitle"],
-                IconKey = "Mongo.trash-2",
-                Facts =
+        {
+            Title = Loc["Fs_DeleteVersionTitle"],
+            Message = message,
+            ConfirmLabel = versions.Count <= 1 ? Loc["Fs_DeleteTitle"] : Loc["Fs_DeleteVersionTitle"],
+            IconKey = "Mongo.trash-2",
+            Facts =
                 [
                     new(Loc["Fs_FactSize"], BsonText.Bytes(file.Length)),
                     new(Loc["Fs_FactChunks"], BsonText.Grouped(file.ChunkCount))
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -816,19 +816,19 @@ internal sealed partial class GridFsTabViewModel
         string labels = string.Join(", ", old.OrderBy(static v => v.Number).Select(static v => v.Label));
         int kept = versions.Count - old.Count;
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Fs_DeleteVersionsTitle"],
-                Message = Loc.Format("Fs_DeleteVersionsBody", labels, latest.BaseName, old.Count, kept),
-                ConfirmLabel = Loc.Format("Fs_DeleteVersionsConfirm", old.Count),
-                IconKey = "Mongo.trash-2",
-                Facts =
+        {
+            Title = Loc["Fs_DeleteVersionsTitle"],
+            Message = Loc.Format("Fs_DeleteVersionsBody", labels, latest.BaseName, old.Count, kept),
+            ConfirmLabel = Loc.Format("Fs_DeleteVersionsConfirm", old.Count),
+            IconKey = "Mongo.trash-2",
+            Facts =
                 [
                     new(Loc["Fs_FactVersions"], BsonText.Grouped(old.Count)),
                     new(Loc["Fs_FactChunks"], BsonText.Grouped(chunks)),
                     new(Loc["Fs_FactFreed"], BsonText.Bytes(bytes))
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -880,7 +880,7 @@ internal sealed partial class GridFsTabViewModel
         }
         try
         {
-            await _service.RestoreAsync(version).ConfigureAwait(true);
+            _ = await _service.RestoreAsync(version).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Fs_Restored", label, version.BaseName), Kind = ToastKind.Success });
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
@@ -921,20 +921,20 @@ internal sealed partial class GridFsTabViewModel
         long chunks = orphans.Sum(static o => o.Chunks);
         long bytes = orphans.Sum(static o => o.Bytes);
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Fs_OrphansTitle"],
-                Message = Loc.Format("Fs_OrphansBody", BsonText.Grouped(chunks), BsonText.Bytes(bytes), BsonText.Grouped(orphans.Count),
+        {
+            Title = Loc["Fs_OrphansTitle"],
+            Message = Loc.Format("Fs_OrphansBody", BsonText.Grouped(chunks), BsonText.Bytes(bytes), BsonText.Grouped(orphans.Count),
                     Bucket.FilesCollection),
-                ConfirmLabel = Loc["Fs_OrphansConfirm"],
-                IconKey = "Mongo.layers",
-                Facts =
+            ConfirmLabel = Loc["Fs_OrphansConfirm"],
+            IconKey = "Mongo.layers",
+            Facts =
                 [
                     new(Loc["Fs_FactOrphanFiles"], BsonText.Grouped(orphans.Count)),
                     new(Loc["Fs_FactChunks"], BsonText.Grouped(chunks)),
                     new(Loc["Fs_FactSize"], BsonText.Bytes(bytes))
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -1029,9 +1029,7 @@ internal sealed partial class GridFsTabViewModel
             using var stream = new MemoryStream(bytes, writable: false);
             return width is { } w ? Bitmap.DecodeToWidth(stream, w) : new Bitmap(stream);
         }
-#pragma warning disable CA1031 // 解码器对坏图抛的异常类型因平台与格式而异;任何一种都只意味着"这张没法预览"。
         catch (Exception)
-#pragma warning restore CA1031
         {
             return null;
         }

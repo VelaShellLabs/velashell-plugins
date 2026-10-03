@@ -65,13 +65,13 @@ public sealed class RedisWriteIntegrationTests
             IServer server = mux.GetServer(Host, Port);
             foreach (RedisKey key in server.KeysAsync(Database, $"{_prefix}*", pageSize: 100).ToBlockingEnumerable())
             {
-                await db.KeyDeleteAsync(key);
+                _ = await db.KeyDeleteAsync(key);
             }
             // 跨库复制那条用例会往 db8 写一个键。
             IDatabase other = mux.GetDatabase(8);
             foreach (RedisKey key in server.KeysAsync(8, $"{_prefix}*", pageSize: 100).ToBlockingEnumerable())
             {
-                await other.KeyDeleteAsync(key);
+                _ = await other.KeyDeleteAsync(key);
             }
             await mux.CloseAsync();
         }
@@ -103,7 +103,7 @@ public sealed class RedisWriteIntegrationTests
         RedisConnection connection = Require();
         RedisKeyName key = Key("keepttl");
         await connection.SetStringAsync(key, Encoding.UTF8.GetBytes("first"), keepTtl: false);
-        await connection.ExpireAsync(key, TimeSpan.FromMinutes(10));
+        _ = await connection.ExpireAsync(key, TimeSpan.FromMinutes(10));
 
         await connection.SetStringAsync(key, Encoding.UTF8.GetBytes("second"));
 
@@ -120,7 +120,7 @@ public sealed class RedisWriteIntegrationTests
         RedisConnection connection = Require();
         RedisKeyName key = Key("droptll");
         await connection.SetStringAsync(key, Encoding.UTF8.GetBytes("x"), keepTtl: false);
-        await connection.ExpireAsync(key, TimeSpan.FromMinutes(10));
+        _ = await connection.ExpireAsync(key, TimeSpan.FromMinutes(10));
 
         await connection.SetStringAsync(key, Encoding.UTF8.GetBytes("y"), keepTtl: false);
 
@@ -151,9 +151,9 @@ public sealed class RedisWriteIntegrationTests
         RedisConnection connection = Require();
         RedisKeyName key = Key("list");
 
-        await connection.PushListAsync(key, "a", atHead: false);
-        await connection.PushListAsync(key, "b", atHead: false);
-        await connection.PushListAsync(key, "z", atHead: true);
+        _ = await connection.PushListAsync(key, "a", atHead: false);
+        _ = await connection.PushListAsync(key, "b", atHead: false);
+        _ = await connection.PushListAsync(key, "z", atHead: true);
         await connection.SetListItemAsync(key, 1, "A");
 
         RedisElementPage page = await connection.ReadElementsAsync(key, "list", "0", 100);
@@ -251,10 +251,7 @@ public sealed class RedisWriteIntegrationTests
     }
 
     [TestMethod]
-    public async Task Delete_EmptyList_IsANoOp()
-    {
-        Assert.AreEqual(0, await Require().DeleteAsync([]));
-    }
+    public async Task Delete_EmptyList_IsANoOp() => Assert.AreEqual(0, await Require().DeleteAsync([]));
 
     [TestMethod]
     public async Task CopyKey_UsesDumpRestoreAndCarriesTheTtl()
@@ -263,7 +260,7 @@ public sealed class RedisWriteIntegrationTests
         RedisConnection connection = Require();
         RedisKeyName source = Key("copy-src");
         await connection.SetHashFieldAsync(source, "f", "v");
-        await connection.ExpireAsync(source, TimeSpan.FromMinutes(30));
+        _ = await connection.ExpireAsync(source, TimeSpan.FromMinutes(30));
 
         Assert.IsTrue(await connection.CopyKeyAsync(source, connection, targetDatabase: 8,
             newKey: Key("copy-dst"), replace: true));

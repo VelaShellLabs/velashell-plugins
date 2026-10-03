@@ -173,11 +173,11 @@ internal static class DocumentEditorDiff
         {
             for (int i = start; i < endLeft; i++)
             {
-                removed.Add(i + 1);
+                _ = removed.Add(i + 1);
             }
             for (int j = start; j < endRight; j++)
             {
-                added.Add(j + 1);
+                _ = added.Add(j + 1);
             }
             return (removed, added);
         }
@@ -203,22 +203,22 @@ internal static class DocumentEditorDiff
             }
             else if (lcs[p + 1, q] >= lcs[p, q + 1])
             {
-                removed.Add(start + p + 1);
+                _ = removed.Add(start + p + 1);
                 p++;
             }
             else
             {
-                added.Add(start + q + 1);
+                _ = added.Add(start + q + 1);
                 q++;
             }
         }
         for (; p < n; p++)
         {
-            removed.Add(start + p + 1);
+            _ = removed.Add(start + p + 1);
         }
         for (; q < m; q++)
         {
-            added.Add(start + q + 1);
+            _ = added.Add(start + q + 1);
         }
         return (removed, added);
     }

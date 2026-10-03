@@ -33,12 +33,8 @@ internal interface IViewServices
 /// </summary>
 internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkbench, IDisposable
 {
-    private readonly IPluginContext _context;
     private int _released;
     private bool _disposed;
-    private WorkspaceTab? _activeTab;
-    private DialogViewModel? _dialog;
-    private MongoSession? _currentSession;
 
     /// <summary>构造。</summary>
     /// <param name="loc">文案表。</param>
@@ -47,7 +43,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     public MongoWorkspaceViewModel(Loc loc, IPluginContext context, MongoStore store)
     {
         Loc = loc;
-        _context = context;
+        Context = context;
         Store = store;
         Log = context.Log;
         Profiles = new MongoProfileStore(context);
@@ -71,7 +67,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     internal MongoConnector Connector { get; }
 
     /// <summary>插件上下文(连接对话框要列宿主里已保存的 SSH 连接)。</summary>
-    internal IPluginContext Context => _context;
+    internal IPluginContext Context { get; }
 
     /// <summary>视图注入的剪贴板与文件选择。</summary>
     internal IViewServices? ViewServices { get; set; }
@@ -88,10 +84,9 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     /// </summary>
     public MongoSession? CurrentSession
     {
-        get => _currentSession;
-        private set
+        get; private set
         {
-            if (!SetProperty(ref _currentSession, value))
+            if (!SetProperty(ref field, value))
             {
                 return;
             }
@@ -100,17 +95,17 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     }
 
     /// <summary>有当前连接(工具栏右侧的只读开关与服务器徽章只在这时出现)。</summary>
-    public bool HasSession => _currentSession is not null;
+    public bool HasSession => CurrentSession is not null;
 
     private void UpdateCurrentSession() =>
-        CurrentSession = _activeTab?.Owner as MongoSession
+        CurrentSession = ActiveTab?.Owner as MongoSession
                          ?? SelectedNode?.Session
-                         ?? (_activeTab is null ? Connections.Select(static c => c.Session).OfType<MongoSession>().FirstOrDefault() : null);
+                         ?? (ActiveTab is null ? Connections.Select(static c => c.Session).OfType<MongoSession>().FirstOrDefault() : null);
 
     /// <summary>某条连接的护栏、可用性或延迟变了;是当前连接就刷新工具栏与状态条。</summary>
     internal void OnSessionChanged(MongoSession session)
     {
-        if (ReferenceEquals(session, _currentSession))
+        if (ReferenceEquals(session, CurrentSession))
         {
             RaiseSessionProperties();
         }
@@ -126,10 +121,10 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     /// <summary>当前连接是否只读(开关双向绑定;解锁生产连接要确认,走 <see cref="ToggleReadOnlyCommand" />)。</summary>
     public bool IsReadOnly
     {
-        get => _currentSession?.Guard.IsReadOnly ?? false;
+        get => CurrentSession?.Guard.IsReadOnly ?? false;
         set
         {
-            if (_currentSession is { } session)
+            if (CurrentSession is { } session)
             {
                 session.Guard.IsReadOnly = value;
             }
@@ -140,14 +135,14 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     public string ReadOnlyLabel => IsReadOnly ? Loc["Toolbar_ReadOnlyOn"] : Loc["Toolbar_ReadWrite"];
 
     /// <summary>服务器徽章(<c>rs0 · PRIMARY</c>)。</summary>
-    public string ServerBadge => _currentSession?.Connection.Server.Badge ?? "";
+    public string ServerBadge => CurrentSession?.Connection.Server.Badge ?? "";
 
     /// <summary>徽章下面那行小字(版本 · 地址 · 延迟)。</summary>
     public string ServerDetail
     {
         get
         {
-            if (_currentSession is not { } session)
+            if (CurrentSession is not { } session)
             {
                 return "";
             }
@@ -158,23 +153,23 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     }
 
     /// <summary>徽章前的色点:连着且可写绿、只读成员橙、断了红。</summary>
-    public string ServerDotClass => _currentSession is not { } session
+    public string ServerDotClass => CurrentSession is not { } session
         ? "off"
         : !session.IsAvailable ? "err" : session.Connection.Server.IsWritable ? "ok" : "warn";
 
     /// <summary>当前连接断了时内容区顶上的横幅。</summary>
-    public string BannerMessage => _currentSession is { IsAvailable: false } ? Loc["Workspace_Disconnected"] : "";
+    public string BannerMessage => CurrentSession is { IsAvailable: false } ? Loc["Workspace_Disconnected"] : "";
 
     /// <summary>有横幅。</summary>
     public bool HasBanner => BannerMessage.Length > 0;
 
     /// <summary>对象树的右键菜单要不要给「删除数据库」(连接里禁用了就不给)。</summary>
-    public bool CanOfferDropDatabase => _currentSession is { } session && !session.Guard.DisableDropDatabase;
+    public bool CanOfferDropDatabase => CurrentSession is { } session && !session.Guard.DisableDropDatabase;
 
     // ── 状态条(设计稿底部那一行:连接 · 范围 · 当前标签的状态)──────────────
 
     /// <summary>状态条左边的连接名。</summary>
-    public string StatusConnection => _currentSession?.ConnectionName ?? "";
+    public string StatusConnection => CurrentSession?.ConnectionName ?? "";
 
     /// <summary>状态条上连接名前的色点。</summary>
     public string StatusDotClass => ServerDotClass;
@@ -184,7 +179,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     {
         get
         {
-            if (_currentSession is not { } session)
+            if (CurrentSession is not { } session)
             {
                 return "";
             }
@@ -194,7 +189,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     }
 
     /// <summary>当前标签自己的状态(<c>shop.orders · 50 行 · 12 ms · IXSCAN</c>)。</summary>
-    public string StatusText => _activeTab?.StatusText is { Length: > 0 } text ? text : "";
+    public string StatusText => ActiveTab?.StatusText is { Length: > 0 } text ? text : "";
 
     /// <summary>状态条连接名后面那一段:标签有自己的状态就用它(那里已经带着范围),没有就只写范围。</summary>
     public string StatusDetail => StatusText.Length > 0 ? StatusText : StatusScope;
@@ -210,22 +205,15 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     /// <summary>活动标签。</summary>
     public WorkspaceTab? ActiveTab
     {
-        get => _activeTab;
-        set
+        get; set
         {
-            WorkspaceTab? previous = _activeTab;
-            if (!SetProperty(ref _activeTab, value))
+            WorkspaceTab? previous = field;
+            if (!SetProperty(ref field, value))
             {
                 return;
             }
-            if (previous is not null)
-            {
-                previous.IsActive = false;
-            }
-            if (value is not null)
-            {
-                value.IsActive = true;
-            }
+            previous?.IsActive = false;
+            value?.IsActive = true;
             RaisePropertiesChanged(nameof(ActiveTool), nameof(HasTabs));
             UpdateCurrentSession();
             NotifyStatusChanged();
@@ -237,7 +225,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     public bool HasTabs => Tabs.Count > 0;
 
     /// <summary>工具栏上哪个大按钮亮着。</summary>
-    public string ActiveTool => _activeTab switch
+    public string ActiveTool => ActiveTab switch
     {
         null => "",
         ObjectsTabViewModel { Filter: ObjectFilter.Views } => "views",
@@ -269,7 +257,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
             return existing;
         }
         tab.Closer = CloseTabAsync;
-        int index = _activeTab is null ? Tabs.Count : Tabs.IndexOf(_activeTab) + 1;
+        int index = ActiveTab is null ? Tabs.Count : Tabs.IndexOf(ActiveTab) + 1;
         Tabs.Insert(Math.Clamp(index, 0, Tabs.Count), tab);
         ActiveTab = tab;
         RaisePropertyChanged(nameof(HasTabs));
@@ -286,11 +274,11 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
         int index = Tabs.IndexOf(old);
         if (index < 0)
         {
-            Activate(replacement);
+            _ = Activate(replacement);
             return;
         }
         replacement.Closer = CloseTabAsync;
-        bool wasActive = ReferenceEquals(_activeTab, old);
+        bool wasActive = ReferenceEquals(ActiveTab, old);
         Tabs[index] = replacement;
         if (wasActive)
         {
@@ -355,10 +343,9 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     /// <summary>当前对话框。</summary>
     public DialogViewModel? Dialog
     {
-        get => _dialog;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _dialog, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasDialog));
             }
@@ -366,7 +353,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
     }
 
     /// <summary>有对话框(覆盖层与遮罩)。</summary>
-    public bool HasDialog => _dialog is not null;
+    public bool HasDialog => Dialog is not null;
 
     /// <summary>右下角的提示。</summary>
     public ObservableCollection<ToastViewModel> Toasts { get; } = [];
@@ -476,9 +463,7 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
             {
                 await link.DisposeAsync().ConfigureAwait(false);
             }
-#pragma warning disable CA1031 // 收尾路径:驱动、套接字、跳板各有各的异常,哪一种都不该让停用半途而废。
             catch (Exception)
-#pragma warning restore CA1031
             {
             }
         }

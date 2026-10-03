@@ -55,7 +55,7 @@ internal sealed record EsrShape(IReadOnlyList<string> Equality, IReadOnlyList<(s
         var key = new BsonDocument();
         foreach (string field in Equality)
         {
-            key.Set(field, 1);
+            _ = key.Set(field, 1);
         }
         foreach ((string path, int direction) in Sort)
         {
@@ -103,7 +103,7 @@ internal sealed record EsrShape(IReadOnlyList<string> Equality, IReadOnlyList<(s
         }
         foreach (string e in equality)
         {
-            range.Remove(e);
+            _ = range.Remove(e);
         }
         return equality.Count + sorts.Count + range.Count == 0 ? null : new EsrShape(equality, sorts, range);
     }
@@ -260,7 +260,7 @@ internal static class IndexAdvisor
             {
                 continue;
             }
-            if (!groups.TryGetValue(shape.Signature, out var list))
+            if (!groups.TryGetValue(shape.Signature, out List<(EsrShape Shape, BsonDocument Entry, BsonDocument Filter, BsonDocument? Sort)>? list))
             {
                 list = [];
                 groups[shape.Signature] = list;
@@ -272,19 +272,19 @@ internal static class IndexAdvisor
         [
             .. order.Select(sig =>
                 {
-                    var list = groups[sig];
-                    var latest = list[0];
+                    List<(EsrShape Shape, BsonDocument Entry, BsonDocument Filter, BsonDocument? Sort)> list = groups[sig];
+                    (EsrShape Shape, BsonDocument Entry, BsonDocument Filter, BsonDocument? Sort) = list[0];
                     return new AdvisorQueryGroup(
-                        latest.Shape,
+                        Shape,
                         list.Count,
                         list.Average(static x => Number(x.Entry, "millis")),
                         list.Average(static x => Number(x.Entry, "docsExamined")),
                         list.Average(static x => Number(x.Entry, "nreturned")),
                         list.Any(static x => x.Entry.GetValue("planSummary", "").ToString()!.StartsWith("COLLSCAN", StringComparison.Ordinal)),
                         list.Any(static x => x.Entry.GetValue("hasSortStage", false).ToBoolean()),
-                        latest.Entry.GetValue("planSummary", "").ToString() ?? "",
-                        latest.Filter,
-                        latest.Sort);
+                        Entry.GetValue("planSummary", "").ToString() ?? "",
+                        Filter,
+                        Sort);
                 })
                 .OrderByDescending(static g => g.Count * g.AverageMillis)
         ];
@@ -316,24 +316,24 @@ internal static class IndexAdvisor
                 filter = Doc(command, "query");
                 return true;
             case "command" when command.Contains("aggregate") && command.GetValue("pipeline", BsonNull.Value) is BsonArray pipeline:
-            {
-                // 只看管道开头的 $match / $sort:后面的阶段吃的是上一阶段的输出,与集合索引无关。
-                foreach (BsonDocument stage in pipeline.OfType<BsonDocument>())
                 {
-                    if (stage.TryGetValue("$match", out BsonValue match) && match is BsonDocument m && sort is null && filter.ElementCount == 0)
+                    // 只看管道开头的 $match / $sort:后面的阶段吃的是上一阶段的输出,与集合索引无关。
+                    foreach (BsonDocument stage in pipeline.OfType<BsonDocument>())
                     {
-                        filter = m;
-                        continue;
+                        if (stage.TryGetValue("$match", out BsonValue match) && match is BsonDocument m && sort is null && filter.ElementCount == 0)
+                        {
+                            filter = m;
+                            continue;
+                        }
+                        if (stage.TryGetValue("$sort", out BsonValue s) && s is BsonDocument sd && sort is null)
+                        {
+                            sort = sd;
+                            continue;
+                        }
+                        break;
                     }
-                    if (stage.TryGetValue("$sort", out BsonValue s) && s is BsonDocument sd && sort is null)
-                    {
-                        sort = sd;
-                        continue;
-                    }
-                    break;
+                    return filter.ElementCount > 0 || sort is not null;
                 }
-                return filter.ElementCount > 0 || sort is not null;
-            }
             default:
                 return false;
         }

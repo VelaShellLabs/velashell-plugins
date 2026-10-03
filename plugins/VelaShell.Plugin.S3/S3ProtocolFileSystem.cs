@@ -86,13 +86,13 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
             if (info.Settings.DefaultBucket is { Length: > 0 } bucket)
             {
                 // 只授予单桶权限的账号调 ListBuckets 会被拒 —— 配了默认桶就只探那个桶。
-                await client.ListObjectsV2Async(
+                _ = await client.ListObjectsV2Async(
                     new() { BucketName = bucket.Trim(), MaxKeys = 1, Delimiter = "/" },
                     cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await client.ListBucketsAsync(new ListBucketsRequest(), cancellationToken).ConfigureAwait(false);
+                _ = await client.ListBucketsAsync(new ListBucketsRequest(), cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -122,7 +122,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         {
             return;
         }
-        _keys.TryRemove(session.Key, out _);
+        _ = _keys.TryRemove(session.Key, out _);
         // 先收面板再断会话:桶管理器/对象检视器都握着这条会话的 sessionId,
         // 留着它们只会让用户对着一扇每次操作都报 "session is not open" 的窗口发呆。
         if (actions is not null)
@@ -205,7 +205,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
     {
         try
         {
-            await OpenSessionAsync(sessionId, S3ConnectionInfo.FromRequest(request), cancellationToken).ConfigureAwait(false);
+            _ = await OpenSessionAsync(sessionId, S3ConnectionInfo.FromRequest(request), cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -768,7 +768,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         S3ObjectPath path = RequireObject(remotePath, "create file");
         try
         {
-            await session.Client.PutObjectAsync(new()
+            _ = await session.Client.PutObjectAsync(new()
             {
                 BucketName = path.Bucket,
                 Key = path.Key,
@@ -800,10 +800,10 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
             {
                 // 显式写出请求类型:目标类型推断在 PutBucketAsync(string,…) 与
                 // PutBucketAsync(PutBucketRequest,…) 之间有二义性。
-                await session.Client.PutBucketAsync(new PutBucketRequest { BucketName = path.Bucket }, cancellationToken).ConfigureAwait(false);
+                _ = await session.Client.PutBucketAsync(new PutBucketRequest { BucketName = path.Bucket }, cancellationToken).ConfigureAwait(false);
                 return;
             }
-            await session.Client.PutObjectAsync(new()
+            _ = await session.Client.PutObjectAsync(new()
             {
                 BucketName = path.Bucket,
                 Key = path.Prefix,
@@ -870,7 +870,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
             // 全选删除(那一步会给出准确的「删除 N 项」确认),再回来删桶。
             if (path.Key.Length == 0)
             {
-                await session.Client.DeleteBucketAsync(new DeleteBucketRequest { BucketName = path.Bucket }, cancellationToken).ConfigureAwait(false);
+                _ = await session.Client.DeleteBucketAsync(new DeleteBucketRequest { BucketName = path.Bucket }, cancellationToken).ConfigureAwait(false);
                 progress?.Report(new(1, 1, path.ToString()));
                 return;
             }
@@ -879,7 +879,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
             // 顺手带走同名前缀下的东西。
             if (await TryHeadAsync(session, path.Bucket, path.Key, cancellationToken).ConfigureAwait(false) is not null)
             {
-                await session.Client.DeleteObjectAsync(new() { BucketName = path.Bucket, Key = path.Key }, cancellationToken).ConfigureAwait(false);
+                _ = await session.Client.DeleteObjectAsync(new() { BucketName = path.Bucket, Key = path.Key }, cancellationToken).ConfigureAwait(false);
                 progress?.Report(new(1, 1, path.ToString()));
                 return;
             }
@@ -1015,7 +1015,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
     {
         if (size <= S3Settings.MaxSinglePutBytes)
         {
-            await session.Client.CopyObjectAsync(new()
+            _ = await session.Client.CopyObjectAsync(new()
             {
                 SourceBucket = source.Bucket,
                 SourceKey = source.Key,
@@ -1052,7 +1052,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
                 }, cancellationToken).ConfigureAwait(false);
                 parts.Add(new(partNumber, part.ETag));
             }
-            await session.Client.CompleteMultipartUploadAsync(new()
+            _ = await session.Client.CompleteMultipartUploadAsync(new()
             {
                 BucketName = destination.Bucket,
                 Key = destination.Key,
@@ -1065,7 +1065,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
             // 中止失败只会在服务端留下残片,不该覆盖用户真正需要看到的那个错误。
             try
             {
-                await session.Client.AbortMultipartUploadAsync(new()
+                _ = await session.Client.AbortMultipartUploadAsync(new()
                 {
                     BucketName = destination.Bucket,
                     Key = destination.Key,
@@ -1313,7 +1313,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         try
         {
             // HeadBucket 是最便宜的探测,且只授予单桶权限的账号也能调。
-            await session.Client.ListObjectsV2Async(
+            _ = await session.Client.ListObjectsV2Async(
                 new() { BucketName = bucket, MaxKeys = 1 }, cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -1384,7 +1384,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         // 与核实过的起点未必一致,对不上就会在文件里留下空隙(SftpService 踩过同一个坑)。
         var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None, LocalStreamBufferSize, FileOptions.Asynchronous);
         stream.SetLength(offset);
-        stream.Seek(offset, SeekOrigin.Begin);
+        _ = stream.Seek(offset, SeekOrigin.Begin);
         return stream;
     }
 
@@ -1421,7 +1421,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
     /// </summary>
     private Exception Fault(Guid sessionId, Exception ex, string operation)
     {
-        _sessions.TryGetValue(sessionId, out S3Session? session);
+        _ = _sessions.TryGetValue(sessionId, out S3Session? session);
         Exception translated = S3Interop.Translate(ex, operation, session?.Probe);
         if (S3Interop.IsConnectionLost(translated) && session is not null)
         {

@@ -21,7 +21,7 @@ public sealed class MonitorTests
     [TestMethod]
     public void Server_status_is_parsed_into_counters()
     {
-        ServerSample s = ServerSample.Parse(Status(uptime: 100, query: 10, insert: 5, bytesIn: 1000), T0);
+        var s = ServerSample.Parse(Status(uptime: 100, query: 10, insert: 5, bytesIn: 1000), T0);
         Assert.AreEqual(128, s.Connections);
         Assert.AreEqual(384, s.ConnectionsAvailable);
         Assert.AreEqual(10, s.Query);
@@ -35,9 +35,9 @@ public sealed class MonitorTests
     [TestMethod]
     public void Rates_are_counter_deltas_over_time()
     {
-        ServerSample a = ServerSample.Parse(Status(uptime: 100, query: 100, insert: 10, bytesIn: 1000), T0);
-        ServerSample b = ServerSample.Parse(Status(uptime: 102, query: 300, getmore: 20, insert: 50, bytesIn: 5000), T0.AddSeconds(2));
-        RateSample? r = RateSample.Between(a, b);
+        var a = ServerSample.Parse(Status(uptime: 100, query: 100, insert: 10, bytesIn: 1000), T0);
+        var b = ServerSample.Parse(Status(uptime: 102, query: 300, getmore: 20, insert: 50, bytesIn: 5000), T0.AddSeconds(2));
+        var r = RateSample.Between(a, b);
         Assert.IsNotNull(r);
         Assert.AreEqual(110, r.Query, 1e-9, "query + getmore");
         Assert.AreEqual(20, r.Insert, 1e-9);
@@ -48,8 +48,8 @@ public sealed class MonitorTests
     [TestMethod]
     public void A_restart_yields_no_rate()
     {
-        ServerSample a = ServerSample.Parse(Status(uptime: 1000, query: 5000), T0);
-        ServerSample b = ServerSample.Parse(Status(uptime: 3, query: 2), T0.AddSeconds(2));
+        var a = ServerSample.Parse(Status(uptime: 1000, query: 5000), T0);
+        var b = ServerSample.Parse(Status(uptime: 3, query: 2), T0.AddSeconds(2));
         Assert.IsNull(RateSample.Between(a, b));
     }
 
@@ -146,7 +146,7 @@ public sealed class MonitorTests
             new BsonDocument { { "host", "10.20.3.22:27017" }, { "priority", 1 }, { "votes", 1 } },
             new BsonDocument { { "host", "10.20.3.23:27017" }, { "priority", 1 }, { "votes", 1 } }
         }));
-        ReplicaSnapshot snapshot = ReplicaSnapshot.Parse(status, config);
+        var snapshot = ReplicaSnapshot.Parse(status, config);
         Assert.AreEqual("rs0", snapshot.SetName);
         Assert.IsTrue(snapshot.MajorityHealthy);
         Assert.AreEqual("10.20.3.21:27017", snapshot.Primary);
@@ -227,7 +227,7 @@ public sealed class MonitorTests
             {
                 { "n", i }, { "level", i % 10 == 0 ? "SVIP" : "VIP" }, { "total", i * 3 }
             }));
-            await load.RunCommandAsync(db, new BsonDocument("profile", 1));
+            _ = await load.RunCommandAsync(db, new BsonDocument("profile", 1));
             List<BsonDocument> slow = await orders.Find(new BsonDocument("$where", "sleep(150) || true")).Limit(1).ToListAsync();
             Assert.AreEqual(1, slow.Count);
 
@@ -241,7 +241,7 @@ public sealed class MonitorTests
             tab.IntervalOverride = TimeSpan.FromMilliseconds(400);
             workload = Task.Run(() => RunWorkloadAsync(load, db, stop.Token));
             await WaitForSamplesAsync(tab, 32);
-            await load.Collection(db, "orders").Indexes.CreateOneAsync(
+            _ = await load.Collection(db, "orders").Indexes.CreateOneAsync(
                 new CreateIndexModel<BsonDocument>(new BsonDocument { { "level", 1 }, { "total", -1 } }));
             await WaitForSamplesAsync(tab, 36);
             await Screens.PumpAsync(40);
@@ -257,7 +257,7 @@ public sealed class MonitorTests
             bench.Window.Width = 1990;
             bench.Window.Height = 1360;
             await Screens.PumpAsync(40);
-            Screens.Capture(bench.Window, "11-monitor-large");
+            _ = Screens.Capture(bench.Window, "11-monitor-large");
             MonitorTabView view = bench.Window.GetVisualDescendants().OfType<MonitorTabView>().First(static v => v.IsEffectivelyVisible);
             BarChart[] charts = [.. view.GetVisualDescendants().OfType<BarChart>()];
             Assert.HasCount(2, charts);
@@ -308,16 +308,16 @@ public sealed class MonitorTests
                 int burst = round % 9 == 0 ? 3 : 1;
                 for (int i = 0; i < 12 * burst; i++)
                 {
-                    await orders.Find(new BsonDocument("n", random.Next(3000))).FirstOrDefaultAsync(token);
+                    _ = await orders.Find(new BsonDocument("n", random.Next(3000))).FirstOrDefaultAsync(token);
                 }
                 for (int i = 0; i < 2 * burst; i++)
                 {
                     await orders.InsertOneAsync(new BsonDocument { { "n", 10_000 + random.Next(1000) }, { "level", "NEW" }, { "total", 1 } }, cancellationToken: token);
                 }
-                await orders.UpdateOneAsync(new BsonDocument("n", random.Next(3000)), new BsonDocument("$inc", new BsonDocument("total", 1)), cancellationToken: token);
+                _ = await orders.UpdateOneAsync(new BsonDocument("n", random.Next(3000)), new BsonDocument("$inc", new BsonDocument("total", 1)), cancellationToken: token);
                 if (round % 3 == 0)
                 {
-                    await orders.DeleteOneAsync(new BsonDocument("level", "NEW"), token);
+                    _ = await orders.DeleteOneAsync(new BsonDocument("level", "NEW"), token);
                 }
                 await Task.Delay(40, token);
             }
