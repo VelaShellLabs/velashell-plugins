@@ -310,13 +310,53 @@ internal sealed class GridFsTransfer
 /// <param name="IsLast">是不是最后一节(当前目录,主色;其余是目录名青色)。</param>
 internal sealed record GridFsCrumb(string Name, string Prefix, bool IsLast);
 
-/// <summary>右侧详情「版本(同名文件)」里的一行。</summary>
-/// <param name="File">这一份。</param>
-/// <param name="Number">版本号(按上传时间从旧到新 1、2、3)。</param>
-/// <param name="IsCurrent">是不是最新的那份。</param>
-/// <param name="IsShown">是不是详情当前展示的那份。</param>
-internal sealed record GridFsVersionRow(GridFsFile File, int Number, bool IsCurrent, bool IsShown)
+/// <summary>
+/// 右侧详情「版本(同名文件)」里的一行。旧版本可以勾选(一次删几个)、单独删除、恢复、下载;
+/// 最新那一份不给勾 —— 删它走详情头部的删除按钮,那里的确认框会讲清谁接替成为最新。
+/// </summary>
+/// <param name="file">这一份。</param>
+/// <param name="number">版本号(按上传时间从旧到新 1、2、3)。</param>
+/// <param name="isCurrent">是不是最新的那份。</param>
+/// <param name="isShown">是不是详情当前展示的那份。</param>
+internal sealed class GridFsVersionRow(GridFsFile file, int number, bool isCurrent, bool isShown) : ObservableObject
 {
+    private GridFsFile _file = file;
+    private bool _isShown = isShown;
+    private bool _isChecked;
+
+    /// <summary>这一份(改了 metadata 之后换成重读的那份)。</summary>
+    public GridFsFile File
+    {
+        get => _file;
+        set
+        {
+            if (SetProperty(ref _file, value))
+            {
+                RaisePropertiesChanged(nameof(SizeText), nameof(DateText));
+            }
+        }
+    }
+
+    /// <summary>版本号(按上传时间从旧到新 1、2、3;GridFS 不存版本号,删掉旧的之后其余的按位置重排)。</summary>
+    public int Number { get; } = number;
+
+    /// <summary>是不是最新的那份。</summary>
+    public bool IsCurrent { get; } = isCurrent;
+
+    /// <summary>是不是详情当前展示的那份。</summary>
+    public bool IsShown
+    {
+        get => _isShown;
+        set => SetProperty(ref _isShown, value);
+    }
+
+    /// <summary>勾选了(准备一起删)。只有旧版本能勾。</summary>
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => SetProperty(ref _isChecked, value && !IsCurrent);
+    }
+
     /// <summary><c>v3</c>。</summary>
     public string Label => "v" + Number.ToString(CultureInfo.InvariantCulture);
 
@@ -326,6 +366,6 @@ internal sealed record GridFsVersionRow(GridFsFile File, int Number, bool IsCurr
     /// <summary>上传时间(<c>09-26 18:20</c>)。</summary>
     public string DateText => File.UploadDate is { } at ? GridFsEntry.FormatLocal(at, "MM-dd HH:mm") : "—";
 
-    /// <summary>不是最新的才能恢复。</summary>
+    /// <summary>不是最新的才能恢复(也才能在这一行上删、才能勾选)。</summary>
     public bool CanRestore => !IsCurrent;
 }

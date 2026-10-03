@@ -432,30 +432,34 @@
       </Border>
     </Grid>
 
-    <!-- ══ 覆盖层:对话框 ═══════════════════════════════════════════════════════ -->
+    <!-- ══ 覆盖层:对话框 ═══════════════════════════════════════════════════════
+         对话框外壳的数据上下文换成对话框本身:没开对话框时它是 null,里面的绑定就安静地不取值 ——
+         绑 Dialog.Width 这种路径的话,中段的 null 每一项都是一条绑定错误。 -->
     <Panel IsVisible="{Binding HasDialog}">
       <Border Background="{DynamicResource VelaScrim}" PointerPressed="OnScrimPressed" />
-      <Border Classes="dialog" HorizontalAlignment="Center" VerticalAlignment="Center"
-              Width="{Binding Dialog.Width, FallbackValue=640}" Height="{Binding Dialog.Height, FallbackValue=NaN}"
-              MaxHeight="{Binding $parent[Panel].Bounds.Height}">
-        <Grid RowDefinitions="28,*">
-          <Border Grid.Row="0" Classes="dialog-titlebar">
-            <DockPanel>
-              <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Classes="dialog-close"
-                      Command="{Binding Dialog.RequestCloseCommand}">
-                <ui:Glyph Key="Mongo.x" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
-              </Button>
-              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <ui:Glyph Key="{Binding Dialog.IconKey}" Size="13"
-                          Brush="{Binding Dialog.IconToken, Converter={x:Static ui:Converters.Token}}" />
-                <TextBlock Classes="ui h" Text="{Binding Dialog.Title}" />
-                <TextBlock Classes="mono small tertiary" Text="{Binding Dialog.Subtitle}" />
-              </StackPanel>
-            </DockPanel>
-          </Border>
-          <ContentControl Grid.Row="1" Content="{Binding Dialog}" ContentTemplate="{x:Static ui:ViewLocator.Instance}" />
-        </Grid>
-      </Border>
+      <Panel DataContext="{Binding Dialog}">
+        <Border x:DataType="ui:DialogViewModel" Classes="dialog" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Width="{Binding Width}" Height="{Binding Height}"
+                MaxHeight="{Binding $parent[Panel].Bounds.Height}">
+          <Grid RowDefinitions="28,*">
+            <Border Grid.Row="0" Classes="dialog-titlebar">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Classes="dialog-close"
+                        Command="{Binding RequestCloseCommand}">
+                  <ui:Glyph Key="Mongo.x" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+                </Button>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <ui:Glyph Key="{Binding IconKey}" Size="13"
+                            Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                  <TextBlock Classes="ui h" Text="{Binding Title}" />
+                  <TextBlock Classes="mono small tertiary" Text="{Binding Subtitle}" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <ContentControl Grid.Row="1" Content="{Binding}" ContentTemplate="{x:Static ui:ViewLocator.Instance}" />
+          </Grid>
+        </Border>
+      </Panel>
     </Panel>
 
     <!-- ══ 右下角提示(设计稿 22:已提交 3 处修改 · 撤销 (9)) ══════════════════ -->

@@ -77,6 +77,14 @@ Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Sc
   而同一元素上的隧道处理器按**注册的逆序**调用 —— 它比 `CodeEditor` 自己的先拿到 Enter,所以要先看 `CodeEditor.IsCompletionOpen`。
 - **代码里建的右键菜单**一律走 `MenuKit.Command`:普通项不设 `Foreground` —— 哪怕设成 `null`,本地值也会压过宿主
   `ContextMenu MenuItem` 样式,文字透明到悬停才露出来。
+- **绑定不穿过可空的中段**:`{Binding Dialog.Title}`、`{Binding Editor.HasError}` 这类路径在中段为 null 时
+  (没开对话框、格子不在编辑)每一处都报一条绑定错误,宿主调试输出里刷屏。可空的那一段换成数据上下文
+  (`DataContext="{Binding Dialog}"` + 子元素 `x:DataType`),或在模型上给一个扁平属性(`CollectionCell.HasEditorError`);
+  挂在别的控件下的子视图(`CodeEditor` 的补全弹层)显式 `DataContext = null`,别继承宿主视图的视图模型。
+  `BindingHygieneTests` 把主要界面与全部对话框走一遍,绑定错误一条都不许有。
+- **停用不押在 UI 线程上**:宿主退出时 UI 线程正同步等着插件停用(限时 2 秒),面板的 `Closed` 在线程池上触发。
+  所以停用先放连接与跳板转发(`MongoWorkspaceViewModel.ReleaseConnectionsAsync`,不碰界面、任意线程),
+  关面板只等一小会儿,界面那一半(`Dispose`)只在 UI 线程上做(不在就投递)。`ShutdownTests` 守着这条路。
 
 ## 已知限制
 

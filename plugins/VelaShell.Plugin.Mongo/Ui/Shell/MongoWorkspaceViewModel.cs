@@ -34,6 +34,8 @@ internal interface IViewServices
 internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkbench, IDisposable
 {
     private readonly IPluginContext _context;
+    private int _released;
+    private bool _disposed;
     private WorkspaceTab? _activeTab;
     private DialogViewModel? _dialog;
     private MongoSession? _currentSession;
@@ -421,9 +423,52 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
 
     internal static string Count(long n) => BsonText.Grouped(n);
 
-    /// <summary>关掉全部标签与连接(面板关了)。</summary>
+    /// <summary>
+    /// 放掉服务器那一侧:在连的取消,连着的断开(驱动连接 + 跳板转发)。**不碰任何界面对象**,
+    /// 所以哪个线程上都能调 —— 宿主退出时面板的 Closed 是在线程池上触发的,那时 UI 线程正被宿主同步等着,
+    /// 界面那一半(<see cref="Dispose" />)排不上,但连接与 SSH 转发不能因此漏关。只生效一次。
+    /// </summary>
+    /// <returns>全部断开之后完成;不抛。</returns>
+    internal Task ReleaseConnectionsAsync()
+    {
+        if (Interlocked.Exchange(ref _released, 1) != 0)
+        {
+            return Task.CompletedTask;
+        }
+        var closing = new List<Task>();
+        foreach (ConnectionEntry entry in Connections.ToArray())
+        {
+            entry.Connecting?.Cancel();
+            if (entry.Session is { } session)
+            {
+                closing.Add(CloseQuietlyAsync(session.Link));
+            }
+        }
+        return Task.WhenAll(closing);
+
+        static async Task CloseQuietlyAsync(MongoLink link)
+        {
+            try
+            {
+                await link.DisposeAsync().ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // 收尾路径:驱动、套接字、跳板各有各的异常,哪一种都不该让停用半途而废。
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+        }
+    }
+
+    /// <summary>关掉全部标签与连接(面板关了)。只能在 UI 线程上调(标签、对象树都绑在界面上);重复调用无害。</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+        _ = ReleaseConnectionsAsync();
         foreach (WorkspaceTab tab in Tabs)
         {
             tab.Dispose();
@@ -432,12 +477,10 @@ internal sealed partial class MongoWorkspaceViewModel : ObservableObject, IWorkb
         DisposeTree();
         foreach (ConnectionEntry entry in Connections)
         {
-            entry.Connecting?.Cancel();
             if (entry.Session is { } session)
             {
                 entry.Session = null;
                 session.Dispose();
-                _ = session.Link.DisposeAsync().AsTask();
             }
         }
     }

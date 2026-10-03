@@ -136,7 +136,18 @@ public sealed class AsyncCommand<T>(Func<T, Task> execute, Func<T, bool>? canExe
     /// <inheritdoc />
     public async void Execute(object? parameter)
     {
-        if (parameter is not T typed || !CanExecute(parameter))
+        if (parameter is T typed)
+        {
+            await ExecuteAsync(typed).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>执行并等它做完(串起几步的代码与单测用)。不可用时直接返回。</summary>
+    /// <param name="parameter">参数。</param>
+    /// <returns>任务。</returns>
+    public async Task ExecuteAsync(T parameter)
+    {
+        if (!CanExecute(parameter))
         {
             return;
         }
@@ -144,11 +155,11 @@ public sealed class AsyncCommand<T>(Func<T, Task> execute, Func<T, bool>? canExe
         RaiseCanExecuteChanged();
         try
         {
-            await execute(typed).ConfigureAwait(true);
+            await execute(parameter).ConfigureAwait(true);
         }
         catch
         {
-            // 同 AsyncCommand:异常不得逃出 async void。
+            // 同 AsyncCommand:命令体自己呈现失败;这里只保证异常不逃出 async void 的 Execute。
         }
         finally
         {

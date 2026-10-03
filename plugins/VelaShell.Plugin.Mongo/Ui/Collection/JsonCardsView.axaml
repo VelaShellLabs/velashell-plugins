@@ -199,24 +199,27 @@
         </Border>
 
         <ScrollViewer Padding="0,6" HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl x:Name="OutlineList" ItemsSource="{Binding FocusedCard.Outline, FallbackValue={x:Null}}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="ui:JsonOutlineItem">
-                <Border Classes="outline" Classes.cur="{Binding IsCurrent}" Height="22" Background="Transparent" Cursor="Hand"
-                        Padding="{Binding Indent, Converter={x:Static ui:Converters.LeftPadding}}">
-                  <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Classes="ui tiny" Text="{Binding TypeText}"
-                               Foreground="{Binding TypeToken, Converter={x:Static ui:Converters.Token}}" />
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                      <Rectangle Width="6" Height="6" RadiusX="1" RadiusY="1" VerticalAlignment="Center"
-                                 Fill="{Binding SwatchToken, Converter={x:Static ui:Converters.Token}}" />
-                      <TextBlock Classes="mono trim" Text="{Binding Name}" Foreground="{Binding NameToken, Converter={x:Static ui:Converters.Token}}" />
-                    </StackPanel>
-                  </DockPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <!-- 没有看着的卡片时 FocusedCard 为 null:换数据上下文再绑,而不是绑 FocusedCard.Outline(路径中段 null 会报绑定错误)。 -->
+          <Panel DataContext="{Binding FocusedCard}">
+            <ItemsControl x:Name="OutlineList" x:DataType="ui:JsonCardViewModel" ItemsSource="{Binding Outline}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ui:JsonOutlineItem">
+                  <Border Classes="outline" Classes.cur="{Binding IsCurrent}" Height="22" Background="Transparent" Cursor="Hand"
+                          Padding="{Binding Indent, Converter={x:Static ui:Converters.LeftPadding}}">
+                    <DockPanel>
+                      <TextBlock DockPanel.Dock="Right" Classes="ui tiny" Text="{Binding TypeText}"
+                                 Foreground="{Binding TypeToken, Converter={x:Static ui:Converters.Token}}" />
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Rectangle Width="6" Height="6" RadiusX="1" RadiusY="1" VerticalAlignment="Center"
+                                   Fill="{Binding SwatchToken, Converter={x:Static ui:Converters.Token}}" />
+                        <TextBlock Classes="mono trim" Text="{Binding Name}" Foreground="{Binding NameToken, Converter={x:Static ui:Converters.Token}}" />
+                      </StackPanel>
+                    </DockPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Panel>
         </ScrollViewer>
       </DockPanel>
     </Border>

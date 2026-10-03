@@ -160,7 +160,9 @@ public sealed class CodeEditor : UserControl
             }
         });
 
-        _popupView = new CompletionPopupView();
+        // DataContext 显式置空:弹层挂在本控件下面,不设就继承宿主视图的视图模型(集合标签、检查器…),
+        // 而弹层的编译绑定按 CompletionSession 转型 —— 每个编辑框一出现就是一串绑定错误。打开时才换成补全会话。
+        _popupView = new CompletionPopupView { DataContext = null };
         _popupView.ItemClicked += item =>
         {
             if (_session is not null)

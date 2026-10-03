@@ -280,6 +280,84 @@ public sealed class GridFsTests
 
     // ── 标签页(视图模型 + 外壳) ─────────────────────────────────────────
 
+    /// <summary>
+    /// 旧版本单独删:v5 是当前版本时,勾 v1、v2 一起删(只删这两份,块一起走),其余留下并重新编号;
+    /// 再在一行旧版本上单独删;最后「只保留最新版本」删掉其余全部。最新那一份始终不给勾、也不在版本行上给删除。
+    /// </summary>
+    [TestMethod]
+    public void Old_versions_can_be_deleted_individually_while_the_latest_stays() => Screens.OnUi(async () =>
+    {
+        await TestServer.RequireAsync();
+        await using TempBucket temp = await TempBucket.CreateAsync();
+        var ids = new List<ObjectId>();
+        for (int i = 1; i <= 5; i++)
+        {
+            using var source = new MemoryStream(Bytes(300_000 + i, seed: i));
+            ids.Add(await temp.Service.UploadAsync("docs/report.pdf", source, null));
+            await Task.Delay(3);
+        }
+        await using Workbench bench = await Screens.OpenWorkbenchAsync(temp.Database);
+        bench.Session.OpenGridFs(temp.Database, "fs");
+        var tab = (GridFsTabViewModel)bench.ViewModel.ActiveTab!;
+        await WaitAsync(() => !tab.IsLoading && tab.Entries.Count > 0);
+        await tab.NavigateAsync("docs/");
+        await WaitAsync(() => tab.Entries.Any(static e => e.Name == "report.pdf"));
+        tab.SelectedEntry = tab.Entries.Single(static e => e.Name == "report.pdf");
+        await WaitAsync(() => tab.Details.Versions.Count == 5);
+
+        GridFsDetailsViewModel details = tab.Details;
+        Assert.AreEqual("v5", details.Versions[0].Label);
+        Assert.IsTrue(details.Versions[0].IsCurrent);
+        Assert.IsTrue(details.HasOldVersions);
+        Assert.IsFalse(details.DeleteCheckedVersionsCommand.CanExecute(null), "nothing ticked yet");
+        details.Versions[0].IsChecked = true;
+        Assert.IsFalse(details.Versions[0].IsChecked, "the latest version cannot be ticked");
+        Assert.IsFalse(details.DeleteVersionCommand.CanExecute(details.Versions[0]), "the latest is deleted from the header, not its row");
+
+        // 勾 v1、v2 → 删除选中的 2 个版本。
+        details.Versions.Single(static v => v.Label == "v1").IsChecked = true;
+        details.Versions.Single(static v => v.Label == "v2").IsChecked = true;
+        Assert.AreEqual(2, details.CheckedVersionCount);
+        Assert.AreEqual(bench.ViewModel.Loc.Format("Fs_DeleteChecked", 2), details.DeleteCheckedText);
+        Task deleting = details.DeleteCheckedVersionsCommand.ExecuteAsync();
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel || deleting.IsCompleted);
+        var confirm = (ConfirmDialogViewModel)bench.ViewModel.Dialog!;
+        StringAssert.Contains(confirm.Request.Message, "v1, v2");
+        confirm.ConfirmCommand.Execute(null);
+        await deleting;
+        await WaitAsync(() => details.Versions.Count == 3);
+
+        IMongoCollection<BsonDocument> files = temp.Connection.Collection(temp.Database, "fs.files");
+        IMongoCollection<BsonDocument> chunks = temp.Connection.Collection(temp.Database, "fs.chunks");
+        List<BsonValue> left = [.. (await files.Find(FilterDefinition<BsonDocument>.Empty).ToListAsync()).Select(static d => d["_id"])];
+        CollectionAssert.AreEquivalent(new BsonValue[] { ids[2], ids[3], ids[4] }, left, "only v1 and v2 are gone");
+        Assert.AreEqual(0L, await chunks.CountDocumentsAsync(new BsonDocument("files_id", new BsonDocument("$in", new BsonArray { ids[0], ids[1] }))),
+            "their chunks went with them");
+        Assert.AreEqual(ids[4], (BsonValue)details.Versions[0].File.Id, "the latest stays the latest");
+        Assert.AreEqual("v3", details.Versions[0].Label, "the kept versions are renumbered by position");
+
+        // 版本行上的垃圾桶:只删那一份(现在的 v1,也就是原来的 v3)。
+        GridFsVersionRow oldest = details.Versions.Single(static v => v.Label == "v1");
+        Assert.AreEqual(ids[2], (BsonValue)oldest.File.Id);
+        Task single = details.DeleteVersionCommand.ExecuteAsync(oldest);
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel || single.IsCompleted);
+        Assert.AreEqual(bench.ViewModel.Loc["Fs_DeleteVersionTitle"], ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).Request.Title);
+        ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).ConfirmCommand.Execute(null);
+        await single;
+        await WaitAsync(() => details.Versions.Count == 2);
+        Assert.IsNull(await temp.Service.GetAsync(ids[2]));
+
+        // 只保留最新版本 → 只剩当时的 v5。
+        Task keeping = details.KeepLatestOnlyCommand.ExecuteAsync();
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel || keeping.IsCompleted);
+        ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).ConfirmCommand.Execute(null);
+        await keeping;
+        await WaitAsync(() => details.Versions.Count == 1);
+        Assert.AreEqual(ids[4], (BsonValue)details.Versions[0].File.Id);
+        Assert.IsFalse(details.HasOldVersions);
+        Assert.AreEqual(1L, await files.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty));
+    });
+
     [TestMethod]
     public void Tab_uploads_navigates_selects_and_deletes_with_confirmation() => Screens.OnUi(async () =>
     {

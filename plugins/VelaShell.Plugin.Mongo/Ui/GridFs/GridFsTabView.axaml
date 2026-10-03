@@ -573,7 +573,7 @@
                   </StackPanel>
                 </Border>
 
-                <!-- 版本(同名文件) -->
+                <!-- 版本(同名文件):旧版本可勾选几个一起删、单独删、恢复、下载;最新那份不给勾,删它走头部的删除按钮。 -->
                 <Border Classes="sec">
                   <StackPanel Spacing="5">
                     <TextBlock Classes="sectitle" Text="{Binding Loc[Fs_Versions]}" />
@@ -594,8 +594,18 @@
                                       CommandParameter="{Binding}">
                                 <TextBlock Classes="ui small info" Text="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_Download]}" />
                               </Button>
+                              <Button Theme="{StaticResource MongoIconButton}" Width="18" Height="18" Classes="delversion"
+                                      Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Details.DeleteVersionCommand}"
+                                      CommandParameter="{Binding}"
+                                      ToolTip.Tip="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_DeleteVersionTitle]}">
+                                <ui:Glyph Key="Mongo.trash-2" Size="11" Brush="{DynamicResource VelaError}" />
+                              </Button>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <!-- 勾选框占位 20px:最新那一行没有勾,版本号照样与其余行对齐。 -->
+                              <Panel Width="20">
+                                <CheckBox Theme="{StaticResource FsCheck}" IsChecked="{Binding IsChecked}" IsVisible="{Binding CanRestore}" />
+                              </Panel>
                               <Ellipse Classes="dot" Classes.accent="{Binding IsCurrent}" />
                               <Button Classes="link" Theme="{StaticResource MongoToolButton}" Height="18"
                                       Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Details.ShowVersionCommand}"
@@ -610,6 +620,24 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <!-- 有旧版本时:删勾选的几个(没勾时是一句提示)/ 只保留最新版本。占用随版本一份份涨,这是腾地方的入口。 -->
+                    <StackPanel Spacing="2" Margin="26,2,0,0" IsVisible="{Binding Details.HasOldVersions}">
+                      <TextBlock Classes="ui small muted" Text="{Binding Details.DeleteCheckedText}" IsVisible="{Binding !Details.HasCheckedVersions}" />
+                      <Button Classes="link" Theme="{StaticResource MongoToolButton}" HorizontalAlignment="Left"
+                              Command="{Binding Details.DeleteCheckedVersionsCommand}" IsVisible="{Binding Details.HasCheckedVersions}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ui:Glyph Key="Mongo.trash-2" Size="11" Brush="{DynamicResource VelaError}" />
+                          <TextBlock Classes="ui small err" Text="{Binding Details.DeleteCheckedText}" />
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="link" Theme="{StaticResource MongoToolButton}" HorizontalAlignment="Left"
+                              Command="{Binding Details.KeepLatestOnlyCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ui:Glyph Key="Mongo.eraser" Size="11" Brush="{DynamicResource VelaError}" />
+                          <TextBlock Classes="ui small err" Text="{Binding Details.KeepLatestText}" />
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
                   </StackPanel>
                 </Border>
               </StackPanel>

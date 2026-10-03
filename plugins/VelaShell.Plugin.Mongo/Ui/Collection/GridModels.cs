@@ -365,15 +365,38 @@ internal sealed class CollectionCell : ObservableObject
         get => _editor;
         set
         {
+            InlineValueEditor? previous = _editor;
             if (SetProperty(ref _editor, value))
             {
-                RaisePropertyChanged(nameof(IsEditing));
+                if (previous is not null)
+                {
+                    previous.PropertyChanged -= OnEditorChanged;
+                }
+                if (value is not null)
+                {
+                    value.PropertyChanged += OnEditorChanged;
+                }
+                RaisePropertiesChanged(nameof(IsEditing), nameof(HasEditorError));
             }
         }
     }
 
     /// <summary>正在编辑。</summary>
     public bool IsEditing => _editor is not null;
+
+    /// <summary>
+    /// 编辑器里的值解析不了(单元格红框)。单元格模板绑它而不是 <c>Editor.HasError</c>:
+    /// 绝大多数格子不在编辑,路径中段的 null 每一格都会报一条绑定错误。
+    /// </summary>
+    public bool HasEditorError => _editor?.HasError == true;
+
+    private void OnEditorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(InlineValueEditor.HasError))
+        {
+            RaisePropertyChanged(nameof(HasEditorError));
+        }
+    }
 
     /// <summary>值从文档根算起的点路径(顶层字段就是列名;子表里是 <c>items.2.qty</c>)。</summary>
     public string Path { get; }

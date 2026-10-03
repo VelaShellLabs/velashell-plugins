@@ -142,7 +142,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="ui:CollectionCell">
                       <Border Classes="gcell" Classes.mod="{Binding IsModified}" Classes.current="{Binding IsCurrent}"
-                              Classes.editing="{Binding IsEditing}" Classes.bad="{Binding Editor.HasError, FallbackValue=False}"
+                              Classes.editing="{Binding IsEditing}" Classes.bad="{Binding HasEditorError}"
                               Width="{Binding Column.Width}">
                         <Panel>
                           <DockPanel IsVisible="{Binding !IsEditing}" VerticalAlignment="Center">

@@ -9,10 +9,11 @@ namespace VelaShell.Plugin.Mongo.Ui;
 
 /// <summary>
 /// 右侧 320px 详情(设计稿 06 右栏):文件名 + 版本徽章 + 下载 / 外部打开 / 删除;
-/// 图片预览;fs.files 字段;metadata(只读显示,可切到编辑并保存);同名文件的版本列表(恢复 / 下载)。
+/// 图片预览;fs.files 字段;metadata(只读显示,可切到编辑并保存);同名文件的版本列表
+/// (恢复 / 下载 / 删除;旧版本可勾选几个一起删,或「只保留最新版本」)。
 /// <para>
 /// 点版本列表里的旧版本,详情就切到那一份 —— 于是头部的删除按钮删的永远是"正在看的这一份",
-/// 与工具栏上"删除这个文件名的全部版本"界线分明。
+/// 与工具栏上"删除这个文件名的全部版本"界线分明。版本列表里的删除只针对旧版本,最新那份永远不在其列。
 /// </para>
 /// </summary>
 internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
@@ -45,6 +46,13 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
         RestoreCommand = new(row => _owner.RestoreVersionAsync(row.File, row.Label), static row => row.CanRestore);
         DownloadVersionCommand = new(row => _owner.DownloadFileAsync(row.File));
         ShowVersionCommand = new(row => _ = ShowFileAsync(row.File));
+        DeleteVersionCommand = new(row => _owner.DeleteVersionAsync(row.File, [.. Versions]), static row => row.CanRestore);
+        DeleteCheckedVersionsCommand = new(
+            () => _owner.DeleteVersionsAsync([.. Versions.Where(static v => v.IsChecked)], [.. Versions]),
+            () => CheckedVersionCount > 0);
+        KeepLatestOnlyCommand = new(
+            () => _owner.DeleteVersionsAsync([.. Versions.Where(static v => !v.IsCurrent)], [.. Versions]),
+            () => HasOldVersions);
     }
 
     private Loc Loc => _owner.Loc;
@@ -272,6 +280,23 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     /// <summary>同名文件的各个版本,最新在前。</summary>
     public ObservableCollection<GridFsVersionRow> Versions { get; } = [];
 
+    /// <summary>有旧版本(版本列表下面那条「删除选中 / 只保留最新版本」才出现)。</summary>
+    public bool HasOldVersions => Versions.Count > 1;
+
+    /// <summary>勾了几个旧版本。</summary>
+    public int CheckedVersionCount => Versions.Count(static v => v.IsChecked);
+
+    /// <summary>「删除选中的 2 个版本」;没勾时是「勾选旧版本可一起删除」的提示。</summary>
+    public string DeleteCheckedText => CheckedVersionCount > 0
+        ? Loc.Format("Fs_DeleteChecked", CheckedVersionCount)
+        : Loc["Fs_PickVersions"];
+
+    /// <summary>「只保留最新版本(删除其余 3 个)」。</summary>
+    public string KeepLatestText => Loc.Format("Fs_KeepLatestOnly", Math.Max(0, Versions.Count - 1));
+
+    /// <summary>「删除选中的 N 个版本」按钮在不在:勾了才在,没勾时那里是一句提示。</summary>
+    public bool HasCheckedVersions => CheckedVersionCount > 0;
+
     // ── 命令 ───────────────────────────────────────────────────────────────
 
     /// <summary>下载正在看的这一份。</summary>
@@ -304,6 +329,15 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
     /// <summary>在详情里看某个版本。</summary>
     public RelayCommand<GridFsVersionRow> ShowVersionCommand { get; }
 
+    /// <summary>只删这一个旧版本(版本行上的垃圾桶)。</summary>
+    public AsyncCommand<GridFsVersionRow> DeleteVersionCommand { get; }
+
+    /// <summary>一次删掉勾选的几个旧版本。</summary>
+    public AsyncCommand DeleteCheckedVersionsCommand { get; }
+
+    /// <summary>只保留最新版本:其余旧版本全删。</summary>
+    public AsyncCommand KeepLatestOnlyCommand { get; }
+
     // ── 加载 ───────────────────────────────────────────────────────────────
 
     /// <summary>换一行显示(目录只显示摘要;文件读版本列表并加载预览)。</summary>
@@ -316,7 +350,7 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
         Entry = entry;
         if (entry is not { IsFile: true, File: { } latest })
         {
-            Versions.Clear();
+            SetVersions([], null);
             File = null;
             Image = null;
             ImageInfo = "";
@@ -360,13 +394,46 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
         await ShowFileAsync(shown).ConfigureAwait(true);
     }
 
-    private void SetVersions(IReadOnlyList<GridFsFile> versions, GridFsFile shown)
+    /// <summary>
+    /// 换一组版本行。同一个文件名重读时(删了几个、恢复了一个),还在的那几份保留勾选 ——
+    /// 勾了三个、删的时候取消了,不该让人从头再勾一遍。
+    /// </summary>
+    private void SetVersions(IReadOnlyList<GridFsFile> versions, GridFsFile? shown)
     {
+        HashSet<BsonValue> keepChecked = versions.Count > 0 && Versions.Count > 0 && Versions[0].File.Filename == versions[0].Filename
+            ? [.. Versions.Where(static v => v.IsChecked).Select(static v => v.File.Id)]
+            : [];
+        foreach (GridFsVersionRow row in Versions)
+        {
+            row.PropertyChanged -= OnVersionChanged;
+        }
         Versions.Clear();
         for (int i = 0; i < versions.Count; i++)
         {
-            Versions.Add(new(versions[i], versions.Count - i, i == 0, versions[i].Id == shown.Id));
+            var row = new GridFsVersionRow(versions[i], versions.Count - i, i == 0, shown is not null && versions[i].Id == shown.Id)
+            {
+                IsChecked = keepChecked.Contains(versions[i].Id)
+            };
+            row.PropertyChanged += OnVersionChanged;
+            Versions.Add(row);
         }
+        RaiseVersionSelection();
+        RaisePropertiesChanged(nameof(HasOldVersions), nameof(KeepLatestText));
+        KeepLatestOnlyCommand.RaiseCanExecuteChanged();
+    }
+
+    private void OnVersionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GridFsVersionRow.IsChecked))
+        {
+            RaiseVersionSelection();
+        }
+    }
+
+    private void RaiseVersionSelection()
+    {
+        RaisePropertiesChanged(nameof(CheckedVersionCount), nameof(HasCheckedVersions), nameof(DeleteCheckedText));
+        DeleteCheckedVersionsCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>切到某一份(版本列表里点了 v2)。</summary>
@@ -377,14 +444,9 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
         _loadCts = cts;
         IsEditing = false;
         File = file;
-        if (Versions.Count > 0)
+        foreach (GridFsVersionRow row in Versions)
         {
-            List<GridFsVersionRow> rows = [.. Versions];
-            Versions.Clear();
-            foreach (GridFsVersionRow row in rows)
-            {
-                Versions.Add(row with { IsShown = row.File.Id == file.Id });
-            }
+            row.IsShown = row.File.Id == file.Id;
         }
         RaisePropertiesChanged(nameof(BadgeText), nameof(IsShowingLatest));
         MetadataText = file.Metadata is { } meta ? BsonText.Pretty(meta) : "{}";
@@ -502,11 +564,9 @@ internal sealed class GridFsDetailsViewModel : ObservableObject, IDisposable
             IsEditing = false;
             if (await _owner.Service.GetAsync(file.Id).ConfigureAwait(true) is { } fresh)
             {
-                List<GridFsVersionRow> rows = [.. Versions];
-                Versions.Clear();
-                foreach (GridFsVersionRow row in rows)
+                if (Versions.FirstOrDefault(v => v.File.Id == fresh.Id) is { } row)
                 {
-                    Versions.Add(row.File.Id == fresh.Id ? row with { File = fresh } : row);
+                    row.File = fresh;
                 }
                 _file = null;
                 await ShowFileAsync(fresh).ConfigureAwait(true);

@@ -791,6 +791,68 @@ internal sealed partial class GridFsTabViewModel
         await DeleteVersionCoreAsync(file).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 一次删掉同一个文件名的几个旧版本(版本列表里勾选的,或「只保留最新版本」的其余全部)。
+    /// 最新版本永远不在其列 —— 删它走详情头部的删除按钮。确认框写明删哪几个、保留几个、能腾出多少空间,
+    /// 以及剩下的版本会按上传时间重新编号(GridFS 不存版本号,v 几只是位置)。
+    /// </summary>
+    /// <param name="doomed">要删的版本行。</param>
+    /// <param name="versions">这个文件名的全部版本行(最新在前)。</param>
+    internal async Task DeleteVersionsAsync(IReadOnlyList<GridFsVersionRow> doomed, IReadOnlyList<GridFsVersionRow> versions)
+    {
+        List<GridFsVersionRow> old = [.. doomed.Where(static v => !v.IsCurrent)];
+        if (old.Count == 0 || !Workspace.EnsureWritable(Database))
+        {
+            return;
+        }
+        if (old.Count == 1)
+        {
+            await DeleteVersionAsync(old[0].File, versions).ConfigureAwait(true);
+            return;
+        }
+        GridFsFile latest = versions.First(static v => v.IsCurrent).File;
+        long bytes = old.Sum(static v => v.File.Length);
+        long chunks = old.Sum(static v => v.File.ChunkCount);
+        string labels = string.Join(", ", old.OrderBy(static v => v.Number).Select(static v => v.Label));
+        int kept = versions.Count - old.Count;
+        if (!await Workspace.ConfirmAsync(new()
+            {
+                Title = Loc["Fs_DeleteVersionsTitle"],
+                Message = Loc.Format("Fs_DeleteVersionsBody", labels, latest.BaseName, old.Count, kept),
+                ConfirmLabel = Loc.Format("Fs_DeleteVersionsConfirm", old.Count),
+                IconKey = "Mongo.trash-2",
+                Facts =
+                [
+                    new(Loc["Fs_FactVersions"], BsonText.Grouped(old.Count)),
+                    new(Loc["Fs_FactChunks"], BsonText.Grouped(chunks)),
+                    new(Loc["Fs_FactFreed"], BsonText.Bytes(bytes))
+                ],
+                TypeToConfirm = Workspace.Guard.ConfirmWrites ? Bucket.Name : null
+            }).ConfigureAwait(true))
+        {
+            return;
+        }
+        if (!Workspace.EnsureWritable(Database))
+        {
+            return;
+        }
+        try
+        {
+            long deleted = await _service.DeleteManyAsync([.. old.Select(static v => v.File.Id)]).ConfigureAwait(true);
+            Workspace.Toast(new()
+            {
+                Title = Loc.Format("Fs_VersionsDeleted", BsonText.Grouped(deleted), BsonText.Bytes(bytes)),
+                Detail = latest.BaseName,
+                Kind = ToastKind.Success
+            });
+        }
+        catch (Exception ex) when (ex is MongoException or TimeoutException)
+        {
+            Failed(ex);
+        }
+        await ReloadAsync().ConfigureAwait(true);
+    }
+
     private async Task DeleteVersionCoreAsync(GridFsFile file)
     {
         if (!Workspace.EnsureWritable(Database))
