@@ -23,6 +23,9 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     /// <summary>柱状图的柱数(15 分钟窗口 → 每柱 30 秒,与设计稿一致)。</summary>
     private const int Bars = 30;
 
+    /// <summary>存储 Top 列几个集合。</summary>
+    private const int StorageTop = 10;
+
     /// <summary>复制延迟告警阈值(秒)。</summary>
     internal const double LagThreshold = 1;
 
@@ -279,6 +282,9 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
         get => _connMax;
         private set => SetProperty(ref _connMax, value);
     }
+
+    /// <summary>两张柱状图至少分几格(满窗口的柱数;刚开始采样时柱子也保持最终宽度,靠右排)。</summary>
+    public int ChartSlots => Bars;
 
     /// <summary>连接数柱状图。</summary>
     public IReadOnlyList<ChartSeries> ConnSeries
@@ -764,7 +770,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     };
 
     /// <summary>
-    /// 存储 Top:用户库里按磁盘占用(数据 + 索引)排前 6 的集合。
+    /// 存储 Top:用户库里按磁盘占用(数据 + 索引)排前 10 的集合(面板矮时在表内滚动)。
     /// 只看占用最大的 4 个库、每库至多 25 个集合 —— 每个集合一次 <c>$collStats</c>,
     /// 一个有上千集合的库全扫一遍,本身就是一次不小的负载。
     /// </summary>
@@ -788,17 +794,18 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
             {
                 return;
             }
-            var top = items.OrderByDescending(static i => i.Data + i.Index).Take(6).ToList();
+            var top = items.OrderByDescending(static i => i.Data + i.Index).Take(StorageTop).ToList();
             bool oneDb = top.Select(static i => i.Database).Distinct(StringComparer.Ordinal).Count() <= 1;
             double max = Math.Max(1, top.Count == 0 ? 1 : top.Max(static i => i.Data + i.Index));
             Storage =
             [
                 .. top.Select(i => new MonitorStorageRow(
-                    oneDb ? i.Collection : $"{i.Database}.{i.Collection}",
+                    oneDb ? "" : i.Database + ".",
+                    i.Collection,
                     i.Data / max,
                     i.Index / max,
                     BsonText.Bytes(i.Data + i.Index),
-                    Loc.Format("Mon_StorageTip", BsonText.Bytes(i.Data), BsonText.Bytes(i.Index))))
+                    $"{i.Database}.{i.Collection}\n" + Loc.Format("Mon_StorageTip", BsonText.Bytes(i.Data), BsonText.Bytes(i.Index))))
             ];
             StorageSubtitle = Loc.Format("Mon_StorageSubtitle", oneDb && top.Count > 0 ? top[0].Database : Loc["Mon_StorageAllDbs"]);
         }

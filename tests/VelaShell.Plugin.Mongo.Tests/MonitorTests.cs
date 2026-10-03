@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Analysis;
@@ -250,6 +252,23 @@ public sealed class MonitorTests
             Assert.IsTrue(tab.OpsSeries[0].Values.Count >= 15, "one bar per sample while the window fills");
             Assert.IsTrue(tab.Events.Any(e => e.Kind == "slow"), "the slow query in our temp database shows up as an event");
             Assert.IsTrue(tab.HasMembers, "the local test server is a one-member replica set");
+
+            // 大窗口(用户报的 2000 × 1370 那种):两行图表平分高度,存储 Top 的集合名列宽够放下最长的名字,不被省略。
+            bench.Window.Width = 1990;
+            bench.Window.Height = 1360;
+            await Screens.PumpAsync(40);
+            Screens.Capture(bench.Window, "11-monitor-large");
+            MonitorTabView view = bench.Window.GetVisualDescendants().OfType<MonitorTabView>().First(static v => v.IsEffectivelyVisible);
+            BarChart[] charts = [.. view.GetVisualDescendants().OfType<BarChart>()];
+            Assert.HasCount(2, charts);
+            Assert.IsLessThan(40, Math.Abs(charts[0].Bounds.Height - charts[1].Bounds.Height), "the two chart rows share the height");
+            Grid[] storageRows = [.. view.GetVisualDescendants().OfType<Grid>().Where(static g => TableColumns.GetRow(g) == "storage")];
+            Assert.IsNotEmpty(storageRows);
+            foreach (Grid row in storageRows)
+            {
+                TextBlock name = row.Children.OfType<TextBlock>().First();
+                Assert.IsFalse(name.TextLayout.TextLines.Any(static l => l.HasCollapsed), $"collection name trimmed: {tab.Storage[0].Name}");
+            }
         }
         finally
         {

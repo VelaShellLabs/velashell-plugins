@@ -5,7 +5,9 @@
              x:DataType="ui:MonitorTabViewModel">
 
   <!-- 服务器监控(设计稿 11):36px 工具行 / 六张指标卡 / 操作每秒 + 副本集 / 连接数 + 存储 Top + 事件。
-       卡片一律 VelaBgSidebar 底 + 1px VelaBorderPrimary + 圆角 4;数字等宽。 -->
+       卡片一律 VelaBgSidebar 底 + 1px VelaBorderPrimary + 圆角 4;数字等宽。
+       图表两行按 1 : 1 分剩余高度(中间的分隔可拖):设计稿 900 高时正好是 282,窗口一高就不再是
+       上面定死、下面一行被拉成一面墙。 -->
 
   <UserControl.Styles>
     <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
@@ -146,7 +148,15 @@
       </StackPanel>
     </Border>
 
-    <Grid Grid.Row="2" Margin="14" RowDefinitions="Auto,12,282,12,*">
+    <Grid Grid.Row="2" Margin="14">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="12" />
+        <RowDefinition Height="*" MinHeight="220" />
+        <RowDefinition Height="12" />
+        <RowDefinition Height="*" MinHeight="200" />
+      </Grid.RowDefinitions>
+      <GridSplitter Grid.Row="3" Classes="hsplit" Margin="0" />
 
       <!-- ══ 六张指标卡 ══ -->
       <Grid Grid.Row="0" ColumnDefinitions="*,12,*,12,*,12,*,12,*,12,*">
@@ -191,7 +201,8 @@
                 <TextBlock Classes="ui small muted trim" Text="{Binding OpsSubtitle}" />
               </StackPanel>
             </DockPanel>
-            <ui:BarChart Series="{Binding OpsSeries}" Labels="{Binding OpsLabels}" MaxValue="{Binding OpsMax}" GapRatio="0.16" />
+            <ui:BarChart Series="{Binding OpsSeries}" Labels="{Binding OpsLabels}" MaxValue="{Binding OpsMax}" GapRatio="0.16"
+                         MinSlots="{Binding ChartSlots}" />
           </DockPanel>
         </Border>
 
@@ -265,7 +276,8 @@
               <TextBlock Classes="h" Text="{Binding Loc[Mon_ConnTitle]}" />
               <TextBlock Classes="ui small muted" Text="{Binding ConnSubtitle}" />
             </StackPanel>
-            <ui:BarChart Series="{Binding ConnSeries}" Labels="{Binding ConnLabels}" MaxValue="{Binding ConnMax}" GapRatio="0.16" />
+            <ui:BarChart Series="{Binding ConnSeries}" Labels="{Binding ConnLabels}" MaxValue="{Binding ConnMax}" GapRatio="0.16"
+                         MinSlots="{Binding ChartSlots}" />
           </DockPanel>
         </Border>
 
@@ -276,26 +288,23 @@
               <TextBlock Classes="ui small muted trim" Text="{Binding StorageSubtitle}" />
             </StackPanel>
             <Panel>
-              <StackPanel Spacing="12" IsVisible="{Binding HasStorage}">
-                <ItemsControl ItemsSource="{Binding Storage}">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                      <StackPanel Spacing="10" />
-                    </ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="ui:MonitorStorageRow">
-                      <Grid ColumnDefinitions="78,*,60" Background="Transparent" ToolTip.Tip="{Binding Tip}">
-                        <TextBlock Classes="mono small secondary trim" Text="{Binding Name}" />
-                        <ui:MonitorBar Grid.Column="1" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
-                                     Ratio="{Binding DataRatio}" Ratio2="{Binding IndexRatio}"
-                                     Token="MongoChart1" Token2="MongoChart2" TrackToken="" Gap="2" Radius="1" />
-                        <TextBlock Grid.Column="2" Classes="mono small primary" HorizontalAlignment="Right" Text="{Binding SizeText}" />
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <StackPanel Orientation="Horizontal" Spacing="12">
+              <!--
+                集合名一列:默认按最长的名字自适应(SharedSizeGroup,各行对齐),列头的分隔线可拖、双击按内容重新自适应。
+                库名淡色、集合名亮色,一眼分得出;悬停整行看完整命名空间与数据 / 索引各占多少。
+              -->
+              <DockPanel IsVisible="{Binding HasStorage}" Grid.IsSharedSizeScope="True">
+                <Grid DockPanel.Dock="Top" Height="22" Margin="0,0,10,6" ui:TableColumns.Header="storage" ui:TableColumns.Fixed="1,2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" MinWidth="72" SharedSizeGroup="StorageName" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="76" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Classes="ui small muted" VerticalAlignment="Center" Margin="0,0,12,0" Text="{Binding Loc[Mon_StorageColName]}" />
+                  <TextBlock Grid.Column="1" Classes="ui small muted" VerticalAlignment="Center" Text="{Binding Loc[Mon_StorageColBar]}" />
+                  <TextBlock Grid.Column="2" Classes="ui small muted" VerticalAlignment="Center" HorizontalAlignment="Right"
+                             Text="{Binding Loc[Mon_StorageColSize]}" />
+                </Grid>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="12" Margin="0,10,0,0">
                   <StackPanel Orientation="Horizontal" Spacing="5">
                     <Border Width="8" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{DynamicResource MongoChart1}" />
                     <TextBlock Classes="ui small secondary" Text="{Binding Loc[Mon_StorageData]}" />
@@ -305,7 +314,36 @@
                     <TextBlock Classes="ui small secondary" Text="{Binding Loc[Mon_StorageIndex]}" />
                   </StackPanel>
                 </StackPanel>
-              </StackPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                  <!-- 右边留 10px 给竖向滚动条(它浮在内容上面),不然盖住「占用」那一列。 -->
+                  <ItemsControl ItemsSource="{Binding Storage}" Margin="0,0,10,0">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="10" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="ui:MonitorStorageRow">
+                        <Grid Background="Transparent" ToolTip.Tip="{Binding Tip}" ui:TableColumns.Row="storage">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="72" SharedSizeGroup="StorageName" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="76" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Classes="mono small" Margin="0,0,12,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                            <!-- 两个 Run 写在同一行:中间的换行会被当成一个空格画出来(shop. orders)。 -->
+                            <Run Text="{Binding Prefix}" Foreground="{DynamicResource VelaTextMuted}" /><Run Text="{Binding Collection}" Foreground="{DynamicResource VelaTextPrimary}" />
+                          </TextBlock>
+                          <ui:MonitorBar Grid.Column="1" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Ratio="{Binding DataRatio}" Ratio2="{Binding IndexRatio}"
+                                       Token="MongoChart1" Token2="MongoChart2" TrackToken="" Gap="2" Radius="1" />
+                          <TextBlock Grid.Column="2" Classes="mono small primary" HorizontalAlignment="Right" Text="{Binding SizeText}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </DockPanel>
               <TextBlock IsVisible="{Binding StorageEmpty}" Classes="ui small muted" HorizontalAlignment="Center"
                          Text="{Binding Loc[Mon_StorageEmpty]}" />
             </Panel>

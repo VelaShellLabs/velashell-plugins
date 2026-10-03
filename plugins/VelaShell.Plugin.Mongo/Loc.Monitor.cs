@@ -90,6 +90,9 @@ public sealed partial class Loc
         ("Mon_StorageIndex", "Indexes", "索引"),
         ("Mon_StorageTip", "data {0} · indexes {1}", "数据 {0} · 索引 {1}"),
         ("Mon_StorageEmpty", "No user collections yet", "还没有用户集合"),
+        ("Mon_StorageColName", "Collection", "集合"),
+        ("Mon_StorageColBar", "Data + indexes", "数据 + 索引"),
+        ("Mon_StorageColSize", "Size", "占用"),
 
         // ── 事件 ──
         ("Mon_EventsTitle", "Events", "事件"),

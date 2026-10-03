@@ -86,6 +86,10 @@ Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Sc
   诊断的第二段(`CheckCollectionsAsync`,异步)查 `db.集合` 在生效的库里有没有,没有就是一条 Warning;
   脚本里建删了集合(`ChangesCatalog`)时 `ForgetCollections` 丢掉那个库的缓存。
 - **GridFS 拖放区可点**:`DropZone` 的 Tapped 走 `UploadFilesCommand`;源头在框里那两个链接按钮里时不再重复弹(它们自己处理)。
+- **服务器监控**(`MonitorTabView`):两行图表 `*` : `*` 分高度,中间 `hsplit` 可拖;两张柱状图 `MinSlots` = 满窗口的柱数
+  (`ChartSlots`),刚开始采样时柱子靠右、保持最终宽度。存储 Top 的集合名列是 `Width="Auto" SharedSizeGroup="StorageName"`
+  (各行对齐、默认放下最长的名字)再挂 `ui:TableColumns` 组 `storage`(拖宽、双击自适应);名字是两个 `Run`(库名淡色 + 集合名),
+  两个 `Run` 必须写在同一行,中间的换行会被画成一个空格。
 - **有未保存修改的标签**:标签上是橙点,鼠标移到标签上换成 ×(`MongoWorkspaceView` 里 `Ellipse.dirty` / `Button.tabclose` 两组样式,
   别再给它们绑 `IsVisible` —— 本地值会压过 `:pointerover` 样式,× 就永远出不来,有修改的标签就关不掉了)。
   点 × 或 Ctrl+W 都先过 `WorkspaceTab.ConfirmCloseAsync`:「放弃未保存的修改?」,确认才关。

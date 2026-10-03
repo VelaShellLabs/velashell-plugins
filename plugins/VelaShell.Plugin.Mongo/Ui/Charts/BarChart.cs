@@ -49,11 +49,18 @@ public sealed class BarChart : Control
     public static readonly StyledProperty<int> XLabelCountProperty =
         AvaloniaProperty.Register<BarChart, int>(nameof(XLabelCount), 5);
 
+    /// <summary>
+    /// 至少按这么多根柱分格(0 = 有几根分几格)。时间序列刚开始采样时只有寥寥几根:不设它,每根柱都被拉得和整张图一样宽;
+    /// 设成满窗口的根数,柱子从一开始就是最终的宽度,靠右排(最新的贴着「现在」),左边空着等数据填进来。
+    /// </summary>
+    public static readonly StyledProperty<int> MinSlotsProperty =
+        AvaloniaProperty.Register<BarChart, int>(nameof(MinSlots));
+
     private int _hover = -1;
 
     static BarChart()
     {
-        AffectsRender<BarChart>(SeriesProperty, LabelsProperty, MaxValueProperty, ShowAxesProperty, GapRatioProperty);
+        AffectsRender<BarChart>(SeriesProperty, LabelsProperty, MaxValueProperty, ShowAxesProperty, GapRatioProperty, MinSlotsProperty);
     }
 
     /// <summary>数据。</summary>
@@ -91,6 +98,13 @@ public sealed class BarChart : Control
         set => SetValue(GapRatioProperty, value);
     }
 
+    /// <summary>至少分几格。</summary>
+    public int MinSlots
+    {
+        get => GetValue(MinSlotsProperty);
+        set => SetValue(MinSlotsProperty, value);
+    }
+
     /// <summary>横轴标签个数。</summary>
     public int XLabelCount
     {
@@ -114,6 +128,12 @@ public sealed class BarChart : Control
 
     private int Count => Series is { Count: > 0 } s ? s.Max(static x => x.Values.Count) : 0;
 
+    /// <summary>分几格(柱数与 <see cref="MinSlots" /> 取大)。</summary>
+    private int Slots => Math.Max(Count, Math.Max(0, MinSlots));
+
+    /// <summary>第一根柱前面空着的格数(柱靠右排)。</summary>
+    private int Offset => Slots - Count;
+
     /// <inheritdoc />
     protected override void OnPointerMoved(PointerEventArgs e)
     {
@@ -121,7 +141,7 @@ public sealed class BarChart : Control
         int count = Count;
         Rect plot = Plot;
         double x = e.GetPosition(this).X;
-        int index = count == 0 || plot.Width <= 0 ? -1 : (int)((x - plot.X) / (plot.Width / count));
+        int index = count == 0 || plot.Width <= 0 ? -1 : (int)Math.Floor((x - plot.X) / (plot.Width / Slots)) - Offset;
         index = index < 0 || index >= count ? -1 : index;
         if (index != _hover)
         {
@@ -173,11 +193,13 @@ public sealed class BarChart : Control
             }
         }
 
-        double slot = plot.Width / count;
+        double slot = plot.Width / Slots;
+        // 柱靠右排:origin 是第 0 根柱所在格的左边。
+        double origin = plot.Left + (slot * Offset);
         double barWidth = Math.Max(1, slot * (1 - Math.Clamp(GapRatio, 0, 0.9)));
         for (int i = 0; i < count; i++)
         {
-            double x = plot.Left + (slot * i) + ((slot - barWidth) / 2);
+            double x = origin + (slot * i) + ((slot - barWidth) / 2);
             double bottom = plot.Bottom;
             int top = -1;
             for (int k = series.Count - 1; k >= 0; k--)
@@ -212,30 +234,44 @@ public sealed class BarChart : Control
             }
             if (i == _hover)
             {
-                context.FillRectangle(ThemeBrushes.GetDim("VelaTextPrimary", 0.08), new Rect(plot.Left + (slot * i), plot.Top, slot, plot.Height));
+                context.FillRectangle(ThemeBrushes.GetDim("VelaTextPrimary", 0.08), new Rect(origin + (slot * i), plot.Top, slot, plot.Height));
             }
         }
 
         if (ShowAxes && Labels is { Count: > 0 } labels)
         {
             int n = Math.Clamp(XLabelCount, 2, labels.Count);
-            IEnumerable<int> picks = Enumerable.Range(0, n).Select(k => (int)Math.Round((double)k * (labels.Count - 1) / (n - 1))).Distinct();
-            foreach (int i in picks)
+            var placed = new List<(FormattedText Text, double X)>();
+            foreach (int i in Enumerable.Range(0, n).Select(k => (int)Math.Round((double)k * (labels.Count - 1) / (n - 1))).Distinct())
             {
                 var text = new FormattedText(labels[i], CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 9, muted);
-                double cx = plot.Left + (slot * i) + (slot / 2) - (text.Width / 2);
-                cx = Math.Clamp(cx, plot.Left, Math.Max(plot.Left, plot.Right - text.Width));
-                context.DrawText(text, new Point(cx, plot.Bottom + 3));
+                double cx = origin + (slot * i) + (slot / 2) - (text.Width / 2);
+                placed.Add((text, Math.Clamp(cx, plot.Left, Math.Max(plot.Left, plot.Right - text.Width))));
+            }
+            // 图窄时标签会叠在一起(最后那个还带着「现在」):首尾一定画,中间的挨不下就跳过。
+            const double labelGap = 8;
+            double right = double.NegativeInfinity;
+            double lastLeft = placed.Count > 1 ? placed[^1].X : double.PositiveInfinity;
+            for (int k = 0; k < placed.Count; k++)
+            {
+                (FormattedText text, double x) = placed[k];
+                bool last = k == placed.Count - 1;
+                if (!last && k > 0 && (x < right + labelGap || x + text.Width > lastLeft - labelGap))
+                {
+                    continue;
+                }
+                context.DrawText(text, new Point(x, plot.Bottom + 3));
+                right = x + text.Width;
             }
         }
 
         if (ShowTooltip && _hover >= 0)
         {
-            DrawTooltip(context, typeface, series, plot, slot);
+            DrawTooltip(context, typeface, series, plot, slot, origin);
         }
     }
 
-    private void DrawTooltip(DrawingContext context, Typeface typeface, IReadOnlyList<ChartSeries> series, Rect plot, double slot)
+    private void DrawTooltip(DrawingContext context, Typeface typeface, IReadOnlyList<ChartSeries> series, Rect plot, double slot, double origin)
     {
         IBrush primary = ThemeBrushes.Get("VelaTextPrimary", Brushes.White);
         IBrush secondary = ThemeBrushes.Get("VelaTextSecondary", Brushes.LightGray);
@@ -249,10 +285,10 @@ public sealed class BarChart : Control
         const double row = 15;
         double width = 150;
         double height = 10 + (title.Length > 0 ? row : 0) + (lines.Count * row);
-        double x = plot.Left + (slot * _hover) + slot + 6;
+        double x = origin + (slot * _hover) + slot + 6;
         if (x + width > Bounds.Width)
         {
-            x = plot.Left + (slot * _hover) - width - 6;
+            x = origin + (slot * _hover) - width - 6;
         }
         double y = plot.Top + 4;
         var box = new Rect(Math.Max(0, x), y, width, height);
