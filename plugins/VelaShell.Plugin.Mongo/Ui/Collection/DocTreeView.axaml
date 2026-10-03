@@ -14,10 +14,17 @@
   </UserControl.Styles>
 
   <UserControl.DataTemplates>
+    <!-- 值的内联编辑器;日期字段右边多一个日历按钮(DatePickFlyout)。 -->
     <DataTemplate DataType="ui:InlineValueEditor">
       <Border Classes="fieldedit" Classes.bad="{Binding HasError}" ToolTip.Tip="{Binding Error}" Margin="0,0,10,0">
-        <ui:GridEditBox Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding Text}"
-                        Foreground="{DynamicResource VelaTextPrimary}" />
+        <Grid ColumnDefinitions="*,Auto">
+          <ui:GridEditBox Grid.Column="0" Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding Text}"
+                          Foreground="{DynamicResource VelaTextPrimary}" />
+          <Button Grid.Column="1" Theme="{StaticResource MongoIconButton}" Width="16" Height="16" Margin="2,0,-4,0" Classes="datepick"
+                  IsVisible="{Binding IsDate}" Focusable="False">
+            <ui:Glyph Key="Mongo.calendar" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </Grid>
       </Border>
     </DataTemplate>
   </UserControl.DataTemplates>

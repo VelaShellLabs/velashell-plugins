@@ -27,14 +27,14 @@
   </UserControl.Styles>
 
   <UserControl.DataTemplates>
-    <!-- 单元格内联编辑器:无边框文本框 + 候选值下拉箭头(布尔、枚举列、日期的"现在")。 -->
+    <!-- 单元格内联编辑器:无边框文本框 + 右边一个按钮(布尔、枚举列是候选值下拉;日期是日历)。 -->
     <DataTemplate DataType="ui:InlineValueEditor">
       <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding Error}">
         <ui:GridEditBox Grid.Column="0" Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding Text}"
                         Foreground="{DynamicResource VelaTextPrimary}" />
         <Button Grid.Column="1" Theme="{StaticResource MongoIconButton}" Width="16" Height="20" Classes="choices"
-                IsVisible="{Binding HasChoices}" Focusable="False">
-          <ui:Glyph Key="Mongo.chevron-down" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                IsVisible="{Binding HasDropDown}" Focusable="False">
+          <ui:Glyph Key="{Binding DropDownIcon}" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
         </Button>
       </Grid>
     </DataTemplate>

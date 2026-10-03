@@ -390,6 +390,12 @@ public sealed class CodeEditor : UserControl
     /// <summary>主动弹出补全(Ctrl+Space 的同一条路)。</summary>
     public void RequestCompletion() => _ = RequestCompletionAsync(explicitRequest: true);
 
+    /// <summary>
+    /// 补全弹层开着。外面在编辑区上另挂按键处理的(筛选框的「Enter 即查找」)要先看它:
+    /// 同一元素上的隧道处理器按**注册的逆序**被调用,后挂的会抢在这里的 Enter / Tab 接受补全之前。
+    /// </summary>
+    public bool IsCompletionOpen => _session is not null;
+
     /// <inheritdoc />
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {

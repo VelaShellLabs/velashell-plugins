@@ -55,6 +55,19 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
             return;
         }
         _viewModel.SelectedNode = node;
+        List<Control> items = TreeMenuItems(node);
+        if (items.Count == 0)
+        {
+            return;
+        }
+        var menu = new ContextMenu { ItemsSource = items };
+        menu.Open(e.Source as Control ?? TreeList);
+        e.Handled = true;
+    }
+
+    /// <summary>对象树某一行的右键菜单项(不可用的命令不列;测试直接读它)。</summary>
+    internal List<Control> TreeMenuItems(TreeNode node)
+    {
         Loc loc = _viewModel.Loc;
         var items = new List<Control>();
 
@@ -77,6 +90,13 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
                 Add(loc["Tree_Pipeline"], "Mongo.workflow", _viewModel.PipelineNodeCommand);
                 Add(loc["Tree_NewQuery"], "Mongo.file-code", _viewModel.QueryNodeCommand);
                 Separator();
+                // 在哪一组上点就能在哪一组里新建:集合行给「新建集合 / 以它为源新建视图」,视图行给「新建视图」。
+                if (node.Kind == NodeKind.Collection)
+                {
+                    Add(loc["Tree_NewCollection"], "Mongo.plus", _viewModel.NewCollectionNodeCommand);
+                }
+                Add(loc["Tree_NewView"], "Mongo.eye", _viewModel.NewViewNodeCommand);
+                Separator();
                 Add(loc["Tree_Import"], "Mongo.download", _viewModel.ImportNodeCommand);
                 Add(loc["Tree_Export"], "Mongo.upload", _viewModel.ExportNodeCommand);
                 Add(loc["Tree_CopyName"], "Mongo.copy", _viewModel.CopyNameCommand);
@@ -87,8 +107,11 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
             case NodeKind.Database:
                 Add(loc["Tree_Objects"], "Mongo.layout-grid", _viewModel.OpenNodeCommand);
                 Add(loc["Tree_NewQuery"], "Mongo.file-code", _viewModel.QueryNodeCommand);
-                Add(loc["Nav_NewCollection"], "Mongo.plus", _viewModel.NewCollectionCommand);
                 Add(loc["Tree_Profiler"], "Mongo.timer", _viewModel.ProfilerNodeCommand);
+                Separator();
+                Add(loc["Tree_NewCollection"], "Mongo.plus", _viewModel.NewCollectionNodeCommand);
+                Add(loc["Tree_NewView"], "Mongo.eye", _viewModel.NewViewNodeCommand);
+                Add(loc["Tree_NewBucket"], "Mongo.folder-plus", _viewModel.NewBucketNodeCommand);
                 Separator();
                 Add(loc["Tree_Export"], "Mongo.upload", _viewModel.ExportNodeCommand);
                 Add(loc["Tree_CopyName"], "Mongo.copy", _viewModel.CopyNameCommand);
@@ -101,9 +124,32 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
                 break;
             case NodeKind.Bucket:
                 Add(loc["Tree_Open"], "Mongo.hard-drive", _viewModel.OpenNodeCommand);
+                Add(loc["Tree_UploadFiles"], "Mongo.upload", _viewModel.UploadFilesNodeCommand);
+                Add(loc["Tree_UploadFolder"], "Mongo.folder-up", _viewModel.UploadFolderNodeCommand);
+                Separator();
+                Add(loc["Tree_NewBucket"], "Mongo.folder-plus", _viewModel.NewBucketNodeCommand);
                 Add(loc["Tree_CopyName"], "Mongo.copy", _viewModel.CopyNameCommand);
+                Separator();
+                Add(loc["Tree_DropBucket"], "Mongo.trash-2", _viewModel.DropCollectionCommand, danger: true);
                 break;
             case NodeKind.Folder:
+                // 分组文件夹上的右键:先给「在这一组里新建」,再是刷新(设计稿 01 的对象树只画了刷新,新建是后补的入口)。
+                switch (node.Folder)
+                {
+                    case FolderKind.Collections:
+                        Add(loc["Tree_NewCollection"], "Mongo.plus", _viewModel.NewCollectionNodeCommand);
+                        break;
+                    case FolderKind.Views:
+                        Add(loc["Tree_NewView"], "Mongo.eye", _viewModel.NewViewNodeCommand);
+                        break;
+                    case FolderKind.Buckets:
+                        Add(loc["Tree_NewBucket"], "Mongo.folder-plus", _viewModel.NewBucketNodeCommand);
+                        break;
+                    case FolderKind.Users:
+                        Add(loc["Tree_Open"], "Mongo.user", _viewModel.OpenNodeCommand);
+                        break;
+                }
+                Separator();
                 Add(loc["Tree_Refresh"], "Mongo.refresh-cw", _viewModel.RefreshNodeCommand);
                 break;
             case NodeKind.Group:
@@ -137,13 +183,12 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
                 Add(loc["Tree_CopyName"], "Mongo.copy", _viewModel.CopyNameCommand);
                 break;
         }
-        if (items.Count == 0)
+        // 末组的项全都不可用时会剩一条孤零零的分隔线收尾。
+        if (items.Count > 0 && items[^1] is Separator)
         {
-            return;
+            items.RemoveAt(items.Count - 1);
         }
-        var menu = new ContextMenu { ItemsSource = items };
-        menu.Open(e.Source as Control ?? TreeList);
-        e.Handled = true;
+        return items;
     }
 
     private void OnScrimPressed(object? sender, PointerPressedEventArgs e)

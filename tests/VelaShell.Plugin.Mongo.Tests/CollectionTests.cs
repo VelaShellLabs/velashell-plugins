@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
@@ -453,6 +454,37 @@ public sealed class CollectionTests
         Assert.AreEqual(tab.FilterText, tab.LastRunFilter);
         Assert.IsTrue(tab.Rows.Count > 0);
         Assert.IsTrue(tab.Rows.All(static r => r.Document["status"].AsString == "shipped"));
+    });
+
+    [TestMethod]
+    public void Enter_in_the_filter_box_accepts_the_highlighted_completion() => Screens.OnUi(async () =>
+    {
+        await TestServer.RequireAsync();
+        await using Workbench bench = await Screens.OpenWorkbenchAsync();
+        CollectionTabViewModel tab = await OpenTabAsync(bench, Screens.Database, "orders");
+        CodeEditor filter = ViewOf(bench).FindControl<CodeEditor>("FilterEditor")!;
+        tab.FilterText = "{  }";
+        await Screens.PumpAsync(5);
+        filter.FocusEditor();
+        filter.Editor.CaretOffset = 2;
+        await Screens.PumpAsync(5);
+        // 敲一个字母:补全自动弹出(字段名),再 ↓ 选到第二项、Enter 接受 —— 不能被当成「查找」吃掉。
+        bench.Window.KeyTextInput("s");
+        await Screens.PumpAsync(20);
+        Popup popup = filter.GetVisualDescendants().OfType<Popup>().Single();
+        Assert.IsTrue(popup.IsOpen, "typing the first letter of a key opens the field completion");
+        var session = (CompletionSession)((Control)popup.Child!).DataContext!;
+        Assert.IsGreaterThan(1, session.Items.Count, "orders has several fields starting with s");
+        bench.Window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        await Screens.PumpAsync(5);
+        CompletionItem highlighted = session.Selected!;
+        string lastRun = tab.LastRunFilter;
+        bench.Window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        await Screens.PumpAsync(10);
+        Assert.IsFalse(popup.IsOpen, "accepting closes the completion");
+        Assert.AreEqual("{ " + highlighted.InsertText!.Replace("|", "", StringComparison.Ordinal) + " }", tab.FilterText,
+            "Enter inserts the highlighted item, exactly as clicking it would");
+        Assert.AreEqual(lastRun, tab.LastRunFilter, "the Enter that accepted a completion must not also run the query");
     });
 
     [TestMethod]

@@ -26,8 +26,8 @@ public sealed partial class CollectionTabView : UserControl
         JsonPane.Attach(viewModel);
         FilterEditor.CompletionProvider = request =>
             Task.FromResult(viewModel.Sample.Complete(viewModel.Loc, request.Text, request.CaretOffset, filterMode: true));
-        // 单行筛选框:Enter 就是查找(补全弹层开着时 Enter 先被编辑器自己拿去接受补全 ——
-        // 它的隧道处理器注册得比这里早,已处理的事件这里收不到)。
+        // 单行筛选框:Enter 就是查找 —— 补全弹层开着时除外,那时的 Enter 是「接受选中的补全项」。
+        // 同一元素上的隧道处理器按注册的逆序调用,这里比编辑器自己的那个先拿到事件,所以要自己让路。
         FilterEditor.Editor.TextArea.AddHandler(KeyDownEvent, OnFilterKeyDown, RoutingStrategies.Tunnel);
         FilterEditor.Editor.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
         FilterEditor.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
@@ -52,7 +52,7 @@ public sealed partial class CollectionTabView : UserControl
 
     private void OnFilterKeyDown(object? sender, KeyEventArgs e)
     {
-        if (_viewModel is null || e.Key != Key.Enter)
+        if (_viewModel is null || e.Key != Key.Enter || FilterEditor.IsCompletionOpen)
         {
             return;
         }

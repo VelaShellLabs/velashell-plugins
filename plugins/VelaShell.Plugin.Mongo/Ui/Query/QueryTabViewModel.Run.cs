@@ -390,7 +390,6 @@ internal sealed partial class QueryTabViewModel
     {
         Explain.Begin(command, database);
         SelectPane(Explain);
-        ExplainRequested?.Invoke();
         // executionStats 一律按 allPlansExecution 去要:后者是前者的超集,多出来的只是候选计划的试运行数据
         // (那本来就跑过了,不额外花服务器的时间),而候选计划列表的 works / score 只有它给得出来。
         string verbosity = Explain.Verbosity == "executionStats" ? "allPlansExecution" : Explain.Verbosity;
@@ -423,9 +422,6 @@ internal sealed partial class QueryTabViewModel
             PlanText = $"{plan.Summary} · {Loc.Format("Query_PlanScan", BsonText.Grouped(examined), BsonText.Grouped(returned))}";
         }
     }
-
-    /// <summary>执行计划页切出来时(视图据此把编辑器收矮,让阶段流有地方放)。</summary>
-    internal event Action? ExplainRequested;
 
     /// <summary>code lens 的数据变了(跑完一次)。</summary>
     internal event Action? LensChanged;

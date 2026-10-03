@@ -200,6 +200,33 @@ public sealed class QueryTests
     });
 
     [TestMethod]
+    public void Explain_keeps_the_split_height_the_user_dragged() => Screens.OnUi(async () =>
+    {
+        await TestServer.RequireAsync();
+        await using Workbench bench = await Screens.OpenWorkbenchAsync();
+        bench.Session.OpenQuery("shop", RunnableScript);
+        await Screens.PumpAsync();
+        QueryTabViewModel tab = bench.ViewModel.Tabs.OfType<QueryTabViewModel>().Last();
+        await tab.RunAsync(all: true);
+        await Screens.PumpAsync(20);
+        QueryTabView view = bench.Window.GetVisualDescendants().OfType<QueryTabView>().First(static v => v.IsEffectivelyVisible);
+        RowDefinition editorRow = view.Root.RowDefinitions[1];
+        // 用户把分隔条拖到了 300(结果区随之变高)。
+        editorRow.Height = new GridLength(300);
+        await Screens.PumpAsync(5);
+
+        tab.CaretOffset = RunnableScript.IndexOf("orderNo", StringComparison.Ordinal);
+        await tab.ExplainCurrentAsync(null);
+        await Screens.PumpAsync(20);
+        Assert.IsTrue(tab.Explain.IsSelected);
+        Assert.AreEqual(300d, editorRow.Height.Value, "switching to the plan must not resize the panes");
+
+        tab.SelectPaneCommand.Execute(tab.Panes.OfType<QueryResultSet>().First());
+        await Screens.PumpAsync(10);
+        Assert.AreEqual(300d, editorRow.Height.Value, "switching back to the results keeps the user's height too");
+    });
+
+    [TestMethod]
     public void Writes_RespectReadOnlyAndRefreshCatalog() => Screens.OnUi(async () =>
     {
         await TestServer.RequireAsync();

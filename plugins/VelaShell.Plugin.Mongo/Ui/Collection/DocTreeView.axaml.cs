@@ -20,6 +20,7 @@ public sealed partial class DocTreeView : UserControl
         InitializeComponent();
         TreeList.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
         TreeList.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        TreeList.AddHandler(Button.ClickEvent, OnDatePickClick);
         TreeList.DoubleTapped += OnDoubleTapped;
         TreeList.ContextRequested += OnContextRequested;
     }
@@ -89,6 +90,26 @@ public sealed partial class DocTreeView : UserControl
         }
         vm.SelectedTreeRow = row;
         row.Editor = vm.CreateEditor(row.Value, row.Path, vm.Sample.KindOf(row.Path));
+    }
+
+    /// <summary>日期值编辑框右边的日历按钮:选一天 / 改时刻即写入暂存区。</summary>
+    private void OnDatePickClick(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is not Button { Classes: var classes } button || !classes.Contains("datepick")
+            || _viewModel is not { } vm || GridPaneView.Find<DocTreeRow>(button) is not { Editor: { } editor } row)
+        {
+            return;
+        }
+        e.Handled = true;
+        DatePickFlyout.Show(button, vm.Loc, editor.Text, text =>
+        {
+            editor.Text = text;
+            if (vm.CommitEditor(editor, row.Row, row.Path))
+            {
+                row.Editor = null;
+                TreeList.Focus();
+            }
+        });
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)

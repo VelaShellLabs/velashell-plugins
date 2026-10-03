@@ -91,6 +91,11 @@ public sealed partial class Loc
         ("Cw_AddFieldExists", "That field already exists.", "这个字段已经存在。"),
 
         // ── 右键菜单 ──
+        // ── 日期选择弹层(内联编辑日期字段时编辑框右边的日历按钮) ──
+        ("Cw_DateTime", "Time", "时间"),
+        ("Cw_DateNow", "Now", "现在"),
+        ("Cw_DateBadTime", "Write the time as HH:mm or HH:mm:ss", "时间写成 HH:mm 或 HH:mm:ss"),
+
         ("Cw_MenuEditValue", "Edit value", "编辑值"),
         ("Cw_MenuChangeType", "Change type", "修改类型"),
         ("Cw_MenuAddField", "Add field", "添加字段"),

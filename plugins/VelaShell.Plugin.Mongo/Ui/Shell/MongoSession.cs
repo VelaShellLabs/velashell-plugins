@@ -556,7 +556,10 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
     }
 
     /// <inheritdoc />
-    public void OpenGridFs(string database, string bucket) =>
+    public void OpenGridFs(string database, string bucket) => ActivateGridFs(database, bucket);
+
+    /// <summary>打开(或切到)一个桶的标签并把它交回来(对象树的「上传文件…」要接着对它发起上传)。</summary>
+    internal GridFsTabViewModel ActivateGridFs(string database, string bucket) =>
         Shell.Activate(new GridFsTabViewModel(this, new GridFsBucketInfo(database, bucket)));
 
     /// <inheritdoc />

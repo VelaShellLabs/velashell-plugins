@@ -476,13 +476,15 @@ internal sealed class DocInspectorViewModel : ObservableObject
     }
 
     /// <summary>提交一个字段的编辑(写入暂存区)。</summary>
-    public bool CommitEdit(InspectorField field)
+    public bool CommitEdit(InspectorField field) => _row is not null && CommitEdit(field, _row);
+
+    /// <summary>
+    /// 把一个字段的编辑提交到指定的那份文档。失焦提交要用它:点网格另一行时,
+    /// 检查器在提交真正执行之前就已经换成了新文档。
+    /// </summary>
+    internal bool CommitEdit(InspectorField field, CollectionRow row)
     {
-        if (_row is null || field.Editor is not { } editor)
-        {
-            return false;
-        }
-        if (!_owner.CommitEditor(editor, _row, field.Path))
+        if (field.Editor is not { } editor || !_owner.CommitEditor(editor, row, field.Path))
         {
             return false;
         }

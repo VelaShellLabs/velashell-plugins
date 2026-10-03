@@ -419,7 +419,8 @@ internal sealed class CollectionCell : ObservableObject
 }
 
 /// <summary>
-/// 单元格 / 字段的内联编辑器:文本 + 目标类型 + 可选的候选值(布尔、本页里取值不多的字符串列、日期的"现在")。
+/// 单元格 / 字段的内联编辑器:文本 + 目标类型 + 可选的候选值(布尔、本页里取值不多的字符串列);
+/// 日期不给候选值,编辑框右边是日历按钮(<see cref="DatePickFlyout" />)。
 /// </summary>
 internal sealed class InlineValueEditor : ObservableObject
 {
@@ -458,6 +459,15 @@ internal sealed class InlineValueEditor : ObservableObject
 
     /// <summary>有没有候选值。</summary>
     public bool HasChoices => Choices.Count > 0;
+
+    /// <summary>编辑的是日期(编辑框右边给日历按钮)。</summary>
+    public bool IsDate => Kind == BsonKind.Date;
+
+    /// <summary>编辑框右边有没有按钮(候选值下拉,或日期的日历)。</summary>
+    public bool HasDropDown => HasChoices || IsDate;
+
+    /// <summary>那个按钮的图标。</summary>
+    public string DropDownIcon => IsDate ? "Mongo.calendar" : "Mongo.chevron-down";
 
     /// <summary>解析失败的原因;没有为 <see langword="null" />。</summary>
     public string? Error

@@ -54,6 +54,9 @@ public sealed partial class GridPaneView : UserControl
     /// <summary>行列表(测试用)。</summary>
     internal ListBox List => GridList;
 
+    /// <summary>最近一次从日期格弹出的日历(测试用)。</summary>
+    internal Flyout? DatePicker { get; private set; }
+
     /// <summary>接上视图模型。</summary>
     internal void Attach(CollectionTabViewModel viewModel)
     {
@@ -275,7 +278,9 @@ public sealed partial class GridPaneView : UserControl
         }
     }
 
-    /// <summary>编辑器右侧的下拉箭头:候选值(布尔、枚举列、日期的"现在"),点一个即写入。</summary>
+    /// <summary>
+    /// 编辑器右侧的按钮:布尔、枚举列弹候选值(点一个即写入);日期弹日历(选一天 / 改时刻即写入)。
+    /// </summary>
     private void OnChoicesClick(object? sender, RoutedEventArgs e)
     {
         if (e.Source is not Button { Classes: var classes } button || !classes.Contains("choices")
@@ -284,6 +289,18 @@ public sealed partial class GridPaneView : UserControl
             return;
         }
         e.Handled = true;
+        if (editor.IsDate)
+        {
+            DatePicker = DatePickFlyout.Show(button, vm.Loc, editor.Text, text =>
+            {
+                editor.Text = text;
+                if (ReferenceEquals(cell.Editor, editor) && vm.CommitCellEdit(cell))
+                {
+                    FocusRow(cell.Row);
+                }
+            });
+            return;
+        }
         CollectionMenus.Open(button, editor.Choices.Select(choice => (Control)CollectionMenus.Item(choice, "Mongo.type", null, () =>
         {
             editor.Text = choice;

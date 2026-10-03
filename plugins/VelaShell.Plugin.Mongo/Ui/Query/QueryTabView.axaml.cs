@@ -17,18 +17,16 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// <summary>
 /// 查询编辑器的视图。代码里做的是 AXAML 做不了或做起来绕的几件事:
 /// 快捷键(要抢在编辑区之前)、编辑器门面(选区 / 替换)、code lens 叠加层(跟着可视行走)、
-/// 库与 maxTimeMS 的下拉菜单、结果网格的右键菜单、看执行计划时把编辑器收矮。
+/// 库与 maxTimeMS 的下拉菜单、结果网格的右键菜单。
+/// <para>
+/// 编辑器与下方结果区的分界只听用户拖的那条分隔条:切到「执行计划」页不再自动把编辑器收矮
+/// (设计稿 14 画的是 230 高的编辑器)—— 结果页与执行计划页是同一块面板的两个页签,
+/// 一切页高度就跳、切回来又被重置成默认值,用户刚拖好的高度就白拖了。
+/// </para>
 /// </summary>
 public sealed partial class QueryTabView : UserControl, IQueryEditor
 {
-    /// <summary>编辑器默认高度(设计稿 03:448 减去 1px 分隔)。</summary>
-    private const double EditorHeight = 447;
-
-    /// <summary>看执行计划时的编辑器高度(设计稿 14:230)。</summary>
-    private const double ExplainEditorHeight = 229;
-
     private readonly QueryTabViewModel? _viewModel;
-    private bool _autoShrunk;
     private bool _lensQueued;
 
     /// <summary>用给定的视图模型初始化。</summary>
@@ -39,7 +37,6 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
         _viewModel = viewModel;
         viewModel.Editor = this;
         viewModel.PropertyChanged += OnViewModelChanged;
-        viewModel.ExplainRequested += OnExplainRequested;
         viewModel.LensChanged += QueueLenses;
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
@@ -87,7 +84,6 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
         view.VisualLinesChanged += (_, _) => QueueLenses();
         view.ScrollOffsetChanged += (_, _) => QueueLenses();
         Editor.CaretMoved += (_, _) => viewModel.OnCaretSettled();
-        Splitter.DragCompleted += (_, _) => _autoShrunk = false;
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
@@ -343,33 +339,11 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
         e.Handled = true;
     }
 
-    // ── 执行计划时收矮编辑器 ────────────────────────────────────────────────
-
-    private void OnExplainRequested()
-    {
-        RowDefinition row = Root.RowDefinitions[1];
-        if (row.Height.Value > ExplainEditorHeight + 40)
-        {
-            row.Height = new GridLength(ExplainEditorHeight);
-            _autoShrunk = true;
-        }
-    }
-
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
+        if (e.PropertyName == nameof(QueryTabViewModel.Statements))
         {
-            case nameof(QueryTabViewModel.SelectedPane) when _viewModel?.SelectedPane is ExplainPane:
-                // 脚本里的 .explain() 跑完也会切到执行计划页 —— 与 F6 同样收矮编辑器。
-                OnExplainRequested();
-                break;
-            case nameof(QueryTabViewModel.SelectedPane) when _autoShrunk:
-                Root.RowDefinitions[1].Height = new GridLength(EditorHeight);
-                _autoShrunk = false;
-                break;
-            case nameof(QueryTabViewModel.Statements):
-                QueueLenses();
-                break;
+            QueueLenses();
         }
     }
 

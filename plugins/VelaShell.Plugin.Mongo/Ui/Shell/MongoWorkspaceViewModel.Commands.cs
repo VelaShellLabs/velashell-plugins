@@ -59,8 +59,20 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>只读开关(解锁生产连接要确认)。</summary>
     public AsyncCommand ToggleReadOnlyCommand { get; private set; } = null!;
 
-    /// <summary>新建集合(对象树右键)。</summary>
-    public RelayCommand NewCollectionCommand { get; private set; } = null!;
+    /// <summary>在这一行所在的库里新建集合(「集合」分组、集合行、库行的右键)。</summary>
+    public RelayCommand<TreeNode> NewCollectionNodeCommand { get; private set; } = null!;
+
+    /// <summary>新建视图(「视图」分组、视图行、集合行的右键;从集合 / 视图上点时源集合预填成它)。</summary>
+    public RelayCommand<TreeNode> NewViewNodeCommand { get; private set; } = null!;
+
+    /// <summary>新建 GridFS 存储桶(「GridFS 存储桶」分组、桶行、库行的右键)。</summary>
+    public RelayCommand<TreeNode> NewBucketNodeCommand { get; private set; } = null!;
+
+    /// <summary>上传文件到这个桶(桶行右键:打开桶的标签再弹文件选择框)。</summary>
+    public AsyncCommand<TreeNode> UploadFilesNodeCommand { get; private set; } = null!;
+
+    /// <summary>上传文件夹到这个桶。</summary>
+    public AsyncCommand<TreeNode> UploadFolderNodeCommand { get; private set; } = null!;
 
     /// <summary>刷新当前连接的树。</summary>
     public AsyncCommand RefreshTreeCommand { get; private set; } = null!;
@@ -113,7 +125,7 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>清空集合。</summary>
     public AsyncCommand<TreeNode> EmptyCollectionCommand { get; private set; } = null!;
 
-    /// <summary>删除集合 / 视图。</summary>
+    /// <summary>删除集合 / 视图 / GridFS 存储桶。</summary>
     public AsyncCommand<TreeNode> DropCollectionCommand { get; private set; } = null!;
 
     /// <summary>删除数据库。</summary>
@@ -180,7 +192,21 @@ internal sealed partial class MongoWorkspaceViewModel
             }
         });
 
-        NewCollectionCommand = new(() => WithDatabase((s, db) => ShowDialog(new NewCollectionDialogViewModel(s, db))));
+        NewCollectionNodeCommand = new(node => ShowDialog(new NewCollectionDialogViewModel(node.Session!, node.Database)),
+            static node => node is { Session: not null, Database.Length: > 0 });
+        NewViewNodeCommand = new(node => ShowDialog(new NewCollectionDialogViewModel(node.Session!, node.Database, NewCollectionKind.View,
+                node.Kind is NodeKind.Collection or NodeKind.View ? node.Name : null)),
+            static node => node is { Session: not null, Database.Length: > 0 });
+        NewBucketNodeCommand = new(node =>
+            {
+                if (node.Session is { } session && session.EnsureWritable(node.Database))
+                {
+                    ShowDialog(new GridFsNewBucketDialogViewModel(session, node.Database));
+                }
+            },
+            static node => node is { Session: not null, Database.Length: > 0 });
+        UploadFilesNodeCommand = new(node => UploadToBucketAsync(node, folder: false), static node => node is { Kind: NodeKind.Bucket, Session: not null });
+        UploadFolderNodeCommand = new(node => UploadToBucketAsync(node, folder: true), static node => node is { Kind: NodeKind.Bucket, Session: not null });
         RefreshTreeCommand = new(async () =>
         {
             if (_currentSession is { } session)
@@ -217,7 +243,8 @@ internal sealed partial class MongoWorkspaceViewModel
             static node => node is { Kind: NodeKind.Collection, Session: not null });
         CopyNameCommand = new(node => CopyAsync(node.Namespace ?? node.Name));
         EmptyCollectionCommand = new(EmptyCollectionAsync, static node => node is { Kind: NodeKind.Collection, Session: not null });
-        DropCollectionCommand = new(DropCollectionAsync, static node => node is { Kind: NodeKind.Collection or NodeKind.View, Session: not null });
+        DropCollectionCommand = new(DropCollectionAsync,
+            static node => node is { Kind: NodeKind.Collection or NodeKind.View or NodeKind.Bucket, Session: not null });
         DropDatabaseCommand = new(DropDatabaseAsync,
             static node => node is { Kind: NodeKind.Database, Session: { } session } && !session.Guard.DisableDropDatabase);
         RefreshNodeCommand = new(node => node.Session?.RefreshTreeAsync(node.Database.Length > 0 ? node.Database : null) ?? Task.CompletedTask,
@@ -299,10 +326,26 @@ internal sealed partial class MongoWorkspaceViewModel
         }
     }
 
+    /// <summary>桶行右键的「上传文件… / 上传文件夹…」:打开(或切到)桶的标签,再走标签里同一条上传路径。</summary>
+    private async Task UploadToBucketAsync(TreeNode node, bool folder)
+    {
+        if (node is not { Session: { } session, Bucket: { } bucket })
+        {
+            return;
+        }
+        GridFsTabViewModel tab = session.ActivateGridFs(bucket.Database, bucket.Name);
+        await (folder ? tab.UploadFolderCommand : tab.UploadFilesCommand).ExecuteAsync().ConfigureAwait(true);
+    }
+
     internal async Task DropCollectionAsync(TreeNode node)
     {
         if (node.Session is not { } session || !session.EnsureWritable(node.Database))
         {
+            return;
+        }
+        if (node.Bucket is { } bucket)
+        {
+            await DropBucketAsync(session, node, bucket).ConfigureAwait(true);
             return;
         }
         var facts = new List<ConfirmFact>();
@@ -349,6 +392,50 @@ internal sealed partial class MongoWorkspaceViewModel
             session.CloseTabsOf($"{node.Database}.{node.Name}");
             session.ClearStats();
             await session.RefreshTreeAsync(node.Database).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is MongoException or TimeoutException)
+        {
+            Toast(new() { Title = Loc.Format("Common_Failed", MongoConnector.Describe(ex)), Kind = ToastKind.Error });
+        }
+    }
+
+    /// <summary>删除一个桶 = 删掉 <c>.files</c> 与 <c>.chunks</c> 两个集合(与对象列表里删桶同一口径)。</summary>
+    private async Task DropBucketAsync(MongoSession session, TreeNode node, GridFsBucketInfo bucket)
+    {
+        var facts = new List<ConfirmFact>();
+        long files = 0;
+        try
+        {
+            CollectionStats filesStats = await session.Connection.GetStatsAsync(bucket.Database, bucket.FilesCollection).ConfigureAwait(true);
+            CollectionStats chunksStats = await session.Connection.GetStatsAsync(bucket.Database, bucket.ChunksCollection).ConfigureAwait(true);
+            files = filesStats.Count;
+            facts.Add(new(Loc["Obj_FactFiles"], BsonText.Grouped(files)));
+            facts.Add(new(Loc["Confirm_DataSize"], BsonText.Bytes(chunksStats.Size)));
+        }
+        catch (Exception ex) when (ex is MongoException or TimeoutException)
+        {
+        }
+        bool confirmed = await ConfirmAsync(new()
+        {
+            Title = Loc["Obj_DropBucketTitle"],
+            Message = Loc.Format("Obj_DropBucketBody", node.Namespace),
+            ConfirmLabel = Loc["Obj_DropBucketTitle"],
+            Facts = facts,
+            TypeToConfirm = session.Guard.ConfirmWrites || files > 0 ? node.Name : null
+        }).ConfigureAwait(true);
+        if (!confirmed)
+        {
+            return;
+        }
+        try
+        {
+            IMongoDatabase database = session.Connection.Database(bucket.Database);
+            await database.DropCollectionAsync(bucket.FilesCollection).ConfigureAwait(true);
+            await database.DropCollectionAsync(bucket.ChunksCollection).ConfigureAwait(true);
+            Toast(new() { Title = Loc.Format("Confirm_Dropped", node.Namespace), Kind = ToastKind.Success });
+            session.CloseTabsOf(node.Namespace!);
+            session.ClearStats();
+            await session.RefreshTreeAsync(bucket.Database).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {

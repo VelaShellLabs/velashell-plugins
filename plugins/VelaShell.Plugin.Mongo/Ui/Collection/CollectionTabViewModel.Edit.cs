@@ -403,7 +403,10 @@ internal sealed partial class CollectionTabViewModel
 
     // ── 字段级编辑(网格 / 树 / 检查器共用) ───────────────────────────────────
 
-    /// <summary>编辑器的初始状态:类型(null / 缺失时按列的主导类型)、文本与候选值。</summary>
+    /// <summary>
+    /// 编辑器的初始状态:类型(null / 缺失时按列的主导类型)、文本与候选值。
+    /// 日期不给候选值 —— 它的按钮弹的是日历(<see cref="DatePickFlyout" />),「现在」在日历里。
+    /// </summary>
     internal InlineValueEditor CreateEditor(BsonValue? value, string path, BsonKind fallback)
     {
         BsonKind kind = BsonKinds.Of(value);
@@ -415,7 +418,6 @@ internal sealed partial class CollectionTabViewModel
         {
             BsonKind.Boolean => ["true", "false"],
             BsonKind.String => EnumChoices(path),
-            BsonKind.Date => [BsonText.FormatDate(new BsonDateTime(DateTime.UtcNow))],
             _ => []
         };
         return new InlineValueEditor(BsonEdit.EditText(value), kind, choices);

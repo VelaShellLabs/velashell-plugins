@@ -84,12 +84,17 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
     /// <param name="database">在哪个库里建。</param>
-    public NewCollectionDialogViewModel(IMongoWorkspace workspace, string database)
+    /// <param name="kind">一打开就选中的卡片(对象树「视图」分组的右键「新建视图」直接落在视图卡上)。</param>
+    /// <param name="viewSource">视图的源集合(从某个集合 / 视图上右键新建视图时,预先填成它)。</param>
+    public NewCollectionDialogViewModel(IMongoWorkspace workspace, string database,
+        NewCollectionKind kind = NewCollectionKind.Plain, string? viewSource = null)
         : base(workspace)
     {
         Database = database;
-        Title = workspace.Loc["Nav_NewCollection"];
+        Title = workspace.Loc[kind == NewCollectionKind.View ? "Nav_NewView" : "Nav_NewCollection"];
         Subtitle = database;
+        _kind = kind;
+        _viewSource = viewSource;
         ExpireUnits =
         [
             new(Loc["NewColl_UnitSeconds"], 1),

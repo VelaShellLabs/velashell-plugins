@@ -149,8 +149,16 @@
     <Setter Property="FontWeight" Value="Medium" />
   </Style>
 
-  <!-- ══ 检查器 / 大纲的行 ═══════════════════════════════════════════════════════ -->
+  <!-- ══ 检查器 / 大纲的行 ═══════════════════════════════════════════════════════
+       选中行只在字段列表拿着焦点时着色:焦点一离开(点回网格、换了一份文档)就不再留那块与悬停同色的底 ——
+       留着像是还在被操作,而且换文档后它会落在新文档的同名字段上。选中本身还在,焦点回来就又亮。 -->
   <Style Selector="ListBox.flat ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.flat ListBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+  </Style>
+  <Style Selector="ListBox.flat:focus-within ListBoxItem:selected /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
   </Style>
   <Style Selector="Border.typetag">
