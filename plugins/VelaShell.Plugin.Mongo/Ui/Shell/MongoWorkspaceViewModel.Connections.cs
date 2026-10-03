@@ -124,8 +124,12 @@ internal sealed partial class MongoWorkspaceViewModel
 
     /// <summary>连一条。已连着就选中它;正在连就什么都不做。</summary>
     /// <param name="entry">连接。</param>
+    /// <param name="quiet">
+    /// 安静地连(查询编辑器切换连接时):不开「正在连接」占位标签、连上后不改对象树的选中、不开对象列表 ——
+    /// 调用方自己接着用这条连接;失败只记在 <see cref="ConnectionEntry.Failure" /> 上,由调用方报。
+    /// </param>
     /// <returns>任务。</returns>
-    internal async Task ConnectAsync(ConnectionEntry entry)
+    internal async Task ConnectAsync(ConnectionEntry entry, bool quiet = false)
     {
         if (entry.State == ConnectionState.Connecting)
         {
@@ -133,14 +137,17 @@ internal sealed partial class MongoWorkspaceViewModel
         }
         if (entry.State == ConnectionState.Connected)
         {
-            SelectedNode = entry.Root;
+            if (!quiet)
+            {
+                SelectedNode = entry.Root;
+            }
             return;
         }
         using var cts = new CancellationTokenSource();
         entry.Connecting = cts;
         entry.Failure = null;
         entry.State = ConnectionState.Connecting;
-        ConnectionStateTabViewModel stateTab = Activate(new ConnectionStateTabViewModel(this, entry));
+        ConnectionStateTabViewModel? stateTab = quiet ? null : Activate(new ConnectionStateTabViewModel(this, entry));
         MongoLink link;
         try
         {
@@ -171,7 +178,7 @@ internal sealed partial class MongoWorkspaceViewModel
             return;
         }
         CloseTabsWhere(t => ReferenceEquals(t, stateTab));
-        await AttachAsync(entry, link).ConfigureAwait(true);
+        await AttachAsync(entry, link, quiet).ConfigureAwait(true);
         entry.Profile.LastConnectedAt = DateTimeOffset.Now;
         try
         {
@@ -184,16 +191,21 @@ internal sealed partial class MongoWorkspaceViewModel
         }
     }
 
-    /// <summary>连上之后:建会话、读库列表、展开默认库,开它的对象列表。</summary>
+    /// <summary>连上之后:建会话、读库列表、展开默认库,开它的对象列表(<paramref name="quiet" /> 时只建会话、读库列表)。</summary>
     /// <param name="entry">连接。</param>
     /// <param name="link">连上的一条。</param>
+    /// <param name="quiet">不动对象树的选中、不开对象列表。</param>
     /// <returns>会话。</returns>
-    internal async Task<MongoSession> AttachAsync(ConnectionEntry entry, MongoLink link)
+    internal async Task<MongoSession> AttachAsync(ConnectionEntry entry, MongoLink link, bool quiet = false)
     {
         var session = new MongoSession(this, entry, link);
         entry.Session = session;
         entry.State = ConnectionState.Connected;
         await session.ReloadTreeAsync().ConfigureAwait(true);
+        if (quiet)
+        {
+            return session;
+        }
         string? db = session.DefaultDatabase();
         if (db is not null && session.Root.Children.FirstOrDefault(n => n.Name == db) is { } dbNode)
         {

@@ -112,12 +112,17 @@ internal sealed record MonitorMember(
     string LagLabel);
 
 /// <summary>存储 Top 的一行。</summary>
-/// <param name="Name">集合名(跨库时 <c>db.coll</c>)。</param>
+/// <param name="Prefix">库名前缀(<c>shop.</c>,淡色);Top 全在一个库里时为空。</param>
+/// <param name="Collection">集合名(亮色)。</param>
 /// <param name="DataRatio">数据段比例(相对最大的那一行)。</param>
 /// <param name="IndexRatio">索引段比例。</param>
 /// <param name="SizeText">合计(<c>44.0 GB</c>)。</param>
-/// <param name="Tip">悬停提示(数据与索引各多少)。</param>
-internal sealed record MonitorStorageRow(string Name, double DataRatio, double IndexRatio, string SizeText, string Tip);
+/// <param name="Tip">悬停提示(完整命名空间,数据与索引各多少)。</param>
+internal sealed record MonitorStorageRow(string Prefix, string Collection, double DataRatio, double IndexRatio, string SizeText, string Tip)
+{
+    /// <summary>显示名(<c>shop.orders</c>;Top 全在一个库里时只有集合名)。</summary>
+    public string Name => Prefix + Collection;
+}
 
 /// <summary>事件栏的一条(由采样推断:复制延迟超阈值、操作量尖峰、慢查询、索引构建完成…)。</summary>
 internal sealed class MonitorEvent : ObservableObject

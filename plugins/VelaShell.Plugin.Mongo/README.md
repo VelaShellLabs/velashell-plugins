@@ -2,7 +2,7 @@
 
 > id `velashell.mongo` · 进程内装载 · 命令面板入口(`contributes.commands`,与 Docker 面板同一个路数) · `minSdkVersion` 2.0.2
 
-照设计稿 `velashell-plugin-mongo.pen`(仓库根,23 个画板)实现的 MongoDB 客户端:
+照设计稿 `velashell-plugin-mongo.pen`(仓库根,24 个画板)实现的 MongoDB 客户端:
 Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Schema 分析、索引建议与 GridFS;
 网格 / 树 / JSON 三视图共用一份数据,所有编辑先进暂存区,提交前可预览将执行的命令。
 
@@ -48,7 +48,7 @@ Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Sc
 | (稿外)系统库 | admin / config / local 默认不列(`showSystemDatabases`,高级选项);对象树表头的眼睛按钮在本次会话里切换;连接里点名的默认库照列 | Navicat 的默认;日常几乎不进这三个库,列着只会把用户库往下挤 |
 | 10 的「分组」 | 对话框里一栏(可选已有分组,也可新写);对象树里分了组的连接挂在可收起的组名节下面,不分组的在最上面 | — |
 | 01 / 13 对象树根上只画了一条连接 | 根上是**全部**已保存的连接(Navicat 的习惯):灰点没连、绿点连着、红点没连上;双击连上,连着的那条下面挂库;右键里有连接 / 断开 / 编辑 / 复制 / 删除 | 连接由插件自己管之后,树根就是连接列表 |
-| 14 执行计划时编辑器收矮到 230 | 不动分界:切到执行计划页,编辑器与结果区的高度照用户拖过的分隔条 | 结果页与执行计划页是同一块面板的两个页签;自动收矮再在切回时重置成默认值,用户拖好的高度就白拖了 |
+| 14 执行计划时编辑器收矮到 194 | 不动分界:切到执行计划页,编辑器与结果区的高度照用户拖过的分隔条 | 结果页与执行计划页是同一块面板的两个页签;自动收矮再在切回时重置成默认值,用户拖好的高度就白拖了 |
 | 01 对象树的分组文件夹右键只有刷新 | 「集合 / 视图 / GridFS 存储桶」分组(及其中对象、库行)右键可新建对应对象;桶行右键可上传文件 / 文件夹、删除存储桶 | 不打开对象列表也能就地新建;新建桶原先只能从已打开的桶标签里进 |
 | 会话标签上的连接名(「mongo-inner-01」) | 宿主标签条上是一个「MongoDB」面板;连接名写在对象树根、对象标签与状态条上 | 一个面板装着全部连接(与 Docker 面板一样);对象标签按连接分开,同名集合在两条连接里是两个标签 |
 | 22「连接中 / 连接失败」两张卡 | 照稿实现在插件里:连接时先开一个占位标签(「正在连接 X」+ 取消),连上了换成默认库的对象列表,没连上就原地变成「无法连接 X」+ 等宽字的原因 + 编辑连接 / 关闭标签页 / 重新连接;证书不受信任时多一个「信任此证书并重连」(只信这一张的指纹)。连接**中途断开**时内容区顶部一条横幅 | 证书信任原先是宿主的流程,连接自己管之后由插件给 |
@@ -75,6 +75,24 @@ Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Sc
   日期不再给"现在"那一条文字候选。
 - **筛选框的 Enter**:补全弹层开着时是「接受补全」,关着才是「查找」。筛选框在编辑区上另挂了隧道处理器,
   而同一元素上的隧道处理器按**注册的逆序**调用 —— 它比 `CodeEditor` 自己的先拿到 Enter,所以要先看 `CodeEditor.IsCompletionOpen`。
+- **新建索引**(设计稿 07b,`DesignIndexesView` + `DesignTabViewModel.NewIndex.cs`):Navicat 设计表的做法 —— 点「新建索引」后索引页下半部分
+  换成整宽编辑器(字段表 / 类型与选项 / 命令预览与预估),索引表末尾钉一行「新建」草稿(`DraftIndex`,与表里的行同一个 `IndexRow` 模型,
+  不进 `Indexes`,所以重名检查、删除、隐藏都碰不到它)。字段表的行距是 28,`DesignIndexesView.RowPitch` 跟着它算拖动落点;
+  上移 / 下移按钮走 `MoveKeyUpCommand / MoveKeyDownCommand`,与拖动是同一个 `MoveKey`。编辑器开着时索引表的滚动区
+  (`ScrollViewer#TableScroll.compact`)最多 180 高。
+- **查询的执行目标**(`QueryTabViewModel.Target.cs`):工具行下行的「连接 ▾ 数据库 ▾」。标签的连接定死在构造里,
+  所以切换连接是 `MongoWorkspaceViewModel.ReplaceTab` 原位换一个新连接上的查询标签(`CarryOver` 带过文本、未保存基线、光标、
+  maxTimeMS);没连着的连接走 `ConnectAsync(entry, quiet: true)`(不开占位标签、不动树的选中、不开对象列表)。
+  诊断的第二段(`CheckCollectionsAsync`,异步)查 `db.集合` 在生效的库里有没有,没有就是一条 Warning;
+  脚本里建删了集合(`ChangesCatalog`)时 `ForgetCollections` 丢掉那个库的缓存。
+- **GridFS 拖放区可点**:`DropZone` 的 Tapped 走 `UploadFilesCommand`;源头在框里那两个链接按钮里时不再重复弹(它们自己处理)。
+- **服务器监控**(`MonitorTabView`):两行图表 `*` : `*` 分高度,中间 `hsplit` 可拖;两张柱状图 `MinSlots` = 满窗口的柱数
+  (`ChartSlots`),刚开始采样时柱子靠右、保持最终宽度。存储 Top 的集合名列是 `Width="Auto" SharedSizeGroup="StorageName"`
+  (各行对齐、默认放下最长的名字)再挂 `ui:TableColumns` 组 `storage`(拖宽、双击自适应);名字是两个 `Run`(库名淡色 + 集合名),
+  两个 `Run` 必须写在同一行,中间的换行会被画成一个空格。
+- **有未保存修改的标签**:标签上是橙点,鼠标移到标签上换成 ×(`MongoWorkspaceView` 里 `Ellipse.dirty` / `Button.tabclose` 两组样式,
+  别再给它们绑 `IsVisible` —— 本地值会压过 `:pointerover` 样式,× 就永远出不来,有修改的标签就关不掉了)。
+  点 × 或 Ctrl+W 都先过 `WorkspaceTab.ConfirmCloseAsync`:「放弃未保存的修改?」,确认才关。
 - **代码里建的右键菜单**一律走 `MenuKit.Command`:普通项不设 `Foreground` —— 哪怕设成 `null`,本地值也会压过宿主
   `ContextMenu MenuItem` 样式,文字透明到悬停才露出来。
 - **绑定不穿过可空的中段**:`{Binding Dialog.Title}`、`{Binding Editor.HasError}` 这类路径在中段为 null 时

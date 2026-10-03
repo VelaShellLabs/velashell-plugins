@@ -77,6 +77,7 @@ internal sealed partial class QueryTabViewModel
         }
         Diagnostics = diagnostics;
         RaisePropertyChanged(nameof(Statements));
+        _ = CheckCollectionsAsync(_statements, diagnostics);
     }
 
     /// <summary>Alt+↵:应用光标所在行的快捷修复(没有就应用全文唯一的那一个)。</summary>

@@ -90,6 +90,7 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
         CopyResultCommand = new AsyncCommand(CopySelectedAsync, () => _selectedPane is not null);
         TogglePinCommand = new RelayCommand(() => (_selectedPane as QueryResultSet)?.TogglePinCommand.Execute(null), () => _selectedPane is QueryResultSet);
         SelectDatabaseCommand = new RelayCommand<string>(db => Database = db);
+        InitializeTarget();
         SetMaxTimeCommand = new RelayCommand<int>(ms => MaxTimeMs = ms);
         ApplyFixCommand = new RelayCommand(() => ApplyQuickFix());
         InsertFieldCommand = new RelayCommand<SampledField>(InsertField);
@@ -116,7 +117,7 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
         UpdateStatus();
     }
 
-    /// <summary>当前库(工具栏右侧的下拉;脚本里的 <c>use</c> 也会改它)。</summary>
+    /// <summary>当前库(工具行左侧「数据库」下拉;脚本里的 <c>use</c> 也会改它)。</summary>
     public string Database
     {
         get => _database;
@@ -125,6 +126,8 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
             if (!string.IsNullOrEmpty(value) && SetProperty(ref _database, value))
             {
                 Scope = "@" + value;
+                RaisePropertyChanged(nameof(TargetText));
+                OnCaretSettled();
                 if (!Databases.Contains(value))
                 {
                     Databases.Add(value);

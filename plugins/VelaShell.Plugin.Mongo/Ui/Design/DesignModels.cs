@@ -225,32 +225,34 @@ internal sealed class AdviceCard
     public required Func<Task> Action { get; init; }
 }
 
-/// <summary>新建索引面板里的一行字段。</summary>
+/// <summary>索引编辑器「字段」表里的一行(键序即这一行在表里的位置)。</summary>
 internal sealed class NewKeyRow : ObservableObject
 {
     private readonly Action _changed;
-    private readonly Func<string, string> _tokenOf;
+    private readonly Func<string, FieldOption?> _optionOf;
     private readonly Func<BsonValue, string> _label;
     private string _field;
     private int _direction;
     private string _role;
     private string _kind = "normal";
     private bool _isFirst;
+    private bool _isLast;
+    private int _number;
 
     /// <summary>构造。</summary>
     /// <param name="field">字段。</param>
     /// <param name="direction">方向(1 / -1)。</param>
     /// <param name="role">ESR 角色文字(<c>等值</c> / <c>排序</c> / <c>范围</c>);未知为空。</param>
-    /// <param name="tokenOf">字段 → 类型色令牌(来自抽样)。</param>
-    /// <param name="changed">任何改动后通知面板重算命令预览。</param>
+    /// <param name="optionOf">字段 → 抽样到的那一项(类型色、类型名);抽样里没有为 <see langword="null" />。</param>
+    /// <param name="changed">任何改动后通知编辑器重算命令预览。</param>
     /// <param name="label">键值 → 方向下拉上的字(<c>1  升序</c>)。</param>
-    public NewKeyRow(string field, int direction, string role, Func<string, string> tokenOf, Action changed, Func<BsonValue, string> label)
+    public NewKeyRow(string field, int direction, string role, Func<string, FieldOption?> optionOf, Action changed, Func<BsonValue, string> label)
     {
         _label = label;
         _field = field;
         _direction = direction;
         _role = role;
-        _tokenOf = tokenOf;
+        _optionOf = optionOf;
         _changed = changed;
     }
 
@@ -262,11 +264,37 @@ internal sealed class NewKeyRow : ObservableObject
         {
             if (SetProperty(ref _field, value ?? ""))
             {
-                RaisePropertyChanged(nameof(SwatchToken));
+                RaisePropertiesChanged(nameof(SwatchToken), nameof(KindText));
                 _changed();
             }
         }
     }
+
+    /// <summary>序号(1 起;表里第一列)。</summary>
+    public int Number
+    {
+        get => _number;
+        set => SetProperty(ref _number, value);
+    }
+
+    /// <summary>是最后一行(「下移」不可用)。</summary>
+    public bool IsLast
+    {
+        get => _isLast;
+        set
+        {
+            if (SetProperty(ref _isLast, value))
+            {
+                RaisePropertyChanged(nameof(CanMoveDown));
+            }
+        }
+    }
+
+    /// <summary>能上移。</summary>
+    public bool CanMoveUp => !_isFirst;
+
+    /// <summary>能下移。</summary>
+    public bool CanMoveDown => !_isLast;
 
     /// <summary>方向(1 / -1)。</summary>
     public int Direction
@@ -298,11 +326,14 @@ internal sealed class NewKeyRow : ObservableObject
     /// <summary>有角色小标签。</summary>
     public bool HasRole => _role.Length > 0;
 
-    /// <summary>字段类型色。</summary>
-    public string SwatchToken => _tokenOf(_field);
+    /// <summary>字段类型色(抽样里没有就是灰的)。</summary>
+    public string SwatchToken => _optionOf(_field)?.Token ?? "VelaTextMuted";
 
-    /// <summary>抽样结果到了:类型色要重算。</summary>
-    internal void RefreshSwatch() => RaisePropertyChanged(nameof(SwatchToken));
+    /// <summary>抽样到的类型名(<c>String</c>);抽样里没有为 <c>—</c>。</summary>
+    public string KindText => _optionOf(_field)?.KindName ?? "—";
+
+    /// <summary>抽样结果到了:类型色与类型名要重算。</summary>
+    internal void RefreshSwatch() => RaisePropertiesChanged(nameof(SwatchToken), nameof(KindText));
 
     /// <summary>当前索引类型(面板的分段:normal / text / 2dsphere / hashed / wildcard)。</summary>
     public string Kind
@@ -325,7 +356,7 @@ internal sealed class NewKeyRow : ObservableObject
         {
             if (SetProperty(ref _isFirst, value))
             {
-                RaisePropertiesChanged(nameof(DirectionValue), nameof(HasDirection), nameof(DirectionText));
+                RaisePropertiesChanged(nameof(DirectionValue), nameof(HasDirection), nameof(DirectionText), nameof(CanMoveUp));
             }
         }
     }

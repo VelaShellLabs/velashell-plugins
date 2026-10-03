@@ -68,6 +68,25 @@
     <Style Selector="ListBox.objtabs ListBoxItem:selected TextBlock.tabtitle">
       <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
     </Style>
+    <!--
+      有未保存修改的标签:平时是橙点,鼠标移到标签上换成 ×(与设计稿、VS Code 一致)。
+      点 × 走 CloseCommand → 先确认「放弃并关闭」,不再因为有修改就关不掉。
+    -->
+    <Style Selector="ListBox.objtabs Ellipse.dirty">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ListBox.objtabs Ellipse.dirty.on">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem:pointerover Ellipse.dirty.on">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ListBox.objtabs Button.tabclose.modified">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem:pointerover Button.tabclose.modified">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
   </UserControl.Styles>
 
   <Panel>
@@ -366,9 +385,9 @@
                       <ui:Glyph Key="{Binding IconKey}" Size="12" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
                       <TextBlock Classes="mono tertiary tabtitle" Text="{Binding Header}" MaxWidth="220" TextTrimming="CharacterEllipsis" />
                       <Panel Width="12" Height="12">
-                        <Ellipse Width="6" Height="6" Fill="{DynamicResource VelaWarning}" IsVisible="{Binding IsModified}" />
-                        <Button Theme="{StaticResource MongoIconButton}" Width="14" Height="14" Margin="-1"
-                                Command="{Binding CloseCommand}" IsVisible="{Binding !IsModified}"
+                        <Ellipse Classes="dirty" Classes.on="{Binding IsModified}" Width="6" Height="6" Fill="{DynamicResource VelaWarning}" />
+                        <Button Classes="tabclose" Classes.modified="{Binding IsModified}" Theme="{StaticResource MongoIconButton}"
+                                Width="14" Height="14" Margin="-1" Command="{Binding CloseCommand}"
                                 ToolTip.Tip="{Binding Loc[Tab_Close]}">
                           <ui:Glyph Key="Mongo.x" Size="10" Brush="{DynamicResource VelaTextMuted}" />
                         </Button>

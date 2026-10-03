@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Threading;
 using AvaloniaEdit.Document;
@@ -17,7 +18,7 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// <summary>
 /// 查询编辑器的视图。代码里做的是 AXAML 做不了或做起来绕的几件事:
 /// 快捷键(要抢在编辑区之前)、编辑器门面(选区 / 替换)、code lens 叠加层(跟着可视行走)、
-/// 库与 maxTimeMS 的下拉菜单、结果网格的右键菜单。
+/// 连接、库与 maxTimeMS 的下拉菜单、结果网格的右键菜单。
 /// <para>
 /// 编辑器与下方结果区的分界只听用户拖的那条分隔条:切到「执行计划」页不再自动把编辑器收矮
 /// (设计稿 14 画的是 230 高的编辑器)—— 结果页与执行计划页是同一块面板的两个页签,
@@ -40,6 +41,7 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
         viewModel.LensChanged += QueueLenses;
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        ConnectionButton.Click += (_, _) => OpenConnectionMenu();
         DatabaseButton.Click += (_, _) => OpenDatabaseMenu();
         TimeoutButton.Click += (_, _) => OpenTimeoutMenu();
         ProblemsButton.Click += (_, _) => JumpToProblem();
@@ -168,6 +170,67 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
     }
 
     // ── 菜单 ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 连接下拉:插件里全部已保存的连接。当前这条打勾;其余前面一个状态点(绿 = 连着、灰 = 没连、红 = 上次没连上),
+    /// 没连着的名字后面一行小字写明 —— 选它会先连上再切过去。
+    /// </summary>
+    private void OpenConnectionMenu()
+    {
+        if (_viewModel is not { } vm || vm.ConnectionChoices is not { Count: > 0 } choices)
+        {
+            return;
+        }
+        var items = choices.Select(entry =>
+        {
+            bool current = vm.IsCurrentConnection(entry);
+            var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            header.Children.Add(new TextBlock
+            {
+                Text = entry.Name,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontFamily = Resource<FontFamily>("VelaUiMonoFont") ?? FontFamily.Default
+            });
+            string? state = entry.State switch
+            {
+                ConnectionState.Connected => null,
+                ConnectionState.Failed => vm.Loc["Query_ConnFailed"],
+                _ => vm.Loc["Query_ConnNotConnected"]
+            };
+            if (state is not null)
+            {
+                header.Children.Add(new TextBlock
+                {
+                    Text = state,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontFamily = Resource<FontFamily>("VelaUiFont") ?? FontFamily.Default,
+                    FontSize = Resource<double>("VelaFontSize10") is > 0 and var size ? size : 10,
+                    Foreground = ThemeBrushes.Get("VelaTextMuted", Brushes.Gray)
+                });
+            }
+            Control icon = current
+                ? new Glyph { Key = "Mongo.check", Size = 12, Brush = ThemeBrushes.Get("VelaAccent", Brushes.Gray) }
+                : new Ellipse
+                {
+                    Width = 7,
+                    Height = 7,
+                    Fill = ThemeBrushes.Get(entry.State switch
+                    {
+                        ConnectionState.Connected => "VelaStatusConnected",
+                        ConnectionState.Failed => "VelaError",
+                        _ => "VelaTextMuted"
+                    }, Brushes.Gray)
+                };
+            return (Control)new MenuItem
+            {
+                Header = header,
+                Icon = icon,
+                Command = vm.SwitchConnectionCommand,
+                CommandParameter = entry
+            };
+        }).ToList();
+        new ContextMenu { ItemsSource = items }.Open(ConnectionButton);
+    }
 
     private void OpenDatabaseMenu()
     {

@@ -1,8 +1,13 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using MongoDB.Bson;
+using MongoDB.Driver;
+using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Shell;
 using VelaShell.Plugin.Mongo.Ui;
 
@@ -54,6 +59,132 @@ public sealed class QueryTests
         var tab = new QueryTabViewModel(bench.Session, database, text, false, 90);
         return tab;
     }
+
+    private static async Task WaitAsync(Func<bool> condition, int rounds = 300)
+    {
+        for (int i = 0; i < rounds && !condition(); i++)
+        {
+            await Screens.PumpAsync(2);
+        }
+        Assert.IsTrue(condition(), "timed out waiting for the condition");
+    }
+
+    /// <summary>
+    /// 有未保存修改的标签照样能关:平时标签上是橙点、× 藏着,鼠标移到标签上换成 ×;
+    /// 点 × 先弹「放弃未保存的修改?」—— 取消就留着,确认「放弃并关闭」就关掉。
+    /// </summary>
+    [TestMethod]
+    public void Modified_tab_closes_after_confirming_discard() => Screens.OnUi(async () =>
+    {
+        await TestServer.RequireAsync();
+        await using Workbench bench = await Screens.OpenWorkbenchAsync();
+        bench.Session.OpenQuery("shop", "db.orders.find({})");
+        await Screens.PumpAsync();
+        QueryTabViewModel tab = bench.ViewModel.Tabs.OfType<QueryTabViewModel>().Last();
+        tab.Text += " ";
+        await Screens.PumpAsync(5);
+        Assert.IsTrue(tab.IsModified);
+
+        ListBox strip = bench.View.GetVisualDescendants().OfType<ListBox>().Single(static l => l.Name == "TabStrip");
+        var item = (ListBoxItem)strip.ContainerFromItem(tab)!;
+        Button close = item.GetVisualDescendants().OfType<Button>().Single(static b => b.Classes.Contains("tabclose"));
+        Avalonia.Controls.Shapes.Ellipse dot = item.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>()
+            .Single(static e => e.Classes.Contains("dirty"));
+        Assert.IsTrue(dot.IsVisible, "an edited tab shows the orange dot");
+        Assert.IsFalse(close.IsVisible);
+
+        // 鼠标移到标签上:橙点换成 ×。
+        bench.Window.MouseMove(item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), bench.Window)!.Value, RawInputModifiers.None);
+        await Screens.PumpAsync(5);
+        Assert.IsTrue(close.IsVisible, "hovering an edited tab reveals its close button");
+        Assert.IsFalse(dot.IsVisible);
+
+        // 点 × → 确认框;取消 → 标签还在。
+        close.Command!.Execute(null);
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel);
+        var confirm = (ConfirmDialogViewModel)bench.ViewModel.Dialog!;
+        Assert.AreEqual("放弃未保存的修改?", confirm.Request.Title);
+        Assert.AreEqual("放弃并关闭", confirm.Request.ConfirmLabel);
+        Assert.IsTrue(confirm.Request.Danger);
+        confirm.CloseCommand.Execute(null);
+        await Screens.PumpAsync(5);
+        Assert.Contains(tab, bench.ViewModel.Tabs);
+        Assert.IsTrue(tab.IsModified);
+
+        // 再点 × → 放弃并关闭 → 标签关掉。
+        close.Command!.Execute(null);
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel);
+        ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).ConfirmCommand.Execute(null);
+        await WaitAsync(() => !bench.ViewModel.Tabs.Contains(tab));
+        Assert.DoesNotContain(tab, bench.ViewModel.Tabs);
+    });
+
+    /// <summary>
+    /// 执行目标(Navicat 查询窗口的「连接 ▾ 数据库 ▾」):切到另一条没连着的连接 —— 先安静地连上(不开占位标签、不开对象列表),
+    /// 查询标签原位换成那条连接上的,文本与未保存状态带过去、库沿用。换库之后集合在新库里解析:
+    /// 新库里没有的集合标橙、字段页写明;脚本里的 use 优先于下拉。
+    /// </summary>
+    [TestMethod]
+    public void Target_switches_connection_in_place_and_resolves_collections_in_the_selected_database() => Screens.OnUi(async () =>
+    {
+        await TestServer.RequireAsync();
+        await using Workbench bench = await Screens.OpenWorkbenchAsync();
+        var url = new MongoUrl(TestServer.Uri);
+        var profile = new MongoProfile { Name = "mongo-replica-02", Host = url.Server.Host, Port = url.Server.Port };
+        profile.Set(MongoSettings.KeyDirect, "true");
+        await bench.ViewModel.SaveProfileAsync(profile, null, connect: false);
+        ConnectionEntry other = bench.ViewModel.Connections.Single(static c => c.Name == "mongo-replica-02");
+        Assert.AreEqual(ConnectionState.Disconnected, other.State);
+
+        const string script = "db.orders.find({}).limit(5)\n\n// 末行";
+        bench.Session.OpenQuery("shop", script);
+        await Screens.PumpAsync();
+        QueryTabViewModel tab = bench.ViewModel.Tabs.OfType<QueryTabViewModel>().Last();
+        tab.Text = script + " ";
+        tab.CaretOffset = tab.Text.Length;
+        Assert.AreEqual("mongo-inner-01", tab.ConnectionName);
+        Assert.HasCount(2, tab.ConnectionChoices);
+        Assert.IsTrue(tab.IsCurrentConnection(bench.Session.Entry));
+        int index = bench.ViewModel.Tabs.IndexOf(tab);
+        int count = bench.ViewModel.Tabs.Count;
+
+        QueryTabViewModel? moved = await tab.SwitchConnectionAsync(other);
+        await Screens.PumpAsync();
+        Assert.IsNotNull(moved);
+        Assert.AreEqual(ConnectionState.Connected, other.State);
+        Assert.AreSame(other.Session, moved.Owner);
+        Assert.AreSame(moved, bench.ViewModel.ActiveTab);
+        Assert.AreEqual(index, bench.ViewModel.Tabs.IndexOf(moved), "the tab is replaced in place");
+        Assert.AreEqual(count, bench.ViewModel.Tabs.Count, "a quiet connect opens no placeholder or object list");
+        Assert.DoesNotContain(tab, bench.ViewModel.Tabs);
+        Assert.AreEqual("shop", moved.Database);
+        Assert.AreEqual(script + " ", moved.Text);
+        Assert.IsTrue(moved.IsModified, "unsaved edits stay unsaved on the other connection");
+        Assert.AreEqual("mongo-replica-02", moved.ConnectionName);
+        Assert.AreEqual("在 mongo-replica-02 / shop 上执行", moved.TargetText);
+
+        await moved.RunAsync(all: true);
+        Assert.HasCount(5, moved.Panes.OfType<QueryResultSet>().Single().Documents);
+
+        // 换到 admin:orders 在那里不存在 → 集合名下橙色波浪线,字段页写明抽的是哪个库。
+        moved.SelectDatabaseCommand.Execute("admin");
+        await WaitAsync(() => moved.Diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Warning) && moved.HelperDatabase == "@admin");
+        EditorDiagnostic missing = moved.Diagnostics.Single(static d => d.Severity == DiagnosticSeverity.Warning);
+        Assert.AreEqual("orders", moved.Text.Substring(missing.Offset, missing.Length));
+        Assert.AreEqual("库 admin 里没有集合 orders —— 核对上方的数据库或 use()", missing.Message);
+        await WaitAsync(() => moved.HasHelperMissing);
+
+        // 脚本里的 use 优先于下拉:同一条 find 跟在 use("shop") 后面就不报。
+        moved.Text = "use(\"shop\")\n" + script;
+        moved.CaretOffset = moved.Text.Length;
+        await WaitAsync(() => moved.Diagnostics.Count == 0);
+
+        // 回到 shop:不再报。
+        moved.Text = script;
+        moved.SelectDatabaseCommand.Execute("shop");
+        moved.CaretOffset = moved.Text.Length;
+        await WaitAsync(() => moved.Diagnostics.Count == 0 && !moved.HasHelperMissing && moved.HelperDatabase == "@shop");
+    });
 
     [TestMethod]
     public void Run_DesignScriptProducesTwoResultsAndHistory() => Screens.OnUi(async () =>

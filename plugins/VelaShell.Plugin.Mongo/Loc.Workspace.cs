@@ -96,9 +96,9 @@ public sealed partial class Loc
         ("Detail_Anonymous", "(no auth)", "(未认证)"),
 
         // ── 标签页 ──
-        ("Tab_CloseModifiedTitle", "Discard pending changes?", "放弃未提交的修改?"),
-        ("Tab_CloseModifiedBody", "{0} has changes that were not applied. Closing the tab discards them.",
-            "{0} 有尚未应用的修改,关闭标签页会丢掉它们。"),
+        ("Tab_CloseModifiedTitle", "Discard unsaved changes?", "放弃未保存的修改?"),
+        ("Tab_CloseModifiedBody", "{0} has unsaved changes. Closing the tab discards them and can't be undone.",
+            "{0} 有未保存的修改,关闭标签页将放弃这些更改,且无法恢复。"),
         ("Tab_CloseDiscard", "Discard and close", "放弃并关闭"),
         ("Tab_Close", "Close", "关闭"),
         ("Tab_CloseOthers", "Close others", "关闭其他"),
