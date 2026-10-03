@@ -292,13 +292,13 @@ internal sealed partial class DesignTabViewModel
         SetActionCommand = new(action => RuleAction = action);
         GenerateRuleCommand = new(async () =>
         {
-            if (_generated is null)
+            if (Generated is null)
             {
                 await AnalyzeAsync().ConfigureAwait(true);
             }
-            if (_generated is not null)
+            if (Generated is not null)
             {
-                LoadRuleIntoEditor(_generated, _genLevel, _genAction);
+                LoadRuleIntoEditor(Generated, GenLevel, GenAction);
             }
         });
         FormatRuleCommand = new(() =>
@@ -628,7 +628,7 @@ internal sealed partial class DesignTabViewModel
     /// <summary>试写文档起手:抽样里的一份文档(去掉 <c>_id</c>,试写的是"新插入")。</summary>
     private async Task SeedTryDocAsync()
     {
-        BsonDocument? doc = _sample.FirstOrDefault();
+        BsonDocument? doc = Sample.FirstOrDefault();
         if (doc is null)
         {
             try
@@ -973,7 +973,7 @@ internal sealed partial class DesignTabViewModel
                 DocsUrl = "https://www.mongodb.com/docs/manual/reference/operator/query/jsonSchema/#available-keywords"
             }));
             var names = new HashSet<string>(StringComparer.Ordinal);
-            foreach (FieldOption field in _fieldOptions)
+            foreach (FieldOption field in FieldOptions)
             {
                 string name = field.Path[(field.Path.LastIndexOf('.') + 1)..];
                 if (names.Add(name))

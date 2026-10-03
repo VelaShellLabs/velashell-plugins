@@ -117,7 +117,7 @@ internal sealed partial class QueryTabViewModel
         }
         else
         {
-            targets = ShellScript.At(statements, _caretOffset) is { } current ? [current] : [];
+            targets = ShellScript.At(statements, CaretOffset) is { } current ? [current] : [];
         }
         await RunStatementsAsync(targets).ConfigureAwait(true);
     }
@@ -223,7 +223,7 @@ internal sealed partial class QueryTabViewModel
                 {
                     case ShellResultKind.Documents:
                         {
-                            var set = new QueryResultSet(Loc, Workspace.Connection.Settings.Ejson, nextNumber++, result, statement) { ViewMode = _resultView };
+                            var set = new QueryResultSet(Loc, Workspace.Connection.Settings.Ejson, nextNumber++, result, statement) { ViewMode = ResultView };
                             Panes.Insert(Panes.IndexOf(Explain), set);
                             lastSet = set;
                             if (command.Method?.Name is "find" or "findOne" or "aggregate" && command.Kind == ShellCommandKind.Collection
@@ -365,7 +365,7 @@ internal sealed partial class QueryTabViewModel
         }
         else
         {
-            if (ShellScript.At(statements, _caretOffset) is { } current)
+            if (ShellScript.At(statements, CaretOffset) is { } current)
             {
                 command = TryCommand(current);
             }
@@ -521,7 +521,7 @@ internal sealed partial class QueryTabViewModel
 
     private async Task ExportSelectedAsync()
     {
-        switch (_selectedPane)
+        switch (SelectedPane)
         {
             case QueryResultSet { Result.Query: { } query } set when set.Result.Operation is "find":
                 Workspace.ShowDialog(new ExportWizardViewModel(Workspace, query.Database, query.Collection, query with { Limit = query.Limit }, null));
@@ -559,7 +559,7 @@ internal sealed partial class QueryTabViewModel
 
     private async Task CopySelectedAsync()
     {
-        string? text = _selectedPane switch
+        string? text = SelectedPane switch
         {
             QueryResultSet set => set.ToJson(),
             ExplainPane explain => explain.RawText,

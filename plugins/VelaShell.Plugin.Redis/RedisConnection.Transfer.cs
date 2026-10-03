@@ -142,7 +142,7 @@ internal sealed partial class RedisConnection
         {
             if (format == RedisExportFormat.RespCommands)
             {
-                await file.WriteLineAsync($"# velashell redis export · {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} · db{_database}")
+                await file.WriteLineAsync($"# velashell redis export · {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} · db{Database}")
                     .ConfigureAwait(false);
             }
             foreach (RedisKeyName key in keys)

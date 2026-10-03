@@ -178,7 +178,7 @@ internal sealed partial class MongoWorkspaceViewModel
         ProfilerCommand = new(() => WithDatabase((s, db) => s.OpenProfiler(db)));
         ToggleReadOnlyCommand = new(async () =>
         {
-            if (_currentSession is not { } session)
+            if (CurrentSession is not { } session)
             {
                 return;
             }
@@ -209,7 +209,7 @@ internal sealed partial class MongoWorkspaceViewModel
         UploadFolderNodeCommand = new(node => UploadToBucketAsync(node, folder: true), static node => node is { Kind: NodeKind.Bucket, Session: not null });
         RefreshTreeCommand = new(async () =>
         {
-            if (_currentSession is { } session)
+            if (CurrentSession is { } session)
             {
                 session.ClearStats();
                 await session.ReloadTreeAsync().ConfigureAwait(true);
@@ -261,7 +261,7 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>没有当前连接时,工具栏的按钮说一句「先连一条」,而不是什么都不发生。</summary>
     private void WithSession(Action<MongoSession> action)
     {
-        if (_currentSession is { } session)
+        if (CurrentSession is { } session)
         {
             action(session);
             return;

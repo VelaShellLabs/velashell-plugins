@@ -71,10 +71,10 @@ internal sealed partial class MongoWorkspaceViewModel
     /// <summary>当前连接是否列出系统库(眼睛按钮)。</summary>
     public bool ShowSystemDatabases
     {
-        get => _currentSession?.ShowSystemDatabases ?? false;
+        get => CurrentSession?.ShowSystemDatabases ?? false;
         set
         {
-            if (_currentSession is { } session && session.ShowSystemDatabases != value)
+            if (CurrentSession is { } session && session.ShowSystemDatabases != value)
             {
                 session.ShowSystemDatabases = value;
                 RaisePropertiesChanged(nameof(ShowSystemDatabases), nameof(SystemDatabasesTip));

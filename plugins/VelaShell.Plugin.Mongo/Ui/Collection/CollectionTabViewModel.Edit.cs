@@ -63,11 +63,11 @@ internal sealed partial class CollectionTabViewModel
                 Workspace.ShowDialog(new ImportWizardViewModel(Workspace, Database, CollectionName));
             }
         });
-        ExportCommand = new(() => Workspace.ShowDialog(new ExportWizardViewModel(Workspace, Database, CollectionName, _lastRequest, null)));
+        ExportCommand = new(() => Workspace.ShowDialog(new ExportWizardViewModel(Workspace, Database, CollectionName, CurrentRequest, null)));
         CopyJsonCommand = new(() => CopyDocumentsAsync(SelectedRows));
         AddRowCommand = new(() =>
         {
-            if (_drill is { } drill && _viewMode == CollectionViewMode.Grid)
+            if (Drill is { } drill && ViewMode == CollectionViewMode.Grid)
             {
                 AddDrillRow(drill);
             }
@@ -99,10 +99,10 @@ internal sealed partial class CollectionTabViewModel
             {
                 return Loc["Cw_PendingNone"];
             }
-            if (_viewMode == CollectionViewMode.Json && Staging.InsertCount == 0 && Staging.DeleteCount == 0)
+            if (ViewMode == CollectionViewMode.Json && Staging.InsertCount == 0 && Staging.DeleteCount == 0)
             {
                 IEnumerable<string> numbers = Staging.Edits
-                    .Select(e => _rows.FirstOrDefault(r => r.Insert is null && e.Id.Equals(r.Id))?.Number)
+                    .Select(e => Rows.FirstOrDefault(r => r.Insert is null && e.Id.Equals(r.Id))?.Number)
                     .Where(static n => n is not null)
                     .Take(4)
                     .Select(static n => "#" + n!.Value.ToString(CultureInfo.InvariantCulture));
@@ -137,7 +137,7 @@ internal sealed partial class CollectionTabViewModel
         _trackedIds = now;
         if (affected.Count > 0)
         {
-            foreach (CollectionRow row in _rows)
+            foreach (CollectionRow row in Rows)
             {
                 if (row.Insert is null && row.Id is { } id && affected.Contains(id))
                 {
@@ -164,26 +164,26 @@ internal sealed partial class CollectionTabViewModel
     private void SyncInsertRows()
     {
         var staged = Staging.Inserts.ToHashSet();
-        for (int i = _rows.Count - 1; i >= 0; i--)
+        for (int i = Rows.Count - 1; i >= 0; i--)
         {
-            if (_rows[i].Insert is { } insert && !staged.Contains(insert))
+            if (Rows[i].Insert is { } insert && !staged.Contains(insert))
             {
-                if (ReferenceEquals(_rows[i], _selectedRow))
+                if (ReferenceEquals(Rows[i], _selectedRow))
                 {
                     SelectedRow = null;
                 }
-                _rows.RemoveAt(i);
+                Rows.RemoveAt(i);
             }
         }
-        var present = _rows.Where(static r => r.Insert is not null).Select(static r => r.Insert!).ToHashSet();
+        var present = Rows.Where(static r => r.Insert is not null).Select(static r => r.Insert!).ToHashSet();
         foreach (StagedInsert insert in Staging.Inserts)
         {
             if (!present.Contains(insert))
             {
-                _rows.Add(new CollectionRow(this, 0, insert));
+                Rows.Add(new CollectionRow(this, 0, insert));
             }
         }
-        foreach (CollectionRow row in _rows.Where(static r => r.Insert is not null))
+        foreach (CollectionRow row in Rows.Where(static r => r.Insert is not null))
         {
             row.Recompute();
         }
@@ -276,7 +276,7 @@ internal sealed partial class CollectionTabViewModel
             return;
         }
         var doc = new BsonDocument();
-        foreach (CollectionColumn column in _columns.Where(static c => c.Name != "_id"))
+        foreach (CollectionColumn column in Columns.Where(static c => c.Name != "_id"))
         {
             doc[column.Name] = column.Kind is BsonKind.Null or BsonKind.Missing or BsonKind.Binary or BsonKind.Regex
                 or BsonKind.Timestamp or BsonKind.Other or BsonKind.ObjectId
@@ -284,7 +284,7 @@ internal sealed partial class CollectionTabViewModel
                 : BsonEdit.Empty(column.Kind);
         }
         StagedInsert insert = Staging.AddInsert(doc);
-        if (_rows.FirstOrDefault(r => ReferenceEquals(r.Insert, insert)) is { } row)
+        if (Rows.FirstOrDefault(r => ReferenceEquals(r.Insert, insert)) is { } row)
         {
             SelectedRow = row;
             RowAdded?.Invoke(row);
@@ -334,7 +334,7 @@ internal sealed partial class CollectionTabViewModel
     {
         await RunQueryAsync(resetPage: false).ConfigureAwait(true);
         if (saved?.GetValue("_id", BsonNull.Value) is { IsBsonNull: false } id
-            && _rows.FirstOrDefault(r => id.Equals(r.Id)) is { } row)
+            && Rows.FirstOrDefault(r => id.Equals(r.Id)) is { } row)
         {
             SelectedRow = row;
         }
@@ -429,7 +429,7 @@ internal sealed partial class CollectionTabViewModel
     /// </summary>
     private IReadOnlyList<string> EnumChoices(string path)
     {
-        IReadOnlyList<string> sampled = _sample.EnumValuesOf(path);
+        IReadOnlyList<string> sampled = Sample.EnumValuesOf(path);
         if (sampled.Count > 0)
         {
             return sampled;

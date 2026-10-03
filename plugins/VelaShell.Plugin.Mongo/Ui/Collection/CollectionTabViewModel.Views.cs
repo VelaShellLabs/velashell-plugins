@@ -61,12 +61,12 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>重建树的可见行(保持选中)。只在树视图可见时做实事 —— 网格模式下不必为它付钱。</summary>
     internal void RebuildTree()
     {
-        if (_viewMode != CollectionViewMode.Tree)
+        if (ViewMode != CollectionViewMode.Tree)
         {
             return;
         }
         (CollectionRow? keepRow, string? keepPath) = (_selectedTreeRow?.Row, _selectedTreeRow?.Path);
-        List<DocTreeRow> rows = DocTreeBuilder.Build(_rows, _treeExpanded, Staging, Loc);
+        List<DocTreeRow> rows = DocTreeBuilder.Build(Rows, _treeExpanded, Staging, Loc);
         TreeRows = [with(rows)];
         _selectedTreeRow = rows.FirstOrDefault(r => ReferenceEquals(r.Row, keepRow) && r.Path == keepPath)
                            ?? rows.FirstOrDefault(r => ReferenceEquals(r.Row, _selectedRow) && r.IsDocument);
@@ -126,13 +126,13 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>重建卡片(只在 JSON 视图可见时)。正在编辑的卡片保留,免得刷新把用户敲了一半的文本冲掉。</summary>
     internal void RebuildCards()
     {
-        if (_viewMode != CollectionViewMode.Json)
+        if (ViewMode != CollectionViewMode.Json)
         {
             return;
         }
         var editing = Cards.Where(static c => c.IsEditing).ToDictionary(static c => c.Row);
-        var cards = new List<JsonCardViewModel>(_rows.Count);
-        foreach (CollectionRow row in _rows)
+        var cards = new List<JsonCardViewModel>(Rows.Count);
+        foreach (CollectionRow row in Rows)
         {
             JsonCardViewModel? kept = editing.GetValueOrDefault(row)
                                       ?? editing.Values.FirstOrDefault(c => c.Row.Id is { } id && id.Equals(row.Id));
@@ -145,7 +145,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>选中行变了:大纲跟着换到那张卡片(除非有卡片正在编辑)。</summary>
     private void SyncCardSelection()
     {
-        if (_viewMode != CollectionViewMode.Json)
+        if (ViewMode != CollectionViewMode.Json)
         {
             return;
         }

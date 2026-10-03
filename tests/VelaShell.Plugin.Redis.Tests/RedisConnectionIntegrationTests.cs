@@ -35,8 +35,9 @@ public sealed class RedisConnectionIntegrationTests
             }
         });
 
+    // 参数不叫 _:方法体里的 `_ = await …` 弃元会被当成给它赋值(单个 _ 形参是具名参数)。
     [ClassInitialize]
-    public static async Task SeedAsync(TestContext _)
+    public static async Task SeedAsync(TestContext context)
     {
         _prefix = $"velashell-it-{Guid.NewGuid():N}";
         try
