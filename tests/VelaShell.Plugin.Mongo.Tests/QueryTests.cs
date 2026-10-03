@@ -1,5 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using MongoDB.Bson;
@@ -65,6 +68,56 @@ public sealed class QueryTests
         }
         Assert.IsTrue(condition(), "timed out waiting for the condition");
     }
+
+    /// <summary>
+    /// 有未保存修改的标签照样能关:平时标签上是橙点、× 藏着,鼠标移到标签上换成 ×;
+    /// 点 × 先弹「放弃未保存的修改?」—— 取消就留着,确认「放弃并关闭」就关掉。
+    /// </summary>
+    [TestMethod]
+    public void Modified_tab_closes_after_confirming_discard() => Screens.OnUi(async () =>
+    {
+        await TestServer.RequireAsync();
+        await using Workbench bench = await Screens.OpenWorkbenchAsync();
+        bench.Session.OpenQuery("shop", "db.orders.find({})");
+        await Screens.PumpAsync();
+        QueryTabViewModel tab = bench.ViewModel.Tabs.OfType<QueryTabViewModel>().Last();
+        tab.Text += " ";
+        await Screens.PumpAsync(5);
+        Assert.IsTrue(tab.IsModified);
+
+        ListBox strip = bench.View.GetVisualDescendants().OfType<ListBox>().Single(static l => l.Name == "TabStrip");
+        var item = (ListBoxItem)strip.ContainerFromItem(tab)!;
+        Button close = item.GetVisualDescendants().OfType<Button>().Single(static b => b.Classes.Contains("tabclose"));
+        Avalonia.Controls.Shapes.Ellipse dot = item.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>()
+            .Single(static e => e.Classes.Contains("dirty"));
+        Assert.IsTrue(dot.IsVisible, "an edited tab shows the orange dot");
+        Assert.IsFalse(close.IsVisible);
+
+        // 鼠标移到标签上:橙点换成 ×。
+        bench.Window.MouseMove(item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), bench.Window)!.Value, RawInputModifiers.None);
+        await Screens.PumpAsync(5);
+        Assert.IsTrue(close.IsVisible, "hovering an edited tab reveals its close button");
+        Assert.IsFalse(dot.IsVisible);
+
+        // 点 × → 确认框;取消 → 标签还在。
+        close.Command!.Execute(null);
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel);
+        var confirm = (ConfirmDialogViewModel)bench.ViewModel.Dialog!;
+        Assert.AreEqual("放弃未保存的修改?", confirm.Request.Title);
+        Assert.AreEqual("放弃并关闭", confirm.Request.ConfirmLabel);
+        Assert.IsTrue(confirm.Request.Danger);
+        confirm.CloseCommand.Execute(null);
+        await Screens.PumpAsync(5);
+        Assert.Contains(tab, bench.ViewModel.Tabs);
+        Assert.IsTrue(tab.IsModified);
+
+        // 再点 × → 放弃并关闭 → 标签关掉。
+        close.Command!.Execute(null);
+        await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel);
+        ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).ConfirmCommand.Execute(null);
+        await WaitAsync(() => !bench.ViewModel.Tabs.Contains(tab));
+        Assert.DoesNotContain(tab, bench.ViewModel.Tabs);
+    });
 
     /// <summary>
     /// 执行目标(Navicat 查询窗口的「连接 ▾ 数据库 ▾」):切到另一条没连着的连接 —— 先安静地连上(不开占位标签、不开对象列表),

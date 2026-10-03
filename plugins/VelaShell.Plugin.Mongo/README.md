@@ -86,6 +86,9 @@ Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Sc
   诊断的第二段(`CheckCollectionsAsync`,异步)查 `db.集合` 在生效的库里有没有,没有就是一条 Warning;
   脚本里建删了集合(`ChangesCatalog`)时 `ForgetCollections` 丢掉那个库的缓存。
 - **GridFS 拖放区可点**:`DropZone` 的 Tapped 走 `UploadFilesCommand`;源头在框里那两个链接按钮里时不再重复弹(它们自己处理)。
+- **有未保存修改的标签**:标签上是橙点,鼠标移到标签上换成 ×(`MongoWorkspaceView` 里 `Ellipse.dirty` / `Button.tabclose` 两组样式,
+  别再给它们绑 `IsVisible` —— 本地值会压过 `:pointerover` 样式,× 就永远出不来,有修改的标签就关不掉了)。
+  点 × 或 Ctrl+W 都先过 `WorkspaceTab.ConfirmCloseAsync`:「放弃未保存的修改?」,确认才关。
 - **代码里建的右键菜单**一律走 `MenuKit.Command`:普通项不设 `Foreground` —— 哪怕设成 `null`,本地值也会压过宿主
   `ContextMenu MenuItem` 样式,文字透明到悬停才露出来。
 - **绑定不穿过可空的中段**:`{Binding Dialog.Title}`、`{Binding Editor.HasError}` 这类路径在中段为 null 时
