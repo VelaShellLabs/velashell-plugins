@@ -35,22 +35,12 @@ internal enum GridFsSort
 /// </summary>
 internal sealed partial class GridFsTabViewModel : WorkspaceTab
 {
-    private readonly GridFsService _service;
     private readonly DispatcherTimer _searchDelay;
     private CancellationTokenSource? _loadCts;
     private List<GridFsEntry> _listed = [];
-    private string _prefix = "";
     private bool _virtualDirs = true;
-    private GridFsTypeFilter _typeFilter = GridFsTypeFilter.All;
     private string _searchText = "";
-    private GridFsSort _sort = GridFsSort.Uploaded;
-    private bool _sortDescending = true;
-    private bool _isGridView;
     private GridFsEntry? _selectedEntry;
-    private bool _isLoading;
-    private bool _truncated;
-    private string? _loadError;
-    private IReadOnlyList<GridFsCrumb> _crumbs = [];
     private bool _bulkChecking;
     private bool _applying;
 
@@ -63,7 +53,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         Bucket = bucket;
         Title = bucket.Name;
         Scope = "@" + bucket.Database;
-        _service = new GridFsService(workspace.Connection, bucket);
+        Service = new GridFsService(workspace.Connection, bucket);
         Details = new GridFsDetailsViewModel(this);
         _searchDelay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _searchDelay.Tick += (_, _) =>
@@ -75,7 +65,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         _transferTicker.Tick += (_, _) => UpdateTransferProgress();
 
         NavigateCommand = new(prefix => _ = NavigateAsync(prefix));
-        UpCommand = new(() => _ = NavigateAsync(GridFsPaths.Parent(_prefix)), () => _prefix.Length > 0);
+        UpCommand = new(() => _ = NavigateAsync(GridFsPaths.Parent(Prefix)), () => Prefix.Length > 0);
         OpenEntryCommand = new(OpenEntryAsync);
         SortCommand = new(SortBy);
         InitializeActions();
@@ -102,7 +92,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     public override string IconToken => "VelaWarning";
 
     /// <summary>服务(详情面板与对话框共用)。</summary>
-    internal GridFsService Service => _service;
+    internal GridFsService Service { get; }
 
     /// <summary>文件表的行(「..」、目录、文件、上传中)。</summary>
     public ObservableCollection<GridFsEntry> Entries { get; } = [];
@@ -111,11 +101,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     public GridFsDetailsViewModel Details { get; }
 
     /// <summary>面包屑(当前目录逐级)。</summary>
-    public IReadOnlyList<GridFsCrumb> Crumbs
-    {
-        get => _crumbs;
-        private set => SetProperty(ref _crumbs, value);
-    }
+    public IReadOnlyList<GridFsCrumb> Crumbs { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>跳到某一级。</summary>
     public RelayCommand<string> NavigateCommand { get; }
@@ -132,13 +118,13 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     // ── 目录与筛选 ─────────────────────────────────────────────────────────
 
     /// <summary>当前虚拟目录(带结尾斜杠;根为空串)。</summary>
-    public string Prefix => _prefix;
+    public string Prefix { get; private set; } = "";
 
     /// <summary>当前目录给人看的写法(根是 <c>/</c>)。</summary>
-    public string PrefixText => _prefix.Length == 0 ? "/" : _prefix;
+    public string PrefixText => Prefix.Length == 0 ? "/" : Prefix;
 
     /// <summary>实际列的前缀:关掉虚拟目录时平铺整个桶。</summary>
-    private string ListPrefix => _virtualDirs ? _prefix : "";
+    private string ListPrefix => _virtualDirs ? Prefix : "";
 
     /// <summary>按 <c>/</c> 显示为虚拟目录。</summary>
     public bool VirtualDirs
@@ -161,21 +147,20 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>类型芯片。</summary>
     public GridFsTypeFilter TypeFilter
     {
-        get => _typeFilter;
-        set
+        get; set
         {
-            if (SetProperty(ref _typeFilter, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsAllTypes), nameof(IsImages), nameof(IsDocuments), nameof(IsVideos));
                 _ = ReloadAsync();
             }
         }
-    }
+    } = GridFsTypeFilter.All;
 
     /// <summary>芯片「全部」。</summary>
     public bool IsAllTypes
     {
-        get => _typeFilter == GridFsTypeFilter.All;
+        get => TypeFilter == GridFsTypeFilter.All;
         set
         {
             if (value)
@@ -188,7 +173,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>芯片「图片」。</summary>
     public bool IsImages
     {
-        get => _typeFilter == GridFsTypeFilter.Images;
+        get => TypeFilter == GridFsTypeFilter.Images;
         set
         {
             if (value)
@@ -201,7 +186,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>芯片「文档」。</summary>
     public bool IsDocuments
     {
-        get => _typeFilter == GridFsTypeFilter.Documents;
+        get => TypeFilter == GridFsTypeFilter.Documents;
         set
         {
             if (value)
@@ -214,7 +199,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>芯片「视频」。</summary>
     public bool IsVideos
     {
-        get => _typeFilter == GridFsTypeFilter.Videos;
+        get => TypeFilter == GridFsTypeFilter.Videos;
         set
         {
             if (value)
@@ -244,7 +229,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>列表视图。</summary>
     public bool IsListView
     {
-        get => !_isGridView;
+        get => !IsGridView;
         set
         {
             if (value)
@@ -257,10 +242,9 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>缩略图视图。</summary>
     public bool IsGridView
     {
-        get => _isGridView;
-        set
+        get; set
         {
-            if (SetProperty(ref _isGridView, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsListView));
                 if (value)
@@ -274,13 +258,13 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     // ── 排序 ───────────────────────────────────────────────────────────────
 
     /// <summary>排序列。</summary>
-    public GridFsSort Sort => _sort;
+    public GridFsSort Sort { get; private set; } = GridFsSort.Uploaded;
 
     /// <summary>倒序。</summary>
-    public bool SortDescending => _sortDescending;
+    public bool SortDescending { get; private set; } = true;
 
     /// <summary>列头箭头的图标(<c>arrow-down</c> / <c>arrow-up</c>)。</summary>
-    public string SortIcon => _sortDescending ? "Mongo.arrow-down" : "Mongo.arrow-up";
+    public string SortIcon => SortDescending ? "Mongo.arrow-down" : "Mongo.arrow-up";
 
     private void SortBy(string column)
     {
@@ -288,15 +272,15 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         {
             return;
         }
-        if (sort == _sort)
+        if (sort == Sort)
         {
-            _sortDescending = !_sortDescending;
+            SortDescending = !SortDescending;
         }
         else
         {
-            _sort = sort;
+            Sort = sort;
             // 名字与类型默认正序;大小、时间、块数默认大的在前 —— 点一下就是人最常要的那个方向。
-            _sortDescending = sort is GridFsSort.Size or GridFsSort.Uploaded or GridFsSort.Chunks;
+            SortDescending = sort is GridFsSort.Size or GridFsSort.Uploaded or GridFsSort.Chunks;
         }
         RaisePropertiesChanged(nameof(Sort), nameof(SortDescending), nameof(SortIcon));
         ApplyEntries();
@@ -307,13 +291,13 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         // 目录永远在文件前面(资源管理器的习惯);目录没有类型与块数,按这两列排时目录按名字排。
         IEnumerable<GridFsEntry> folders = entries.Where(static e => e.IsFolder);
         IEnumerable<GridFsEntry> files = entries.Where(static e => !e.IsFolder);
-        folders = _sort switch
+        folders = Sort switch
         {
             GridFsSort.Size => Order(folders, static e => e.Size),
             GridFsSort.Uploaded => Order(folders, static e => e.Uploaded ?? DateTime.MinValue),
             _ => folders.OrderBy(static e => e.Name, StringComparer.OrdinalIgnoreCase)
         };
-        files = _sort switch
+        files = Sort switch
         {
             GridFsSort.Name => Order(files, static e => e.Name, StringComparer.OrdinalIgnoreCase),
             GridFsSort.Size => Order(files, static e => e.Size),
@@ -325,7 +309,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     }
 
     private IOrderedEnumerable<GridFsEntry> Order<TKey>(IEnumerable<GridFsEntry> source, Func<GridFsEntry, TKey> key, IComparer<TKey>? comparer = null) =>
-        _sortDescending ? source.OrderByDescending(key, comparer) : source.OrderBy(key, comparer);
+        SortDescending ? source.OrderByDescending(key, comparer) : source.OrderBy(key, comparer);
 
     // ── 选择与勾选 ─────────────────────────────────────────────────────────
 
@@ -414,7 +398,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     {
         get
         {
-            string count = BsonText.Grouped(_listed.Count) + (_truncated ? "+" : "");
+            string count = BsonText.Grouped(_listed.Count) + (IsTruncated ? "+" : "");
             return Loc.Format("Fs_Items", count, BsonText.Bytes(_listed.Sum(static e => e.Size)));
         }
     }
@@ -440,10 +424,9 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>正在加载。</summary>
     public bool IsLoading
     {
-        get => _isLoading;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _isLoading, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(EmptyText), nameof(HasEmptyText));
             }
@@ -453,10 +436,9 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>加载失败的原因;成功为 <see langword="null" />。</summary>
     public string? LoadError
     {
-        get => _loadError;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _loadError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(EmptyText), nameof(HasEmptyText));
             }
@@ -464,19 +446,15 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     }
 
     /// <summary>被截断了(超过 <see cref="GridFsService.ListLimit" /> 项)。</summary>
-    public bool IsTruncated
-    {
-        get => _truncated;
-        private set => SetProperty(ref _truncated, value);
-    }
+    public bool IsTruncated { get; private set => SetProperty(ref field, value); }
 
     /// <summary>截断提示。</summary>
     public string TruncatedText => Loc.Format("Fs_Truncated", BsonText.Grouped(GridFsService.ListLimit));
 
     /// <summary>空态文字(加载中 / 失败 / 空目录 / 搜索无结果);有内容时为空。</summary>
     public string EmptyText =>
-        _isLoading && _listed.Count == 0 ? Loc["Common_Loading"]
-        : _loadError is { } error ? Loc.Format("Common_Failed", error)
+        IsLoading && _listed.Count == 0 ? Loc["Common_Loading"]
+        : LoadError is { } error ? Loc.Format("Common_Failed", error)
         : _listed.Count > 0 ? ""
         : IsSearching ? Loc.Format("Fs_NoMatch", _searchText.Trim())
         : Loc["Fs_Empty"];
@@ -503,7 +481,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         try
         {
             string listPrefix = ListPrefix;
-            GridFsListing listing = await _service.ListAsync(listPrefix, _virtualDirs, _typeFilter, _searchText, cts.Token)
+            GridFsListing listing = await Service.ListAsync(listPrefix, _virtualDirs, TypeFilter, _searchText, cts.Token)
                 .ConfigureAwait(true);
             if (cts.IsCancellationRequested)
             {
@@ -521,7 +499,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
             IsTruncated = listing.Truncated;
             LoadError = null;
             ApplyEntries();
-            if (_isGridView)
+            if (IsGridView)
             {
                 _ = LoadThumbnailsAsync();
             }
@@ -568,9 +546,9 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         }
 
         var rows = new List<GridFsEntry>();
-        if (_virtualDirs && _prefix.Length > 0 && !IsSearching)
+        if (_virtualDirs && Prefix.Length > 0 && !IsSearching)
         {
-            rows.Add(GridFsEntry.Parent(GridFsPaths.Parent(_prefix)));
+            rows.Add(GridFsEntry.Parent(GridFsPaths.Parent(Prefix)));
         }
         rows.AddRange(Sorted(_listed));
         rows.AddRange(_pendingRows.Where(ShowsUploadRow));
@@ -619,7 +597,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     /// <summary>上传行是不是该出现在当前这一页。</summary>
     private bool ShowsUploadRow(GridFsEntry row) =>
         !IsSearching && (_virtualDirs
-            ? GridFsPaths.DirectoryOf(row.Path) == _prefix
+            ? GridFsPaths.DirectoryOf(row.Path) == Prefix
             : row.Path.StartsWith(ListPrefix, StringComparison.Ordinal));
 
     // ── 导航 ───────────────────────────────────────────────────────────────
@@ -632,7 +610,7 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
         {
             entry.IsChecked = false;
         }
-        _prefix = target;
+        Prefix = target;
         _searchDelay.Stop();
         if (_searchText.Length > 0)
         {
@@ -671,9 +649,9 @@ internal sealed partial class GridFsTabViewModel : WorkspaceTab
     private void UpdateCrumbs()
     {
         var crumbs = new List<GridFsCrumb>();
-        if (_virtualDirs && _prefix.Length > 0)
+        if (_virtualDirs && Prefix.Length > 0)
         {
-            string[] parts = _prefix.TrimEnd('/').Split('/');
+            string[] parts = Prefix.TrimEnd('/').Split('/');
             string path = "";
             for (int i = 0; i < parts.Length; i++)
             {

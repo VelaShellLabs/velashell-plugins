@@ -1,5 +1,4 @@
 using VelaShell.PluginSdk;
-using VelaShell.PluginSdk.Commands;
 using VelaShell.PluginSdk.Protocols;
 
 namespace VelaShell.Plugin.Serial;
@@ -107,7 +106,7 @@ public sealed class SerialPlugin : IVelaPlugin
                     context.Log.Warn($"{title}: no serial session is open.");
                     return;
                 }
-                await action(session, token).ConfigureAwait(false);
+                _ = await action(session, token).ConfigureAwait(false);
             })));
     }
 

@@ -17,7 +17,7 @@ namespace VelaShell.Plugin.Serial.Tests;
 /// </summary>
 internal sealed class FakeSerialPort : ISerialPortHandle
 {
-    private readonly BlockingCollection<byte[]> _incoming = new();
+    private readonly BlockingCollection<byte[]> _incoming = [];
     private readonly List<byte> _written = [];
     private readonly Lock _gate = new();
     private Exception? _failure;

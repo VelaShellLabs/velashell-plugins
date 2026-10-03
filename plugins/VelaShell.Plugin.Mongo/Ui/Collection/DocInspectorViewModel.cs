@@ -11,7 +11,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// <summary>检查器字段树的一行(设计稿 01 右侧:键 : 值 + 类型标签)。</summary>
 internal sealed class InspectorField : ObservableObject
 {
-    private InlineValueEditor? _editor;
 
     /// <summary>构造。</summary>
     public InspectorField(string path, string key, int depth, BsonValue? value, bool isExpanded, ChangeRelation change, Loc loc)
@@ -74,10 +73,9 @@ internal sealed class InspectorField : ObservableObject
     /// <summary>内联编辑器。</summary>
     public InlineValueEditor? Editor
     {
-        get => _editor;
-        set
+        get; set
         {
-            if (SetProperty(ref _editor, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsEditing));
             }
@@ -85,7 +83,7 @@ internal sealed class InspectorField : ObservableObject
     }
 
     /// <summary>编辑中。</summary>
-    public bool IsEditing => _editor is not null;
+    public bool IsEditing => Editor is not null;
 
     /// <summary>
     /// 检查器里的值写法:ObjectId 缩写、字符串带引号、Decimal 原样、日期 ISO;
@@ -105,25 +103,25 @@ internal sealed class InspectorField : ObservableObject
             case BsonKind.Date:
                 return BsonText.IsoDate(value!);
             case BsonKind.Object:
-            {
-                BsonDocument doc = value!.AsBsonDocument;
-                if (expanded || doc.ElementCount == 0)
                 {
-                    return $"{{{doc.ElementCount}}}";
+                    BsonDocument doc = value!.AsBsonDocument;
+                    if (expanded || doc.ElementCount == 0)
+                    {
+                        return $"{{{doc.ElementCount}}}";
+                    }
+                    string keys = string.Join(", ", doc.Names.Take(4)) + (doc.ElementCount > 4 ? ", …" : "");
+                    return $"{{ {keys} }}";
                 }
-                string keys = string.Join(", ", doc.Names.Take(4)) + (doc.ElementCount > 4 ? ", …" : "");
-                return $"{{ {keys} }}";
-            }
             case BsonKind.Array:
-            {
-                BsonArray array = value!.AsBsonArray;
-                if (expanded)
                 {
-                    return $"[{array.Count}]";
+                    BsonArray array = value!.AsBsonArray;
+                    if (expanded)
+                    {
+                        return $"[{array.Count}]";
+                    }
+                    string literal = "[" + string.Join(",", array.Select(static v => v is BsonDocument or BsonArray ? "…" : BsonText.Literal(v))) + "]";
+                    return literal.Length <= 40 ? literal : $"[{array.Count}]";
                 }
-                string literal = "[" + string.Join(",", array.Select(static v => v is BsonDocument or BsonArray ? "…" : BsonText.Literal(v))) + "]";
-                return literal.Length <= 40 ? literal : $"[{array.Count}]";
-            }
             default:
                 return BsonText.Inline(value, loc, shortenIds: true);
         }
@@ -141,54 +139,45 @@ internal sealed record CollectionInfoLine(string Label, string Value);
 /// </summary>
 internal sealed class DocInspectorViewModel : ObservableObject
 {
-    private readonly CollectionTabViewModel _owner;
-    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
-    private CollectionRow? _row;
-    private int _page;
-    private ObservableCollection<InspectorField> _fields = [];
+    private readonly HashSet<string> _expanded = [with(StringComparer.Ordinal)];
+    private readonly HashSet<string> _collapsed = [with(StringComparer.Ordinal)];
     private InspectorField? _selected;
-    private string _jsonText = "";
-    private string _validationText = "";
-    private string _validationIcon = "Mongo.shield";
-    private string _validationToken = "VelaTextMuted";
-    private IReadOnlyList<CollectionInfoLine> _infoLines = [];
 
     /// <summary>构造。</summary>
     public DocInspectorViewModel(CollectionTabViewModel owner)
     {
-        _owner = owner;
+        Owner = owner;
         ShowJsonCommand = new RelayCommand(() => Page = 1);
-        CopyCommand = new AsyncCommand(() => _row is null ? Task.CompletedTask : owner.CopyDocumentsAsync([_row]));
+        CopyCommand = new AsyncCommand(() => Row is null ? Task.CompletedTask : owner.CopyDocumentsAsync([Row]));
         CloneCommand = new RelayCommand(() =>
         {
-            if (_row is not null)
+            if (Row is not null)
             {
-                owner.Clone(_row);
+                owner.Clone(Row);
             }
         });
         DeleteCommand = new RelayCommand(() =>
         {
-            if (_row is not null)
+            if (Row is not null)
             {
-                owner.StageDelete([_row]);
+                owner.StageDelete([Row]);
             }
         });
         AddFieldCommand = new RelayCommand(() =>
         {
-            if (_row is not null)
+            if (Row is not null)
             {
-                owner.PromptAddField(_row, "");
+                owner.PromptAddField(Row, "");
             }
         });
         DiscardCommand = new RelayCommand(() =>
         {
-            if (_row is not null)
+            if (Row is not null)
             {
-                owner.DiscardDocument(_row);
+                owner.DiscardDocument(Row);
             }
         });
-        ApplyCommand = new AsyncCommand(() => _row switch
+        ApplyCommand = new AsyncCommand(() => Row switch
         {
             { Insert: { } insert } => owner.CommitAsync(new CommitScope(OnlyInsert: insert)),
             { Id: { } id } => owner.CommitAsync(new CommitScope(id)),
@@ -197,27 +186,26 @@ internal sealed class DocInspectorViewModel : ObservableObject
     }
 
     /// <summary>文案表。</summary>
-    public Loc Loc => _owner.Loc;
+    public Loc Loc => Owner.Loc;
 
     /// <summary>所属工作台。</summary>
-    public CollectionTabViewModel Owner => _owner;
+    public CollectionTabViewModel Owner { get; }
 
     /// <summary>看着的行。</summary>
-    public CollectionRow? Row => _row;
+    public CollectionRow? Row { get; private set; }
 
     /// <summary>有没有行。</summary>
-    public bool HasRow => _row is not null;
+    public bool HasRow => Row is not null;
 
     /// <summary>头部的 <c>#4</c>。</summary>
-    public string NumberText => _row is null ? "" : "#" + _row.NumberText;
+    public string NumberText => Row is null ? "" : "#" + Row.NumberText;
 
     /// <summary>页签:0 字段、1 JSON、2 集合信息。</summary>
     public int Page
     {
-        get => _page;
-        set
+        get; set
         {
-            if (SetProperty(ref _page, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsFieldsPage), nameof(IsJsonPage), nameof(IsInfoPage));
                 if (value == 1)
@@ -235,7 +223,7 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>字段页。</summary>
     public bool IsFieldsPage
     {
-        get => _page == 0;
+        get => Page == 0;
         set
         {
             if (value)
@@ -248,7 +236,7 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>JSON 页。</summary>
     public bool IsJsonPage
     {
-        get => _page == 1;
+        get => Page == 1;
         set
         {
             if (value)
@@ -261,7 +249,7 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>集合信息页。</summary>
     public bool IsInfoPage
     {
-        get => _page == 2;
+        get => Page == 2;
         set
         {
             if (value)
@@ -272,11 +260,7 @@ internal sealed class DocInspectorViewModel : ObservableObject
     }
 
     /// <summary>字段树的可见行。</summary>
-    public ObservableCollection<InspectorField> Fields
-    {
-        get => _fields;
-        private set => SetProperty(ref _fields, value);
-    }
+    public ObservableCollection<InspectorField> Fields { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>选中的字段。</summary>
     public InspectorField? SelectedField
@@ -286,45 +270,25 @@ internal sealed class DocInspectorViewModel : ObservableObject
     }
 
     /// <summary>JSON 页的文本。</summary>
-    public string JsonText
-    {
-        get => _jsonText;
-        private set => SetProperty(ref _jsonText, value);
-    }
+    public string JsonText { get; private set => SetProperty(ref field, value); } = "";
 
     /// <summary>JSON 页的语法。</summary>
-    public CodeLanguage JsonLanguage => _owner.Ejson == EjsonMode.Shell ? CodeLanguage.Shell : CodeLanguage.Json;
+    public CodeLanguage JsonLanguage => Owner.Ejson == EjsonMode.Shell ? CodeLanguage.Shell : CodeLanguage.Json;
 
     /// <summary>底部验证状态文字。</summary>
-    public string ValidationText
-    {
-        get => _validationText;
-        private set => SetProperty(ref _validationText, value);
-    }
+    public string ValidationText { get; private set => SetProperty(ref field, value); } = "";
 
     /// <summary>验证状态图标。</summary>
-    public string ValidationIcon
-    {
-        get => _validationIcon;
-        private set => SetProperty(ref _validationIcon, value);
-    }
+    public string ValidationIcon { get; private set => SetProperty(ref field, value); } = "Mongo.shield";
 
     /// <summary>验证状态图标颜色。</summary>
-    public string ValidationToken
-    {
-        get => _validationToken;
-        private set => SetProperty(ref _validationToken, value);
-    }
+    public string ValidationToken { get; private set => SetProperty(ref field, value); } = "VelaTextMuted";
 
     /// <summary>这份文档有暂存修改(「放弃 / 应用修改」可用)。</summary>
-    public bool HasChanges => _row is { State: CollectionRowState.Modified or CollectionRowState.Added or CollectionRowState.Deleted };
+    public bool HasChanges => Row is { State: CollectionRowState.Modified or CollectionRowState.Added or CollectionRowState.Deleted };
 
     /// <summary>「集合信息」页。</summary>
-    public IReadOnlyList<CollectionInfoLine> InfoLines
-    {
-        get => _infoLines;
-        private set => SetProperty(ref _infoLines, value);
-    }
+    public IReadOnlyList<CollectionInfoLine> InfoLines { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>JSON 页。</summary>
     public RelayCommand ShowJsonCommand { get; }
@@ -350,12 +314,12 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>换一行看。</summary>
     public void Load(CollectionRow? row)
     {
-        if (!ReferenceEquals(row, _row))
+        if (!ReferenceEquals(row, Row))
         {
             _expanded.Clear();
             _collapsed.Clear();
         }
-        _row = row;
+        Row = row;
         RaisePropertiesChanged(nameof(Row), nameof(HasRow), nameof(NumberText));
         Reload();
     }
@@ -364,30 +328,30 @@ internal sealed class DocInspectorViewModel : ObservableObject
     public void Reload()
     {
         string? keep = _selected?.Path;
-        if (_row is null)
+        if (Row is null)
         {
             Fields = [];
             ValidationText = "";
             RaisePropertyChanged(nameof(HasChanges));
             return;
         }
-        BsonDocument doc = _row.Document;
-        StagedEdit? edit = _row.Insert is null ? _owner.Staging.EditOf(_row.Id) : null;
+        BsonDocument doc = Row.Document;
+        StagedEdit? edit = Row.Insert is null ? Owner.Staging.EditOf(Row.Id) : null;
         var list = new List<InspectorField>();
         Append(list, doc, "", 0, edit);
         // 这一页里别的文档有、这一份没有的顶层字段:「— 字段不存在」+「缺失」。
-        foreach (CollectionColumn column in _owner.Columns)
+        foreach (CollectionColumn column in Owner.Columns)
         {
             if (!doc.Contains(column.Name))
             {
                 list.Add(new InspectorField(column.Name, column.Name, 0, null, false, ChangeRelation.None, Loc) { TypeText = Loc["Cw_TypeMissing"] });
             }
         }
-        Fields = new ObservableCollection<InspectorField>(list);
+        Fields = [with(list)];
         _selected = keep is null ? null : list.FirstOrDefault(f => f.Path == keep);
         RaisePropertiesChanged(nameof(SelectedField), nameof(HasChanges), nameof(NumberText));
         RefreshValidation();
-        if (_page == 1)
+        if (Page == 1)
         {
             RefreshJson();
         }
@@ -448,13 +412,13 @@ internal sealed class DocInspectorViewModel : ObservableObject
         }
         if (field.IsExpanded)
         {
-            _expanded.Remove(field.Path);
-            _collapsed.Add(field.Path);
+            _ = _expanded.Remove(field.Path);
+            _ = _collapsed.Add(field.Path);
         }
         else
         {
-            _collapsed.Remove(field.Path);
-            _expanded.Add(field.Path);
+            _ = _collapsed.Remove(field.Path);
+            _ = _expanded.Add(field.Path);
         }
         Reload();
     }
@@ -462,21 +426,21 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>开始编辑一个字段的值。</summary>
     public void BeginEdit(InspectorField field)
     {
-        if (_row is null || field.Path == "_id" && _row.Insert is null || !_owner.EnsureCanWrite())
+        if (Row is null || field.Path == "_id" && Row.Insert is null || !Owner.EnsureCanWrite())
         {
             return;
         }
-        foreach (InspectorField other in _fields.Where(static f => f.IsEditing))
+        foreach (InspectorField other in Fields.Where(static f => f.IsEditing))
         {
             other.Editor = null;
         }
-        BsonKind fallback = _owner.Columns.FirstOrDefault(c => c.Name == field.Path)?.Kind ?? _owner.Sample.KindOf(field.Path);
-        field.Editor = _owner.CreateEditor(field.Value, field.Path, fallback);
+        BsonKind fallback = Owner.Columns.FirstOrDefault(c => c.Name == field.Path)?.Kind ?? Owner.Sample.KindOf(field.Path);
+        field.Editor = Owner.CreateEditor(field.Value, field.Path, fallback);
         SelectedField = field;
     }
 
     /// <summary>提交一个字段的编辑(写入暂存区)。</summary>
-    public bool CommitEdit(InspectorField field) => _row is not null && CommitEdit(field, _row);
+    public bool CommitEdit(InspectorField field) => Row is not null && CommitEdit(field, Row);
 
     /// <summary>
     /// 把一个字段的编辑提交到指定的那份文档。失焦提交要用它:点网格另一行时,
@@ -484,7 +448,7 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// </summary>
     internal bool CommitEdit(InspectorField field, CollectionRow row)
     {
-        if (field.Editor is not { } editor || !_owner.CommitEditor(editor, row, field.Path))
+        if (field.Editor is not { } editor || !Owner.CommitEditor(editor, row, field.Path))
         {
             return false;
         }
@@ -498,16 +462,16 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>换类型。</summary>
     public void ChangeType(InspectorField field, BsonKind kind)
     {
-        if (_row is not null && field.Path != "_id")
+        if (Row is not null && field.Path != "_id")
         {
-            _owner.ChangeType(_row, field.Path, kind);
+            Owner.ChangeType(Row, field.Path, kind);
         }
     }
 
     /// <summary>JSON 页文本(当前写法)。</summary>
     public void RefreshJson()
     {
-        JsonText = _row is null ? "" : BsonText.Pretty(_row.Document, _owner.Ejson);
+        JsonText = Row is null ? "" : BsonText.Pretty(Row.Document, Owner.Ejson);
         RaisePropertyChanged(nameof(JsonLanguage));
     }
 
@@ -517,18 +481,18 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// </summary>
     public void RefreshValidation()
     {
-        if (_row is null)
+        if (Row is null)
         {
             return;
         }
-        if (_owner.Info.Validator is not { } validator)
+        if (Owner.Info.Validator is not { } validator)
         {
             ValidationText = Loc["Cw_NoValidator"];
             ValidationIcon = "Mongo.shield";
             ValidationToken = "VelaTextMuted";
             return;
         }
-        IReadOnlyList<SchemaViolation> violations = JsonSchemaValidator.Validate(validator, _row.Document, Loc);
+        IReadOnlyList<SchemaViolation> violations = JsonSchemaValidator.Validate(validator, Row.Document, Loc);
         if (violations.Count == 0)
         {
             ValidationText = Loc["Cw_SchemaOk"];
@@ -546,10 +510,10 @@ internal sealed class DocInspectorViewModel : ObservableObject
     /// <summary>「集合信息」页:形态、文档数、大小、索引、验证规则。</summary>
     private async Task LoadInfoAsync()
     {
-        CollectionInfo info = _owner.Info;
-        InfoLines = BuildInfo(info, _owner.Stats);
-        await _owner.LoadStatsAsync().ConfigureAwait(true);
-        InfoLines = BuildInfo(info, _owner.Stats);
+        CollectionInfo info = Owner.Info;
+        InfoLines = BuildInfo(info, Owner.Stats);
+        await Owner.LoadStatsAsync().ConfigureAwait(true);
+        InfoLines = BuildInfo(info, Owner.Stats);
     }
 
     private List<CollectionInfoLine> BuildInfo(CollectionInfo info, CollectionStats? stats)

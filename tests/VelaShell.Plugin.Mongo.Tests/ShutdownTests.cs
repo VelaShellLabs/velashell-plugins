@@ -48,7 +48,7 @@ public sealed class ShutdownTests
         Assert.IsTrue(context.FakeUi.LastPanel.IsOpen);
 
         // 像宿主那样:UI 线程同步等,停用在线程池上跑(面板的 Closed 因此也在线程池上触发)。
-        Task deactivation = Task.Run(() => plugin.DeactivateAsync(CancellationToken.None));
+        var deactivation = Task.Run(() => plugin.DeactivateAsync(CancellationToken.None));
         Assert.IsTrue(deactivation.Wait(TimeSpan.FromSeconds(2)), "deactivation must finish inside the host's 2 s budget");
         Assert.IsNull(deactivation.Exception, deactivation.Exception?.ToString());
 
@@ -69,7 +69,7 @@ public sealed class ShutdownTests
         typeof(MongoPlugin).GetField("_panel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(plugin, new StuckPanel(context.FakeUi.LastPanel));
 
-        Task deactivation = Task.Run(() => plugin.DeactivateAsync(CancellationToken.None));
+        var deactivation = Task.Run(() => plugin.DeactivateAsync(CancellationToken.None));
         Assert.IsTrue(deactivation.Wait(TimeSpan.FromSeconds(2)), "a stuck CloseAsync is abandoned, not awaited forever");
         Assert.IsNull(deactivation.Exception, deactivation.Exception?.ToString());
         await Screens.PumpAsync(10);

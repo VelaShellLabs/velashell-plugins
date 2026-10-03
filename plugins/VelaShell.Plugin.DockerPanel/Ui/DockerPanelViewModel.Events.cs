@@ -57,7 +57,7 @@ public sealed partial class DockerPanelViewModel
     {
         _eventCts = CancellationTokenSource.CreateLinkedTokenSource(Lifetime);
         _eventsSince = DateTimeOffset.UtcNow;
-        var token = _eventCts.Token;
+        CancellationToken token = _eventCts.Token;
         _eventTask = Task.Run(() => EventLoopAsync(token), token);
     }
 
@@ -94,7 +94,7 @@ public sealed partial class DockerPanelViewModel
         var backoff = TimeSpan.FromSeconds(1);
         while (!token.IsCancellationRequested)
         {
-            var client = Client;
+            DockerClient? client = Client;
             if (client is null)
             {
                 return;
@@ -146,7 +146,7 @@ public sealed partial class DockerPanelViewModel
         Ui.Post(() =>
         {
             Overview.AcceptEvent(dockerEvent);
-            var wanted = ActivePage?.WantsRefresh(dockerEvent) ?? false;
+            bool wanted = ActivePage?.WantsRefresh(dockerEvent) ?? false;
             // 总览页永远关心计数,即使它不在前台 —— 用户切回去时不该看到一份旧数字。
             if (!wanted && !Overview.WantsRefresh(dockerEvent))
             {

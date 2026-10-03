@@ -188,7 +188,7 @@ public sealed class ShellExecutorTests
                 Assert.AreEqual(ShellConfirmKind.Drop, guard.Asked[^1].Kind);
                 Assert.IsTrue(drop.ChangesCatalog);
 
-                await Assert.ThrowsExactlyAsync<ShellExecutionException>(() => RunAsync(executor, session, "db.dropDatabase()"));
+                _ = await Assert.ThrowsExactlyAsync<ShellExecutionException>(() => RunAsync(executor, session, "db.dropDatabase()"));
             }
             finally
             {
@@ -212,14 +212,14 @@ public sealed class ShellExecutorTests
                     { "total", (299 - i) * 10 },
                     { "createdAt", new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(i) }
                 }));
-                await orders.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument { { "status", 1 }, { "createdAt", -1 } }));
+                _ = await orders.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument { { "status", 1 }, { "createdAt", -1 } }));
                 var executor = new ShellExecutor(connection, new StubGuard(), new Loc("zh-CN"));
                 ShellCommand find = ShellParser.Parse(ShellScript.Split(
                     "db.orders.find({ status: \"paid\", total: { $gte: 500 } }).sort({ createdAt: -1 }).limit(20)")[0]);
 
                 ShellResult result = await executor.ExplainAsync(find, database, "allPlansExecution", new ShellRunOptions { MaxTimeMs = 10_000 }, null);
                 Assert.AreEqual(ShellResultKind.Explain, result.Kind);
-                ExplainPlan plan = ExplainPlan.Parse(result.Explain!);
+                var plan = ExplainPlan.Parse(result.Explain!);
                 Assert.AreEqual("IXSCAN", plan.Stages[0].Name);
                 Assert.AreEqual("status_1_createdAt_-1", plan.Stages[0].IndexName);
                 Assert.IsTrue(plan.SortFromIndex, "排序由索引提供");
@@ -230,13 +230,13 @@ public sealed class ShellExecutorTests
                 Assert.IsTrue(plan.Candidates[0].Winner);
 
                 ShellResult hinted = await executor.ExplainAsync(find, database, "executionStats", new ShellRunOptions(), new BsonString("_id_"));
-                ExplainPlan hintedPlan = ExplainPlan.Parse(hinted.Explain!);
+                var hintedPlan = ExplainPlan.Parse(hinted.Explain!);
                 Assert.IsTrue(hintedPlan.Stages.Any(static s => s.IndexName == "_id_"), "hint 要落到 explain 命令里");
 
                 ShellCommand aggregate = ShellParser.Parse(ShellScript.Split(
                     "db.orders.aggregate([{ $match: { status: \"paid\" } }, { $group: { _id: \"$status\", n: { $sum: 1 } } }])")[0]);
                 ShellResult aggregateResult = await executor.ExplainAsync(aggregate, database, "executionStats", new ShellRunOptions(), null);
-                ExplainPlan aggregatePlan = ExplainPlan.Parse(aggregateResult.Explain!);
+                var aggregatePlan = ExplainPlan.Parse(aggregateResult.Explain!);
                 Assert.IsTrue(aggregatePlan.IsAggregate);
                 Assert.IsTrue(aggregatePlan.Stages.Any(static s => s.Name is "IXSCAN" or "COLLSCAN"));
                 Assert.IsTrue(aggregatePlan.Stages.Any(static s => s.Name.Contains("GROUP", StringComparison.OrdinalIgnoreCase)));
@@ -269,7 +269,7 @@ public sealed class ShellExecutorTests
                     killed = await connection.KillByCommentAsync(comment);
                 }
                 Assert.IsGreaterThan(0, killed, "comment 标记要能在 currentOp 里找到这条查询");
-                await Assert.ThrowsAsync<MongoException>(() => running);
+                _ = await Assert.ThrowsAsync<MongoException>(() => running);
             }
             finally
             {

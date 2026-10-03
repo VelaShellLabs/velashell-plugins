@@ -126,10 +126,10 @@ public static class RedisTtl
         if (ttl.TotalDays >= 1)
         {
             var builder = new StringBuilder();
-            builder.Append(CultureInfo.CurrentCulture, $"{(int)ttl.TotalDays}d");
+            _ = builder.Append(CultureInfo.CurrentCulture, $"{(int)ttl.TotalDays}d");
             if (ttl.Hours > 0)
             {
-                builder.Append(CultureInfo.CurrentCulture, $" {ttl.Hours}h");
+                _ = builder.Append(CultureInfo.CurrentCulture, $" {ttl.Hours}h");
             }
             return builder.ToString();
         }

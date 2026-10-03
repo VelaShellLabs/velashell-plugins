@@ -27,7 +27,7 @@ public sealed class S3InteropTests
     [DataRow("TokenRefreshRequired")]
     public void Translate_CredentialErrors_BecomeAuthenticationFailures(string code)
     {
-        Assert.IsInstanceOfType<VelaS3AuthenticationException>(
+        _ = Assert.IsInstanceOfType<VelaS3AuthenticationException>(
             S3Interop.Translate(Aws(code, HttpStatusCode.Forbidden), "list"));
     }
 
@@ -35,11 +35,11 @@ public sealed class S3InteropTests
     [TestMethod]
     public void Translate_SeparatesDeniedFromMissing()
     {
-        Assert.IsInstanceOfType<VelaS3PermissionDeniedException>(
+        _ = Assert.IsInstanceOfType<VelaS3PermissionDeniedException>(
             S3Interop.Translate(Aws("AccessDenied", HttpStatusCode.Forbidden), "delete"));
-        Assert.IsInstanceOfType<VelaS3PathNotFoundException>(
+        _ = Assert.IsInstanceOfType<VelaS3PathNotFoundException>(
             S3Interop.Translate(Aws("NoSuchKey", HttpStatusCode.NotFound), "stat"));
-        Assert.IsInstanceOfType<VelaS3PathNotFoundException>(
+        _ = Assert.IsInstanceOfType<VelaS3PathNotFoundException>(
             S3Interop.Translate(Aws("NoSuchBucket", HttpStatusCode.NotFound), "list"));
     }
 
@@ -47,9 +47,9 @@ public sealed class S3InteropTests
     [TestMethod]
     public void Translate_UnsupportedOperationsAreTheirOwnCategory()
     {
-        Assert.IsInstanceOfType<VelaS3UnsupportedOperationException>(
+        _ = Assert.IsInstanceOfType<VelaS3UnsupportedOperationException>(
             S3Interop.Translate(Aws("NotImplemented", HttpStatusCode.NotImplemented), "get replication"));
-        Assert.IsInstanceOfType<VelaS3UnsupportedOperationException>(
+        _ = Assert.IsInstanceOfType<VelaS3UnsupportedOperationException>(
             S3Interop.Translate(Aws("MethodNotAllowed", HttpStatusCode.MethodNotAllowed), "put abac"));
     }
 
@@ -57,9 +57,9 @@ public sealed class S3InteropTests
     [TestMethod]
     public void Translate_ServerSideFailuresAreConnectionErrors()
     {
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(Aws("InternalError", HttpStatusCode.InternalServerError), "upload"));
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(Aws("SlowDown", HttpStatusCode.TooManyRequests), "upload"));
     }
 
@@ -67,16 +67,16 @@ public sealed class S3InteropTests
     [TestMethod]
     public void Translate_WrapsTransportExceptions()
     {
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(new HttpRequestException("no route"), "connect"));
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(new SocketException(10061), "connect"));
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(new TimeoutException("slow"), "download"));
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(new AuthenticationException("tls"), "connect"));
         // 会话关闭后仍有在飞的操作:不翻译的话用户只会看到 "Cannot access a disposed object"。
-        Assert.IsInstanceOfType<VelaS3ConnectionException>(
+        _ = Assert.IsInstanceOfType<VelaS3ConnectionException>(
             S3Interop.Translate(new ObjectDisposedException("AmazonS3Client"), "list"));
     }
 

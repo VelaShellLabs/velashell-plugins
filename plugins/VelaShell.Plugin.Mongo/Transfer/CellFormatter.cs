@@ -19,47 +19,31 @@ internal static class CellFormatter
     /// <param name="nullAsEmpty">null 写成空(否则写 <c>null</c>)。</param>
     public static string Format(BsonValue? value, CellConversion conversion, bool nullAsEmpty)
     {
-        switch (BsonKinds.Of(value))
+        return BsonKinds.Of(value) switch
         {
-            case BsonKind.Missing:
-                return "";
-            case BsonKind.Null:
-                return nullAsEmpty ? "" : "null";
-            case BsonKind.ObjectId:
-                return value!.AsObjectId.ToString();
-            case BsonKind.String:
-                return value!.AsString;
-            case BsonKind.Int32:
-                return conversion == CellConversion.Fixed2
-                    ? value!.AsInt32.ToString("0.00", CultureInfo.InvariantCulture)
-                    : value!.AsInt32.ToString(CultureInfo.InvariantCulture);
-            case BsonKind.Int64:
-                return conversion == CellConversion.Fixed2
-                    ? value!.AsInt64.ToString("0.00", CultureInfo.InvariantCulture)
-                    : value!.AsInt64.ToString(CultureInfo.InvariantCulture);
-            case BsonKind.Double:
-                return conversion == CellConversion.Fixed2 && double.IsFinite(value!.AsDouble)
-                    ? value.AsDouble.ToString("0.00", CultureInfo.InvariantCulture)
-                    : BsonText.FormatDouble(value!.AsDouble, forceDecimalPoint: false);
-            case BsonKind.Decimal128:
-                return FormatDecimal(value!.AsDecimal128, conversion == CellConversion.Fixed2);
-            case BsonKind.Boolean:
-                return value!.AsBoolean ? "true" : "false";
-            case BsonKind.Date:
-                return conversion == CellConversion.IsoTime ? BsonText.IsoDate(value!) : LocalDate(value!);
-            case BsonKind.Object or BsonKind.Array:
-                return BsonText.Compact(value!, EjsonMode.Relaxed);
-            case BsonKind.Uuid:
-                return value!.AsBsonBinaryData.ToGuid().ToString();
-            case BsonKind.Binary:
-                return Convert.ToBase64String(value!.AsBsonBinaryData.Bytes);
-            case BsonKind.Regex:
-                return value!.AsBsonRegularExpression.ToString();
-            case BsonKind.Timestamp:
-                return $"Timestamp({value!.AsBsonTimestamp.Timestamp}, {value.AsBsonTimestamp.Increment})";
-            default:
-                return BsonText.Literal(value!);
-        }
+            BsonKind.Missing => "",
+            BsonKind.Null => nullAsEmpty ? "" : "null",
+            BsonKind.ObjectId => value!.AsObjectId.ToString(),
+            BsonKind.String => value!.AsString,
+            BsonKind.Int32 => conversion == CellConversion.Fixed2
+                                ? value!.AsInt32.ToString("0.00", CultureInfo.InvariantCulture)
+                                : value!.AsInt32.ToString(CultureInfo.InvariantCulture),
+            BsonKind.Int64 => conversion == CellConversion.Fixed2
+                                ? value!.AsInt64.ToString("0.00", CultureInfo.InvariantCulture)
+                                : value!.AsInt64.ToString(CultureInfo.InvariantCulture),
+            BsonKind.Double => conversion == CellConversion.Fixed2 && double.IsFinite(value!.AsDouble)
+                                ? value.AsDouble.ToString("0.00", CultureInfo.InvariantCulture)
+                                : BsonText.FormatDouble(value!.AsDouble, forceDecimalPoint: false),
+            BsonKind.Decimal128 => FormatDecimal(value!.AsDecimal128, conversion == CellConversion.Fixed2),
+            BsonKind.Boolean => value!.AsBoolean ? "true" : "false",
+            BsonKind.Date => conversion == CellConversion.IsoTime ? BsonText.IsoDate(value!) : LocalDate(value!),
+            BsonKind.Object or BsonKind.Array => BsonText.Compact(value!, EjsonMode.Relaxed),
+            BsonKind.Uuid => value!.AsBsonBinaryData.ToGuid().ToString(),
+            BsonKind.Binary => Convert.ToBase64String(value!.AsBsonBinaryData.Bytes),
+            BsonKind.Regex => value!.AsBsonRegularExpression.ToString(),
+            BsonKind.Timestamp => $"Timestamp({value!.AsBsonTimestamp.Timestamp}, {value.AsBsonTimestamp.Increment})",
+            _ => BsonText.Literal(value!),
+        };
     }
 
     /// <summary>Decimal128 → 文本;<paramref name="fixed2" /> 时四舍五入到两位(远离零)。</summary>
@@ -79,7 +63,7 @@ internal static class CellFormatter
     public static string LocalDate(BsonValue value)
     {
         long ms = value.AsBsonDateTime.MillisecondsSinceEpoch;
-        if (ms < -62135596800000L || ms > 253402300799999L)
+        if (ms is < -62135596800000L or > 253402300799999L)
         {
             return ms.ToString(CultureInfo.InvariantCulture);
         }

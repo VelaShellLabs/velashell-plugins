@@ -264,7 +264,7 @@ internal sealed class ExplainPlan
     /// <summary>解析一份 explain 输出。</summary>
     public static ExplainPlan Parse(BsonDocument explain)
     {
-        BsonDocument? command = explain.GetValue("command", null) as BsonDocument;
+        var command = explain.GetValue("command", null) as BsonDocument;
         BsonDocument queryPlanner;
         BsonDocument? executionStats;
         var pipelineStages = new List<ExplainStage>();
@@ -524,7 +524,7 @@ internal sealed class ExplainPlan
     {
         var candidates = new List<ExplainCandidate>();
         var all = executionStats?.GetValue("allPlansExecution", null) as BsonArray;
-        var rejected = queryPlanner.GetValue("rejectedPlans", null) as BsonArray ?? [];
+        BsonArray rejected = queryPlanner.GetValue("rejectedPlans", null) as BsonArray ?? [];
         if (winning is null)
         {
             return candidates;
@@ -536,7 +536,7 @@ internal sealed class ExplainPlan
         var used = new HashSet<BsonDocument>(ReferenceEqualityComparer.Instance);
         if (winnerStats is not null)
         {
-            used.Add(winnerStats);
+            _ = used.Add(winnerStats);
         }
         foreach (BsonDocument plan in rejected.OfType<BsonDocument>())
         {
@@ -545,7 +545,7 @@ internal sealed class ExplainPlan
                 .FirstOrDefault(p => !used.Contains(p) && p.GetValue("executionStages", null) is BsonDocument s && Chain(Unwrap(s)!) == chain);
             if (stats is not null)
             {
-                used.Add(stats);
+                _ = used.Add(stats);
             }
             candidates.Add(Candidate(false, chain, stats));
         }

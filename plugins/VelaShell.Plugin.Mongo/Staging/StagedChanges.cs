@@ -78,11 +78,11 @@ internal sealed class StagedEdit
         {
             if (change.Value is null)
             {
-                BsonPath.Unset(current, change.Path);
+                _ = BsonPath.Unset(current, change.Path);
             }
             else
             {
-                BsonPath.Set(current, change.Path, change.Value.DeepClone());
+                _ = BsonPath.Set(current, change.Path, change.Value.DeepClone());
             }
         }
         return current;
@@ -133,7 +133,7 @@ internal sealed class StagedEdit
             Put(ancestor.Path, rebuilt, ancestorIndex);
             return;
         }
-        _changes.RemoveAll(c => IsAncestor(path, c.Path));
+        _ = _changes.RemoveAll(c => IsAncestor(path, c.Path));
         Put(path, value, -1);
     }
 
@@ -180,7 +180,7 @@ internal sealed class StagedEdit
     private void Put(string path, BsonValue? value, int index)
     {
         BsonValue? original = BsonPath.Get(Original, path);
-        _changes.RemoveAll(c => c.Path == path);
+        _ = _changes.RemoveAll(c => c.Path == path);
         if (SameValue(original, value))
         {
             return;
@@ -203,11 +203,11 @@ internal sealed class StagedEdit
         var holder = new BsonDocument("v", start);
         if (value is null)
         {
-            BsonPath.Unset(holder, "v." + relative);
+            _ = BsonPath.Unset(holder, "v." + relative);
         }
         else
         {
-            BsonPath.Set(holder, "v." + relative, value.DeepClone());
+            _ = BsonPath.Set(holder, "v." + relative, value.DeepClone());
         }
         return holder["v"];
     }

@@ -26,7 +26,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(AutoRefreshLabel));
             RaisePropertyChanged(nameof(IsAutoRefreshPaused));
             RaisePropertyChanged(nameof(AutoRefreshPausedNotice));

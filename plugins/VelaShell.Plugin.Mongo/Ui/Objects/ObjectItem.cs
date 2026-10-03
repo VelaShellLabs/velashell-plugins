@@ -47,15 +47,7 @@ internal enum ObjectViewMode
 internal sealed class ObjectItem : ObservableObject
 {
     private readonly Loc _loc;
-    private bool _isSelected;
     private bool _isTtl;
-    private CollectionStats? _stats;
-    private long? _count;
-    private long? _avgSize;
-    private long? _dataSize;
-    private long? _storageSize;
-    private int? _indexCount;
-    private long? _indexSize;
 
     /// <summary>一个集合或视图。</summary>
     public ObjectItem(CollectionInfo info, Loc loc)
@@ -132,15 +124,15 @@ internal sealed class ObjectItem : ObservableObject
     public string IconToken => Kind == ObjectKind.Bucket ? "VelaWarning" : "VelaInfo";
 
     /// <summary>实际画的图标色:选中行改用强调色(设计稿 12 的 events 行)。</summary>
-    public string ShownIconToken => _isSelected ? "VelaAccent" : IconToken;
+    public string ShownIconToken => IsSelected ? "VelaAccent" : IconToken;
 
     /// <summary>是否为当前选中行(由视图模型维护,用于强调色的名字与图标)。</summary>
     public bool IsSelected
     {
-        get => _isSelected;
+        get;
         set
         {
-            if (SetProperty(ref _isSelected, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(ShownIconToken));
             }
@@ -218,56 +210,56 @@ internal sealed class ObjectItem : ObservableObject
     public IReadOnlyList<BsonDocument>? Indexes { get; set; }
 
     /// <summary>统计原文(集合;桶是 files 那一份)。</summary>
-    public CollectionStats? Stats => _stats;
+    public CollectionStats? Stats { get; private set; }
 
     /// <summary>桶的 chunks 统计。</summary>
     public CollectionStats? ChunkStats { get; private set; }
 
     /// <summary>统计取回来了没有。</summary>
-    public bool HasStats => _stats is not null;
+    public bool HasStats => Stats is not null;
 
     /// <summary>文档数(桶 = 文件数)。</summary>
-    public long? Count => _count;
+    public long? Count { get; private set; }
 
     /// <summary>平均文档大小(桶 = 平均文件大小)。</summary>
-    public long? AvgSize => _avgSize;
+    public long? AvgSize { get; private set; }
 
     /// <summary>数据大小(未压缩)。</summary>
-    public long? DataSize => _dataSize;
+    public long? DataSize { get; private set; }
 
     /// <summary>存储大小(压缩后)。</summary>
-    public long? StorageSize => _storageSize;
+    public long? StorageSize { get; private set; }
 
     /// <summary>索引个数。</summary>
-    public int? IndexCount => _indexCount;
+    public int? IndexCount { get; private set; }
 
     /// <summary>索引大小。</summary>
-    public long? IndexSize => _indexSize;
+    public long? IndexSize { get; private set; }
 
     /// <summary>时序集合的 bucket 数(<c>storageStats.timeseries.bucketCount</c>)。</summary>
     public long? BucketCount =>
-        _stats?.Raw.TryGetValue("timeseries", out BsonValue ts) == true && ts.IsBsonDocument
+        Stats?.Raw.TryGetValue("timeseries", out BsonValue ts) == true && ts.IsBsonDocument
         && ts.AsBsonDocument.TryGetValue("bucketCount", out BsonValue n) && n.IsNumeric
             ? n.ToInt64()
             : null;
 
     /// <summary>文档数列:一千万以下写全(<c>1,284,902</c>),再大就缩写(<c>42.7M</c>)—— 与设计稿同一口径。</summary>
-    public string CountText => IsView ? "—" : _count is { } n ? (n >= 10_000_000 ? BsonText.Count(n) : BsonText.Grouped(n)) : "";
+    public string CountText => IsView ? "—" : Count is { } n ? (n >= 10_000_000 ? BsonText.Count(n) : BsonText.Grouped(n)) : "";
 
     /// <summary>平均大小列。</summary>
-    public string AvgSizeText => Size(_avgSize);
+    public string AvgSizeText => Size(AvgSize);
 
     /// <summary>数据大小列。</summary>
-    public string DataSizeText => Size(_dataSize);
+    public string DataSizeText => Size(DataSize);
 
     /// <summary>存储大小列。</summary>
-    public string StorageSizeText => Size(_storageSize);
+    public string StorageSizeText => Size(StorageSize);
 
     /// <summary>索引个数列。</summary>
-    public string IndexCountText => IsView ? "—" : _indexCount?.ToString(CultureInfo.InvariantCulture) ?? "";
+    public string IndexCountText => IsView ? "—" : IndexCount?.ToString(CultureInfo.InvariantCulture) ?? "";
 
     /// <summary>索引大小列。</summary>
-    public string IndexSizeText => Size(_indexSize);
+    public string IndexSizeText => Size(IndexSize);
 
     /// <summary>
     /// 填上一个集合的统计。时序集合的 <c>storageStats.count</c> 是 0(文档在桶里),
@@ -275,13 +267,13 @@ internal sealed class ObjectItem : ObservableObject
     /// </summary>
     public void SetStats(CollectionStats stats, long? estimatedCount = null)
     {
-        _stats = stats;
-        _count = stats.Count > 0 ? stats.Count : estimatedCount ?? stats.Count;
-        _dataSize = stats.Size;
-        _avgSize = stats.AvgObjSize > 0 ? stats.AvgObjSize : _count > 0 ? stats.Size / _count : 0;
-        _storageSize = stats.StorageSize;
-        _indexCount = stats.IndexCount;
-        _indexSize = stats.TotalIndexSize;
+        Stats = stats;
+        Count = stats.Count > 0 ? stats.Count : estimatedCount ?? stats.Count;
+        DataSize = stats.Size;
+        AvgSize = stats.AvgObjSize > 0 ? stats.AvgObjSize : Count > 0 ? stats.Size / Count : 0;
+        StorageSize = stats.StorageSize;
+        IndexCount = stats.IndexCount;
+        IndexSize = stats.TotalIndexSize;
         RaiseStats();
     }
 
@@ -291,14 +283,14 @@ internal sealed class ObjectItem : ObservableObject
     /// </summary>
     public void SetBucketStats(CollectionStats files, CollectionStats chunks)
     {
-        _stats = files;
+        Stats = files;
         ChunkStats = chunks;
-        _count = files.Count;
-        _dataSize = files.Size + chunks.Size;
-        _avgSize = files.Count > 0 ? chunks.Size / files.Count : 0;
-        _storageSize = files.StorageSize + chunks.StorageSize;
-        _indexCount = files.IndexCount + chunks.IndexCount;
-        _indexSize = files.TotalIndexSize + chunks.TotalIndexSize;
+        Count = files.Count;
+        DataSize = files.Size + chunks.Size;
+        AvgSize = files.Count > 0 ? chunks.Size / files.Count : 0;
+        StorageSize = files.StorageSize + chunks.StorageSize;
+        IndexCount = files.IndexCount + chunks.IndexCount;
+        IndexSize = files.TotalIndexSize + chunks.TotalIndexSize;
         RaiseStats();
     }
 
@@ -308,18 +300,18 @@ internal sealed class ObjectItem : ObservableObject
     /// </summary>
     public void CarryOver(ObjectItem previous)
     {
-        if (previous.Kind != Kind || previous._stats is null)
+        if (previous.Kind != Kind || previous.Stats is null)
         {
             return;
         }
-        _stats = previous._stats;
+        Stats = previous.Stats;
         ChunkStats = previous.ChunkStats;
-        _count = previous._count;
-        _avgSize = previous._avgSize;
-        _dataSize = previous._dataSize;
-        _storageSize = previous._storageSize;
-        _indexCount = previous._indexCount;
-        _indexSize = previous._indexSize;
+        Count = previous.Count;
+        AvgSize = previous.AvgSize;
+        DataSize = previous.DataSize;
+        StorageSize = previous.StorageSize;
+        IndexCount = previous.IndexCount;
+        IndexSize = previous.IndexSize;
         _isTtl = previous._isTtl;
         RaiseStats();
     }
@@ -342,12 +334,12 @@ internal sealed class ObjectItem : ObservableObject
     internal IComparable SortKey(string column) => column switch
     {
         "Type" => TypeText,
-        "Count" => _count ?? -1,
-        "AvgSize" => _avgSize ?? -1,
-        "DataSize" => _dataSize ?? -1,
-        "StorageSize" => _storageSize ?? -1,
-        "Indexes" => (long)(_indexCount ?? -1),
-        "IndexSize" => _indexSize ?? -1,
+        "Count" => Count ?? -1,
+        "AvgSize" => AvgSize ?? -1,
+        "DataSize" => DataSize ?? -1,
+        "StorageSize" => StorageSize ?? -1,
+        "Indexes" => (long)(IndexCount ?? -1),
+        "IndexSize" => IndexSize ?? -1,
         "Validation" => HasValidator ? ValidationLevel : "",
         _ => DisplayName
     };

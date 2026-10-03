@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Avalonia.Threading;
-using VelaShell.Plugin.Mongo.Transfer;
 using VelaShell.Plugin.Mongo.Core;
+using VelaShell.Plugin.Mongo.Transfer;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -22,9 +22,6 @@ internal enum XferStepState
 /// <summary>向导左栏的一步(一行标题 + 一行灰字摘要)。</summary>
 internal sealed class XferStep : ObservableObject
 {
-    private string _summary = "";
-    private XferStepState _state;
-    private bool _locked;
 
     /// <summary>构造。</summary>
     /// <param name="index">下标(从 0 起)。</param>
@@ -47,26 +44,26 @@ internal sealed class XferStep : ObservableObject
     /// <summary>摘要(<c>shop.orders · 当前筛选</c>)。</summary>
     public string Summary
     {
-        get => _summary;
+        get;
         set
         {
-            if (SetProperty(ref _summary, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasSummary));
             }
         }
-    }
+    } = "";
 
     /// <summary>有没有摘要。</summary>
-    public bool HasSummary => _summary.Length > 0;
+    public bool HasSummary => Summary.Length > 0;
 
     /// <summary>状态。</summary>
     public XferStepState State
     {
-        get => _state;
+        get;
         set
         {
-            if (SetProperty(ref _state, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsDone), nameof(IsCurrent), nameof(IsPending), nameof(CanJump));
             }
@@ -76,10 +73,10 @@ internal sealed class XferStep : ObservableObject
     /// <summary>执行中 / 执行完之后不许再点回设置步骤。</summary>
     public bool Locked
     {
-        get => _locked;
+        get;
         set
         {
-            if (SetProperty(ref _locked, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(CanJump));
             }
@@ -87,16 +84,16 @@ internal sealed class XferStep : ObservableObject
     }
 
     /// <summary>已完成。</summary>
-    public bool IsDone => _state == XferStepState.Done;
+    public bool IsDone => State == XferStepState.Done;
 
     /// <summary>当前。</summary>
-    public bool IsCurrent => _state == XferStepState.Current;
+    public bool IsCurrent => State == XferStepState.Current;
 
     /// <summary>未到。</summary>
-    public bool IsPending => _state == XferStepState.Pending;
+    public bool IsPending => State == XferStepState.Pending;
 
     /// <summary>能点回去。</summary>
-    public bool CanJump => _state == XferStepState.Done && !_locked;
+    public bool CanJump => State == XferStepState.Done && !Locked;
 }
 
 /// <summary>下拉里的一项(值 + 给人看的名字)。</summary>
@@ -139,12 +136,6 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <summary>执行页的下标。</summary>
     protected const int RunStep = 3;
 
-    private int _stepIndex = -1;
-    private bool _isRunning;
-    private bool _isFinished;
-    private bool _isBackground;
-    private bool _isBusy;
-
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
     /// <param name="stepTitles">四步的标题。</param>
@@ -152,7 +143,7 @@ internal abstract class XferWizardViewModel : DialogViewModel
         : base(workspace)
     {
         Steps = [.. stepTitles.Select(static (t, i) => new XferStep(i, t))];
-        NextCommand = new AsyncCommand(NextAsync, () => !_isRunning && !_isBusy);
+        NextCommand = new AsyncCommand(NextAsync, () => !IsRunning && !IsBusy);
         BackCommand = new RelayCommand(() => GoTo(StepIndex - 1), () => CanGoBack);
         JumpCommand = new RelayCommand<XferStep>(step => GoTo(step.Index), static step => step.CanJump);
         BackgroundCommand = new RelayCommand(MoveToBackground);
@@ -166,7 +157,7 @@ internal abstract class XferWizardViewModel : DialogViewModel
     public override double Height => 720;
 
     /// <inheritdoc />
-    public override bool CanCloseWithEscape => !_isRunning;
+    public override bool CanCloseWithEscape => !IsRunning;
 
     /// <summary>四步。</summary>
     public ObservableCollection<XferStep> Steps { get; }
@@ -174,10 +165,10 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <summary>当前步。</summary>
     public int StepIndex
     {
-        get => _stepIndex;
+        get;
         protected set
         {
-            if (!SetProperty(ref _stepIndex, value))
+            if (!SetProperty(ref field, value))
             {
                 return;
             }
@@ -193,30 +184,30 @@ internal abstract class XferWizardViewModel : DialogViewModel
             BackCommand.RaiseCanExecuteChanged();
             JumpCommand?.RaiseCanExecuteChanged();
         }
-    }
+    } = -1;
 
     /// <summary>第 1 步。</summary>
-    public bool IsStep0 => _stepIndex == 0;
+    public bool IsStep0 => StepIndex == 0;
 
     /// <summary>第 2 步。</summary>
-    public bool IsStep1 => _stepIndex == 1;
+    public bool IsStep1 => StepIndex == 1;
 
     /// <summary>第 3 步。</summary>
-    public bool IsStep2 => _stepIndex == 2;
+    public bool IsStep2 => StepIndex == 2;
 
     /// <summary>执行页。</summary>
-    public bool IsStep3 => _stepIndex == RunStep;
+    public bool IsStep3 => StepIndex == RunStep;
 
     /// <summary>设置步骤(1–3)。</summary>
-    public bool IsSetup => _stepIndex < RunStep;
+    public bool IsSetup => StepIndex < RunStep;
 
     /// <summary>执行中。</summary>
     public bool IsRunning
     {
-        get => _isRunning;
+        get;
         protected set
         {
-            if (SetProperty(ref _isRunning, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShowRunFooter), nameof(ShowDoneFooter), nameof(CanGoBack));
                 NextCommand.RaiseCanExecuteChanged();
@@ -228,10 +219,10 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <summary>执行完了(成功、失败或取消)。</summary>
     public bool IsFinished
     {
-        get => _isFinished;
+        get;
         protected set
         {
-            if (SetProperty(ref _isFinished, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShowDoneFooter));
             }
@@ -241,10 +232,10 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <summary>某一步在加载 / 校验(下一步暂不可点)。</summary>
     public bool IsBusy
     {
-        get => _isBusy;
+        get;
         protected set
         {
-            if (SetProperty(ref _isBusy, value))
+            if (SetProperty(ref field, value))
             {
                 NextCommand.RaiseCanExecuteChanged();
             }
@@ -254,24 +245,24 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <summary>已转入后台(对话框关着,任务还在跑)。</summary>
     public bool IsBackground
     {
-        get => _isBackground;
-        private set => SetProperty(ref _isBackground, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>能回上一步。</summary>
-    public bool CanGoBack => _stepIndex > 0 && _stepIndex < RunStep && !_isRunning;
+    public bool CanGoBack => StepIndex > 0 && StepIndex < RunStep && !IsRunning;
 
     /// <summary>底栏:设置阶段(取消 / 上一步 / 下一步)。</summary>
-    public bool ShowSetupFooter => _stepIndex < RunStep;
+    public bool ShowSetupFooter => StepIndex < RunStep;
 
     /// <summary>底栏:执行中(转入后台 / 停止)。</summary>
-    public bool ShowRunFooter => _stepIndex == RunStep && _isRunning;
+    public bool ShowRunFooter => StepIndex == RunStep && IsRunning;
 
     /// <summary>底栏:执行完(关闭)。</summary>
-    public bool ShowDoneFooter => _stepIndex == RunStep && !_isRunning;
+    public bool ShowDoneFooter => StepIndex == RunStep && !IsRunning;
 
     /// <summary>「下一步」按钮上的字:最后一个设置步骤变成主操作(<c>开始导出 · 312 份文档</c>)。</summary>
-    public string NextText => _stepIndex == RunStep - 1 ? StartText : Loc["Common_Next"];
+    public string NextText => StepIndex == RunStep - 1 ? StartText : Loc["Common_Next"];
 
     /// <summary>主操作的字。</summary>
     protected abstract string StartText { get; }
@@ -303,7 +294,7 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <summary>切到某一步(只许往回跳,或由派生类往前推)。</summary>
     protected void GoTo(int index)
     {
-        if (index < 0 || index >= RunStep || _isRunning)
+        if (index < 0 || index >= RunStep || IsRunning)
         {
             return;
         }
@@ -313,14 +304,14 @@ internal abstract class XferWizardViewModel : DialogViewModel
 
     private async Task NextAsync()
     {
-        if (_isRunning || _stepIndex >= RunStep)
+        if (IsRunning || StepIndex >= RunStep)
         {
             return;
         }
         IsBusy = true;
         try
         {
-            if (!await ValidateAsync(_stepIndex).ConfigureAwait(true))
+            if (!await ValidateAsync(StepIndex).ConfigureAwait(true))
             {
                 return;
             }
@@ -329,13 +320,13 @@ internal abstract class XferWizardViewModel : DialogViewModel
         {
             IsBusy = false;
         }
-        if (_stepIndex == RunStep - 1)
+        if (StepIndex == RunStep - 1)
         {
             await StartAsync().ConfigureAwait(true);
             return;
         }
-        StepIndex = _stepIndex + 1;
-        await EnterAsync(_stepIndex).ConfigureAwait(true);
+        StepIndex++;
+        await EnterAsync(StepIndex).ConfigureAwait(true);
     }
 
     private async Task EnterAsync(int step)
@@ -363,7 +354,7 @@ internal abstract class XferWizardViewModel : DialogViewModel
     {
         IsRunning = false;
         IsFinished = true;
-        if (_isBackground)
+        if (IsBackground)
         {
             Workspace.Toast(toast with
             {
@@ -391,7 +382,7 @@ internal abstract class XferWizardViewModel : DialogViewModel
 
     private void MoveToBackground()
     {
-        if (!_isRunning)
+        if (!IsRunning)
         {
             Close();
             return;
@@ -403,12 +394,12 @@ internal abstract class XferWizardViewModel : DialogViewModel
     /// <inheritdoc />
     internal override void OnClosed()
     {
-        if (_isRunning && !_isBackground)
+        if (IsRunning && !IsBackground)
         {
             // 执行中点了 ✕:任务不停,转入后台。
             IsBackground = true;
         }
-        if (_isRunning)
+        if (IsRunning)
         {
             Workspace.Toast(new()
             {
@@ -453,16 +444,16 @@ internal abstract class XferWizardViewModel : DialogViewModel
         {
             if (OperatingSystem.IsWindows())
             {
-                Process.Start(new ProcessStartInfo("explorer.exe", File.Exists(path) ? $"/select,\"{path}\"" : $"\"{path}\"") { UseShellExecute = false });
+                _ = Process.Start(new ProcessStartInfo("explorer.exe", File.Exists(path) ? $"/select,\"{path}\"" : $"\"{path}\"") { UseShellExecute = false });
             }
             else if (OperatingSystem.IsMacOS())
             {
-                Process.Start(new ProcessStartInfo("open", File.Exists(path) ? $"-R \"{path}\"" : $"\"{path}\"") { UseShellExecute = false });
+                _ = Process.Start(new ProcessStartInfo("open", File.Exists(path) ? $"-R \"{path}\"" : $"\"{path}\"") { UseShellExecute = false });
             }
             else
             {
                 string folder = Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? path;
-                Process.Start(new ProcessStartInfo("xdg-open", $"\"{folder}\"") { UseShellExecute = false });
+                _ = Process.Start(new ProcessStartInfo("xdg-open", $"\"{folder}\"") { UseShellExecute = false });
             }
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)

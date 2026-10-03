@@ -94,7 +94,7 @@ public sealed class SerialSessionTests
         var port = new FakeSerialPort();
         await using SerialSession session = Open(port);
         port.Feed(Encoding.ASCII.GetBytes("hi"));
-        await ReadExactAsync(session, 2);
+        _ = await ReadExactAsync(session, 2);
 
         port.Fail(new IOException("The device is not connected."));
 
@@ -294,7 +294,7 @@ public sealed class SerialSessionTests
         var port = new FakeSerialPort { CanControlRts = false, RtsEnable = true };
         await using SerialSession session = Open(port);
 
-        await session.ToggleAsync(SerialControlLine.Rts, CancellationToken.None);
+        _ = await session.ToggleAsync(SerialControlLine.Rts, CancellationToken.None);
 
         Assert.IsTrue(port.RtsEnable);
     }

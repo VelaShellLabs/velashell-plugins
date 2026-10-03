@@ -155,7 +155,7 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
     public async Task<ShellResult> ExecuteAsync(ShellCommand command, ShellSession session, ShellRunOptions options,
         CancellationToken cancellationToken = default)
     {
-        Stopwatch watch = Stopwatch.StartNew();
+        var watch = Stopwatch.StartNew();
         ShellResult result = command.Kind switch
         {
             ShellCommandKind.Use => Use(command, session),
@@ -206,91 +206,91 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
         switch (method.Name)
         {
             case "getCollectionNames":
-            {
-                IReadOnlyList<CollectionInfo> collections = await connection.ListCollectionsAsync(database, cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, null, [.. collections.Select(static c => new BsonDocument("name", c.Name))], false);
-            }
-            case "getCollectionInfos":
-            {
-                var listOptions = new ListCollectionsOptions { Filter = method.Document(0) ?? [] };
-                using IAsyncCursor<BsonDocument> cursor = await db.ListCollectionsAsync(listOptions, cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, null, await cursor.ToListAsync(cancellationToken).ConfigureAwait(false), false);
-            }
-            case "stats":
-            {
-                var stats = new BsonDocument("dbStats", 1);
-                if (method.Arg(0) is { IsNumeric: true } scale)
                 {
-                    stats["scale"] = scale;
+                    IReadOnlyList<CollectionInfo> collections = await connection.ListCollectionsAsync(database, cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, null, [.. collections.Select(static c => new BsonDocument("name", c.Name))], false);
                 }
-                return Single(command, database, null, await connection.RunCommandAsync(database, stats, cancellationToken).ConfigureAwait(false));
-            }
+            case "getCollectionInfos":
+                {
+                    var listOptions = new ListCollectionsOptions { Filter = method.Document(0) ?? [] };
+                    using IAsyncCursor<BsonDocument> cursor = await db.ListCollectionsAsync(listOptions, cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, null, await cursor.ToListAsync(cancellationToken).ConfigureAwait(false), false);
+                }
+            case "stats":
+                {
+                    var stats = new BsonDocument("dbStats", 1);
+                    if (method.Arg(0) is { IsNumeric: true } scale)
+                    {
+                        stats["scale"] = scale;
+                    }
+                    return Single(command, database, null, await connection.RunCommandAsync(database, stats, cancellationToken).ConfigureAwait(false));
+                }
             case "runCommand" or "adminCommand":
-            {
-                string target = method.Name == "adminCommand" ? "admin" : database;
-                BsonDocument body = method.Arg(0) switch
                 {
-                    BsonDocument d => d,
-                    BsonString s => new BsonDocument(s.Value, 1),
-                    _ => throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name))
-                };
-                if (body.ElementCount > 0 && ShellParser.WriteCommands.Contains(body.GetElement(0).Name))
+                    string target = method.Name == "adminCommand" ? "admin" : database;
+                    BsonDocument body = method.Arg(0) switch
+                    {
+                        BsonDocument d => d,
+                        BsonString s => new BsonDocument(s.Value, 1),
+                        _ => throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name))
+                    };
+                    if (body.ElementCount > 0 && ShellParser.WriteCommands.Contains(body.GetElement(0).Name))
+                    {
+                        if (!guard.EnsureWritable(target))
+                        {
+                            return Blocked(command, database);
+                        }
+                        if (body.GetElement(0).Name.Equals("dropDatabase", StringComparison.OrdinalIgnoreCase)
+                            && !await ConfirmDropDatabaseAsync(target).ConfigureAwait(false))
+                        {
+                            return Declined(command, target);
+                        }
+                    }
+                    BsonDocument reply = await connection.RunCommandAsync(target, body, cancellationToken).ConfigureAwait(false);
+                    bool catalog = body.ElementCount > 0 && body.GetElement(0).Name is "create" or "drop" or "renameCollection" or "dropDatabase";
+                    return Single(command, target, null, reply) with { ChangesCatalog = catalog };
+                }
+            case "createCollection" or "createView":
                 {
-                    if (!guard.EnsureWritable(target))
+                    if (method.Arg(0) is not BsonString name)
+                    {
+                        throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", method.Name));
+                    }
+                    if (!guard.EnsureWritable(database))
                     {
                         return Blocked(command, database);
                     }
-                    if (body.GetElement(0).Name.Equals("dropDatabase", StringComparison.OrdinalIgnoreCase)
-                        && !await ConfirmDropDatabaseAsync(target).ConfigureAwait(false))
+                    var create = new BsonDocument("create", name.Value);
+                    if (method.Name == "createView")
                     {
-                        return Declined(command, target);
+                        create["viewOn"] = method.Arg(1) as BsonString ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", "viewOn"));
+                        create["pipeline"] = method.Arg(2) as BsonArray ?? [];
+                        _ = create.Merge(method.Document(3) ?? [], overwriteExistingElements: false);
                     }
+                    else
+                    {
+                        _ = create.Merge(method.Document(1) ?? [], overwriteExistingElements: false);
+                    }
+                    BsonDocument reply = await connection.RunCommandAsync(database, create, cancellationToken).ConfigureAwait(false);
+                    return Single(command, database, name.Value, reply) with { ChangesCatalog = true };
                 }
-                BsonDocument reply = await connection.RunCommandAsync(target, body, cancellationToken).ConfigureAwait(false);
-                bool catalog = body.ElementCount > 0 && body.GetElement(0).Name is "create" or "drop" or "renameCollection" or "dropDatabase";
-                return Single(command, target, null, reply) with { ChangesCatalog = catalog };
-            }
-            case "createCollection" or "createView":
-            {
-                if (method.Arg(0) is not BsonString name)
-                {
-                    throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", method.Name));
-                }
-                if (!guard.EnsureWritable(database))
-                {
-                    return Blocked(command, database);
-                }
-                var create = new BsonDocument("create", name.Value);
-                if (method.Name == "createView")
-                {
-                    create["viewOn"] = method.Arg(1) as BsonString ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", "viewOn"));
-                    create["pipeline"] = method.Arg(2) as BsonArray ?? [];
-                    create.Merge(method.Document(3) ?? [], overwriteExistingElements: false);
-                }
-                else
-                {
-                    create.Merge(method.Document(1) ?? [], overwriteExistingElements: false);
-                }
-                BsonDocument reply = await connection.RunCommandAsync(database, create, cancellationToken).ConfigureAwait(false);
-                return Single(command, database, name.Value, reply) with { ChangesCatalog = true };
-            }
             case "dropDatabase":
-            {
-                if (guard.DisableDropDatabase)
                 {
-                    throw new ShellExecutionException(loc["Query_ErrDropDatabaseDisabled"]);
+                    if (guard.DisableDropDatabase)
+                    {
+                        throw new ShellExecutionException(loc["Query_ErrDropDatabaseDisabled"]);
+                    }
+                    if (!guard.EnsureWritable(database))
+                    {
+                        return Blocked(command, database);
+                    }
+                    if (!await ConfirmDropDatabaseAsync(database).ConfigureAwait(false))
+                    {
+                        return Declined(command, database);
+                    }
+                    BsonDocument reply = await connection.RunCommandAsync(database, new BsonDocument("dropDatabase", 1), cancellationToken).ConfigureAwait(false);
+                    return Single(command, database, null, reply) with { ChangesCatalog = true };
                 }
-                if (!guard.EnsureWritable(database))
-                {
-                    return Blocked(command, database);
-                }
-                if (!await ConfirmDropDatabaseAsync(database).ConfigureAwait(false))
-                {
-                    return Declined(command, database);
-                }
-                BsonDocument reply = await connection.RunCommandAsync(database, new BsonDocument("dropDatabase", 1), cancellationToken).ConfigureAwait(false);
-                return Single(command, database, null, reply) with { ChangesCatalog = true };
-            }
             case "getName":
                 return Single(command, database, null, new BsonDocument("name", database));
             case "version":
@@ -302,28 +302,28 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
                 return Single(command, database, null,
                     await connection.RunCommandAsync(database, new BsonDocument("profile", -1), cancellationToken).ConfigureAwait(false));
             case "currentOp":
-            {
-                var current = new BsonDocument("currentOp", 1);
-                current.Merge(method.Document(0) ?? [], overwriteExistingElements: true);
-                BsonDocument reply = await connection.RunCommandAsync("admin", current, cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, null, Docs(reply.GetValue("inprog", new BsonArray())), false);
-            }
+                {
+                    var current = new BsonDocument("currentOp", 1);
+                    _ = current.Merge(method.Document(0) ?? [], overwriteExistingElements: true);
+                    BsonDocument reply = await connection.RunCommandAsync("admin", current, cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, null, Docs(reply.GetValue("inprog", new BsonArray())), false);
+                }
             case "getUsers" or "getRoles":
-            {
-                string commandName = method.Name == "getUsers" ? "usersInfo" : "rolesInfo";
-                BsonDocument reply = await connection.RunCommandAsync(database, new BsonDocument(commandName, 1), cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, null, Docs(reply.GetValue(method.Name == "getUsers" ? "users" : "roles", new BsonArray())), false);
-            }
+                {
+                    string commandName = method.Name == "getUsers" ? "usersInfo" : "rolesInfo";
+                    BsonDocument reply = await connection.RunCommandAsync(database, new BsonDocument(commandName, 1), cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, null, Docs(reply.GetValue(method.Name == "getUsers" ? "users" : "roles", new BsonArray())), false);
+                }
             case "aggregate":
-            {
-                BsonArray pipeline = method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsPipeline", "aggregate"));
-                var aggregateOptions = new AggregateOptions { MaxTime = MaxTime(options.MaxTimeMs), Comment = Comment(options) };
-                using IAsyncCursor<BsonDocument> cursor = await db.AggregateAsync(
-                    PipelineDefinition<NoPipelineInput, BsonDocument>.Create(pipeline.Select(static s => s.AsBsonDocument)),
-                    aggregateOptions, cancellationToken).ConfigureAwait(false);
-                (List<BsonDocument> docs, bool truncated) = await DrainAsync(cursor, options.MaxDocuments, cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, null, docs, truncated) with { Pipeline = pipeline };
-            }
+                {
+                    BsonArray pipeline = method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsPipeline", "aggregate"));
+                    var aggregateOptions = new AggregateOptions { MaxTime = MaxTime(options.MaxTimeMs), Comment = Comment(options) };
+                    using IAsyncCursor<BsonDocument> cursor = await db.AggregateAsync(
+                        PipelineDefinition<NoPipelineInput, BsonDocument>.Create(pipeline.Select(static s => s.AsBsonDocument)),
+                        aggregateOptions, cancellationToken).ConfigureAwait(false);
+                    (List<BsonDocument> docs, bool truncated) = await DrainAsync(cursor, options.MaxDocuments, cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, null, docs, truncated) with { Pipeline = pipeline };
+                }
             default:
                 throw new ShellExecutionException(loc.Format("Query_ErrUnsupportedMethod", "db." + method.Name));
         }
@@ -350,152 +350,152 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
                 return await FindAsync(command, collection, database, maxTime, comment, options, cancellationToken).ConfigureAwait(false);
 
             case "aggregate":
-            {
-                BsonArray pipeline = Pipeline(method);
-                bool writes = pipeline.Any(static s => s is BsonDocument d && (d.Contains("$out") || d.Contains("$merge")));
-                if (writes && !guard.EnsureWritable(database))
                 {
-                    return Blocked(command, database);
+                    BsonArray pipeline = Pipeline(method);
+                    bool writes = pipeline.Any(static s => s is BsonDocument d && (d.Contains("$out") || d.Contains("$merge")));
+                    if (writes && !guard.EnsureWritable(database))
+                    {
+                        return Blocked(command, database);
+                    }
+                    BsonDocument settings = method.Document(1) ?? [];
+                    var aggregateOptions = new AggregateOptions
+                    {
+                        AllowDiskUse = settings.TryGetValue("allowDiskUse", out BsonValue disk) ? disk.ToBoolean()
+                            : command.Modifier("allowDiskUse") is not null ? true : null,
+                        MaxTime = settings.TryGetValue("maxTimeMS", out BsonValue max) && max.IsNumeric ? MaxTime(max.ToInt32()) : maxTime,
+                        Hint = settings.GetValue("hint", null) ?? command.Modifier("hint")?.Arg(0),
+                        Collation = Collation(settings.GetValue("collation", null) ?? command.Modifier("collation")?.Arg(0)),
+                        Comment = comment,
+                        BatchSize = settings.TryGetValue("batchSize", out BsonValue batch) && batch.IsNumeric ? batch.ToInt32() : null
+                    };
+                    using IAsyncCursor<BsonDocument> cursor = await collection.AggregateAsync(
+                        PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline.Select(static s => s.AsBsonDocument)),
+                        aggregateOptions, cancellationToken).ConfigureAwait(false);
+                    (List<BsonDocument> docs, bool truncated) = await DrainAsync(cursor, options.MaxDocuments, cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, name, docs, truncated) with { Pipeline = pipeline, ChangesCatalog = writes };
                 }
-                BsonDocument settings = method.Document(1) ?? [];
-                var aggregateOptions = new AggregateOptions
-                {
-                    AllowDiskUse = settings.TryGetValue("allowDiskUse", out BsonValue disk) ? disk.ToBoolean()
-                        : command.Modifier("allowDiskUse") is not null ? true : null,
-                    MaxTime = settings.TryGetValue("maxTimeMS", out BsonValue max) && max.IsNumeric ? MaxTime(max.ToInt32()) : maxTime,
-                    Hint = settings.GetValue("hint", null) ?? command.Modifier("hint")?.Arg(0),
-                    Collation = Collation(settings.GetValue("collation", null) ?? command.Modifier("collation")?.Arg(0)),
-                    Comment = comment,
-                    BatchSize = settings.TryGetValue("batchSize", out BsonValue batch) && batch.IsNumeric ? batch.ToInt32() : null
-                };
-                using IAsyncCursor<BsonDocument> cursor = await collection.AggregateAsync(
-                    PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline.Select(static s => s.AsBsonDocument)),
-                    aggregateOptions, cancellationToken).ConfigureAwait(false);
-                (List<BsonDocument> docs, bool truncated) = await DrainAsync(cursor, options.MaxDocuments, cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, name, docs, truncated) with { Pipeline = pipeline, ChangesCatalog = writes };
-            }
 
             case "countDocuments":
-            {
-                BsonDocument settings = method.Document(1) ?? [];
-                var countOptions = new CountOptions
                 {
-                    Skip = settings.TryGetValue("skip", out BsonValue skip) && skip.IsNumeric ? skip.ToInt64() : null,
-                    Limit = settings.TryGetValue("limit", out BsonValue limit) && limit.IsNumeric ? limit.ToInt64() : null,
-                    Hint = settings.GetValue("hint", null),
-                    MaxTime = maxTime,
-                    Comment = comment
-                };
-                long count = await collection.CountDocumentsAsync(Filter(method, 0), countOptions, cancellationToken).ConfigureAwait(false);
-                return Single(command, database, name, new BsonDocument("count", count));
-            }
+                    BsonDocument settings = method.Document(1) ?? [];
+                    var countOptions = new CountOptions
+                    {
+                        Skip = settings.TryGetValue("skip", out BsonValue skip) && skip.IsNumeric ? skip.ToInt64() : null,
+                        Limit = settings.TryGetValue("limit", out BsonValue limit) && limit.IsNumeric ? limit.ToInt64() : null,
+                        Hint = settings.GetValue("hint", null),
+                        MaxTime = maxTime,
+                        Comment = comment
+                    };
+                    long count = await collection.CountDocumentsAsync(Filter(method, 0), countOptions, cancellationToken).ConfigureAwait(false);
+                    return Single(command, database, name, new BsonDocument("count", count));
+                }
 
             case "estimatedDocumentCount":
-            {
-                long count = await collection.EstimatedDocumentCountAsync(
-                    new EstimatedDocumentCountOptions { MaxTime = maxTime, Comment = comment }, cancellationToken).ConfigureAwait(false);
-                return Single(command, database, name, new BsonDocument("count", count));
-            }
+                {
+                    long count = await collection.EstimatedDocumentCountAsync(
+                        new EstimatedDocumentCountOptions { MaxTime = maxTime, Comment = comment }, cancellationToken).ConfigureAwait(false);
+                    return Single(command, database, name, new BsonDocument("count", count));
+                }
 
             case "distinct":
-            {
-                string field = method.Arg(0) is BsonString f ? f.Value : throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", "distinct"));
-                using IAsyncCursor<BsonValue> cursor = await collection.DistinctAsync(
-                    new StringFieldDefinition<BsonDocument, BsonValue>(field), Filter(method, 1),
-                    new DistinctOptions { MaxTime = maxTime, Comment = comment }, cancellationToken).ConfigureAwait(false);
-                List<BsonValue> values = await cursor.ToListAsync(cancellationToken).ConfigureAwait(false);
-                bool truncated = values.Count > options.MaxDocuments;
-                return Documents(command, database, name,
-                    [.. values.Take(options.MaxDocuments).Select(static v => new BsonDocument("value", v))], truncated);
-            }
+                {
+                    string field = method.Arg(0) is BsonString f ? f.Value : throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", "distinct"));
+                    using IAsyncCursor<BsonValue> cursor = await collection.DistinctAsync(
+                        new StringFieldDefinition<BsonDocument, BsonValue>(field), Filter(method, 1),
+                        new DistinctOptions { MaxTime = maxTime, Comment = comment }, cancellationToken).ConfigureAwait(false);
+                    List<BsonValue> values = await cursor.ToListAsync(cancellationToken).ConfigureAwait(false);
+                    bool truncated = values.Count > options.MaxDocuments;
+                    return Documents(command, database, name,
+                        [.. values.Take(options.MaxDocuments).Select(static v => new BsonDocument("value", v))], truncated);
+                }
 
             case "insertOne" or "insert" when method.Arg(0) is BsonDocument document:
-            {
-                await collection.InsertOneAsync(document, new InsertOneOptions { Comment = comment }, cancellationToken).ConfigureAwait(false);
-                return Write(command, database, name, new BsonDocument { { "acknowledged", true }, { "insertedId", document.GetValue("_id", BsonNull.Value) } },
-                    loc.Format("Query_MsgInserted", 1));
-            }
+                {
+                    await collection.InsertOneAsync(document, new InsertOneOptions { Comment = comment }, cancellationToken).ConfigureAwait(false);
+                    return Write(command, database, name, new BsonDocument { { "acknowledged", true }, { "insertedId", document.GetValue("_id", BsonNull.Value) } },
+                        loc.Format("Query_MsgInserted", 1));
+                }
 
             case "insertOne":
                 throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name));
 
             case "insertMany" or "insert":
-            {
-                BsonArray array = method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsArray", method.Name));
-                List<BsonDocument> documents = [.. array.Select(static d => d.AsBsonDocument)];
-                bool ordered = method.Document(1)?.GetValue("ordered", true).ToBoolean() ?? true;
-                await collection.InsertManyAsync(documents, new InsertManyOptions { IsOrdered = ordered, Comment = comment }, cancellationToken)
-                    .ConfigureAwait(false);
-                return Write(command, database, name,
-                    new BsonDocument { { "acknowledged", true }, { "insertedIds", new BsonArray(documents.Select(static d => d.GetValue("_id", BsonNull.Value))) } },
-                    loc.Format("Query_MsgInserted", documents.Count));
-            }
+                {
+                    BsonArray array = method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsArray", method.Name));
+                    List<BsonDocument> documents = [.. array.Select(static d => d.AsBsonDocument)];
+                    bool ordered = method.Document(1)?.GetValue("ordered", true).ToBoolean() ?? true;
+                    await collection.InsertManyAsync(documents, new InsertManyOptions { IsOrdered = ordered, Comment = comment }, cancellationToken)
+                        .ConfigureAwait(false);
+                    return Write(command, database, name,
+                        new BsonDocument { { "acknowledged", true }, { "insertedIds", new BsonArray(documents.Select(static d => d.GetValue("_id", BsonNull.Value))) } },
+                        loc.Format("Query_MsgInserted", documents.Count));
+                }
 
             case "updateOne" or "updateMany" or "update":
-            {
-                BsonDocument filter = Filter(method, 0);
-                BsonDocument settings = method.Document(2) ?? [];
-                bool many = method.Name == "updateMany" || method.Name == "update" && settings.GetValue("multi", false).ToBoolean();
-                if (many && !await ConfirmAsync(ShellConfirmKind.UpdateMany, collection, database, name, filter, cancellationToken).ConfigureAwait(false))
                 {
-                    return Declined(command, database, name);
+                    BsonDocument filter = Filter(method, 0);
+                    BsonDocument settings = method.Document(2) ?? [];
+                    bool many = method.Name == "updateMany" || method.Name == "update" && settings.GetValue("multi", false).ToBoolean();
+                    if (many && !await ConfirmAsync(ShellConfirmKind.UpdateMany, collection, database, name, filter, cancellationToken).ConfigureAwait(false))
+                    {
+                        return Declined(command, database, name);
+                    }
+                    UpdateDefinition<BsonDocument> update = Update(method.Arg(1), method.Name);
+                    var updateOptions = new UpdateOptions
+                    {
+                        IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
+                        ArrayFilters = settings.GetValue("arrayFilters", null) is BsonArray filters
+                            ? [.. filters.Select(static f => new BsonDocumentArrayFilterDefinition<BsonDocument>(f.AsBsonDocument))]
+                            : null,
+                        Hint = settings.GetValue("hint", null),
+                        Collation = Collation(settings.GetValue("collation", null)),
+                        Comment = comment
+                    };
+                    UpdateResult result = many
+                        ? await collection.UpdateManyAsync(filter, update, updateOptions, cancellationToken).ConfigureAwait(false)
+                        : await collection.UpdateOneAsync(filter, update, updateOptions, cancellationToken).ConfigureAwait(false);
+                    return Write(command, database, name, UpdateReply(result), loc.Format("Query_MsgUpdated", result.MatchedCount, result.ModifiedCount));
                 }
-                UpdateDefinition<BsonDocument> update = Update(method.Arg(1), method.Name);
-                var updateOptions = new UpdateOptions
-                {
-                    IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
-                    ArrayFilters = settings.GetValue("arrayFilters", null) is BsonArray filters
-                        ? [.. filters.Select(static f => new BsonDocumentArrayFilterDefinition<BsonDocument>(f.AsBsonDocument))]
-                        : null,
-                    Hint = settings.GetValue("hint", null),
-                    Collation = Collation(settings.GetValue("collation", null)),
-                    Comment = comment
-                };
-                UpdateResult result = many
-                    ? await collection.UpdateManyAsync(filter, update, updateOptions, cancellationToken).ConfigureAwait(false)
-                    : await collection.UpdateOneAsync(filter, update, updateOptions, cancellationToken).ConfigureAwait(false);
-                return Write(command, database, name, UpdateReply(result), loc.Format("Query_MsgUpdated", result.MatchedCount, result.ModifiedCount));
-            }
 
             case "replaceOne":
-            {
-                BsonDocument replacement = method.Arg(1) as BsonDocument ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", "replaceOne"));
-                BsonDocument settings = method.Document(2) ?? [];
-                ReplaceOneResult result = await collection.ReplaceOneAsync(Filter(method, 0), replacement, new ReplaceOptions
                 {
-                    IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
-                    Hint = settings.GetValue("hint", null),
-                    Collation = Collation(settings.GetValue("collation", null)),
-                    Comment = comment
-                }, cancellationToken).ConfigureAwait(false);
-                var reply = new BsonDocument
+                    BsonDocument replacement = method.Arg(1) as BsonDocument ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", "replaceOne"));
+                    BsonDocument settings = method.Document(2) ?? [];
+                    ReplaceOneResult result = await collection.ReplaceOneAsync(Filter(method, 0), replacement, new ReplaceOptions
+                    {
+                        IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
+                        Hint = settings.GetValue("hint", null),
+                        Collation = Collation(settings.GetValue("collation", null)),
+                        Comment = comment
+                    }, cancellationToken).ConfigureAwait(false);
+                    var reply = new BsonDocument
                 {
                     { "acknowledged", result.IsAcknowledged },
                     { "matchedCount", result.IsAcknowledged ? result.MatchedCount : 0 },
                     { "modifiedCount", result.IsAcknowledged && result.IsModifiedCountAvailable ? result.ModifiedCount : 0 },
                     { "upsertedId", result.IsAcknowledged ? result.UpsertedId ?? BsonNull.Value : BsonNull.Value }
                 };
-                return Write(command, database, name, reply, loc.Format("Query_MsgUpdated", reply["matchedCount"], reply["modifiedCount"]));
-            }
+                    return Write(command, database, name, reply, loc.Format("Query_MsgUpdated", reply["matchedCount"], reply["modifiedCount"]));
+                }
 
             case "deleteOne" or "deleteMany" or "remove":
-            {
-                BsonDocument filter = Filter(method, 0);
-                bool many = method.Name == "deleteMany" || method.Name == "remove" && method.Arg(1) is not BsonBoolean { Value: true }
-                            && method.Document(1)?.GetValue("justOne", false).ToBoolean() != true;
-                if (many && !await ConfirmAsync(ShellConfirmKind.DeleteMany, collection, database, name, filter, cancellationToken).ConfigureAwait(false))
                 {
-                    return Declined(command, database, name);
+                    BsonDocument filter = Filter(method, 0);
+                    bool many = method.Name == "deleteMany" || method.Name == "remove" && method.Arg(1) is not BsonBoolean { Value: true }
+                                && method.Document(1)?.GetValue("justOne", false).ToBoolean() != true;
+                    if (many && !await ConfirmAsync(ShellConfirmKind.DeleteMany, collection, database, name, filter, cancellationToken).ConfigureAwait(false))
+                    {
+                        return Declined(command, database, name);
+                    }
+                    BsonDocument settings = method.Document(1) ?? [];
+                    var deleteOptions = new DeleteOptions { Hint = settings.GetValue("hint", null), Collation = Collation(settings.GetValue("collation", null)), Comment = comment };
+                    DeleteResult result = many
+                        ? await collection.DeleteManyAsync(filter, deleteOptions, cancellationToken).ConfigureAwait(false)
+                        : await collection.DeleteOneAsync(filter, deleteOptions, cancellationToken).ConfigureAwait(false);
+                    long deleted = result.IsAcknowledged ? result.DeletedCount : 0;
+                    return Write(command, database, name, new BsonDocument { { "acknowledged", result.IsAcknowledged }, { "deletedCount", deleted } },
+                        loc.Format("Query_MsgDeleted", deleted));
                 }
-                BsonDocument settings = method.Document(1) ?? [];
-                var deleteOptions = new DeleteOptions { Hint = settings.GetValue("hint", null), Collation = Collation(settings.GetValue("collation", null)), Comment = comment };
-                DeleteResult result = many
-                    ? await collection.DeleteManyAsync(filter, deleteOptions, cancellationToken).ConfigureAwait(false)
-                    : await collection.DeleteOneAsync(filter, deleteOptions, cancellationToken).ConfigureAwait(false);
-                long deleted = result.IsAcknowledged ? result.DeletedCount : 0;
-                return Write(command, database, name, new BsonDocument { { "acknowledged", result.IsAcknowledged }, { "deletedCount", deleted } },
-                    loc.Format("Query_MsgDeleted", deleted));
-            }
 
             case "findOneAndUpdate" or "findOneAndReplace" or "findOneAndDelete":
                 return await FindOneAndAsync(command, collection, database, name, maxTime, comment, cancellationToken).ConfigureAwait(false);
@@ -504,75 +504,75 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
                 return await BulkWriteAsync(command, collection, database, name, comment, cancellationToken).ConfigureAwait(false);
 
             case "createIndex" or "createIndexes":
-            {
-                IEnumerable<BsonDocument> keys = method.Name == "createIndexes"
-                    ? (method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsArray", method.Name))).Select(static k => k.AsBsonDocument)
-                    : [method.Document(0) ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name))];
-                BsonDocument indexOptions = method.Document(1) ?? [];
-                var indexes = new BsonArray();
-                foreach (BsonDocument key in keys)
                 {
-                    var spec = new BsonDocument { { "key", key }, { "name", indexOptions.GetValue("name", IndexName(key)) } };
-                    spec.Merge(indexOptions, overwriteExistingElements: false);
-                    indexes.Add(spec);
+                    IEnumerable<BsonDocument> keys = method.Name == "createIndexes"
+                        ? (method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsArray", method.Name))).Select(static k => k.AsBsonDocument)
+                        : [method.Document(0) ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name))];
+                    BsonDocument indexOptions = method.Document(1) ?? [];
+                    var indexes = new BsonArray();
+                    foreach (BsonDocument key in keys)
+                    {
+                        var spec = new BsonDocument { { "key", key }, { "name", indexOptions.GetValue("name", IndexName(key)) } };
+                        _ = spec.Merge(indexOptions, overwriteExistingElements: false);
+                        _ = indexes.Add(spec);
+                    }
+                    var createIndexes = new BsonDocument { { "createIndexes", name }, { "indexes", indexes } };
+                    if (comment is not null)
+                    {
+                        createIndexes["comment"] = comment;
+                    }
+                    BsonDocument reply = await connection.RunCommandAsync(database, createIndexes, cancellationToken).ConfigureAwait(false);
+                    return Write(command, database, name, reply, loc.Format("Query_MsgIndexCreated", string.Join(", ", indexes.Select(static i => i["name"].ToString()))));
                 }
-                var createIndexes = new BsonDocument { { "createIndexes", name }, { "indexes", indexes } };
-                if (comment is not null)
-                {
-                    createIndexes["comment"] = comment;
-                }
-                BsonDocument reply = await connection.RunCommandAsync(database, createIndexes, cancellationToken).ConfigureAwait(false);
-                return Write(command, database, name, reply, loc.Format("Query_MsgIndexCreated", string.Join(", ", indexes.Select(static i => i["name"].ToString()))));
-            }
 
             case "dropIndex" or "dropIndexes":
-            {
-                BsonValue index = method.Arg(0) ?? (method.Name == "dropIndexes" ? "*" : throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", method.Name)));
-                if (guard.ConfirmWrites && !await guard.ConfirmAsync(new ShellConfirmation(ShellConfirmKind.DropIndex, database, name, null, null,
-                        index.IsString ? index.AsString : index.ToString())).ConfigureAwait(true))
                 {
-                    return Declined(command, database, name);
+                    BsonValue index = method.Arg(0) ?? (method.Name == "dropIndexes" ? "*" : throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", method.Name)));
+                    if (guard.ConfirmWrites && !await guard.ConfirmAsync(new ShellConfirmation(ShellConfirmKind.DropIndex, database, name, null, null,
+                            index.IsString ? index.AsString : index.ToString())).ConfigureAwait(true))
+                    {
+                        return Declined(command, database, name);
+                    }
+                    BsonDocument reply = await connection.RunCommandAsync(database, new BsonDocument { { "dropIndexes", name }, { "index", index } }, cancellationToken)
+                        .ConfigureAwait(false);
+                    return Write(command, database, name, reply, loc.Format("Query_MsgIndexDropped", index.IsString ? index.AsString : index.ToString()));
                 }
-                BsonDocument reply = await connection.RunCommandAsync(database, new BsonDocument { { "dropIndexes", name }, { "index", index } }, cancellationToken)
-                    .ConfigureAwait(false);
-                return Write(command, database, name, reply, loc.Format("Query_MsgIndexDropped", index.IsString ? index.AsString : index.ToString()));
-            }
 
             case "getIndexes":
-            {
-                IReadOnlyList<BsonDocument> indexes = await connection.ListIndexesAsync(database, name, cancellationToken).ConfigureAwait(false);
-                return Documents(command, database, name, [.. indexes], false);
-            }
+                {
+                    IReadOnlyList<BsonDocument> indexes = await connection.ListIndexesAsync(database, name, cancellationToken).ConfigureAwait(false);
+                    return Documents(command, database, name, [.. indexes], false);
+                }
 
             case "stats":
-            {
-                CollectionStats stats = await connection.GetStatsAsync(database, name, cancellationToken).ConfigureAwait(false);
-                return Single(command, database, name, stats.Raw);
-            }
+                {
+                    CollectionStats stats = await connection.GetStatsAsync(database, name, cancellationToken).ConfigureAwait(false);
+                    return Single(command, database, name, stats.Raw);
+                }
 
             case "drop":
-            {
-                if (guard.ConfirmWrites && !await guard.ConfirmAsync(new ShellConfirmation(ShellConfirmKind.Drop, database, name, null,
-                        await connection.EstimatedCountAsync(database, name, cancellationToken).ConfigureAwait(true))).ConfigureAwait(true))
                 {
-                    return Declined(command, database, name);
+                    if (guard.ConfirmWrites && !await guard.ConfirmAsync(new ShellConfirmation(ShellConfirmKind.Drop, database, name, null,
+                            await connection.EstimatedCountAsync(database, name, cancellationToken).ConfigureAwait(true))).ConfigureAwait(true))
+                    {
+                        return Declined(command, database, name);
+                    }
+                    await connection.Database(database).DropCollectionAsync(name, cancellationToken).ConfigureAwait(false);
+                    return Write(command, database, name, new BsonDocument("dropped", true), loc.Format("Query_MsgDropped", name)) with { ChangesCatalog = true };
                 }
-                await connection.Database(database).DropCollectionAsync(name, cancellationToken).ConfigureAwait(false);
-                return Write(command, database, name, new BsonDocument("dropped", true), loc.Format("Query_MsgDropped", name)) with { ChangesCatalog = true };
-            }
 
             case "renameCollection":
-            {
-                string target = method.Arg(0) is BsonString t ? t.Value : throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", method.Name));
-                bool dropTarget = method.Arg(1) is BsonBoolean { Value: true };
-                BsonDocument reply = await connection.RunCommandAsync("admin", new BsonDocument
+                {
+                    string target = method.Arg(0) is BsonString t ? t.Value : throw new ShellExecutionException(loc.Format("Query_ErrNeedsName", method.Name));
+                    bool dropTarget = method.Arg(1) is BsonBoolean { Value: true };
+                    BsonDocument reply = await connection.RunCommandAsync("admin", new BsonDocument
                 {
                     { "renameCollection", $"{database}.{name}" },
                     { "to", $"{database}.{target}" },
                     { "dropTarget", dropTarget }
                 }, cancellationToken).ConfigureAwait(false);
-                return Write(command, database, name, reply, loc.Format("Query_MsgRenamed", name, target)) with { ChangesCatalog = true };
-            }
+                    return Write(command, database, name, reply, loc.Format("Query_MsgRenamed", name, target)) with { ChangesCatalog = true };
+                }
 
             default:
                 throw new ShellExecutionException(loc.Format("Query_ErrUnsupportedMethod", method.Name));
@@ -656,13 +656,22 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
         BsonDocument settings = method.Document(method.Name == "findOneAndDelete" ? 1 : 2) ?? [];
         bool returnNew = settings.GetValue("returnNewDocument", false).ToBoolean()
                          || settings.GetValue("returnDocument", "before").ToString() == "after";
-        BsonDocument? projection = settings.GetValue("projection", null) as BsonDocument;
-        BsonDocument? sort = settings.GetValue("sort", null) as BsonDocument;
-        BsonDocument? document;
-        switch (method.Name)
+        var projection = settings.GetValue("projection", null) as BsonDocument;
+        var sort = settings.GetValue("sort", null) as BsonDocument;
+        BsonDocument? document = method.Name switch
         {
-            case "findOneAndUpdate":
-                document = await collection.FindOneAndUpdateAsync(filter, Update(method.Arg(1), method.Name), new FindOneAndUpdateOptions<BsonDocument>
+            "findOneAndUpdate" => await collection.FindOneAndUpdateAsync(filter, Update(method.Arg(1), method.Name), new FindOneAndUpdateOptions<BsonDocument>
+            {
+                ReturnDocument = returnNew ? ReturnDocument.After : ReturnDocument.Before,
+                IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
+                Projection = projection is null ? null : new BsonDocumentProjectionDefinition<BsonDocument, BsonDocument>(projection),
+                Sort = sort,
+                MaxTime = maxTime,
+                Comment = comment
+            }, cancellationToken).ConfigureAwait(false),
+            "findOneAndReplace" => await collection.FindOneAndReplaceAsync(filter,
+                method.Arg(1) as BsonDocument ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name)),
+                new FindOneAndReplaceOptions<BsonDocument>
                 {
                     ReturnDocument = returnNew ? ReturnDocument.After : ReturnDocument.Before,
                     IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
@@ -670,31 +679,15 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
                     Sort = sort,
                     MaxTime = maxTime,
                     Comment = comment
-                }, cancellationToken).ConfigureAwait(false);
-                break;
-            case "findOneAndReplace":
-                document = await collection.FindOneAndReplaceAsync(filter,
-                    method.Arg(1) as BsonDocument ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsDocument", method.Name)),
-                    new FindOneAndReplaceOptions<BsonDocument>
-                    {
-                        ReturnDocument = returnNew ? ReturnDocument.After : ReturnDocument.Before,
-                        IsUpsert = settings.GetValue("upsert", false).ToBoolean(),
-                        Projection = projection is null ? null : new BsonDocumentProjectionDefinition<BsonDocument, BsonDocument>(projection),
-                        Sort = sort,
-                        MaxTime = maxTime,
-                        Comment = comment
-                    }, cancellationToken).ConfigureAwait(false);
-                break;
-            default:
-                document = await collection.FindOneAndDeleteAsync(filter, new FindOneAndDeleteOptions<BsonDocument>
-                {
-                    Projection = projection is null ? null : new BsonDocumentProjectionDefinition<BsonDocument, BsonDocument>(projection),
-                    Sort = sort,
-                    MaxTime = maxTime,
-                    Comment = comment
-                }, cancellationToken).ConfigureAwait(false);
-                break;
-        }
+                }, cancellationToken).ConfigureAwait(false),
+            _ => await collection.FindOneAndDeleteAsync(filter, new FindOneAndDeleteOptions<BsonDocument>
+            {
+                Projection = projection is null ? null : new BsonDocumentProjectionDefinition<BsonDocument, BsonDocument>(projection),
+                Sort = sort,
+                MaxTime = maxTime,
+                Comment = comment
+            }, cancellationToken).ConfigureAwait(false),
+        };
         return Documents(command, database, name, document is null ? [] : [document], false) with
         {
             Message = document is null ? loc["Query_MsgNoMatch"] : loc.Format("Query_MsgDocs", 1)
@@ -772,7 +765,7 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
     public async Task<ShellResult> ExplainAsync(ShellCommand command, string database, string verbosity, ShellRunOptions options,
         BsonValue? hint, CancellationToken cancellationToken = default)
     {
-        Stopwatch watch = Stopwatch.StartNew();
+        var watch = Stopwatch.StartNew();
         BsonDocument inner = BuildExplainTarget(command, database, options, hint, loc);
         BsonDocument explain = await connection.RunCommandAsync(command.Database ?? database,
             new BsonDocument { { "explain", inner }, { "verbosity", verbosity } }, cancellationToken).ConfigureAwait(false);
@@ -803,126 +796,126 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
         switch (method.Name)
         {
             case "find" or "findOne":
-            {
-                FindRequest request = BuildFindRequest(command, database, options.MaxTimeMs);
-                if (command.Modifier("count") is not null)
                 {
-                    target = new BsonDocument { { "count", name }, { "query", request.Filter } };
+                    FindRequest request = BuildFindRequest(command, database, options.MaxTimeMs);
+                    if (command.Modifier("count") is not null)
+                    {
+                        target = new BsonDocument { { "count", name }, { "query", request.Filter } };
+                        break;
+                    }
+                    target = new BsonDocument { { "find", name }, { "filter", request.Filter } };
+                    if (request.Projection is { } projection)
+                    {
+                        target["projection"] = projection;
+                    }
+                    if (request.Sort is { } sort)
+                    {
+                        target["sort"] = sort;
+                    }
+                    if (request.Skip > 0)
+                    {
+                        target["skip"] = request.Skip;
+                    }
+                    if (request.Limit > 0)
+                    {
+                        target["limit"] = request.Limit;
+                    }
+                    if (method.Name == "findOne")
+                    {
+                        target["singleBatch"] = true;
+                    }
+                    if ((hint ?? request.Hint) is { } h)
+                    {
+                        target["hint"] = h;
+                    }
+                    if (request.Collation is { } collation)
+                    {
+                        target["collation"] = collation;
+                    }
                     break;
                 }
-                target = new BsonDocument { { "find", name }, { "filter", request.Filter } };
-                if (request.Projection is { } projection)
-                {
-                    target["projection"] = projection;
-                }
-                if (request.Sort is { } sort)
-                {
-                    target["sort"] = sort;
-                }
-                if (request.Skip > 0)
-                {
-                    target["skip"] = request.Skip;
-                }
-                if (request.Limit > 0)
-                {
-                    target["limit"] = request.Limit;
-                }
-                if (method.Name == "findOne")
-                {
-                    target["singleBatch"] = true;
-                }
-                if ((hint ?? request.Hint) is { } h)
-                {
-                    target["hint"] = h;
-                }
-                if (request.Collation is { } collation)
-                {
-                    target["collation"] = collation;
-                }
-                break;
-            }
             case "aggregate":
-            {
-                BsonArray pipeline = method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsPipeline", "aggregate"));
-                target = new BsonDocument { { "aggregate", name }, { "pipeline", pipeline }, { "cursor", new BsonDocument() } };
-                BsonDocument settings = method.Document(1) ?? [];
-                if ((hint ?? settings.GetValue("hint", null) ?? command.Modifier("hint")?.Arg(0)) is { } h)
                 {
-                    target["hint"] = h;
+                    BsonArray pipeline = method.Arg(0) as BsonArray ?? throw new ShellExecutionException(loc.Format("Query_ErrNeedsPipeline", "aggregate"));
+                    target = new BsonDocument { { "aggregate", name }, { "pipeline", pipeline }, { "cursor", new BsonDocument() } };
+                    BsonDocument settings = method.Document(1) ?? [];
+                    if ((hint ?? settings.GetValue("hint", null) ?? command.Modifier("hint")?.Arg(0)) is { } h)
+                    {
+                        target["hint"] = h;
+                    }
+                    if (settings.GetValue("allowDiskUse", null) is { } disk)
+                    {
+                        target["allowDiskUse"] = disk;
+                    }
+                    break;
                 }
-                if (settings.GetValue("allowDiskUse", null) is { } disk)
-                {
-                    target["allowDiskUse"] = disk;
-                }
-                break;
-            }
             case "countDocuments":
-            {
-                var pipeline = new BsonArray { new BsonDocument("$match", method.Document(0) ?? []) };
-                BsonDocument settings = method.Document(1) ?? [];
-                if (settings.GetValue("skip", null) is { IsNumeric: true } skip)
                 {
-                    pipeline.Add(new BsonDocument("$skip", skip));
+                    var pipeline = new BsonArray { new BsonDocument("$match", method.Document(0) ?? []) };
+                    BsonDocument settings = method.Document(1) ?? [];
+                    if (settings.GetValue("skip", null) is { IsNumeric: true } skip)
+                    {
+                        _ = pipeline.Add(new BsonDocument("$skip", skip));
+                    }
+                    if (settings.GetValue("limit", null) is { IsNumeric: true } limit)
+                    {
+                        _ = pipeline.Add(new BsonDocument("$limit", limit));
+                    }
+                    _ = pipeline.Add(new BsonDocument("$group", new BsonDocument { { "_id", 1 }, { "n", new BsonDocument("$sum", 1) } }));
+                    target = new BsonDocument { { "aggregate", name }, { "pipeline", pipeline }, { "cursor", new BsonDocument() } };
+                    if ((hint ?? settings.GetValue("hint", null)) is { } h)
+                    {
+                        target["hint"] = h;
+                    }
+                    break;
                 }
-                if (settings.GetValue("limit", null) is { IsNumeric: true } limit)
-                {
-                    pipeline.Add(new BsonDocument("$limit", limit));
-                }
-                pipeline.Add(new BsonDocument("$group", new BsonDocument { { "_id", 1 }, { "n", new BsonDocument("$sum", 1) } }));
-                target = new BsonDocument { { "aggregate", name }, { "pipeline", pipeline }, { "cursor", new BsonDocument() } };
-                if ((hint ?? settings.GetValue("hint", null)) is { } h)
-                {
-                    target["hint"] = h;
-                }
-                break;
-            }
             case "distinct":
                 target = new BsonDocument { { "distinct", name }, { "key", method.Arg(0) ?? "" }, { "query", method.Document(1) ?? [] } };
                 break;
             case "updateOne" or "updateMany" or "replaceOne":
-            {
-                var update = new BsonDocument
+                {
+                    var update = new BsonDocument
                 {
                     { "q", method.Document(0) ?? [] },
                     { "u", method.Arg(1) ?? new BsonDocument() },
                     { "multi", method.Name == "updateMany" },
                     { "upsert", method.Document(2)?.GetValue("upsert", false) ?? false }
                 };
-                if (hint is not null)
-                {
-                    update["hint"] = hint;
+                    if (hint is not null)
+                    {
+                        update["hint"] = hint;
+                    }
+                    target = new BsonDocument { { "update", name }, { "updates", new BsonArray { update } } };
+                    break;
                 }
-                target = new BsonDocument { { "update", name }, { "updates", new BsonArray { update } } };
-                break;
-            }
             case "deleteOne" or "deleteMany":
-            {
-                var delete = new BsonDocument { { "q", method.Document(0) ?? [] }, { "limit", method.Name == "deleteOne" ? 1 : 0 } };
-                if (hint is not null)
                 {
-                    delete["hint"] = hint;
+                    var delete = new BsonDocument { { "q", method.Document(0) ?? [] }, { "limit", method.Name == "deleteOne" ? 1 : 0 } };
+                    if (hint is not null)
+                    {
+                        delete["hint"] = hint;
+                    }
+                    target = new BsonDocument { { "delete", name }, { "deletes", new BsonArray { delete } } };
+                    break;
                 }
-                target = new BsonDocument { { "delete", name }, { "deletes", new BsonArray { delete } } };
-                break;
-            }
             case "findOneAndUpdate" or "findOneAndReplace" or "findOneAndDelete":
-            {
-                BsonDocument settings = method.Document(method.Name == "findOneAndDelete" ? 1 : 2) ?? [];
-                target = new BsonDocument { { "findAndModify", name }, { "query", method.Document(0) ?? [] } };
-                if (method.Name == "findOneAndDelete")
                 {
-                    target["remove"] = true;
+                    BsonDocument settings = method.Document(method.Name == "findOneAndDelete" ? 1 : 2) ?? [];
+                    target = new BsonDocument { { "findAndModify", name }, { "query", method.Document(0) ?? [] } };
+                    if (method.Name == "findOneAndDelete")
+                    {
+                        target["remove"] = true;
+                    }
+                    else
+                    {
+                        target["update"] = method.Arg(1) ?? new BsonDocument();
+                    }
+                    if (settings.GetValue("sort", null) is BsonDocument sort)
+                    {
+                        target["sort"] = sort;
+                    }
+                    break;
                 }
-                else
-                {
-                    target["update"] = method.Arg(1) ?? new BsonDocument();
-                }
-                if (settings.GetValue("sort", null) is BsonDocument sort)
-                {
-                    target["sort"] = sort;
-                }
-                break;
-            }
             default:
                 throw new ShellExecutionException(loc.Format("Query_ErrExplainUnsupported", method.Name));
         }

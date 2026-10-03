@@ -22,7 +22,6 @@ internal sealed class GridFsUploadDialogViewModel : DialogViewModel, IViewFactor
     private readonly TaskCompletionSource<GridFsUploadPlan?> _result = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private string _target;
     private string _metadataText;
-    private string? _error;
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -39,7 +38,7 @@ internal sealed class GridFsUploadDialogViewModel : DialogViewModel, IViewFactor
         Subtitle = $"{bucket.Database}.{bucket.Name}";
         _target = prefix;
         _metadataText = BsonText.Pretty(metadata);
-        ConfirmCommand = new RelayCommand(Confirm, () => _error is null);
+        ConfirmCommand = new RelayCommand(Confirm, () => Error is null);
     }
 
     /// <inheritdoc />
@@ -83,10 +82,10 @@ internal sealed class GridFsUploadDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>metadata 解析错误。</summary>
     public string? Error
     {
-        get => _error;
+        get;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
                 ConfirmCommand.RaiseCanExecuteChanged();
@@ -95,7 +94,7 @@ internal sealed class GridFsUploadDialogViewModel : DialogViewModel, IViewFactor
     }
 
     /// <summary>有错误。</summary>
-    public bool HasError => _error is not null;
+    public bool HasError => Error is not null;
 
     /// <summary>确认按钮文字「上传 3 个文件」。</summary>
     public string ConfirmLabel => Loc.Format("Fs_UploadConfirm", Items.Count);
@@ -113,14 +112,14 @@ internal sealed class GridFsUploadDialogViewModel : DialogViewModel, IViewFactor
             Error = Loc.Format("Fs_MetadataInvalid", error);
             return;
         }
-        _result.TrySetResult(new(GridFsPaths.NormalizePrefix(_target), metadata));
+        _ = _result.TrySetResult(new(GridFsPaths.NormalizePrefix(_target), metadata));
         Close();
     }
 
     /// <inheritdoc />
     internal override void OnClosed()
     {
-        _result.TrySetResult(null);
+        _ = _result.TrySetResult(null);
         base.OnClosed();
     }
 

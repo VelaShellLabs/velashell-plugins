@@ -43,19 +43,13 @@ public enum TabKind
 /// </summary>
 internal abstract class WorkspaceTab : ObservableObject, IDisposable
 {
-    private string _title = "";
-    private string _scope = "";
-    private bool _isModified;
-    private bool _isActive;
-    private string _statusText = "";
-    private readonly IMongoWorkspace? _workspace;
 
     /// <summary>构造一条连接里的标签页。</summary>
     /// <param name="workspace">这条连接的服务。</param>
     protected WorkspaceTab(IMongoWorkspace workspace)
         : this((IWorkbench)workspace)
     {
-        _workspace = workspace;
+        Owner = workspace;
     }
 
     /// <summary>
@@ -70,13 +64,13 @@ internal abstract class WorkspaceTab : ObservableObject, IDisposable
 
     /// <summary>这条连接的服务。外壳自己的标签页没有连接,读它是编程错误。</summary>
     public IMongoWorkspace Workspace =>
-        _workspace ?? throw new InvalidOperationException(GetType().Name + " does not belong to a connection.");
+        Owner ?? throw new InvalidOperationException(GetType().Name + " does not belong to a connection.");
 
     /// <summary>外壳服务。</summary>
     public IWorkbench Workbench { get; }
 
     /// <summary>它属于哪条连接;外壳自己的标签页为 <see langword="null" />。</summary>
-    public IMongoWorkspace? Owner => _workspace;
+    public IMongoWorkspace? Owner { get; }
 
     /// <summary>关掉自己(外壳在挂上标签时设好)。</summary>
     internal Func<WorkspaceTab, Task>? Closer { get; set; }
@@ -93,28 +87,26 @@ internal abstract class WorkspaceTab : ObservableObject, IDisposable
     /// <summary>标题(<c>orders</c>、<c>查询 1</c>、<c>设计 · orders</c>)。</summary>
     public string Title
     {
-        get => _title;
-        set
+        get; set
         {
-            if (SetProperty(ref _title, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(Header));
             }
         }
-    }
+    } = "";
 
     /// <summary>作用域后缀(<c>@shop</c>);没有为空。</summary>
     public string Scope
     {
-        get => _scope;
-        set
+        get; set
         {
-            if (SetProperty(ref _scope, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(Header));
             }
         }
-    }
+    } = "";
 
     /// <summary>标签上显示的完整文字。</summary>
     public string Header => string.IsNullOrEmpty(Scope) ? Title : $"{Title} {Scope}";
@@ -126,19 +118,14 @@ internal abstract class WorkspaceTab : ObservableObject, IDisposable
     public abstract string IconToken { get; }
 
     /// <summary>有未提交的修改(标签上的橙点,关闭前要确认)。</summary>
-    public bool IsModified
-    {
-        get => _isModified;
-        protected set => SetProperty(ref _isModified, value);
-    }
+    public bool IsModified { get; protected set => SetProperty(ref field, value); }
 
     /// <summary>当前是不是活动标签。</summary>
     public bool IsActive
     {
-        get => _isActive;
-        set
+        get; set
         {
-            if (!SetProperty(ref _isActive, value))
+            if (!SetProperty(ref field, value))
             {
                 return;
             }
@@ -158,15 +145,14 @@ internal abstract class WorkspaceTab : ObservableObject, IDisposable
     /// </summary>
     public string StatusText
     {
-        get => _statusText;
-        protected set
+        get; protected set
         {
-            if (SetProperty(ref _statusText, value) && IsActive)
+            if (SetProperty(ref field, value) && IsActive)
             {
                 Workbench.NotifyStatusChanged();
             }
         }
-    }
+    } = "";
 
     /// <summary>能不能关(对象列表那个固定标签不能关)。</summary>
     public virtual bool CanClose => true;

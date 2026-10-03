@@ -11,8 +11,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// </summary>
 internal sealed class DocTreeRow : ObservableObject
 {
-    private bool _isExpanded;
-    private InlineValueEditor? _editor;
 
     /// <summary>构造。</summary>
     /// <param name="row">所属网格行(同一份文档)。</param>
@@ -105,10 +103,10 @@ internal sealed class DocTreeRow : ObservableObject
     /// <summary>展开着。</summary>
     public bool IsExpanded
     {
-        get => _isExpanded;
+        get;
         set
         {
-            if (SetProperty(ref _isExpanded, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(Chevron));
             }
@@ -116,15 +114,15 @@ internal sealed class DocTreeRow : ObservableObject
     }
 
     /// <summary>展开箭头。</summary>
-    public string Chevron => _isExpanded ? "Mongo.chevron-down" : "Mongo.chevron-right";
+    public string Chevron => IsExpanded ? "Mongo.chevron-down" : "Mongo.chevron-right";
 
     /// <summary>值列的内联编辑器。</summary>
     public InlineValueEditor? Editor
     {
-        get => _editor;
+        get;
         set
         {
-            if (SetProperty(ref _editor, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsEditing));
             }
@@ -132,7 +130,7 @@ internal sealed class DocTreeRow : ObservableObject
     }
 
     /// <summary>编辑中。</summary>
-    public bool IsEditing => _editor is not null;
+    public bool IsEditing => Editor is not null;
 
     /// <summary>父路径(数组元素的父是数组)。</summary>
     public string ParentPath => Path.LastIndexOf('.') is var dot and > 0 ? Path[..dot] : "";

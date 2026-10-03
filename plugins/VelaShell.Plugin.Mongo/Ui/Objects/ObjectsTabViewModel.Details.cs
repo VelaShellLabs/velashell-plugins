@@ -25,27 +25,24 @@ internal enum ObjectDetailTab
 internal sealed partial class ObjectsTabViewModel
 {
     /// <summary>算"写"的那些动作(权限页上单独上色;只读用户一眼看出自己少了哪一块)。</summary>
-    private static readonly HashSet<string> WriteActionNames = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> WriteActionNames =
+    [
+        with(StringComparer.Ordinal),
         "insert", "update", "remove", "createCollection", "dropCollection", "createIndex", "dropIndex", "collMod",
         "convertToCapped", "renameCollectionSameDB", "compact", "reIndex", "bypassDocumentValidation",
         "createSearchIndexes", "dropSearchIndex", "updateSearchIndex", "enableProfiler", "dropDatabase"
-    };
+    ];
 
     private CancellationTokenSource? _detail;
-    private ObjectDetailTab _detailTab;
-    private string _ddlText = "";
-    private string _privilegeUser = "";
-    private string _privilegeNotice = "";
     private BsonDocument? _connectionStatus;
 
     /// <summary>当前页签。</summary>
     public ObjectDetailTab DetailTab
     {
-        get => _detailTab;
+        get;
         set
         {
-            if (SetProperty(ref _detailTab, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsGeneralTab), nameof(IsDdlTab), nameof(IsPrivilegesTab));
             }
@@ -53,13 +50,13 @@ internal sealed partial class ObjectsTabViewModel
     }
 
     /// <summary>页签:常规。</summary>
-    public bool IsGeneralTab { get => _detailTab == ObjectDetailTab.General; set { if (value) { DetailTab = ObjectDetailTab.General; } } }
+    public bool IsGeneralTab { get => DetailTab == ObjectDetailTab.General; set { if (value) { DetailTab = ObjectDetailTab.General; } } }
 
     /// <summary>页签:DDL。</summary>
-    public bool IsDdlTab { get => _detailTab == ObjectDetailTab.Ddl; set { if (value) { DetailTab = ObjectDetailTab.Ddl; } } }
+    public bool IsDdlTab { get => DetailTab == ObjectDetailTab.Ddl; set { if (value) { DetailTab = ObjectDetailTab.Ddl; } } }
 
     /// <summary>页签:权限。</summary>
-    public bool IsPrivilegesTab { get => _detailTab == ObjectDetailTab.Privileges; set { if (value) { DetailTab = ObjectDetailTab.Privileges; } } }
+    public bool IsPrivilegesTab { get => DetailTab == ObjectDetailTab.Privileges; set { if (value) { DetailTab = ObjectDetailTab.Privileges; } } }
 
     /// <summary>面板头的图标。</summary>
     public string DetailIconKey => _selected?.IconKey ?? "Mongo.layout-grid";
@@ -93,29 +90,29 @@ internal sealed partial class ObjectsTabViewModel
     /// <summary>DDL 页的脚本。</summary>
     public string DdlText
     {
-        get => _ddlText;
+        get;
         private set
         {
-            if (SetProperty(ref _ddlText, value))
+            if (SetProperty(ref field, value))
             {
                 CopyDdlCommand.RaiseCanExecuteChanged();
             }
         }
-    }
+    } = "";
 
     /// <summary>权限页:当前用户(<c>ops_reader@admin</c>)。</summary>
     public string PrivilegeUser
     {
-        get => _privilegeUser;
-        private set => SetProperty(ref _privilegeUser, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>权限页的提示(未开认证 / 没有任何动作 / 取不到)。</summary>
     public string PrivilegeNotice
     {
-        get => _privilegeNotice;
-        private set => SetProperty(ref _privilegeNotice, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>权限页「对 shop.events 的有效动作」那一行标题。</summary>
     public string PrivilegeActionsTitle => _selected is { } s
@@ -210,82 +207,82 @@ internal sealed partial class ObjectsTabViewModel
         switch (item.Kind)
         {
             case ObjectKind.TimeSeries:
-            {
-                BsonDocument ts = options.TryGetValue("timeseries", out BsonValue t) && t.IsBsonDocument ? t.AsBsonDocument : [];
-                facts.Add(new("timeField", ts.GetValue("timeField", "—").ToString() ?? "—", "VelaShellCyan"));
-                facts.Add(ts.TryGetValue("metaField", out BsonValue meta)
-                    ? new("metaField", meta.ToString() ?? "", "VelaShellCyan")
-                    : new("metaField", "—", "VelaTextMuted"));
-                facts.Add(ts.TryGetValue("granularity", out BsonValue granularity)
-                    ? new("granularity", granularity.ToString() ?? "")
-                    : new("bucketMaxSpanSeconds", Seconds(ts.GetValue("bucketMaxSpanSeconds", 0).ToInt64())));
-                facts.Add(Expire(options));
-                return new(Loc["Obj_SecTimeSeries"], facts);
-            }
-            case ObjectKind.Capped:
-            {
-                long size = options.GetValue("size", 0).ToInt64();
-                facts.Add(new("size", $"{BsonText.Grouped(size)} ({ObjectItem.ShortBytes(size)})"));
-                facts.Add(options.TryGetValue("max", out BsonValue max) && max.IsNumeric
-                    ? new("max", BsonText.Grouped(max.ToInt64()))
-                    : new("max", "—", "VelaTextMuted"));
-                AddValidation(item, facts);
-                return new(Loc["Obj_SecCapped"], facts);
-            }
-            case ObjectKind.Clustered:
-            {
-                BsonDocument clustered = options.TryGetValue("clusteredIndex", out BsonValue c) && c.IsBsonDocument ? c.AsBsonDocument : [];
-                facts.Add(new("clusteredIndex", BsonText.Literal(clustered.GetValue("key", new BsonDocument("_id", 1))), "VelaShellCyan"));
-                facts.Add(new("unique", clustered.GetValue("unique", true).ToBoolean() ? "true" : "false"));
-                if (options.Contains("expireAfterSeconds"))
                 {
+                    BsonDocument ts = options.TryGetValue("timeseries", out BsonValue t) && t.IsBsonDocument ? t.AsBsonDocument : [];
+                    facts.Add(new("timeField", ts.GetValue("timeField", "—").ToString() ?? "—", "VelaShellCyan"));
+                    facts.Add(ts.TryGetValue("metaField", out BsonValue meta)
+                        ? new("metaField", meta.ToString() ?? "", "VelaShellCyan")
+                        : new("metaField", "—", "VelaTextMuted"));
+                    facts.Add(ts.TryGetValue("granularity", out BsonValue granularity)
+                        ? new("granularity", granularity.ToString() ?? "")
+                        : new("bucketMaxSpanSeconds", Seconds(ts.GetValue("bucketMaxSpanSeconds", 0).ToInt64())));
                     facts.Add(Expire(options));
+                    return new(Loc["Obj_SecTimeSeries"], facts);
                 }
-                AddValidation(item, facts);
-                return new(Loc["Obj_SecClustered"], facts);
-            }
+            case ObjectKind.Capped:
+                {
+                    long size = options.GetValue("size", 0).ToInt64();
+                    facts.Add(new("size", $"{BsonText.Grouped(size)} ({ObjectItem.ShortBytes(size)})"));
+                    facts.Add(options.TryGetValue("max", out BsonValue max) && max.IsNumeric
+                        ? new("max", BsonText.Grouped(max.ToInt64()))
+                        : new("max", "—", "VelaTextMuted"));
+                    AddValidation(item, facts);
+                    return new(Loc["Obj_SecCapped"], facts);
+                }
+            case ObjectKind.Clustered:
+                {
+                    BsonDocument clustered = options.TryGetValue("clusteredIndex", out BsonValue c) && c.IsBsonDocument ? c.AsBsonDocument : [];
+                    facts.Add(new("clusteredIndex", BsonText.Literal(clustered.GetValue("key", new BsonDocument("_id", 1))), "VelaShellCyan"));
+                    facts.Add(new("unique", clustered.GetValue("unique", true).ToBoolean() ? "true" : "false"));
+                    if (options.Contains("expireAfterSeconds"))
+                    {
+                        facts.Add(Expire(options));
+                    }
+                    AddValidation(item, facts);
+                    return new(Loc["Obj_SecClustered"], facts);
+                }
             case ObjectKind.View:
-            {
-                BsonArray pipeline = item.Info?.Pipeline ?? [];
-                facts.Add(new(Loc["Obj_FactViewOn"], item.Info?.ViewOn ?? "—", "VelaShellCyan"));
-                facts.Add(new(Loc["Obj_FactStages"], pipeline.Count.ToString(CultureInfo.InvariantCulture)));
-                if (pipeline.Count > 0)
                 {
-                    facts.Add(new(Loc["Obj_FactPipeline"], string.Join(" → ", pipeline
-                        .Where(static s => s.IsBsonDocument && s.AsBsonDocument.ElementCount > 0)
-                        .Select(static s => s.AsBsonDocument.GetElement(0).Name))));
+                    BsonArray pipeline = item.Info?.Pipeline ?? [];
+                    facts.Add(new(Loc["Obj_FactViewOn"], item.Info?.ViewOn ?? "—", "VelaShellCyan"));
+                    facts.Add(new(Loc["Obj_FactStages"], pipeline.Count.ToString(CultureInfo.InvariantCulture)));
+                    if (pipeline.Count > 0)
+                    {
+                        facts.Add(new(Loc["Obj_FactPipeline"], string.Join(" → ", pipeline
+                            .Where(static s => s.IsBsonDocument && s.AsBsonDocument.ElementCount > 0)
+                            .Select(static s => s.AsBsonDocument.GetElement(0).Name))));
+                    }
+                    return new(Loc["Obj_SecView"], facts);
                 }
-                return new(Loc["Obj_SecView"], facts);
-            }
             case ObjectKind.Bucket:
-            {
-                GridFsBucketInfo bucket = item.Bucket!;
-                facts.Add(new(Loc["Obj_FactFilesCollection"], bucket.FilesCollection, "VelaShellCyan"));
-                facts.Add(new(Loc["Obj_FactChunksCollection"], bucket.ChunksCollection, "VelaShellCyan"));
-                if (item.ChunkStats is { } chunks)
                 {
-                    facts.Add(new(Loc["Obj_FactChunks"], BsonText.Grouped(chunks.Count)));
+                    GridFsBucketInfo bucket = item.Bucket!;
+                    facts.Add(new(Loc["Obj_FactFilesCollection"], bucket.FilesCollection, "VelaShellCyan"));
+                    facts.Add(new(Loc["Obj_FactChunksCollection"], bucket.ChunksCollection, "VelaShellCyan"));
+                    if (item.ChunkStats is { } chunks)
+                    {
+                        facts.Add(new(Loc["Obj_FactChunks"], BsonText.Grouped(chunks.Count)));
+                    }
+                    return new(Loc["Obj_SecBucket"], facts);
                 }
-                return new(Loc["Obj_SecBucket"], facts);
-            }
             default:
-            {
-                AddValidation(item, facts);
-                if (item.Info?.Validator is null)
                 {
-                    facts.Add(new(Loc["Obj_FactValidation"], Loc["Obj_None"], "VelaTextMuted"));
+                    AddValidation(item, facts);
+                    if (item.Info?.Validator is null)
+                    {
+                        facts.Add(new(Loc["Obj_FactValidation"], Loc["Obj_None"], "VelaTextMuted"));
+                    }
+                    if (item.Indexes?.FirstOrDefault(static i => i.Contains("expireAfterSeconds")) is { } ttl)
+                    {
+                        facts.Add(new(Loc["Obj_FactTtl"],
+                            $"{ttl.GetValue("name", "").AsString} · {Seconds(ttl["expireAfterSeconds"].ToInt64())}", "VelaWarning"));
+                    }
+                    if (options.TryGetValue("collation", out BsonValue collation) && collation.IsBsonDocument)
+                    {
+                        facts.Add(new(Loc["Obj_FactCollation"], collation.AsBsonDocument.GetValue("locale", "simple").ToString() ?? ""));
+                    }
+                    return new(Loc["Obj_SecCollection"], facts);
                 }
-                if (item.Indexes?.FirstOrDefault(static i => i.Contains("expireAfterSeconds")) is { } ttl)
-                {
-                    facts.Add(new(Loc["Obj_FactTtl"],
-                        $"{ttl.GetValue("name", "").AsString} · {Seconds(ttl["expireAfterSeconds"].ToInt64())}", "VelaWarning"));
-                }
-                if (options.TryGetValue("collation", out BsonValue collation) && collation.IsBsonDocument)
-                {
-                    facts.Add(new(Loc["Obj_FactCollation"], collation.AsBsonDocument.GetValue("locale", "simple").ToString() ?? ""));
-                }
-                return new(Loc["Obj_SecCollection"], facts);
-            }
         }
     }
 
@@ -351,21 +348,21 @@ internal sealed partial class ObjectsTabViewModel
             case ObjectKind.View:
                 return ObjectScripts.Ddl(item.Info!, []);
             case ObjectKind.Bucket:
-            {
-                GridFsBucketInfo bucket = item.Bucket!;
-                var parts = new List<string>();
-                foreach (string name in new[] { bucket.FilesCollection, bucket.ChunksCollection })
                 {
-                    IReadOnlyList<BsonDocument> indexes = await connection.ListIndexesAsync(Database, name, cancellationToken).ConfigureAwait(true);
-                    parts.Add(ObjectScripts.Ddl(new CollectionInfo(Database, name, CollectionKind.Collection, []), indexes));
+                    GridFsBucketInfo bucket = item.Bucket!;
+                    var parts = new List<string>();
+                    foreach (string name in new[] { bucket.FilesCollection, bucket.ChunksCollection })
+                    {
+                        IReadOnlyList<BsonDocument> indexes = await connection.ListIndexesAsync(Database, name, cancellationToken).ConfigureAwait(true);
+                        parts.Add(ObjectScripts.Ddl(new CollectionInfo(Database, name, CollectionKind.Collection, []), indexes));
+                    }
+                    return string.Join("\n", parts);
                 }
-                return string.Join("\n", parts);
-            }
             default:
-            {
-                item.Indexes ??= await connection.ListIndexesAsync(Database, item.Name, cancellationToken).ConfigureAwait(true);
-                return ObjectScripts.Ddl(item.Info!, item.Indexes);
-            }
+                {
+                    item.Indexes ??= await connection.ListIndexesAsync(Database, item.Name, cancellationToken).ConfigureAwait(true);
+                    return ObjectScripts.Ddl(item.Info!, item.Indexes);
+                }
         }
     }
 
@@ -455,7 +452,7 @@ internal sealed partial class ObjectsTabViewModel
             {
                 if (action.IsString)
                 {
-                    actions.Add(action.AsString);
+                    _ = actions.Add(action.AsString);
                 }
             }
         }
@@ -522,41 +519,41 @@ internal sealed partial class ObjectsTabViewModel
         switch (item.Kind)
         {
             case ObjectKind.TimeSeries:
-            {
-                string timeField = item.Info!.Options.GetValue("timeseries", new BsonDocument()).AsBsonDocument.GetValue("timeField", "ts").AsString;
-                try
                 {
-                    IMongoCollection<BsonDocument> buckets = connection.Collection(Database, "system.buckets." + item.Name);
-                    BsonDocument? newest = await First(buckets, newestFirst).ConfigureAwait(true);
-                    BsonDocument? oldest = await First(buckets, oldestFirst).ConfigureAwait(true);
-                    return (TimeAt(newest, "control", "max", timeField), TimeAt(oldest, "control", "min", timeField));
+                    string timeField = item.Info!.Options.GetValue("timeseries", new BsonDocument()).AsBsonDocument.GetValue("timeField", "ts").AsString;
+                    try
+                    {
+                        IMongoCollection<BsonDocument> buckets = connection.Collection(Database, "system.buckets." + item.Name);
+                        BsonDocument? newest = await First(buckets, newestFirst).ConfigureAwait(true);
+                        BsonDocument? oldest = await First(buckets, oldestFirst).ConfigureAwait(true);
+                        return (TimeAt(newest, "control", "max", timeField), TimeAt(oldest, "control", "min", timeField));
+                    }
+                    catch (MongoCommandException)
+                    {
+                        // 读不了桶集合(权限只授到视图上):退回在时序视图上按时间字段排序,有超时兜底。
+                        IMongoCollection<BsonDocument> view = connection.Collection(Database, item.Name);
+                        BsonDocument? newest = await First(view, new BsonDocument(timeField, -1)).ConfigureAwait(true);
+                        BsonDocument? oldest = await First(view, new BsonDocument(timeField, 1)).ConfigureAwait(true);
+                        return (TimeAt(newest, timeField), TimeAt(oldest, timeField));
+                    }
                 }
-                catch (MongoCommandException)
-                {
-                    // 读不了桶集合(权限只授到视图上):退回在时序视图上按时间字段排序,有超时兜底。
-                    IMongoCollection<BsonDocument> view = connection.Collection(Database, item.Name);
-                    BsonDocument? newest = await First(view, new BsonDocument(timeField, -1)).ConfigureAwait(true);
-                    BsonDocument? oldest = await First(view, new BsonDocument(timeField, 1)).ConfigureAwait(true);
-                    return (TimeAt(newest, timeField), TimeAt(oldest, timeField));
-                }
-            }
             case ObjectKind.Bucket:
-            {
-                IMongoCollection<BsonDocument> files = connection.Collection(Database, item.Bucket!.FilesCollection);
-                BsonDocument? newest = await First(files, newestFirst).ConfigureAwait(true);
-                BsonDocument? oldest = await First(files, oldestFirst).ConfigureAwait(true);
-                return (TimeAt(newest, "uploadDate") ?? IdTime(newest), IdTime(oldest) ?? TimeAt(oldest, "uploadDate"));
-            }
+                {
+                    IMongoCollection<BsonDocument> files = connection.Collection(Database, item.Bucket!.FilesCollection);
+                    BsonDocument? newest = await First(files, newestFirst).ConfigureAwait(true);
+                    BsonDocument? oldest = await First(files, oldestFirst).ConfigureAwait(true);
+                    return (TimeAt(newest, "uploadDate") ?? IdTime(newest), IdTime(oldest) ?? TimeAt(oldest, "uploadDate"));
+                }
             default:
-            {
-                IMongoCollection<BsonDocument> collection = connection.Collection(Database, item.Name);
-                // 固定集合按插入序($natural)才是"最近";其余按 _id(ObjectId 单调增)。
-                BsonDocument newestSort = item.Kind == ObjectKind.Capped ? new BsonDocument("$natural", -1) : newestFirst;
-                BsonDocument oldestSort = item.Kind == ObjectKind.Capped ? new BsonDocument("$natural", 1) : oldestFirst;
-                BsonDocument? newest = await First(collection, newestSort).ConfigureAwait(true);
-                BsonDocument? oldest = await First(collection, oldestSort).ConfigureAwait(true);
-                return (IdTime(newest), IdTime(oldest));
-            }
+                {
+                    IMongoCollection<BsonDocument> collection = connection.Collection(Database, item.Name);
+                    // 固定集合按插入序($natural)才是"最近";其余按 _id(ObjectId 单调增)。
+                    BsonDocument newestSort = item.Kind == ObjectKind.Capped ? new BsonDocument("$natural", -1) : newestFirst;
+                    BsonDocument oldestSort = item.Kind == ObjectKind.Capped ? new BsonDocument("$natural", 1) : oldestFirst;
+                    BsonDocument? newest = await First(collection, newestSort).ConfigureAwait(true);
+                    BsonDocument? oldest = await First(collection, oldestSort).ConfigureAwait(true);
+                    return (IdTime(newest), IdTime(oldest));
+                }
         }
 
         async Task<BsonDocument?> First(IMongoCollection<BsonDocument> source, BsonDocument sort) =>
@@ -773,20 +770,20 @@ internal sealed partial class ObjectsTabViewModel
         {
             long? count = await Workspace.Connection.EstimatedCountAsync(Database, item.Name).ConfigureAwait(true);
             if (!await Workspace.ConfirmAsync(new()
-                {
-                    Title = Loc["Tree_EmptyTitle"],
-                    Message = Loc.Format("Tree_EmptyBody", item.Namespace, BsonText.Grouped(count ?? 0)),
-                    ConfirmLabel = Loc["Tree_EmptyConfirm"],
-                    IconKey = "Mongo.eraser",
-                    TypeToConfirm = Workspace.Guard.ConfirmWrites ? item.Name : null
-                }).ConfigureAwait(true))
+            {
+                Title = Loc["Tree_EmptyTitle"],
+                Message = Loc.Format("Tree_EmptyBody", item.Namespace, BsonText.Grouped(count ?? 0)),
+                ConfirmLabel = Loc["Tree_EmptyConfirm"],
+                IconKey = "Mongo.eraser",
+                TypeToConfirm = Workspace.Guard.ConfirmWrites ? item.Name : null
+            }).ConfigureAwait(true))
             {
                 return;
             }
             DeleteResult result = await Workspace.Connection.Collection(Database, item.Name)
                 .DeleteManyAsync(FilterDefinition<BsonDocument>.Empty).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Tree_EmptyDone", BsonText.Grouped(result.DeletedCount)), Kind = ToastKind.Success });
-            _statsTasks.TryRemove(item, out _);
+            _ = _statsTasks.TryRemove(item, out _);
             await EnsureStatsAsync(item).ConfigureAwait(true);
             if (ReferenceEquals(_selected, item))
             {

@@ -18,18 +18,7 @@ internal sealed partial class DesignTabViewModel
     /// <summary>时序粒度从细到粗(只能往粗改)。</summary>
     public static IReadOnlyList<string> Granularities { get; } = ["seconds", "minutes", "hours"];
 
-    private string _collationText = "";
-    private string _cappedSize = "";
-    private string _cappedMax = "";
-    private string _tsTimeField = "";
-    private string _tsMetaField = "";
-    private string _tsGranularity = "";
-    private string _tsExpire = "";
-    private string _viewOn = "";
-    private string _viewPipeline = "";
-    private bool _prePost;
     private bool _prePostOriginal;
-    private string _optionsJson = "";
 
     /// <summary>TTL 索引。</summary>
     public ObservableCollection<TtlRow> TtlRows { get; } = [];
@@ -40,94 +29,94 @@ internal sealed partial class DesignTabViewModel
     /// <summary>排序规则(只读);没有为空。</summary>
     public string CollationText
     {
-        get => _collationText;
+        get;
         private set
         {
-            if (SetProperty(ref _collationText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasCollation));
             }
         }
-    }
+    } = "";
 
     /// <summary>设了排序规则。</summary>
-    public bool HasCollation => _collationText.Length > 0;
+    public bool HasCollation => CollationText.Length > 0;
 
     /// <summary>固定集合字节上限(可改,6.0+)。</summary>
     public string CappedSize
     {
-        get => _cappedSize;
-        set => SetProperty(ref _cappedSize, value ?? "");
-    }
+        get;
+        set => SetProperty(ref field, value ?? "");
+    } = "";
 
     /// <summary>固定集合文档数上限(可改,6.0+;空 = 不限)。</summary>
     public string CappedMax
     {
-        get => _cappedMax;
-        set => SetProperty(ref _cappedMax, value ?? "");
-    }
+        get;
+        set => SetProperty(ref field, value ?? "");
+    } = "";
 
     /// <summary>固定集合字节上限换算(<c>= 1.0 GB</c>)。</summary>
-    public string CappedSizeHuman => long.TryParse(_cappedSize, out long b) ? "= " + BsonText.Bytes(b) : "";
+    public string CappedSizeHuman => long.TryParse(CappedSize, out long b) ? "= " + BsonText.Bytes(b) : "";
 
     /// <summary>时序:时间字段(只读)。</summary>
     public string TsTimeField
     {
-        get => _tsTimeField;
-        private set => SetProperty(ref _tsTimeField, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>时序:元数据字段(只读)。</summary>
     public string TsMetaField
     {
-        get => _tsMetaField;
-        private set => SetProperty(ref _tsMetaField, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>时序:粒度(只能往粗改)。</summary>
     public string TsGranularity
     {
-        get => _tsGranularity;
-        set => SetProperty(ref _tsGranularity, value ?? "");
-    }
+        get;
+        set => SetProperty(ref field, value ?? "");
+    } = "";
 
     /// <summary>时序:过期秒数(空 = 不过期)。</summary>
     public string TsExpire
     {
-        get => _tsExpire;
+        get;
         set
         {
-            if (SetProperty(ref _tsExpire, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 RaisePropertyChanged(nameof(TsExpireHuman));
             }
         }
-    }
+    } = "";
 
     /// <summary>时序过期换算。</summary>
-    public string TsExpireHuman => long.TryParse(_tsExpire, out long s) ? "= " + Duration(s) : Loc["Design_NeverExpire"];
+    public string TsExpireHuman => long.TryParse(TsExpire, out long s) ? "= " + Duration(s) : Loc["Design_NeverExpire"];
 
     /// <summary>视图:源集合。</summary>
     public string ViewOn
     {
-        get => _viewOn;
-        set => SetProperty(ref _viewOn, value ?? "");
-    }
+        get;
+        set => SetProperty(ref field, value ?? "");
+    } = "";
 
     /// <summary>视图:管道(mongosh 写法)。</summary>
     public string ViewPipeline
     {
-        get => _viewPipeline;
-        set => SetProperty(ref _viewPipeline, value ?? "");
-    }
+        get;
+        set => SetProperty(ref field, value ?? "");
+    } = "";
 
     /// <summary>变更流前后镜像(changeStreamPreAndPostImages,6.0+)。</summary>
     public bool PrePostImages
     {
-        get => _prePost;
+        get;
         set
         {
-            if (SetProperty(ref _prePost, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(PrePostDirty));
             }
@@ -135,14 +124,14 @@ internal sealed partial class DesignTabViewModel
     }
 
     /// <summary>前后镜像开关改过了。</summary>
-    public bool PrePostDirty => _prePost != _prePostOriginal;
+    public bool PrePostDirty => PrePostImages != _prePostOriginal;
 
     /// <summary>listCollections 的 options 原文(只读,页底)。</summary>
     public string OptionsJson
     {
-        get => _optionsJson;
-        private set => SetProperty(ref _optionsJson, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>应用一条 TTL 的新秒数。</summary>
     public AsyncCommand<TtlRow> ApplyTtlCommand { get; private set; } = null!;
@@ -171,7 +160,7 @@ internal sealed partial class DesignTabViewModel
         ApplyViewCommand = new(ApplyViewAsync);
         ApplyPrePostCommand = new(async () =>
         {
-            if (await CollModAsync(new BsonDocument("changeStreamPreAndPostImages", new BsonDocument("enabled", _prePost)), Loc["Design_OptPrePost"])
+            if (await CollModAsync(new BsonDocument("changeStreamPreAndPostImages", new BsonDocument("enabled", PrePostImages)), Loc["Design_OptPrePost"])
                     .ConfigureAwait(true))
             {
                 await LoadOptionsAsync().ConfigureAwait(true);
@@ -239,15 +228,15 @@ internal sealed partial class DesignTabViewModel
     private async Task ApplyCappedAsync()
     {
         var changes = new BsonDocument();
-        if (long.TryParse(_cappedSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out long size) && size > 0)
+        if (long.TryParse(CappedSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out long size) && size > 0)
         {
             changes["cappedSize"] = size;
         }
-        if (_cappedMax.Trim().Length == 0)
+        if (CappedMax.Trim().Length == 0)
         {
             changes["cappedMax"] = 0;
         }
-        else if (long.TryParse(_cappedMax, NumberStyles.Integer, CultureInfo.InvariantCulture, out long max) && max >= 0)
+        else if (long.TryParse(CappedMax, NumberStyles.Integer, CultureInfo.InvariantCulture, out long max) && max >= 0)
         {
             changes["cappedMax"] = max;
         }
@@ -255,7 +244,7 @@ internal sealed partial class DesignTabViewModel
         {
             return;
         }
-        await CollModAsync(changes, Loc["Design_OptCapped"]).ConfigureAwait(true);
+        _ = await CollModAsync(changes, Loc["Design_OptCapped"]).ConfigureAwait(true);
         await LoadOptionsAsync().ConfigureAwait(true);
     }
 
@@ -265,23 +254,23 @@ internal sealed partial class DesignTabViewModel
         var changes = new BsonDocument();
         BsonDocument ts = _live.Options.GetValue("timeseries", BsonNull.Value) as BsonDocument ?? [];
         string current = ts.GetValue("granularity", BsonNull.Value) is BsonString g ? g.Value : "";
-        if (_tsGranularity.Length > 0 && _tsGranularity != current)
+        if (TsGranularity.Length > 0 && TsGranularity != current)
         {
-            if (Granularities.ToList().IndexOf(_tsGranularity) < Granularities.ToList().IndexOf(current))
+            if (Granularities.ToList().IndexOf(TsGranularity) < Granularities.ToList().IndexOf(current))
             {
                 Workspace.Toast(new() { Title = Loc["Design_ErrGranularity"], Kind = ToastKind.Warning });
                 return;
             }
-            changes["timeseries"] = new BsonDocument("granularity", _tsGranularity);
+            changes["timeseries"] = new BsonDocument("granularity", TsGranularity);
         }
-        if (_tsExpire.Trim().Length == 0)
+        if (TsExpire.Trim().Length == 0)
         {
             if (_live.Options.Contains("expireAfterSeconds"))
             {
                 changes["expireAfterSeconds"] = "off";
             }
         }
-        else if (long.TryParse(_tsExpire, NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds) && seconds >= 0)
+        else if (long.TryParse(TsExpire, NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds) && seconds >= 0)
         {
             changes["expireAfterSeconds"] = seconds;
         }
@@ -289,7 +278,7 @@ internal sealed partial class DesignTabViewModel
         {
             return;
         }
-        await CollModAsync(changes, Loc["Design_OptTimeSeries"]).ConfigureAwait(true);
+        _ = await CollModAsync(changes, Loc["Design_OptTimeSeries"]).ConfigureAwait(true);
         await LoadOptionsAsync().ConfigureAwait(true);
     }
 
@@ -299,18 +288,18 @@ internal sealed partial class DesignTabViewModel
         BsonArray pipeline;
         try
         {
-            pipeline = ShellJson.ParseArray(_viewPipeline);
+            pipeline = ShellJson.ParseArray(ViewPipeline);
         }
         catch (ShellJsonException ex)
         {
             Workspace.Toast(new() { Title = Loc.Format("Design_SyntaxError", ex.Message), Kind = ToastKind.Warning });
             return;
         }
-        if (_viewOn.Trim().Length == 0)
+        if (ViewOn.Trim().Length == 0)
         {
             return;
         }
-        await CollModAsync(new BsonDocument { { "viewOn", _viewOn.Trim() }, { "pipeline", pipeline } }, Loc["Design_OptView"]).ConfigureAwait(true);
+        _ = await CollModAsync(new BsonDocument { { "viewOn", ViewOn.Trim() }, { "pipeline", pipeline } }, Loc["Design_OptView"]).ConfigureAwait(true);
         await LoadOptionsAsync().ConfigureAwait(true);
     }
 
@@ -340,8 +329,8 @@ internal sealed partial class DesignTabViewModel
         try
         {
             var command = new BsonDocument("collMod", CollectionName);
-            command.Merge(changes);
-            await Workspace.Connection.RunCommandAsync(Database, command, Lifetime).ConfigureAwait(true);
+            _ = command.Merge(changes);
+            _ = await Workspace.Connection.RunCommandAsync(Database, command, Lifetime).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Design_CollModDone", what), Kind = ToastKind.Success });
             await RefreshInfoAsync().ConfigureAwait(true);
             await Workspace.RefreshTreeAsync(Database).ConfigureAwait(true);

@@ -9,7 +9,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed partial class DesignTabViewModel
 {
     private CollectionStats? _stats;
-    private string _statsRaw = "";
 
     /// <summary>指标卡。</summary>
     public ObservableCollection<StatCard> StatCards { get; } = [];
@@ -20,9 +19,9 @@ internal sealed partial class DesignTabViewModel
     /// <summary>原始 JSON。</summary>
     public string StatsRaw
     {
-        get => _statsRaw;
-        private set => SetProperty(ref _statsRaw, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>刷新统计。</summary>
     public AsyncCommand RefreshStatsCommand { get; private set; } = null!;
@@ -35,7 +34,7 @@ internal sealed partial class DesignTabViewModel
         RefreshStatsCommand = new(LoadStatsAsync);
         CopyStatsCommand = new(async () =>
         {
-            await Workspace.CopyAsync(_statsRaw).ConfigureAwait(true);
+            await Workspace.CopyAsync(StatsRaw).ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc["Common_Copied"], Kind = ToastKind.Success });
         });
     }

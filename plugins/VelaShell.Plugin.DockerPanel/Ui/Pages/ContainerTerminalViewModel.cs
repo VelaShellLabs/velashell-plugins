@@ -104,14 +104,14 @@ public sealed class ContainerTerminalViewModel(DockerPanelViewModel shell, strin
         get
         {
             var sb = new StringBuilder(containerName);
-            sb.Append(" · ").Append(Shell);
+            _ = sb.Append(" · ").Append(Shell);
             if (User.Length > 0)
             {
-                sb.Append(" · ").Append(User);
+                _ = sb.Append(" · ").Append(User);
             }
             if (WorkingDir.Length > 0)
             {
-                sb.Append(" · ").Append(WorkingDir);
+                _ = sb.Append(" · ").Append(WorkingDir);
             }
             return sb.ToString();
         }
@@ -233,9 +233,9 @@ public sealed class ContainerTerminalViewModel(DockerPanelViewModel shell, strin
         Status = "正在建立 exec 会话…";
         try
         {
-            var resolved = await ResolveShellAsync(client).ConfigureAwait(true);
+            string resolved = await ResolveShellAsync(client).ConfigureAwait(true);
             Shell = resolved;
-            var session = await client.StartExecAsync(containerId, [resolved], tty: true,
+            DockerExecSession session = await client.StartExecAsync(containerId, [resolved], tty: true,
                 string.IsNullOrWhiteSpace(User) ? null : User,
                 string.IsNullOrWhiteSpace(WorkingDir) ? null : WorkingDir,
                 shell.Lifetime).ConfigureAwait(true);
@@ -255,8 +255,8 @@ public sealed class ContainerTerminalViewModel(DockerPanelViewModel shell, strin
             view.Write($"\u001b[31m无法在 {containerName} 里启动 {Shell}:{ex.Message}\u001b[0m\r\n");
             // daemon 的原文(多半是一句 "no such file or directory")指不出下一步该做什么。
             // 建不起来的原因就那么三种,直说 —— 对着一句原文没人猜得到该换什么。
-            var warn = (char)0x1b + "[33m";
-            var reset = (char)0x1b + "[0m";
+            string warn = (char)0x1b + "[33m";
+            string reset = (char)0x1b + "[0m";
             view.Write($"{warn}常见原因:容器没在跑;镜像里根本没有 shell(distroless 一类);" +
                        $"或者指定的用户在容器里不存在。{reset}\r\n");
             view.Write($"{warn}工具条上的「切换用户」可以换 shell 与身份,换完会自动重连。{reset}\r\n");
@@ -278,11 +278,11 @@ public sealed class ContainerTerminalViewModel(DockerPanelViewModel shell, strin
         {
             return Shell;
         }
-        foreach (var candidate in ShellCandidates)
+        foreach (string candidate in ShellCandidates)
         {
             try
             {
-                var probe = await client
+                ExecCapture probe = await client
                     .ExecCaptureAsync(containerId, ["/bin/sh", "-c", $"command -v {candidate} >/dev/null"],
                         cancellationToken: shell.Lifetime)
                     .ConfigureAwait(true);
@@ -385,18 +385,18 @@ public sealed class ContainerTerminalViewModel(DockerPanelViewModel shell, strin
         {
             return;
         }
-        var command = $"docker exec -it {Sh.Quote(containerName)} {Sh.Quote(Shell)}";
+        string command = $"docker exec -it {Sh.Quote(containerName)} {Sh.Quote(Shell)}";
         try
         {
             // 回写走宿主的输入队列("如同用户键入"),并且需要用户授权 ——
             // 面板不直写 SSH 流,这条边界不为方便让路。
             await shell.Context.Terminal.WriteAsync(endpoint.SessionId, command + "\n", shell.Lifetime)
                        .ConfigureAwait(true);
-            shell.Feedback.Notify(FeedbackKind.Info, "已送到宿主终端", command);
+            _ = shell.Feedback.Notify(FeedbackKind.Info, "已送到宿主终端", command);
         }
         catch (PluginPermissionDeniedException)
         {
-            shell.Feedback.Notify(FeedbackKind.Warning, "没有向终端回写的授权",
+            _ = shell.Feedback.Notify(FeedbackKind.Warning, "没有向终端回写的授权",
                 $"可以自己在那条会话里执行:{command}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

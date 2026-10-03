@@ -15,30 +15,28 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// </summary>
 internal sealed partial class CollectionTabViewModel
 {
-    private GridDrill? _drill;
     private ObservableCollection<CollectionRow> _drillRows = [];
     private CollectionRow? _drillSelected;
     private IReadOnlyList<CollectionRow> _drillSelectedRows = [];
     private readonly List<string> _drillHistory = [];
-    private IReadOnlyList<DrillCrumb> _drillCrumbs = [];
     private bool _swappingGrid;
 
     /// <summary>正在看某个对象 / 数组的子表。</summary>
-    public bool IsDrilled => _drill is not null;
+    public bool IsDrilled => Drill is not null;
 
     /// <summary>当前这一层;没钻入为 <see langword="null" />。</summary>
-    public GridDrill? Drill => _drill;
+    public GridDrill? Drill { get; private set; }
 
     /// <summary>网格的列。</summary>
-    public IReadOnlyList<CollectionColumn> GridColumns => _drill?.Columns ?? _columns;
+    public IReadOnlyList<CollectionColumn> GridColumns => Drill?.Columns ?? _columns;
 
     /// <summary>网格的行。</summary>
-    public ObservableCollection<CollectionRow> GridRows => _drill is null ? _rows : _drillRows;
+    public ObservableCollection<CollectionRow> GridRows => Drill is null ? _rows : _drillRows;
 
     /// <summary>网格选中的行(钻入时是子表里的那一行;检查器仍看它所属的文档)。</summary>
     public CollectionRow? GridSelectedRow
     {
-        get => _drill is null ? _selectedRow : _drillSelected;
+        get => Drill is null ? _selectedRow : _drillSelected;
         set
         {
             // 换数据源的那一刻 ListBox 会把选中清成 null 推回来 —— 那不是用户的选择。
@@ -46,7 +44,7 @@ internal sealed partial class CollectionTabViewModel
             {
                 return;
             }
-            if (_drill is null)
+            if (Drill is null)
             {
                 SelectedRow = value;
                 return;
@@ -65,14 +63,14 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>网格里多选的行(由视图在选中变化时写入)。</summary>
     public IReadOnlyList<CollectionRow> GridSelectedRows
     {
-        get => _drill is null ? SelectedRows : _drillSelectedRows.Count > 0 ? _drillSelectedRows : _drillSelected is { } one ? [one] : [];
+        get => Drill is null ? SelectedRows : _drillSelectedRows.Count > 0 ? _drillSelectedRows : _drillSelected is { } one ? [one] : [];
         set
         {
             if (_swappingGrid)
             {
                 return;
             }
-            if (_drill is null)
+            if (Drill is null)
             {
                 SelectedRows = value;
             }
@@ -84,14 +82,10 @@ internal sealed partial class CollectionTabViewModel
     }
 
     /// <summary>面包屑:<c>文档 #3 › items › [2] › attrs</c>。</summary>
-    public IReadOnlyList<DrillCrumb> DrillCrumbs
-    {
-        get => _drillCrumbs;
-        private set => SetProperty(ref _drillCrumbs, value);
-    }
+    public IReadOnlyList<DrillCrumb> DrillCrumbs { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>面包屑右侧的小字(<c>数组 · 4 项</c>)。</summary>
-    public string DrillSummary => _drill?.Summary(Loc) ?? "";
+    public string DrillSummary => Drill?.Summary(Loc) ?? "";
 
     /// <summary>面包屑左侧的「‹」。</summary>
     public RelayCommand DrillBackCommand { get; private set; } = null!;
@@ -101,22 +95,22 @@ internal sealed partial class CollectionTabViewModel
 
     private void InitializeDrillCommands()
     {
-        DrillBackCommand = new(DrillBack, () => _drill is not null);
+        DrillBackCommand = new(DrillBack, () => Drill is not null);
         DrillToCommand = new(crumb =>
         {
-            if (_drill is not { } drill || crumb.IsLast)
+            if (Drill is not { } drill || crumb.IsLast)
             {
                 return;
             }
             // 往回跳:历史里比目标更深的都不要了。
-            _drillHistory.RemoveAll(p => p.Length >= crumb.Path.Length);
+            _ = _drillHistory.RemoveAll(p => p.Length >= crumb.Path.Length);
             if (crumb.Path.Length == 0)
             {
                 ExitDrill(drill.Path);
             }
             else
             {
-                Show(drill.Root, crumb.Path, focusFrom: drill.Path);
+                _ = Show(drill.Root, crumb.Path, focusFrom: drill.Path);
             }
         });
     }
@@ -132,7 +126,7 @@ internal sealed partial class CollectionTabViewModel
             return false;
         }
         CancelGridEdits();
-        if (_drill is { } current)
+        if (Drill is { } current)
         {
             _drillHistory.Add(current.Path);
         }
@@ -142,7 +136,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>回上一层(Backspace / Alt+← / 「‹」);已在最外层时什么也不做。</summary>
     internal void DrillBack()
     {
-        if (_drill is not { } drill)
+        if (Drill is not { } drill)
         {
             return;
         }
@@ -162,7 +156,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>退出钻入,回到本页文档;选中回到那份文档、当前列回到钻进去时的那一列。</summary>
     internal void ExitDrill(string? focusFrom = null)
     {
-        if (_drill is not { } drill)
+        if (Drill is not { } drill)
         {
             return;
         }
@@ -171,7 +165,7 @@ internal sealed partial class CollectionTabViewModel
         _swappingGrid = true;
         try
         {
-            _drill = null;
+            Drill = null;
             _drillRows = [];
             _drillSelected = null;
             _drillSelectedRows = [];
@@ -199,19 +193,19 @@ internal sealed partial class CollectionTabViewModel
     /// </summary>
     private bool Show(CollectionRow root, string path, string? focusFrom)
     {
-        IReadOnlyList<CollectionColumn>? previous = _drill is { } old && old.Path == path ? old.Columns : null;
-        GridDrill? drill = GridDrill.Create(this, root, path, previous, out List<CollectionRow> rows);
+        IReadOnlyList<CollectionColumn>? previous = Drill is { } old && old.Path == path ? old.Columns : null;
+        var drill = GridDrill.Create(this, root, path, previous, out List<CollectionRow> rows);
         if (drill is null)
         {
             return false;
         }
-        int keepIndex = _drill is { } same && same.Path == path ? (_drillSelected?.Number ?? 0) : 0;
+        int keepIndex = Drill is { } same && same.Path == path ? (_drillSelected?.Number ?? 0) : 0;
         string? keepColumn = _currentColumn?.Name;
         _swappingGrid = true;
         try
         {
-            _drill = drill;
-            _drillRows = new ObservableCollection<CollectionRow>(rows);
+            Drill = drill;
+            _drillRows = [with(rows)];
             _drillSelected = null;
             _drillSelectedRows = [];
             RaiseGridChanged();
@@ -263,7 +257,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>暂存区变了:子表按所属文档的新版本重建(元素可能多了、少了),停在原来的下标上。</summary>
     private void RefreshDrill()
     {
-        if (_drill is not { } drill)
+        if (Drill is not { } drill)
         {
             return;
         }
@@ -273,7 +267,7 @@ internal sealed partial class CollectionTabViewModel
             return;
         }
         // 形状没变(元素数、列都一样)就原地重算各行 —— 改一格不该把子表整个换掉,选中、焦点、滚动位置都留着。
-        GridDrill? fresh = GridDrill.Create(this, drill.Root, drill.Path, drill.Columns, out _);
+        var fresh = GridDrill.Create(this, drill.Root, drill.Path, drill.Columns, out _);
         if (fresh is not null && fresh.IsArray == drill.IsArray && fresh.Count == drill.Count
             && fresh.Columns.Select(static c => (c.Name, c.IsElementValue)).SequenceEqual(drill.Columns.Select(static c => (c.Name, c.IsElementValue))))
         {
@@ -302,7 +296,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>重查 / 翻页之后:按 <c>_id</c>(新增行按暂存键)找回那份文档,接着看同一层;找不到就退出。</summary>
     private void ReattachDrill()
     {
-        if (_drill is not { } drill)
+        if (Drill is not { } drill)
         {
             return;
         }
@@ -325,7 +319,7 @@ internal sealed partial class CollectionTabViewModel
         if (drill.IsArray)
         {
             InsertArrayElement(drill.Root, drill.Path);
-            if (_drill is { } now && _drillRows.LastOrDefault() is { } last)
+            if (Drill is { } now && _drillRows.LastOrDefault() is { } last)
             {
                 GridSelectedRow = last;
                 _currentColumn = now.Columns.FirstOrDefault(static c => c.IsElementValue) ?? _currentColumn;
@@ -340,7 +334,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>工具栏「删除」、底栏「−」、Del:网格钻入时删子表里的元素,否则暂存删除选中的文档。</summary>
     private void DeleteGridSelection()
     {
-        if (_drill is { } drill && _viewMode == CollectionViewMode.Grid)
+        if (Drill is { } drill && _viewMode == CollectionViewMode.Grid)
         {
             DeleteDrillRows(drill);
         }
@@ -378,7 +372,7 @@ internal sealed partial class CollectionTabViewModel
         {
             copy.RemoveAt(index);
         }
-        Stage(drill.Root, drill.Path, copy);
+        _ = Stage(drill.Root, drill.Path, copy);
     }
 
     private void RaiseGridChanged()
@@ -392,7 +386,7 @@ internal sealed partial class CollectionTabViewModel
 
     private List<DrillCrumb> BuildCrumbs()
     {
-        if (_drill is not { } drill)
+        if (Drill is not { } drill)
         {
             return [];
         }

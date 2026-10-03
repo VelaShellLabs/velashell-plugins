@@ -36,7 +36,7 @@ internal static class BsonDump
         {
             BsonDocument copy = index.DeepClone().AsBsonDocument;
             copy.Remove("ns");
-            cleaned.Add(copy);
+            _ = cleaned.Add(copy);
         }
         var metadata = new BsonDocument
         {
@@ -65,7 +65,7 @@ internal static class BsonDump
     /// <summary>打开一个写出流(gzip 时套一层压缩)。</summary>
     public static Stream OpenWrite(string path, bool gzip)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         Stream file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20);
         return gzip ? new GZipStream(file, CompressionLevel.Fastest, leaveOpen: false) : file;
     }
@@ -110,7 +110,7 @@ internal static class BsonDump
         }
         int length = BinaryPrimitives.ReadInt32LittleEndian(prefix);
         // BSON 单文档上限 16 MB,留点余量;小于 5 字节的不可能是文档。
-        if (length < 5 || length > 48 * 1024 * 1024)
+        if (length is < 5 or > (48 * 1024 * 1024))
         {
             throw new InvalidDataException($"Invalid BSON document length {length}.");
         }
@@ -144,7 +144,7 @@ internal static class BsonDump
                 {
                     break;
                 }
-                stream.Seek(length - 4, SeekOrigin.Current);
+                _ = stream.Seek(length - 4, SeekOrigin.Current);
                 count++;
             }
             return count;

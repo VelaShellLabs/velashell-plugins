@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using MongoDB.Bson;
 
 namespace VelaShell.Plugin.Mongo.Ui;
@@ -57,7 +58,6 @@ internal sealed record RoleTag(string Text, string Token)
 internal sealed class UserRowViewModel : ObservableObject
 {
     private readonly Loc _loc;
-    private bool _isEditing;
 
     /// <summary>构造。</summary>
     public UserRowViewModel(MongoUser user, Loc loc, string? focusDb, bool isSelf)
@@ -102,10 +102,10 @@ internal sealed class UserRowViewModel : ObservableObject
     /// <summary>有未保存的修改(副标题换成橙色「编辑中」)。</summary>
     public bool IsEditing
     {
-        get => _isEditing;
+        get;
         set
         {
-            if (SetProperty(ref _isEditing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(Subtitle), nameof(HasSubtitle));
             }
@@ -113,7 +113,7 @@ internal sealed class UserRowViewModel : ObservableObject
     }
 
     /// <summary>灰字副标题:备注;没有备注而它正是当前连接的身份时标「当前连接身份」;编辑中时换成「编辑中」。</summary>
-    public string Subtitle => _isEditing ? _loc["Users_Editing"] : Note ?? (IsSelf ? _loc["Users_CurrentIdentity"] : "");
+    public string Subtitle => IsEditing ? _loc["Users_Editing"] : Note ?? (IsSelf ? _loc["Users_CurrentIdentity"] : "");
 
     /// <summary>有没有副标题(没有时名字垂直居中)。</summary>
     public bool HasSubtitle => Subtitle.Length > 0;
@@ -123,7 +123,6 @@ internal sealed class UserRowViewModel : ObservableObject
 internal sealed class RoleRowViewModel : ObservableObject
 {
     private readonly Loc _loc;
-    private bool _isEditing;
 
     /// <summary>构造。</summary>
     public RoleRowViewModel(MongoRole role, Loc loc, string? focusDb, int holders)
@@ -158,10 +157,10 @@ internal sealed class RoleRowViewModel : ObservableObject
     /// <summary>有未保存的修改。</summary>
     public bool IsEditing
     {
-        get => _isEditing;
+        get;
         set
         {
-            if (SetProperty(ref _isEditing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(Subtitle));
             }
@@ -169,7 +168,7 @@ internal sealed class RoleRowViewModel : ObservableObject
     }
 
     /// <summary>副标题:<c>3 条权限 · 2 个用户</c>;编辑中时换成「编辑中」。</summary>
-    public string Subtitle => _isEditing
+    public string Subtitle => IsEditing
         ? _loc["Users_Editing"]
         : _loc.Format("Users_RoleRowSummary", Role.Privileges.Count, Holders);
 }
@@ -497,7 +496,6 @@ internal sealed class ActionCheckViewModel : ObservableObject
 internal sealed class PrivilegeRowViewModel : ObservableObject
 {
     private readonly Action _changed;
-    private readonly BsonDocument? _resource;
     private string _db;
     private string _collection;
 
@@ -512,7 +510,7 @@ internal sealed class PrivilegeRowViewModel : ObservableObject
         Loc = loc;
         _changed = changed;
         IsNew = original is null;
-        _resource = original?.Resource;
+        Resource = original?.Resource;
         IsNamespace = original is null
                       || (original.Resource.ElementCount == 2
                           && original.Resource.TryGetValue("db", out BsonValue d) && d.IsString
@@ -575,9 +573,10 @@ internal sealed class PrivilegeRowViewModel : ObservableObject
     public RelayCommand RemoveCommand { get; }
 
     /// <summary>资源文档。</summary>
+    [AllowNull]
     public BsonDocument Resource => IsNamespace
         ? new BsonDocument { { "db", _db }, { "collection", _collection } }
-        : _resource!;
+        : field!;
 
     /// <summary>当前状态的权限;一个动作都没勾时为 <see langword="null" />(保存时等于删除)。</summary>
     public Privilege? ToPrivilege()

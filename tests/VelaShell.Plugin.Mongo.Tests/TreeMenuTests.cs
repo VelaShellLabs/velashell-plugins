@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Ui;
 
 namespace VelaShell.Plugin.Mongo.Tests;

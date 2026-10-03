@@ -1,5 +1,4 @@
 using Avalonia.Markup.Xaml;
-using Avalonia.Media;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 

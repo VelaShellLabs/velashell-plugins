@@ -32,7 +32,7 @@ public static class ShellFormatter
             string line = raw.Trim();
             if (inBlockComment)
             {
-                output.Append(new string(' ', levels.Count * Unit.Length)).Append(line).Append('\n');
+                _ = output.Append(new string(' ', levels.Count * Unit.Length)).Append(line).Append('\n');
                 if (line.Contains("*/", StringComparison.Ordinal))
                 {
                     inBlockComment = false;
@@ -43,7 +43,7 @@ public static class ShellFormatter
             {
                 if (++blankRun <= 1)
                 {
-                    output.Append('\n');
+                    _ = output.Append('\n');
                 }
                 continue;
             }
@@ -62,7 +62,7 @@ public static class ShellFormatter
                 }
             }
             int indent = temp.Count + (spaced.StartsWith('.') ? 1 : 0);
-            output.Append(string.Concat(Enumerable.Repeat(Unit, indent))).Append(spaced).Append('\n');
+            _ = output.Append(string.Concat(Enumerable.Repeat(Unit, indent))).Append(spaced).Append('\n');
 
             // 再按本行的括号更新层级:一行里新开的括号(不论几个)只算一级缩进。
             int pending = 0;
@@ -114,7 +114,7 @@ public static class ShellFormatter
             if (c is '"' or '\'')
             {
                 int end = ShellScript.SkipString(line, i);
-                b.Append(line, i, end - i);
+                _ = b.Append(line, i, end - i);
                 i = end;
                 previous = c;
                 sawContent = true;
@@ -125,16 +125,16 @@ public static class ShellFormatter
                 TrimSpace(b);
                 if (b.Length > 0)
                 {
-                    b.Append(' ');
+                    _ = b.Append(' ');
                 }
-                b.Append(line, i, line.Length - i);
+                _ = b.Append(line, i, line.Length - i);
                 break;
             }
             if (c == '/' && i + 1 < line.Length && line[i + 1] == '*')
             {
                 int close = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
                 int end = close < 0 ? line.Length : close + 2;
-                b.Append(line, i, end - i);
+                _ = b.Append(line, i, end - i);
                 opensBlockComment = close < 0;
                 i = end;
                 continue;
@@ -142,7 +142,7 @@ public static class ShellFormatter
             if (c == '/' && ShellScript.IsRegexStart(previous))
             {
                 int end = ShellScript.SkipRegex(line, i);
-                b.Append(line, i, end - i);
+                _ = b.Append(line, i, end - i);
                 i = end;
                 previous = '/';
                 sawContent = true;
@@ -152,7 +152,7 @@ public static class ShellFormatter
             {
                 if (b.Length > 0 && b[^1] != ' ')
                 {
-                    b.Append(' ');
+                    _ = b.Append(' ');
                 }
                 i++;
                 continue;
@@ -160,46 +160,46 @@ public static class ShellFormatter
             switch (c)
             {
                 case '{':
-                    b.Append('{');
+                    _ = b.Append('{');
                     // { 后一个空格(空对象 {} 除外)。
                     if (NextSignificant(line, i + 1) is var n && n != '}' && n != '\0')
                     {
-                        b.Append(' ');
+                        _ = b.Append(' ');
                     }
                     break;
                 case '}':
                     TrimSpace(b);
                     if (b.Length > 0 && b[^1] != '{' && b[^1] is not ('(' or '['))
                     {
-                        b.Append(' ');
+                        _ = b.Append(' ');
                     }
-                    b.Append('}');
+                    _ = b.Append('}');
                     break;
                 case ':':
                     TrimSpace(b);
-                    b.Append(':');
+                    _ = b.Append(':');
                     if (i + 1 < line.Length)
                     {
-                        b.Append(' ');
+                        _ = b.Append(' ');
                     }
                     break;
                 case ',':
                     TrimSpace(b);
-                    b.Append(',');
+                    _ = b.Append(',');
                     if (i + 1 < line.Length && NextSignificant(line, i + 1) is not (']' or ')' or '\0'))
                     {
-                        b.Append(' ');
+                        _ = b.Append(' ');
                     }
                     break;
                 case ')' or ']':
                     TrimSpace(b);
-                    b.Append(c);
+                    _ = b.Append(c);
                     break;
                 case '(' or '[':
-                    b.Append(c);
+                    _ = b.Append(c);
                     break;
                 default:
-                    b.Append(c);
+                    _ = b.Append(c);
                     break;
             }
             if (c is '(' or '[' or '{' or ')' or ']' or '}')

@@ -148,16 +148,16 @@ internal sealed class AnalyzedField
             case BsonKind.Object:
                 return;
             case BsonKind.Array:
-            {
-                BsonArray array = value.AsBsonArray;
-                ArrayLengths[array.Count] = ArrayLengths.GetValueOrDefault(array.Count) + 1;
-                foreach (BsonValue item in array)
                 {
-                    BsonKind itemKind = BsonKinds.Of(item);
-                    ElementKinds[itemKind] = ElementKinds.GetValueOrDefault(itemKind) + 1;
+                    BsonArray array = value.AsBsonArray;
+                    ArrayLengths[array.Count] = ArrayLengths.GetValueOrDefault(array.Count) + 1;
+                    foreach (BsonValue item in array)
+                    {
+                        BsonKind itemKind = BsonKinds.Of(item);
+                        ElementKinds[itemKind] = ElementKinds.GetValueOrDefault(itemKind) + 1;
+                    }
+                    return;
                 }
-                return;
-            }
         }
         ScalarCount++;
         ValueBytes += EstimateBytes(value);
@@ -323,7 +323,7 @@ internal static class SchemaAnalyzer
             list.Add(element.Value);
             if (inArray)
             {
-                arrayPaths.Add(path);
+                _ = arrayPaths.Add(path);
             }
             if (depth <= 0)
             {
@@ -438,7 +438,7 @@ internal static class SchemaAnalyzer
         {
             min = 0;
         }
-        var bins = new double[HistogramBins];
+        double[] bins = new double[HistogramBins];
         double width = max > min ? (max - min) / HistogramBins : 1;
         foreach (double v in sorted)
         {
@@ -462,7 +462,7 @@ internal static class SchemaAnalyzer
         int days = (int)(end - start).TotalDays + 1;
         int perBin = days > 120 ? 7 : 1;
         int count = Math.Max(1, (int)Math.Ceiling(days / (double)perBin));
-        var bins = new double[count];
+        double[] bins = new double[count];
         foreach (DateTime date in field.Dates)
         {
             int index = (int)((date.Date - start).TotalDays / perBin);
@@ -524,31 +524,31 @@ internal static class SchemaAnalyzer
                     ? (loc.Format("Design_HintNearlyUnique", name), false)
                     : (loc.Format("Design_HintDistinct", name, BsonText.Grouped(field.DistinctCount)), false);
             case BsonKind.Int32 or BsonKind.Int64 or BsonKind.Double or BsonKind.Decimal128 when field.Numbers.Count > 0:
-            {
-                double[] sorted = [.. field.Numbers.Order()];
-                return (loc.Format("Design_HintNumeric", name, Number(Percentile(sorted, 0.5)), Number(Percentile(sorted, 0.95))), false);
-            }
+                {
+                    double[] sorted = [.. field.Numbers.Order()];
+                    return (loc.Format("Design_HintNumeric", name, Number(Percentile(sorted, 0.5)), Number(Percentile(sorted, 0.95))), false);
+                }
             case BsonKind.Date when field.Dates.Count > 0:
                 return (WeekendDip(field)
                     ? loc.Format("Design_HintWeekendDip", name)
                     : loc.Format("Design_HintDateSpan", name, (int)(field.Dates.Max() - field.Dates.Min()).TotalDays + 1), false);
             case BsonKind.Array:
-            {
-                if (field.ElementDocuments > 0)
                 {
-                    return (loc.Format("Design_HintArrayObjects", name, Pct(field.CompleteElementDocuments, field.ElementDocuments)), false);
+                    if (field.ElementDocuments > 0)
+                    {
+                        return (loc.Format("Design_HintArrayObjects", name, Pct(field.CompleteElementDocuments, field.ElementDocuments)), false);
+                    }
+                    int arrays = field.ArrayLengths.Values.Sum();
+                    double avg = arrays == 0 ? 0 : field.ArrayLengths.Sum(static p => (double)p.Key * p.Value) / arrays;
+                    return (loc.Format("Design_HintArrayAvg", name, avg.ToString("0.#", CultureInfo.InvariantCulture)), false);
                 }
-                int arrays = field.ArrayLengths.Values.Sum();
-                double avg = arrays == 0 ? 0 : field.ArrayLengths.Sum(static p => (double)p.Key * p.Value) / arrays;
-                return (loc.Format("Design_HintArrayAvg", name, avg.ToString("0.#", CultureInfo.InvariantCulture)), false);
-            }
             case BsonKind.Object:
                 return (loc.Format("Design_HintObject", name, field.Children.Count), false);
             case BsonKind.Boolean:
-            {
-                int trues = field.Values.TryGetValue(BsonBoolean.True, out int t) ? t : 0;
-                return (loc.Format("Design_HintBoolean", name, Pct(trues, field.ScalarCount)), false);
-            }
+                {
+                    int trues = field.Values.TryGetValue(BsonBoolean.True, out int t) ? t : 0;
+                    return (loc.Format("Design_HintBoolean", name, Pct(trues, field.ScalarCount)), false);
+                }
             case BsonKind.ObjectId:
                 return (loc.Format("Design_HintReference", name, BsonText.Grouped(field.DistinctCount)), false);
             default:
@@ -582,28 +582,28 @@ internal static class SchemaAnalyzer
         switch (kind)
         {
             case BsonKind.ObjectId when field.IdTimes.Count > 0:
-            {
-                string head = field.IsUnique
-                    ? loc.Format("Design_VizUniqueValues", BsonText.Grouped(field.DistinctCount))
-                    : loc.Format("Design_VizDistinct", BsonText.Grouped(field.DistinctCount));
-                DateTime from = field.IdTimes.Min().ToLocalTime();
-                DateTime to = field.IdTimes.Max().ToLocalTime();
-                string range = from.Year == to.Year
-                    ? $"{from:yyyy-MM-dd} → {to:MM-dd}"
-                    : $"{from:yyyy-MM-dd} → {to:yyyy-MM-dd}";
-                return $"{head} · {loc.Format("Design_VizIdTime", range)}";
-            }
+                {
+                    string head = field.IsUnique
+                        ? loc.Format("Design_VizUniqueValues", BsonText.Grouped(field.DistinctCount))
+                        : loc.Format("Design_VizDistinct", BsonText.Grouped(field.DistinctCount));
+                    DateTime from = field.IdTimes.Min().ToLocalTime();
+                    DateTime to = field.IdTimes.Max().ToLocalTime();
+                    string range = from.Year == to.Year
+                        ? $"{from:yyyy-MM-dd} → {to:MM-dd}"
+                        : $"{from:yyyy-MM-dd} → {to:yyyy-MM-dd}";
+                    return $"{head} · {loc.Format("Design_VizIdTime", range)}";
+                }
             case BsonKind.String:
-            {
-                string head = field.IsUnique
-                    ? loc.Format("Design_VizUniqueValues", BsonText.Grouped(field.DistinctCount))
-                    : loc.Format("Design_VizDistinct", BsonText.Grouped(field.DistinctCount) + (field.DistinctOverflow ? "+" : ""));
-                string example = field.Values.Keys.FirstOrDefault() is { } first ? Label(first) : "";
-                string lengths = field.StringLengths.Count == 0
-                    ? ""
-                    : " · " + loc.Format("Design_VizLength", field.StringLengths.Min(), field.StringLengths.Max());
-                return example.Length == 0 ? head + lengths : $"{head} · {loc.Format("Design_VizExample", example)}{lengths}";
-            }
+                {
+                    string head = field.IsUnique
+                        ? loc.Format("Design_VizUniqueValues", BsonText.Grouped(field.DistinctCount))
+                        : loc.Format("Design_VizDistinct", BsonText.Grouped(field.DistinctCount) + (field.DistinctOverflow ? "+" : ""));
+                    string example = field.Values.Keys.FirstOrDefault() is { } first ? Label(first) : "";
+                    string lengths = field.StringLengths.Count == 0
+                        ? ""
+                        : " · " + loc.Format("Design_VizLength", field.StringLengths.Min(), field.StringLengths.Max());
+                    return example.Length == 0 ? head + lengths : $"{head} · {loc.Format("Design_VizExample", example)}{lengths}";
+                }
             case BsonKind.Object:
                 return loc.Format("Design_VizChildren", string.Join(" · ", field.Children.Take(6)) + (field.Children.Count > 6 ? " …" : ""));
             case BsonKind.Null:
@@ -634,7 +634,7 @@ internal static class SchemaAnalyzer
         {
             return false;
         }
-        var byDay = new int[7];
+        int[] byDay = new int[7];
         foreach (DateTime date in field.Dates)
         {
             byDay[(int)date.ToLocalTime().DayOfWeek]++;

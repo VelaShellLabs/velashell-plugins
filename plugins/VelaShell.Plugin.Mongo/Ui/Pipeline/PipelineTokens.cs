@@ -55,11 +55,12 @@ internal readonly record struct PipelineToken(int Start, int Length, PipelineTok
 /// </summary>
 internal static class PipelineTokens
 {
-    private static readonly HashSet<string> Constructors = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> Constructors =
+    [
+        with(StringComparer.Ordinal),
         "ISODate", "Date", "NumberDecimal", "NumberLong", "NumberInt", "NumberDouble", "Decimal128", "Long", "Int32",
         "Double", "BinData", "UUID", "Timestamp", "MinKey", "MaxKey", "RegExp", "HexData", "MD5", "new"
-    };
+    ];
 
     /// <summary>切分。</summary>
     public static IReadOnlyList<PipelineToken> Tokenize(string text)
@@ -148,10 +149,10 @@ internal static class PipelineTokens
                 int end = PipelineText.SkipString(code, i);
                 if (space && b.Length > 0)
                 {
-                    b.Append(' ');
+                    _ = b.Append(' ');
                 }
                 space = false;
-                b.Append(code, i, end - i);
+                _ = b.Append(code, i, end - i);
                 i = end;
                 continue;
             }
@@ -169,10 +170,10 @@ internal static class PipelineTokens
             }
             if (space && b.Length > 0)
             {
-                b.Append(' ');
+                _ = b.Append(' ');
             }
             space = false;
-            b.Append(c);
+            _ = b.Append(c);
             i++;
         }
         return b.ToString();

@@ -51,7 +51,7 @@ public static class LogLevels
         {
             return fromJson;
         }
-        var head = text.AsSpan(0, Math.Min(text.Length, HeadWindow));
+        ReadOnlySpan<char> head = text.AsSpan(0, Math.Min(text.Length, HeadWindow));
         return HasWord(head, "ERROR") || HasWord(head, "FATAL") || HasWord(head, "PANIC") ? LogLevel.Error
             : HasWord(head, "WARN") || HasWord(head, "WARNING") ? LogLevel.Warn
             : HasWord(head, "DEBUG") || HasWord(head, "TRACE") ? LogLevel.Debug
@@ -69,18 +69,18 @@ public static class LogLevels
     /// </summary>
     private static bool HasWord(ReadOnlySpan<char> haystack, ReadOnlySpan<char> word)
     {
-        var from = 0;
+        int from = 0;
         while (from < haystack.Length)
         {
-            var at = haystack[from..].IndexOf(word, StringComparison.OrdinalIgnoreCase);
+            int at = haystack[from..].IndexOf(word, StringComparison.OrdinalIgnoreCase);
             if (at < 0)
             {
                 return false;
             }
             at += from;
-            var after = at + word.Length;
-            var leftOk = at == 0 || !char.IsLetterOrDigit(haystack[at - 1]);
-            var rightOk = after >= haystack.Length || !char.IsLetterOrDigit(haystack[after]);
+            int after = at + word.Length;
+            bool leftOk = at == 0 || !char.IsLetterOrDigit(haystack[at - 1]);
+            bool rightOk = after >= haystack.Length || !char.IsLetterOrDigit(haystack[after]);
             if (leftOk && rightOk)
             {
                 return true;
@@ -92,16 +92,16 @@ public static class LogLevels
 
     private static LogLevel? TryJsonLevel(string text)
     {
-        foreach (var key in (string[])["\"level\"", "\"lvl\"", "\"severity\""])
+        foreach (string key in (string[])["\"level\"", "\"lvl\"", "\"severity\""])
         {
-            var at = text.IndexOf(key, StringComparison.OrdinalIgnoreCase);
+            int at = text.IndexOf(key, StringComparison.OrdinalIgnoreCase);
             if (at < 0)
             {
                 continue;
             }
             // 取键之后一小段,足够覆盖 `: "error"` 这种带空格的写法。
-            var from = at + key.Length;
-            var value = text.AsSpan(from, Math.Min(24, text.Length - from));
+            int from = at + key.Length;
+            ReadOnlySpan<char> value = text.AsSpan(from, Math.Min(24, text.Length - from));
             if (Contains(value, "error") || Contains(value, "fatal") || Contains(value, "panic"))
             {
                 return LogLevel.Error;

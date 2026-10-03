@@ -18,8 +18,6 @@ internal sealed class EffectivePreview : ObservableObject, IDisposable
 {
     private readonly UsersTabViewModel _owner;
     private CancellationTokenSource? _pending;
-    private bool _isBusy;
-    private string _message = "";
 
     /// <summary>构造。</summary>
     public EffectivePreview(UsersTabViewModel owner)
@@ -33,25 +31,25 @@ internal sealed class EffectivePreview : ObservableObject, IDisposable
     /// <summary>正在算。</summary>
     public bool IsBusy
     {
-        get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>空态 / 出错时的一句话。</summary>
     public string Message
     {
-        get => _message;
+        get;
         private set
         {
-            if (SetProperty(ref _message, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasMessage));
             }
         }
-    }
+    } = "";
 
     /// <summary>有没有那句话。</summary>
-    public bool HasMessage => _message.Length > 0;
+    public bool HasMessage => Message.Length > 0;
 
     /// <summary>请求重算(防抖)。</summary>
     /// <param name="originalRoles">服务器现状的角色。</param>

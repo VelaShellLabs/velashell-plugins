@@ -47,7 +47,7 @@ public sealed partial class DockerPanelViewModel
             return;
         }
         form.FormError = null;
-        foreach (var each in form.Fields)
+        foreach (FormField each in form.Fields)
         {
             each.Error = null;
         }
@@ -127,10 +127,10 @@ public sealed partial class DockerPanelViewModel
 
     private void CompleteForm(bool confirmed)
     {
-        var pending = _formPending;
+        TaskCompletionSource<bool>? pending = _formPending;
         _formPending = null;
         Ui.Post(() => ActiveForm = null);
-        pending?.TrySetResult(confirmed);
+        _ = (pending?.TrySetResult(confirmed));
     }
 
     /// <summary>打开拉取镜像对话框。</summary>
@@ -150,7 +150,7 @@ public sealed partial class DockerPanelViewModel
         string[] networks;
         try
         {
-            var all = await client.ListNetworksAsync(Lifetime).ConfigureAwait(true);
+            NetworkSummary[] all = await client.ListNetworksAsync(Lifetime).ConfigureAwait(true);
             networks = [.. all.Select(n => n.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase)];
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -159,10 +159,10 @@ public sealed partial class DockerPanelViewModel
         }
         // 镜像的小字:大小与平台。表单里原来完全看不到自己要跑的是哪个镜像
         // (只有最底下那条等效命令里出现过),而这颗按钮是从好几个地方点进来的。
-        var detail = "";
+        string detail = "";
         try
         {
-            var images = await client.ListImagesAsync(false, Lifetime).ConfigureAwait(true);
+            ImageSummary[] images = await client.ListImagesAsync(false, Lifetime).ConfigureAwait(true);
             if (images.FirstOrDefault(i => i.RepoTags?.Contains(image) == true) is { } match)
             {
                 detail = Humanize.Bytes(match.Size);
@@ -178,21 +178,21 @@ public sealed partial class DockerPanelViewModel
         {
             return;
         }
-        var task = Tasks.Start("Icon.play", $"运行 {image}", indeterminate: true);
+        PanelTask task = Tasks.Start("Icon.play", $"运行 {image}", indeterminate: true);
         try
         {
-            var created = await client
+            CreateContainerResponse created = await client
                 .CreateContainerAsync(form.ContainerName, form.ToRequest(), task.Token).ConfigureAwait(true);
-            foreach (var warning in created.Warnings ?? [])
+            foreach (string warning in created.Warnings ?? [])
             {
-                Feedback.Notify(FeedbackKind.Warning, "daemon 有话说", warning);
+                _ = Feedback.Notify(FeedbackKind.Warning, "daemon 有话说", warning);
             }
             if (form.Detach)
             {
                 await client.StartContainerAsync(created.Id, task.Token).ConfigureAwait(true);
             }
             task.Finish(PanelTaskState.Succeeded, "完成", Humanize.ShortId(created.Id));
-            Feedback.Notify(FeedbackKind.Success,
+            _ = Feedback.Notify(FeedbackKind.Success,
                 form.Detach ? "容器已启动" : "容器已创建",
                 $"{(form.ContainerName.Length > 0 ? form.ContainerName : Humanize.ShortId(created.Id))} · {image}");
             await GoToAsync(PanelPage.Containers).ConfigureAwait(true);

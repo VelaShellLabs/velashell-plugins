@@ -5,8 +5,8 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Analysis;
 using VelaShell.Plugin.Mongo.Bson;
-using VelaShell.Plugin.Mongo.Shell;
 using VelaShell.Plugin.Mongo.Core;
+using VelaShell.Plugin.Mongo.Shell;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -35,11 +35,6 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
     private readonly string _database;
     private readonly ExplainPlan _current;
     private readonly int _maxTimeMs;
-    private string? _selectedIndex;
-    private bool _isBusy;
-    private string? _error;
-    private IReadOnlyList<HintCompareRow> _rows = [];
-    private string _hintedTitle = "";
 
     /// <summary>构造。</summary>
     public HintCompareDialogViewModel(IMongoWorkspace workspace, ShellExecutor executor, ShellCommand command, string database, ExplainPlan current, int maxTimeMs)
@@ -52,7 +47,7 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
         _maxTimeMs = maxTimeMs;
         Title = workspace.Loc["Query_HintTitle"];
         Subtitle = $"{_database}.{command.Collection}";
-        CompareCommand = new AsyncCommand(CompareAsync, () => _selectedIndex is not null && !_isBusy);
+        CompareCommand = new AsyncCommand(CompareAsync, () => SelectedIndex is not null && !IsBusy);
         _ = LoadIndexesAsync();
         Rows = Build(null);
     }
@@ -69,10 +64,10 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>选中的索引。</summary>
     public string? SelectedIndex
     {
-        get => _selectedIndex;
+        get;
         set
         {
-            if (SetProperty(ref _selectedIndex, value))
+            if (SetProperty(ref field, value))
             {
                 CompareCommand.RaiseCanExecuteChanged();
             }
@@ -82,10 +77,10 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>跑着。</summary>
     public bool IsBusy
     {
-        get => _isBusy;
+        get;
         private set
         {
-            if (SetProperty(ref _isBusy, value))
+            if (SetProperty(ref field, value))
             {
                 CompareCommand.RaiseCanExecuteChanged();
             }
@@ -95,10 +90,10 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>失败原因。</summary>
     public string? Error
     {
-        get => _error;
+        get;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
@@ -106,7 +101,7 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
     }
 
     /// <summary>有没有失败。</summary>
-    public bool HasError => _error is not null;
+    public bool HasError => Error is not null;
 
     /// <summary>当前计划一列的标题。</summary>
     public string CurrentTitle => Loc.Format("Query_HintCurrent", _current.Summary);
@@ -114,16 +109,16 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>hint 一列的标题。</summary>
     public string HintedTitle
     {
-        get => _hintedTitle;
-        private set => SetProperty(ref _hintedTitle, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>对比表。</summary>
     public IReadOnlyList<HintCompareRow> Rows
     {
-        get => _rows;
-        private set => SetProperty(ref _rows, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>对比。</summary>
     public AsyncCommand CompareCommand { get; }
@@ -153,7 +148,7 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
 
     private async Task CompareAsync()
     {
-        if (_selectedIndex is not { } index)
+        if (SelectedIndex is not { } index)
         {
             return;
         }
@@ -166,7 +161,7 @@ internal sealed class HintCompareDialogViewModel : DialogViewModel, IViewFactory
                 .ConfigureAwait(true);
             if (result.Explain is { } explain)
             {
-                ExplainPlan hinted = ExplainPlan.Parse(explain);
+                var hinted = ExplainPlan.Parse(explain);
                 HintedTitle = Loc.Format("Query_HintWith", index);
                 Rows = Build(hinted);
             }

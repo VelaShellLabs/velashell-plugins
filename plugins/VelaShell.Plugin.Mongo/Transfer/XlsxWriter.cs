@@ -59,7 +59,6 @@ internal sealed class XlsxWriter : IDisposable
     private readonly bool _freezeHeader;
     private Stream? _sheetStream;
     private XmlWriter? _sheet;
-    private int _row;
     private bool _completed;
 
     /// <summary>构造。</summary>
@@ -72,7 +71,7 @@ internal sealed class XlsxWriter : IDisposable
     }
 
     /// <summary>当前表已写的行数。</summary>
-    public int RowsInSheet => _row;
+    public int RowsInSheet { get; private set; }
 
     /// <summary>已建的表数。</summary>
     public int SheetCount => _sheets.Count;
@@ -127,7 +126,7 @@ internal sealed class XlsxWriter : IDisposable
             _sheet.WriteEndElement();
         }
         _sheet.WriteStartElement("sheetData", MainNs);
-        _row = 0;
+        RowsInSheet = 0;
     }
 
     /// <summary>写一行。</summary>
@@ -139,12 +138,12 @@ internal sealed class XlsxWriter : IDisposable
         {
             throw new InvalidOperationException("BeginSheet first.");
         }
-        if (_row >= MaxRows)
+        if (RowsInSheet >= MaxRows)
         {
             throw new InvalidOperationException("The sheet is full.");
         }
-        _row++;
-        string rowRef = _row.ToString(CultureInfo.InvariantCulture);
+        RowsInSheet++;
+        string rowRef = RowsInSheet.ToString(CultureInfo.InvariantCulture);
         _sheet.WriteStartElement("row", MainNs);
         _sheet.WriteAttributeString("r", rowRef);
         for (int i = 0; i < cells.Count; i++)
@@ -284,7 +283,7 @@ internal sealed class XlsxWriter : IDisposable
         while (n > 0)
         {
             int rem = (n - 1) % 26;
-            name.Insert(0, (char)('A' + rem));
+            _ = name.Insert(0, (char)('A' + rem));
             n = (n - 1) / 26;
         }
         return name.ToString();
@@ -293,7 +292,7 @@ internal sealed class XlsxWriter : IDisposable
     /// <summary>工作表名:去掉 <c>[]:*?/\</c>,最长 31 个字符,不能为空。</summary>
     public static string SanitizeSheetName(string name)
     {
-        var chars = name.Where(static c => c is not ('[' or ']' or ':' or '*' or '?' or '/' or '\\') && !char.IsControl(c)).ToArray();
+        char[] chars = name.Where(static c => c is not ('[' or ']' or ':' or '*' or '?' or '/' or '\\') && !char.IsControl(c)).ToArray();
         string clean = new string(chars).Trim('\'').Trim();
         if (clean.Length == 0)
         {
@@ -345,19 +344,19 @@ internal sealed class XlsxWriter : IDisposable
             char c = text[i];
             if (char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
             {
-                builder.Append(c).Append(text[i + 1]);
+                _ = builder.Append(c).Append(text[i + 1]);
                 i++;
             }
             else if (IsXmlChar(c) && !char.IsSurrogate(c))
             {
-                builder.Append(c);
+                _ = builder.Append(c);
             }
         }
         return builder.ToString();
     }
 
     private static bool IsXmlChar(char c) =>
-        c == '\t' || c == '\n' || c == '\r' || (c >= 0x20 && c <= 0xFFFD && c is not '￾' and not '￿');
+        c is '\t' or '\n' or '\r' or >= (char)0x20 and <= (char)0xFFFD and not '￾' and not '￿';
 
     private static XmlWriterSettings XmlSettings() => new()
     {

@@ -101,7 +101,7 @@ internal static class ExportRunner
             }
             else if (job.TargetIsFolder)
             {
-                Directory.CreateDirectory(job.Target);
+                _ = Directory.CreateDirectory(job.Target);
                 foreach (ExportSource source in job.Sources)
                 {
                     string path = Path.Combine(job.Target, TransferText.SafeFileName(source.Info.Name) + ExportJob.Extension(job.Format, job.Json));
@@ -138,7 +138,7 @@ internal static class ExportRunner
         CancellationToken cancellationToken)
     {
         string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        Directory.CreateDirectory(directory);
+        _ = Directory.CreateDirectory(directory);
         string part = path + ".part";
         created.Add(part);
         var counting = new CountingStream(new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20));
@@ -159,7 +159,7 @@ internal static class ExportRunner
         }
         state.Detach();
         File.Move(part, path, overwrite: true);
-        created.Remove(part);
+        _ = created.Remove(part);
     }
 
     private static async Task DumpAsync(

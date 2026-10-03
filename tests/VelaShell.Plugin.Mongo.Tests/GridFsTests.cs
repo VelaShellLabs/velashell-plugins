@@ -102,7 +102,7 @@ public sealed class GridFsTests
     {
         string root = Path.Combine(Path.GetTempPath(), "fs-up-" + Guid.NewGuid().ToString("N"));
         string folder = Path.Combine(root, "SKU-1");
-        Directory.CreateDirectory(Path.Combine(folder, "detail"));
+        _ = Directory.CreateDirectory(Path.Combine(folder, "detail"));
         File.WriteAllBytes(Path.Combine(folder, "main.jpg"), [1, 2, 3]);
         File.WriteAllBytes(Path.Combine(folder, "detail", "d1.jpg"), [4, 5]);
         string loose = Path.Combine(root, "loose.txt");
@@ -178,12 +178,12 @@ public sealed class GridFsTests
         long reported = 0;
         using (var source = new MemoryStream(v1))
         {
-            await fs.UploadAsync("docs/a.bin", source, new BsonDocument("note", "first"), new Progress<long>(b => reported = b));
+            _ = await fs.UploadAsync("docs/a.bin", source, new BsonDocument("note", "first"), new Progress<long>(b => reported = b));
         }
         await Task.Delay(5);
         using (var source = new MemoryStream(v2))
         {
-            await fs.UploadAsync("docs/a.bin", source, new BsonDocument("note", "second"));
+            _ = await fs.UploadAsync("docs/a.bin", source, new BsonDocument("note", "second"));
         }
         IReadOnlyList<GridFsFile> versions = await fs.VersionsAsync("docs/a.bin");
         Assert.AreEqual(2, versions.Count);
@@ -197,7 +197,7 @@ public sealed class GridFsTests
         }
 
         // 恢复 v1:新写一份,成为最新;旧的两份都还在。
-        await fs.RestoreAsync(versions[1]);
+        _ = await fs.RestoreAsync(versions[1]);
         IReadOnlyList<GridFsFile> afterRestore = await fs.VersionsAsync("docs/a.bin");
         Assert.AreEqual(3, afterRestore.Count);
         Assert.AreEqual(v1.Length, afterRestore[0].Length);
@@ -246,7 +246,7 @@ public sealed class GridFsTests
         GridFsService fs = temp.Service;
         using (var source = new MemoryStream(Bytes(1000, seed: 3)))
         {
-            await fs.UploadAsync("kept.bin", source, null);
+            _ = await fs.UploadAsync("kept.bin", source, null);
         }
         var ghost = ObjectId.GenerateNewId();
         await fs.Chunks.InsertManyAsync(
@@ -333,12 +333,12 @@ public sealed class GridFsTests
         CollectionAssert.AreEquivalent(new BsonValue[] { ids[2], ids[3], ids[4] }, left, "only v1 and v2 are gone");
         Assert.AreEqual(0L, await chunks.CountDocumentsAsync(new BsonDocument("files_id", new BsonDocument("$in", new BsonArray { ids[0], ids[1] }))),
             "their chunks went with them");
-        Assert.AreEqual(ids[4], (BsonValue)details.Versions[0].File.Id, "the latest stays the latest");
+        Assert.AreEqual(ids[4], details.Versions[0].File.Id, "the latest stays the latest");
         Assert.AreEqual("v3", details.Versions[0].Label, "the kept versions are renumbered by position");
 
         // 版本行上的垃圾桶:只删那一份(现在的 v1,也就是原来的 v3)。
         GridFsVersionRow oldest = details.Versions.Single(static v => v.Label == "v1");
-        Assert.AreEqual(ids[2], (BsonValue)oldest.File.Id);
+        Assert.AreEqual(ids[2], oldest.File.Id);
         Task single = details.DeleteVersionCommand.ExecuteAsync(oldest);
         await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel || single.IsCompleted);
         Assert.AreEqual(bench.ViewModel.Loc["Fs_DeleteVersionTitle"], ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).Request.Title);
@@ -353,7 +353,7 @@ public sealed class GridFsTests
         ((ConfirmDialogViewModel)bench.ViewModel.Dialog!).ConfirmCommand.Execute(null);
         await keeping;
         await WaitAsync(() => details.Versions.Count == 1);
-        Assert.AreEqual(ids[4], (BsonValue)details.Versions[0].File.Id);
+        Assert.AreEqual(ids[4], details.Versions[0].File.Id);
         Assert.IsFalse(details.HasOldVersions);
         Assert.AreEqual(1L, await files.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty));
     });
@@ -366,7 +366,7 @@ public sealed class GridFsTests
         // 先放一份,让桶在对象树里出现。
         using (var seed = new MemoryStream(Bytes(10, seed: 4)))
         {
-            await temp.Service.UploadAsync("seed/readme.txt", seed, null);
+            _ = await temp.Service.UploadAsync("seed/readme.txt", seed, null);
         }
         await using Workbench bench = await Screens.OpenWorkbenchAsync(temp.Database);
         bench.Session.OpenGridFs(temp.Database, "fs");
@@ -379,7 +379,7 @@ public sealed class GridFsTests
         await tab.NavigateAsync("seed/");
         Assert.AreEqual(GridFsEntryKind.Parent, tab.Entries[0].Kind);
         string local = Path.Combine(Path.GetTempPath(), "fs-tab-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(local);
+        _ = Directory.CreateDirectory(local);
         string photo = Path.Combine(local, "photo.png");
         string doc = Path.Combine(local, "manual.pdf");
         File.WriteAllBytes(photo, Bytes(400_000, seed: 5));
@@ -418,11 +418,11 @@ public sealed class GridFsTests
             await WaitAsync(() => tab.Details.HasImage);
             Assert.AreEqual("160 × 90 · PNG", tab.Details.ImageInfo);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "06-gridfs-preview");
+            _ = Screens.Capture(bench.Window, "06-gridfs-preview");
             tab.IsGridView = true;
             await WaitAsync(() => tab.Entries.Single(static e => e.Name == "real.png").HasThumbnail);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "06-gridfs-thumbs");
+            _ = Screens.Capture(bench.Window, "06-gridfs-thumbs");
             tab.IsListView = true;
             tab.SelectedEntry = tab.Entries.Single(static e => e.Name == "real.png");
             tab.DeleteCommand.Execute(null);
@@ -462,7 +462,7 @@ public sealed class GridFsTests
             await WaitAsync(() => tab.IsTransferring && tab.TransferProgress > 0.02, timeoutMs: 30000);
             Assert.IsTrue(tab.Entries.Any(static e => e.IsUpload), "the pending upload shows as a row in its folder");
             await Screens.PumpAsync(4);
-            Screens.Capture(bench.Window, "06-gridfs-uploading");
+            _ = Screens.Capture(bench.Window, "06-gridfs-uploading");
             tab.CancelTransfersCommand.Execute(null);
             await WaitAsync(() => !tab.IsTransferring, timeoutMs: 30000);
             await WaitAsync(() => tab.Entries.All(static e => !e.IsUpload));
@@ -500,7 +500,7 @@ public sealed class GridFsTests
         await using TempBucket temp = await TempBucket.CreateAsync();
         using (var seed = new MemoryStream(Bytes(10, seed: 7)))
         {
-            await temp.Service.UploadAsync("a.txt", seed, null);
+            _ = await temp.Service.UploadAsync("a.txt", seed, null);
         }
         await using Workbench bench = await Screens.OpenWorkbenchAsync(temp.Database);
         bench.Session.OpenGridFs(temp.Database, "fs");
@@ -571,7 +571,7 @@ public sealed class GridFsTests
 
         // 上传对话框:只看不传(shop 只读对待)。
         string local = Path.Combine(Path.GetTempPath(), "fs-dlg-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(local);
+        _ = Directory.CreateDirectory(local);
         File.WriteAllBytes(Path.Combine(local, "detail-07.jpg"), Bytes(1000, seed: 9));
         File.WriteAllBytes(Path.Combine(local, "detail-08.jpg"), Bytes(2000, seed: 10));
         try
@@ -579,7 +579,7 @@ public sealed class GridFsTests
             Task upload = tab.UploadPathsAsync([Path.Combine(local, "detail-07.jpg"), Path.Combine(local, "detail-08.jpg")]);
             await WaitAsync(() => bench.ViewModel.Dialog is GridFsUploadDialogViewModel);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "06-gridfs-upload");
+            _ = Screens.Capture(bench.Window, "06-gridfs-upload");
             var dialog = (GridFsUploadDialogViewModel)bench.ViewModel.Dialog!;
             StringAssert.Contains(dialog.MetadataText, "image/jpeg", "same-type batches get contentType in the template");
             dialog.Close();
@@ -599,7 +599,7 @@ public sealed class GridFsTests
         Assert.IsFalse(create.CreateCommand.CanExecute(null));
         create.Name = "images";
         await Screens.PumpAsync(20);
-        Screens.Capture(bench.Window, "06-gridfs-newbucket");
+        _ = Screens.Capture(bench.Window, "06-gridfs-newbucket");
         create.Close();
 
         // 删除确认框(只看):写明"全部版本",并给出"只删最新版本"的出口。
@@ -609,7 +609,7 @@ public sealed class GridFsTests
         var confirm = (ConfirmDialogViewModel)bench.ViewModel.Dialog!;
         Assert.IsNotNull(confirm.Request.AsideLabel, "a multi-version file offers deleting only the latest version");
         await Screens.PumpAsync(20);
-        Screens.Capture(bench.Window, "06-gridfs-delete");
+        _ = Screens.Capture(bench.Window, "06-gridfs-delete");
         confirm.Close();
         await Screens.PumpAsync(5);
         Assert.IsTrue(tab.Entries.Any(static e => e.Name == "main.jpg"), "cancel deletes nothing");
@@ -624,7 +624,7 @@ public sealed class GridFsTests
             Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
         using (Avalonia.Platform.ILockedFramebuffer frame = bitmap.Lock())
         {
-            var row = new byte[frame.RowBytes];
+            byte[] row = new byte[frame.RowBytes];
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -643,7 +643,7 @@ public sealed class GridFsTests
 
     private static byte[] Bytes(int length, int seed)
     {
-        var bytes = new byte[length];
+        byte[] bytes = new byte[length];
         new Random(seed).NextBytes(bytes);
         return bytes;
     }
@@ -651,7 +651,7 @@ public sealed class GridFsTests
     private static async Task UploadAsync(GridFsService fs, string name, int length, BsonDocument? metadata)
     {
         using var source = new MemoryStream(Bytes(length, length));
-        await fs.UploadAsync(name, source, metadata);
+        _ = await fs.UploadAsync(name, source, metadata);
         // uploadDate 是毫秒精度:同名的几份隔开一点,"最新"才有确定的先后。
         await Task.Delay(3);
     }

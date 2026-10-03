@@ -29,10 +29,7 @@ public sealed class SerialPortEnumeratorTests
     }
 
     [TestMethod]
-    public void Sort_IgnoresLeadingZeroes()
-    {
-        Assert.AreSequenceEqual(["COM007", "COM8"], SortNames("COM8", "COM007"));
-    }
+    public void Sort_IgnoresLeadingZeroes() => Assert.AreSequenceEqual(["COM007", "COM8"], SortNames("COM8", "COM007"));
 
     [TestMethod]
     public void Sort_IsStableForNamesWithoutDigits()
@@ -60,16 +57,10 @@ public sealed class SerialPortEnumeratorTests
     }
 
     [TestMethod]
-    public void DescribeUnixName_KeepsAMacOsDeviceSuffixAsIs()
-    {
-        Assert.AreEqual("usbserial-A50285BI", SerialPortEnumerator.DescribeUnixName("usbserial-A50285BI"));
-    }
+    public void DescribeUnixName_KeepsAMacOsDeviceSuffixAsIs() => Assert.AreEqual("usbserial-A50285BI", SerialPortEnumerator.DescribeUnixName("usbserial-A50285BI"));
 
     [TestMethod]
-    public void DescribeUnixName_ReturnsEmptyForNothing()
-    {
-        Assert.AreEqual(string.Empty, SerialPortEnumerator.DescribeUnixName("   "));
-    }
+    public void DescribeUnixName_ReturnsEmptyForNothing() => Assert.AreEqual(string.Empty, SerialPortEnumerator.DescribeUnixName("   "));
 
     // ── Windows 的友好名 ────────────────────────────────────────────────────
 
@@ -93,11 +84,9 @@ public sealed class SerialPortEnumeratorTests
     }
 
     [TestMethod]
-    public void TrySplitFriendlyName_RejectsAParallelPort()
-    {
+    public void TrySplitFriendlyName_RejectsAParallelPort() =>
         // "端口(COM 和 LPT)"这个设备类里也有并口 —— 拆不出 (COMn) 正是过滤器本身。
         Assert.IsFalse(WindowsSerialPortNames.TrySplitFriendlyName("Printer Port (LPT1)", out _, out _));
-    }
 
     [TestMethod]
     public void TrySplitFriendlyName_RejectsNamesWithoutAPortNumber()

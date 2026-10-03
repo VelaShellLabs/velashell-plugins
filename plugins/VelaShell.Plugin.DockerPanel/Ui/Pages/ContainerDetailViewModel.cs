@@ -349,9 +349,9 @@ public sealed class ContainerDetailViewModel : ObservableObject, IAsyncDisposabl
         }
         try
         {
-            var result = await client.CommitContainerAsync(ContainerId, form.Repository, form.Tag,
+            CommitResponse result = await client.CommitContainerAsync(ContainerId, form.Repository, form.Tag,
                 form.Comment, author: null, form.Pause, _shell.Lifetime).ConfigureAwait(true);
-            _shell.Feedback.Notify(FeedbackKind.Success, "已提交为镜像",
+            _ = _shell.Feedback.Notify(FeedbackKind.Success, "已提交为镜像",
                 $"{form.Repository}:{form.Tag} · {Humanize.ShortId(result.Id)}");
             await _shell.Images.RefreshAsync(_shell.Lifetime).ConfigureAwait(true);
         }
@@ -482,7 +482,7 @@ public sealed class ContainerDetailViewModel : ObservableObject, IAsyncDisposabl
             Basics.Add(new("特权模式", "是 —— 容器可以做几乎任何宿主能做的事", RowTone.Danger));
         }
 
-        foreach (var port in _row.Summary.Ports ?? [])
+        foreach (DockerPort port in _row.Summary.Ports ?? [])
         {
             PortLines.Add(port.PublicPort > 0
                 ? new($"{port.PrivatePort}/{port.Type ?? "tcp"}",
@@ -491,9 +491,9 @@ public sealed class ContainerDetailViewModel : ObservableObject, IAsyncDisposabl
                 : new($"{port.PrivatePort}/{port.Type ?? "tcp"}", "仅容器内可见(未发布)"));
         }
 
-        foreach (var mount in inspect.Mounts ?? [])
+        foreach (DockerMount mount in inspect.Mounts ?? [])
         {
-            var source = mount.Type == "volume" ? mount.Name ?? mount.Source ?? "" : mount.Source ?? "";
+            string source = mount.Type == "volume" ? mount.Name ?? mount.Source ?? "" : mount.Source ?? "";
             Mounts.Add(new(
                 mount.Type == "volume" ? "Docker.database" : "Icon.folder",
                 $"{source} → {mount.Destination}",
@@ -501,14 +501,14 @@ public sealed class ContainerDetailViewModel : ObservableObject, IAsyncDisposabl
                 !mount.RW));
         }
 
-        foreach ((var name, var endpoint) in inspect.NetworkSettings?.Networks ?? [])
+        foreach ((string? name, EndpointSettings? endpoint) in inspect.NetworkSettings?.Networks ?? [])
         {
             Networks.Add(new(name, endpoint.IPAddress is { Length: > 0 } ip ? ip : "(未分配)", RowTone.Ok));
         }
 
-        foreach (var entry in inspect.Config?.Env ?? [])
+        foreach (string entry in inspect.Config?.Env ?? [])
         {
-            var equals = entry.IndexOf('=');
+            int equals = entry.IndexOf('=');
             Environment.Add(equals > 0
                 ? new(entry[..equals], entry[(equals + 1)..])
                 : new(entry, ""));
@@ -568,10 +568,10 @@ public sealed class ContainerDetailViewModel : ObservableObject, IAsyncDisposabl
         }
         try
         {
-            var top = await client.TopAsync(ContainerId, cancellationToken: cancellationToken)
+            ContainerTopResult top = await client.TopAsync(ContainerId, cancellationToken: cancellationToken)
                                                  .ConfigureAwait(true);
             Processes.Clear();
-            foreach (var row in ProcessTable.Normalize(top))
+            foreach (ProcessRow row in ProcessTable.Normalize(top))
             {
                 Processes.Add(row);
             }
@@ -599,8 +599,8 @@ public sealed class ContainerDetailViewModel : ObservableObject, IAsyncDisposabl
         }
         StopStatsStream();
         _statsCts = CancellationTokenSource.CreateLinkedTokenSource(_shell.Lifetime);
-        var token = _statsCts.Token;
-        var id = ContainerId;
+        CancellationToken token = _statsCts.Token;
+        string id = ContainerId;
         _ = Task.Run(async () =>
         {
             try

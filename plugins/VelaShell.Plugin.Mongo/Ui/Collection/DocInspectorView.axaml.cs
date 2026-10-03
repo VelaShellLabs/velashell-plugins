@@ -89,7 +89,7 @@ public sealed partial class DocInspectorView : UserControl
             {
                 return;
             }
-            vm.CommitEdit(field, row);
+            _ = vm.CommitEdit(field, row);
         });
     }
 
@@ -106,7 +106,7 @@ public sealed partial class DocInspectorView : UserControl
             return;
         }
         e.Handled = true;
-        DatePickFlyout.Show(button, vm.Loc, editor.Text, text =>
+        _ = DatePickFlyout.Show(button, vm.Loc, editor.Text, text =>
         {
             editor.Text = text;
             if (vm.CommitEdit(field, row))
@@ -124,11 +124,11 @@ public sealed partial class DocInspectorView : UserControl
     {
         if (ViewModel?.SelectedField is { } selected && FieldList.ContainerFromItem(selected) is Control container)
         {
-            container.Focus();
+            _ = container.Focus();
         }
         else
         {
-            FieldList.Focus();
+            _ = FieldList.Focus();
         }
     }, DispatcherPriority.Loaded);
 
@@ -145,14 +145,14 @@ public sealed partial class DocInspectorView : UserControl
                 e.Handled = true;
                 if (vm.CommitEdit(editing))
                 {
-                    FieldList.Focus();
+                    _ = FieldList.Focus();
                 }
             }
             else if (e.Key == Key.Escape)
             {
                 e.Handled = true;
                 DocInspectorViewModel.CancelEdit(editing);
-                FieldList.Focus();
+                _ = FieldList.Focus();
             }
             return;
         }

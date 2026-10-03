@@ -98,7 +98,7 @@ internal static class SchemaSampler
         }
         catch (MongoCommandException)
         {
-            return await collection.Find(filter ?? new BsonDocument()).Limit(size).ToListAsync(cancellationToken).ConfigureAwait(false);
+            return await collection.Find(filter ?? []).Limit(size).ToListAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

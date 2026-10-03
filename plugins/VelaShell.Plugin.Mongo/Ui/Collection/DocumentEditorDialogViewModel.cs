@@ -44,37 +44,20 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
 
     private readonly List<DocumentEditorRow> _roots = [];
     private readonly DocumentEditorTail _tail;
-    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
-    private DocumentEditorMode _mode;
-    private bool _isSearching;
-    private string _search = "";
+    private readonly HashSet<string> _expanded = [with(StringComparer.Ordinal)];
+    private readonly HashSet<string> _collapsed = [with(StringComparer.Ordinal)];
     private bool _recomputePending;
     private bool _jsonStale = true;
     private bool _applyingJson;
     private bool _regeneratingJson;
     private DispatcherTimer? _jsonTimer;
-    private string _jsonText = "";
     private string? _jsonError;
-    private IReadOnlyList<EditorDiagnostic> _jsonDiagnostics = [];
-    private string _previewText = "";
-    private IReadOnlyList<LineMark> _previewMarks = [];
-    private string _commandName = "";
-    private string _commandText = "";
-    private string _commandNote = "";
-    private string _diffLeft = "";
-    private string _diffRight = "";
-    private IReadOnlyList<LineMark> _diffLeftMarks = [];
-    private IReadOnlyList<LineMark> _diffRightMarks = [];
-    private string _idText = "";
     private int _modified;
     private int _added;
     private int _removed;
     private int _errors;
     private int _warnings;
-    private bool _reordered;
     private bool _dirty;
-    private bool _busy;
     private bool _closed;
     private DocumentEditorPlan? _plan;
     private DocumentEditorSchema? _schema;
@@ -110,7 +93,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         BsonDocument initial = Original?.DeepClone().AsBsonDocument ?? new BsonDocument("_id", ObjectId.GenerateNewId());
         if (template)
         {
-            initial.AddRange(document!.DeepClone().AsBsonDocument);
+            _ = initial.AddRange(document!.DeepClone().AsBsonDocument);
         }
         LoadRows(initial, keepExpansion: false);
         _dirty = false;
@@ -139,7 +122,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     public override double Height => 708;
 
     /// <summary>有未保存的修改时 Esc 不关(误触一下就丢掉一屏编辑,代价太大)。</summary>
-    public override bool CanCloseWithEscape => !_dirty && !_busy;
+    public override bool CanCloseWithEscape => !_dirty && !IsBusy;
 
     // ── 状态 ────────────────────────────────────────────────────────────────
 
@@ -155,10 +138,10 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>正在保存。</summary>
     public bool IsBusy
     {
-        get => _busy;
+        get;
         private set
         {
-            if (SetProperty(ref _busy, value))
+            if (SetProperty(ref field, value))
             {
                 RaiseSaveState();
             }
@@ -168,25 +151,25 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>子标题行的 <c>_id</c> 芯片:<c>ObjectId("…")</c>。</summary>
     public string IdText
     {
-        get => _idText;
-        private set => SetProperty(ref _idText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>当前模式。</summary>
     public DocumentEditorMode Mode
     {
-        get => _mode;
+        get;
         set
         {
-            if (_mode == value)
+            if (field == value)
             {
                 return;
             }
-            if (_mode == DocumentEditorMode.Json)
+            if (field == DocumentEditorMode.Json)
             {
                 LeaveJson();
             }
-            _mode = value;
+            field = value;
             if (value == DocumentEditorMode.Json && _jsonStale)
             {
                 RegenerateJson();
@@ -199,7 +182,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>表单模式(分段按钮)。</summary>
     public bool IsFormMode
     {
-        get => _mode == DocumentEditorMode.Form;
+        get => Mode == DocumentEditorMode.Form;
         set
         {
             if (value)
@@ -212,7 +195,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>JSON 模式。</summary>
     public bool IsJsonMode
     {
-        get => _mode == DocumentEditorMode.Json;
+        get => Mode == DocumentEditorMode.Json;
         set
         {
             if (value)
@@ -225,7 +208,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>对比模式。</summary>
     public bool IsDiffMode
     {
-        get => _mode == DocumentEditorMode.Diff;
+        get => Mode == DocumentEditorMode.Diff;
         set
         {
             if (value)
@@ -240,10 +223,10 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>查找框开着。</summary>
     public bool IsSearching
     {
-        get => _isSearching;
+        get;
         set
         {
-            if (SetProperty(ref _isSearching, value) && !value)
+            if (SetProperty(ref field, value) && !value)
             {
                 Search = "";
             }
@@ -253,15 +236,15 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>查找的字段名片段(过滤表单行;命中嵌套字段时连同它的祖先一起显示)。</summary>
     public string Search
     {
-        get => _search;
+        get;
         set
         {
-            if (SetProperty(ref _search, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 RefreshVisible();
             }
         }
-    }
+    } = "";
 
     // ── 表单 ────────────────────────────────────────────────────────────────
 
@@ -282,15 +265,15 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     /// <summary>JSON 模式的文本(mongosh 写法;改它 = 改表单)。</summary>
     public string JsonText
     {
-        get => _jsonText;
+        get;
         set
         {
             value ??= "";
-            if (_jsonText == value)
+            if (field == value)
             {
                 return;
             }
-            _jsonText = value;
+            field = value;
             RaisePropertyChanged();
             if (_regeneratingJson || !CanEdit)
             {
@@ -302,79 +285,79 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
             _jsonTimer.Stop();
             _jsonTimer.Start();
         }
-    }
+    } = "";
 
     /// <summary>JSON 的语法诊断。</summary>
     public IReadOnlyList<EditorDiagnostic> JsonDiagnostics
     {
-        get => _jsonDiagnostics;
-        private set => SetProperty(ref _jsonDiagnostics, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>对比:原文档。</summary>
     public string DiffLeftText
     {
-        get => _diffLeft;
-        private set => SetProperty(ref _diffLeft, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>对比:当前。</summary>
     public string DiffRightText
     {
-        get => _diffRight;
-        private set => SetProperty(ref _diffRight, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>对比:原文档里被删掉的行(红)。</summary>
     public IReadOnlyList<LineMark> DiffLeftMarks
     {
-        get => _diffLeftMarks;
-        private set => SetProperty(ref _diffLeftMarks, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>对比:当前里新增的行(绿)。</summary>
     public IReadOnlyList<LineMark> DiffRightMarks
     {
-        get => _diffRightMarks;
-        private set => SetProperty(ref _diffRightMarks, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     // ── 预览与命令 ──────────────────────────────────────────────────────────
 
     /// <summary>实时预览(紧凑的 mongosh 文本)。</summary>
     public string PreviewText
     {
-        get => _previewText;
-        private set => SetProperty(ref _previewText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>预览里与原文档不同的行。</summary>
     public IReadOnlyList<LineMark> PreviewMarks
     {
-        get => _previewMarks;
-        private set => SetProperty(ref _previewMarks, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = [];
 
     /// <summary>将执行的命令名(<c>updateOne</c> / <c>replaceOne</c> / <c>insertOne</c>)。</summary>
     public string CommandName
     {
-        get => _commandName;
-        private set => SetProperty(ref _commandName, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>将执行的命令全文。</summary>
     public string CommandText
     {
-        get => _commandText;
-        private set => SetProperty(ref _commandText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>命令下面那行说明(只提交变更字段 · 乐观并发…)。</summary>
     public string CommandNote
     {
-        get => _commandNote;
-        private set => SetProperty(ref _commandNote, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     // ── 底栏 ────────────────────────────────────────────────────────────────
 
@@ -409,7 +392,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     public bool HasWarnings => _warnings > 0;
 
     /// <summary>顶层字段顺序变了(要整份替换)。</summary>
-    public bool HasReordered => _reordered;
+    public bool HasReordered { get; private set; }
 
     /// <summary><c>字段顺序已调整</c>。</summary>
     public string ReorderedText => Loc["Doc_Reordered"];
@@ -432,10 +415,10 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         : "";
 
     /// <summary>能保存。</summary>
-    public bool CanSave => CanEdit && !_busy && _errors == 0 && _jsonError is null && HasChanges;
+    public bool CanSave => CanEdit && !IsBusy && _errors == 0 && _jsonError is null && HasChanges;
 
     /// <summary>能另存为新文档。</summary>
-    public bool CanSaveAsNew => CanEdit && !_busy && _errors == 0 && _jsonError is null;
+    public bool CanSaveAsNew => CanEdit && !IsBusy && _errors == 0 && _jsonError is null;
 
     // ── 命令 ────────────────────────────────────────────────────────────────
 
@@ -531,7 +514,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     internal void RefreshVisible()
     {
         var visible = new List<object>();
-        string query = _search.Trim();
+        string query = Search.Trim();
         foreach (DocumentEditorRow root in _roots)
         {
             AddVisible(root, query, visible);
@@ -652,8 +635,8 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         }
         row.IsExpanded = !row.IsExpanded;
         string path = row.Path;
-        (row.IsExpanded ? _expanded : _collapsed).Add(path);
-        (row.IsExpanded ? _collapsed : _expanded).Remove(path);
+        _ = (row.IsExpanded ? _expanded : _collapsed).Add(path);
+        _ = (row.IsExpanded ? _collapsed : _expanded).Remove(path);
         RefreshVisible();
         ScheduleRecompute();
     }
@@ -667,11 +650,11 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         }
         if (row.IsContainer)
         {
-            AddChild(row);
+            _ = AddChild(row);
         }
         else
         {
-            AddAfter(row);
+            _ = AddAfter(row);
         }
     }
 
@@ -690,8 +673,8 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         if (!container.IsExpanded)
         {
             container.IsExpanded = true;
-            _expanded.Add(container.Path);
-            _collapsed.Remove(container.Path);
+            _ = _expanded.Add(container.Path);
+            _ = _collapsed.Remove(container.Path);
         }
         OnEdited(child, structural: true);
         RequestFocus(child);
@@ -750,7 +733,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         {
             return;
         }
-        SiblingsOf(row).Remove(row);
+        _ = SiblingsOf(row).Remove(row);
         row.Parent?.OnChildrenChanged();
         RaisePropertyChanged(nameof(NewDocumentText));
         if (row.Parent is { } parent)
@@ -807,7 +790,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
             // _id 留在第一位(mongosh 与驱动都这么写,网格的列序也以它打头)。
             after = true;
         }
-        siblings.Remove(row);
+        _ = siblings.Remove(row);
         int index = siblings.IndexOf(anchor) + (after ? 1 : 0);
         siblings.Insert(Math.Clamp(index, 0, siblings.Count), row);
         row.Parent?.OnChildrenChanged();
@@ -913,11 +896,11 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
 
         BuildCommand(current);
         BuildPreview(current, context);
-        if (_mode == DocumentEditorMode.Diff)
+        if (Mode == DocumentEditorMode.Diff)
         {
             BuildDiff(current);
         }
-        if (_mode == DocumentEditorMode.Json && _jsonStale && !_applyingJson && _jsonError is null)
+        if (Mode == DocumentEditorMode.Json && _jsonStale && !_applyingJson && _jsonError is null)
         {
             RegenerateJson(current);
         }
@@ -1020,7 +1003,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         SchemaViolation? violation = context.ByPath.GetValueOrDefault(row.Path);
         if (violation is not null)
         {
-            context.Consumed.Add(violation);
+            _ = context.Consumed.Add(violation);
         }
 
         DocumentEditorRowState state;
@@ -1226,7 +1209,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         if (Original is null)
         {
             _plan = null;
-            _reordered = false;
+            HasReordered = false;
             CommandName = "insertOne";
             CommandText = DocumentEditorFormat.Command(collectionRef, "insertOne", null, current);
             CommandNote = Loc["Doc_InsertNote"];
@@ -1234,7 +1217,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         }
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(Original, current);
         _plan = plan;
-        _reordered = plan.Replace && !DocumentEditorDiff.SameOrder(Original, current, skipId: true);
+        HasReordered = plan.Replace && !DocumentEditorDiff.SameOrder(Original, current, skipId: true);
         BsonDocument? filter = BuildFilter();
         bool versioned = Original.Contains(VersionField);
         if (plan.IsEmpty)
@@ -1265,7 +1248,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         {
             if (preview.LinePaths[i] is { } path)
             {
-                lineOf.TryAdd(path, i + 1);
+                _ = lineOf.TryAdd(path, i + 1);
             }
         }
         var marks = new Dictionary<int, LineMarkKind>();
@@ -1339,19 +1322,19 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
         {
             return;
         }
-        List<EditorDiagnostic> diagnostics = [.. ShellJson.Diagnose(_jsonText).Select(d => new EditorDiagnostic(
+        List<EditorDiagnostic> diagnostics = [.. ShellJson.Diagnose(JsonText).Select(d => new EditorDiagnostic(
             d.Offset, Math.Max(1, d.Length), Loc.Format(d.MessageKey, d.Argument), DiagnosticSeverity.Error, d.Fix, d.Fix is null ? null : "Alt+↵"))];
         BsonDocument document;
         try
         {
-            document = ShellJson.ParseDocument(_jsonText);
+            document = ShellJson.ParseDocument(JsonText);
         }
         catch (ShellJsonException ex)
         {
             _jsonError = ex.Message;
             if (diagnostics.Count == 0)
             {
-                int offset = ex.Offset >= 0 ? Math.Min(ex.Offset, Math.Max(0, _jsonText.Length - 1)) : Math.Max(0, _jsonText.TrimEnd().Length - 1);
+                int offset = ex.Offset >= 0 ? Math.Min(ex.Offset, Math.Max(0, JsonText.Length - 1)) : Math.Max(0, JsonText.TrimEnd().Length - 1);
                 diagnostics.Add(new(offset, 1, Loc.Format("Doc_JsonError", ex.Message)));
             }
             JsonDiagnostics = diagnostics;
@@ -1549,7 +1532,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
             {
                 parent.OnChildrenChanged();
                 parent.IsExpanded = true;
-                _expanded.Add(parent.Path);
+                _ = _expanded.Add(parent.Path);
             }
             added.Add(field.Path);
         }
@@ -1786,11 +1769,11 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     {
         foreach (BsonElement unset in plan.Unset)
         {
-            BsonPath.Unset(target, unset.Name);
+            _ = BsonPath.Unset(target, unset.Name);
         }
         foreach (BsonElement set in plan.Set)
         {
-            BsonPath.Set(target, set.Name, set.Value.DeepClone());
+            _ = BsonPath.Set(target, set.Name, set.Value.DeepClone());
         }
         return target;
     }

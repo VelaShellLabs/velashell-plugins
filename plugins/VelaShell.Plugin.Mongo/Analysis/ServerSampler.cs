@@ -257,7 +257,7 @@ internal sealed class SampleHistory
     /// <param name="interval">采样间隔。</param>
     public BucketSet Buckets(TimeSpan window, int maxBars, DateTime now, TimeSpan interval)
     {
-        List<RateSample> points = Within(window, now).ToList();
+        var points = Within(window, now).ToList();
         if (points.Count == 0 || maxBars <= 0)
         {
             return new([], window.TotalSeconds / Math.Max(1, maxBars), TimeSpan.Zero);
@@ -318,7 +318,7 @@ internal sealed class SampleHistory
             return null;
         }
         RateSample latest = _rates[^1];
-        List<double> baseline = _rates.Take(_rates.Count - 1)
+        var baseline = _rates.Take(_rates.Count - 1)
             .Where(r => r.Time > latest.Time - TimeSpan.FromMinutes(5))
             .Select(select)
             .ToList();
@@ -411,7 +411,7 @@ internal sealed record ReplicaSnapshot(string SetName, IReadOnlyList<ReplicaMemb
         int voters = 0;
         foreach ((string name, string state, bool healthy, DateTime? applied, DateTime? heartbeat, bool self) in raw)
         {
-            (double priority, int votes) = settings.TryGetValue(name, out var cfgMember) ? cfgMember : (1, 1);
+            (double priority, int votes) = settings.TryGetValue(name, out (double Priority, int Votes) cfgMember) ? cfgMember : (1, 1);
             double? lag = state is "PRIMARY" or "ARBITER" || applied is null || primaryApplied is null
                 ? null
                 : Math.Max(0, (primaryApplied.Value - applied.Value).TotalSeconds);

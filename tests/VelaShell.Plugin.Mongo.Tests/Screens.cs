@@ -29,7 +29,7 @@ internal static class Screens
     public static void OnUi(Func<Task> body)
     {
         _session ??= HeadlessUnitTestSession.GetOrStartForAssembly(typeof(Screens).Assembly);
-        _session.Dispatch(async () =>
+        _ = _session.Dispatch(async () =>
         {
             await body();
             return true;
@@ -75,7 +75,7 @@ internal static class Screens
         WriteableBitmap? frame = window.CaptureRenderedFrame();
         if (frame is not null && OutputDirectory is { } dir)
         {
-            Directory.CreateDirectory(dir);
+            _ = Directory.CreateDirectory(dir);
             frame.Save(Path.Combine(dir, name + ".png"), new PngBitmapEncoderOptions());
         }
         return frame;

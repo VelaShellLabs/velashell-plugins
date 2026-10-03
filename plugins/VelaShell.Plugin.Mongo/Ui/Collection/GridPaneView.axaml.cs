@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -24,10 +23,7 @@ public sealed partial class GridPaneView : UserControl
         GridList.TemplateApplied += (_, e) =>
         {
             _rowsScroll = e.NameScope.Find<ScrollViewer>("PART_ScrollViewer");
-            if (_rowsScroll is not null)
-            {
-                _rowsScroll.ScrollChanged += (_, _) => HeaderScroll.Offset = new Vector(_rowsScroll.Offset.X, 0);
-            }
+            _rowsScroll?.ScrollChanged += (_, _) => HeaderScroll.Offset = new Vector(_rowsScroll.Offset.X, 0);
         };
         GridList.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         GridList.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
@@ -36,10 +32,7 @@ public sealed partial class GridPaneView : UserControl
         GridList.ContextRequested += OnContextRequested;
         GridList.SelectionChanged += (_, _) =>
         {
-            if (_viewModel is not null)
-            {
-                _viewModel.GridSelectedRows = [.. GridList.SelectedItems?.OfType<CollectionRow>() ?? []];
-            }
+            _viewModel?.GridSelectedRows = [.. GridList.SelectedItems?.OfType<CollectionRow>() ?? []];
         };
         // 分隔线上双击:按内容自动调列宽。
         ColumnFit.OnGripDoubleClick(HeaderItems, column =>
@@ -61,7 +54,7 @@ public sealed partial class GridPaneView : UserControl
     internal void Attach(CollectionTabViewModel viewModel)
     {
         _viewModel = viewModel;
-        viewModel.RowAdded += row => GridList.ScrollIntoView(row);
+        viewModel.RowAdded += GridList.ScrollIntoView;
     }
 
     private void OnHeaderClick(object? sender, RoutedEventArgs e)
@@ -261,11 +254,11 @@ public sealed partial class GridPaneView : UserControl
     {
         if (GridList.ContainerFromItem(row) is Control container)
         {
-            container.Focus();
+            _ = container.Focus();
         }
         else
         {
-            GridList.Focus();
+            _ = GridList.Focus();
         }
     }
 

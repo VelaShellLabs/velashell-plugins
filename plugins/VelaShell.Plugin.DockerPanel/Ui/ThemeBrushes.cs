@@ -42,7 +42,7 @@ namespace VelaShell.Plugin.DockerPanel.Ui;
 internal static class ThemeBrushes
 {
     /// <summary>令牌名 → 那支长期有效的画刷。只在 UI 线程上读写(转换器与资源事件都在 UI 线程)。</summary>
-    private static readonly Dictionary<string, SolidColorBrush> Tracked = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, SolidColorBrush> Tracked = [with(StringComparer.Ordinal)];
 
     private static EventHandler<ResourcesChangedEventArgs>? _hook;
 

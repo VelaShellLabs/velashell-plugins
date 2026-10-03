@@ -25,21 +25,7 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     private TransferTarget? _target;
     private TransferTarget? _selectedSession;
     private string _targetDatabase;
-    private string _uri = "";
-    private bool _connecting;
-    private string _connectError = "";
-    private bool _keepId = true;
-    private bool _indexes = true;
-    private bool _validation = true;
-    private string _batchSize = "1000";
-    private string _concurrency = "4";
     private XferOption _readPreference;
-    private string _rateText = "—";
-    private string _overallText = "";
-    private string _percentText = "0%";
-    private double _overall;
-    private bool _paused;
-    private string _resultText = "";
     private string _resultTone = "ok";
     private CancellationTokenSource? _run;
     private XferPauseGate? _gate;
@@ -71,7 +57,7 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
             new("secondary", "secondary"), new("nearest", "nearest")
         ];
         _readPreference = ReadPreferences[0];
-        ConnectCommand = new AsyncCommand(ConnectUriAsync, () => !_connecting && _uri.Trim().Length > 0);
+        ConnectCommand = new AsyncCommand(ConnectUriAsync, () => !Connecting && Uri.Trim().Length > 0);
         PauseCommand = new RelayCommand(TogglePause, () => IsRunning);
         StopCommand = new AsyncCommand(StopAsync, () => IsRunning);
         CopyLogCommand = new AsyncCommand(() => Workspace.CopyAsync(string.Join(Environment.NewLine, Log.Select(static l => $"{l.Time}  {l.Text}"))));
@@ -125,9 +111,9 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     /// <summary>箭头下的实时吞吐(<c>18.2k 文档/s</c>)。</summary>
     public string RateText
     {
-        get => _rateText;
-        private set => SetProperty(ref _rateText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     // ── 第一步:目标 ─────────────────────────────────────────────────────
 
@@ -153,23 +139,23 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     /// <summary>手填的连接串。</summary>
     public string Uri
     {
-        get => _uri;
+        get;
         set
         {
-            if (SetProperty(ref _uri, value))
+            if (SetProperty(ref field, value))
             {
                 ConnectCommand.RaiseCanExecuteChanged();
             }
         }
-    }
+    } = "";
 
     /// <summary>连接中。</summary>
     public bool Connecting
     {
-        get => _connecting;
+        get;
         private set
         {
-            if (SetProperty(ref _connecting, value))
+            if (SetProperty(ref field, value))
             {
                 ConnectCommand.RaiseCanExecuteChanged();
             }
@@ -179,18 +165,18 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     /// <summary>连接失败的原因。</summary>
     public string ConnectError
     {
-        get => _connectError;
+        get;
         private set
         {
-            if (SetProperty(ref _connectError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasConnectError));
             }
         }
-    }
+    } = "";
 
     /// <summary>连接失败了。</summary>
-    public bool HasConnectError => _connectError.Length > 0;
+    public bool HasConnectError => ConnectError.Length > 0;
 
     /// <summary>用连接串连。</summary>
     public AsyncCommand ConnectCommand { get; }
@@ -225,67 +211,67 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     /// <summary>保留 _id。</summary>
     public bool KeepId
     {
-        get => _keepId;
+        get;
         set
         {
-            if (SetProperty(ref _keepId, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = true;
 
     /// <summary>传输索引。</summary>
     public bool Indexes
     {
-        get => _indexes;
+        get;
         set
         {
-            if (SetProperty(ref _indexes, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = true;
 
     /// <summary>传输验证规则。</summary>
     public bool Validation
     {
-        get => _validation;
+        get;
         set
         {
-            if (SetProperty(ref _validation, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = true;
 
     /// <summary>批大小。</summary>
     public string BatchSize
     {
-        get => _batchSize;
+        get;
         set
         {
-            if (SetProperty(ref _batchSize, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = "1000";
 
     /// <summary>并发。</summary>
     public string Concurrency
     {
-        get => _concurrency;
+        get;
         set
         {
-            if (SetProperty(ref _concurrency, value))
+            if (SetProperty(ref field, value))
             {
                 OnOptionsChanged();
             }
         }
-    }
+    } = "4";
 
     /// <summary>读偏好候选。</summary>
     public IReadOnlyList<XferOption> ReadPreferences { get; }
@@ -304,51 +290,51 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     }
 
     /// <summary>右栏:保留 _id。</summary>
-    public string KeepIdText => _keepId ? Loc["Common_Yes"] : Loc["Common_No"];
+    public string KeepIdText => KeepId ? Loc["Common_Yes"] : Loc["Common_No"];
 
     /// <summary>右栏:传输索引。</summary>
-    public string IndexesText => _indexes ? Loc["Xfer_IndexesYes"] : Loc["Common_No"];
+    public string IndexesText => Indexes ? Loc["Xfer_IndexesYes"] : Loc["Common_No"];
 
     /// <summary>右栏:传输验证规则。</summary>
-    public string ValidationText => _validation ? Loc["Common_Yes"] : Loc["Common_No"];
+    public string ValidationText => Validation ? Loc["Common_Yes"] : Loc["Common_No"];
 
     /// <summary>右栏:批大小 · 并发。</summary>
     public string BatchText => Loc.Format("Xfer_BatchText", BsonText.Grouped(Batch), Parallel);
 
-    private int Batch => int.TryParse(_batchSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? Math.Clamp(n, 1, 100_000) : 1000;
+    private int Batch => int.TryParse(BatchSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? Math.Clamp(n, 1, 100_000) : 1000;
 
-    private int Parallel => int.TryParse(_concurrency, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? Math.Clamp(n, 1, 16) : 4;
+    private int Parallel => int.TryParse(Concurrency, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? Math.Clamp(n, 1, 16) : 4;
 
     // ── 第四步:执行 ─────────────────────────────────────────────────────
 
     /// <summary>总进度 0–100。</summary>
     public double Overall
     {
-        get => _overall;
-        private set => SetProperty(ref _overall, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>「908,330 / 1,812,640 文档 · 已用 50 s · 预计剩余 50 s」。</summary>
     public string OverallText
     {
-        get => _overallText;
-        private set => SetProperty(ref _overallText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>百分比。</summary>
     public string PercentText
     {
-        get => _percentText;
-        private set => SetProperty(ref _percentText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "0%";
 
     /// <summary>暂停中。</summary>
     public bool Paused
     {
-        get => _paused;
+        get;
         private set
         {
-            if (SetProperty(ref _paused, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(PauseText), nameof(PauseIcon));
             }
@@ -356,29 +342,29 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
     }
 
     /// <summary>暂停 / 继续 按钮的字。</summary>
-    public string PauseText => _paused ? Loc["Xfer_Resume"] : Loc["Xfer_Pause"];
+    public string PauseText => Paused ? Loc["Xfer_Resume"] : Loc["Xfer_Pause"];
 
     /// <summary>暂停 / 继续 按钮的图标。</summary>
-    public string PauseIcon => _paused ? "Mongo.play" : "Mongo.pause";
+    public string PauseIcon => Paused ? "Mongo.play" : "Mongo.pause";
 
     /// <summary>结果说明。</summary>
     public string ResultText
     {
-        get => _resultText;
+        get;
         private set
         {
-            if (SetProperty(ref _resultText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ResultOk), nameof(ResultFailed));
             }
         }
-    }
+    } = "";
 
     /// <summary>成功。</summary>
-    public bool ResultOk => _resultText.Length > 0 && _resultTone == "ok";
+    public bool ResultOk => ResultText.Length > 0 && _resultTone == "ok";
 
     /// <summary>失败 / 停止。</summary>
-    public bool ResultFailed => _resultText.Length > 0 && _resultTone != "ok";
+    public bool ResultFailed => ResultText.Length > 0 && _resultTone != "ok";
 
     /// <summary>日志。</summary>
     public ObservableCollection<XferLogLine> Log { get; } = [];
@@ -434,7 +420,7 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
 
     private async Task ConnectUriAsync()
     {
-        string uri = _uri.Trim();
+        string uri = Uri.Trim();
         Connecting = true;
         ConnectError = "";
         try
@@ -562,11 +548,11 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
             ? Loc.Format("Xfer_ObjectsSummaryBuckets", collections, buckets)
             : Loc.Format("Xfer_ObjectsSummary", collections);
         var parts = new List<string>();
-        if (_keepId)
+        if (KeepId)
         {
             parts.Add(Loc["Xfer_KeepIdShort"]);
         }
-        if (_indexes)
+        if (Indexes)
         {
             parts.Add(Loc["Xfer_IndexesShort"]);
         }
@@ -639,20 +625,20 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
         {
             bool production = target.Environment == MongoEnvironment.Production;
             if (!await Workspace.ConfirmAsync(new()
-                {
-                    Title = production ? Loc["Xfer_ConfirmProdTitle"] : Loc["Xfer_ConfirmOverwriteTitle"],
-                    Message = Loc.Format(production ? "Xfer_ConfirmProdBody" : "Xfer_ConfirmOverwriteBody", $"{target.Name} / {targetDb}",
+            {
+                Title = production ? Loc["Xfer_ConfirmProdTitle"] : Loc["Xfer_ConfirmOverwriteTitle"],
+                Message = Loc.Format(production ? "Xfer_ConfirmProdBody" : "Xfer_ConfirmOverwriteBody", $"{target.Name} / {targetDb}",
                         string.Join(", ", rows.Where(static r => r.ActionValue == XferAction.Overwrite).Select(static r => r.Name))),
-                    ConfirmLabel = Loc["Xfer_StartPlain"],
-                    IconKey = "Mongo.arrow-left-right",
-                    TypeToConfirm = production ? targetDb : null,
-                    Facts =
+                ConfirmLabel = Loc["Xfer_StartPlain"],
+                IconKey = "Mongo.arrow-left-right",
+                TypeToConfirm = production ? targetDb : null,
+                Facts =
                     [
                         new(Loc["Xfer_FactTarget"], $"{target.Name} / {targetDb}"),
                         new(Loc["Xfer_FactObjects"], rows.Count(static r => r.ActionValue != XferAction.Skip).ToString(CultureInfo.InvariantCulture)),
                         new(Loc["Xfer_FactDocs"], BsonText.Grouped(total))
                     ]
-                }).ConfigureAwait(true))
+            }).ConfigureAwait(true))
             {
                 return;
             }
@@ -682,9 +668,9 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
         CancellationToken token = _run.Token;
         var options = new XferOptions
         {
-            KeepId = _keepId,
-            Indexes = _indexes,
-            Validation = _validation,
+            KeepId = KeepId,
+            Indexes = Indexes,
+            Validation = Validation,
             BatchSize = Batch,
             Concurrency = Parallel,
             ReadPreference = (string)_readPreference.Value
@@ -801,7 +787,7 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
         long copied = Objects.Where(static o => o.IsChecked && o.ActionValue != XferAction.Skip).Sum(static o => o.Done);
         TimeSpan now = _watch.Elapsed;
         _rateWindow.Add((now, copied));
-        _rateWindow.RemoveAll(s => now - s.At > TimeSpan.FromSeconds(5));
+        _ = _rateWindow.RemoveAll(s => now - s.At > TimeSpan.FromSeconds(5));
         double rate = 0;
         if (_rateWindow.Count >= 2)
         {
@@ -852,12 +838,12 @@ internal sealed class TransferWizardViewModel : XferWizardViewModel
             return;
         }
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Xfer_StopTitle"],
-                Message = Loc["Xfer_StopBody"],
-                ConfirmLabel = Loc["Xfer_Stop"],
-                IconKey = "Mongo.octagon-x"
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Xfer_StopTitle"],
+            Message = Loc["Xfer_StopBody"],
+            ConfirmLabel = Loc["Xfer_Stop"],
+            IconKey = "Mongo.octagon-x"
+        }).ConfigureAwait(true))
         {
             return;
         }

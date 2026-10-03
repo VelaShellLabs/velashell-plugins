@@ -122,7 +122,7 @@ internal sealed partial class MongoConnection : IAsyncDisposable
     /// <returns>已连接的连接。</returns>
     public static async Task<MongoConnection> ConnectAsync(string connectionString, CancellationToken cancellationToken)
     {
-        MongoClientSettings clientSettings = MongoClientSettings.FromConnectionString(connectionString);
+        var clientSettings = MongoClientSettings.FromConnectionString(connectionString);
         clientSettings.ServerSelectionTimeout = TimeSpan.FromSeconds(10);
         clientSettings.ApplicationName ??= "velashell";
         var url = new MongoUrl(connectionString);
@@ -151,64 +151,64 @@ internal sealed partial class MongoConnection : IAsyncDisposable
         switch (settings.Topology)
         {
             case MongoTopology.Uri:
-            {
-                // URI 写在"主机"那一栏里。凭据可以在 URI 里,也可以填在用户名/密码两栏 ——
-                // 后者优先:那两栏的密码是宿主加密落盘的,URI 里的密码是明文。
-                var url = new MongoUrlBuilder(request.Host.Trim());
-                if (request.Tunnel is not null)
                 {
-                    // 走隧道时宿主把主机改写成了本地端点 —— 但 URI 模式下"主机"一栏是整条串,
-                    // 宿主改写的是它解析出来的第一台。这里按宿主给的端点直连那一台。
-                    url.Server = new(request.Host, request.Port);
-                    url.DirectConnection = true;
-                }
-                if (!string.IsNullOrEmpty(request.Username))
-                {
-                    url.Username = request.Username;
-                    url.Password = request.Password;
-                }
-                client = MongoClientSettings.FromUrl(url.ToMongoUrl());
-                break;
-            }
-            case MongoTopology.Srv:
-            {
-                var url = new MongoUrlBuilder
-                {
-                    Scheme = ConnectionStringScheme.MongoDBPlusSrv,
-                    Server = new(request.Host.Trim())
-                };
-                client = MongoClientSettings.FromUrl(url.ToMongoUrl());
-                ApplyCredential(client, request, settings);
-                if (settings.ReplicaSet.Length > 0)
-                {
-                    client.ReplicaSetName = settings.ReplicaSet;
-                }
-                break;
-            }
-            default:
-            {
-                client = new MongoClientSettings();
-                var servers = new List<MongoServerAddress> { new(request.Host.Trim(), request.Port) };
-                bool tunneled = request.Tunnel is not null;
-                if (!tunneled)
-                {
-                    foreach (string extra in settings.AdditionalHosts)
+                    // URI 写在"主机"那一栏里。凭据可以在 URI 里,也可以填在用户名/密码两栏 ——
+                    // 后者优先:那两栏的密码是宿主加密落盘的,URI 里的密码是明文。
+                    var url = new MongoUrlBuilder(request.Host.Trim());
+                    if (request.Tunnel is not null)
                     {
-                        servers.Add(ParseAddress(extra));
+                        // 走隧道时宿主把主机改写成了本地端点 —— 但 URI 模式下"主机"一栏是整条串,
+                        // 宿主改写的是它解析出来的第一台。这里按宿主给的端点直连那一台。
+                        url.Server = new(request.Host, request.Port);
+                        url.DirectConnection = true;
                     }
+                    if (!string.IsNullOrEmpty(request.Username))
+                    {
+                        url.Username = request.Username;
+                        url.Password = request.Password;
+                    }
+                    client = MongoClientSettings.FromUrl(url.ToMongoUrl());
+                    break;
                 }
-                client.Servers = servers;
-                // 经隧道:本地转发只通到那一台,驱动按副本集配置去连其余成员的真实地址 ——
-                // 那些地址从本机根本够不着,结果是选服超时。所以隧道下强制直连。
-                bool direct = tunneled || (settings.DirectConnection && servers.Count == 1);
-                client.DirectConnection = direct;
-                if (!direct && settings.ReplicaSet.Length > 0)
+            case MongoTopology.Srv:
                 {
-                    client.ReplicaSetName = settings.ReplicaSet;
+                    var url = new MongoUrlBuilder
+                    {
+                        Scheme = ConnectionStringScheme.MongoDBPlusSrv,
+                        Server = new(request.Host.Trim())
+                    };
+                    client = MongoClientSettings.FromUrl(url.ToMongoUrl());
+                    ApplyCredential(client, request, settings);
+                    if (settings.ReplicaSet.Length > 0)
+                    {
+                        client.ReplicaSetName = settings.ReplicaSet;
+                    }
+                    break;
                 }
-                ApplyCredential(client, request, settings);
-                break;
-            }
+            default:
+                {
+                    client = new MongoClientSettings();
+                    var servers = new List<MongoServerAddress> { new(request.Host.Trim(), request.Port) };
+                    bool tunneled = request.Tunnel is not null;
+                    if (!tunneled)
+                    {
+                        foreach (string extra in settings.AdditionalHosts)
+                        {
+                            servers.Add(ParseAddress(extra));
+                        }
+                    }
+                    client.Servers = servers;
+                    // 经隧道:本地转发只通到那一台,驱动按副本集配置去连其余成员的真实地址 ——
+                    // 那些地址从本机根本够不着,结果是选服超时。所以隧道下强制直连。
+                    bool direct = tunneled || (settings.DirectConnection && servers.Count == 1);
+                    client.DirectConnection = direct;
+                    if (!direct && settings.ReplicaSet.Length > 0)
+                    {
+                        client.ReplicaSetName = settings.ReplicaSet;
+                    }
+                    ApplyCredential(client, request, settings);
+                    break;
+                }
         }
 
         client.ApplicationName = settings.AppName;
@@ -222,7 +222,7 @@ internal sealed partial class MongoConnection : IAsyncDisposable
         if (tls)
         {
             client.UseTls = true;
-            var ssl = client.SslSettings?.Clone() ?? new SslSettings();
+            SslSettings ssl = client.SslSettings?.Clone() ?? new SslSettings();
             ssl.CheckCertificateRevocation = false;
             X509Certificate2Collection? caCertificates = LoadCaCertificates(settings.TlsCaFile);
             ssl.ServerCertificateValidationCallback = (_, certificate, chain, errors) =>
@@ -463,11 +463,11 @@ internal sealed partial class MongoConnection : IAsyncDisposable
                 if (resource.GetValue("anyResource", false).ToBoolean()
                     || (resource.TryGetValue("db", out BsonValue db) && db.IsString && db.AsString.Length == 0))
                 {
-                    writable.Add("*");
+                    _ = writable.Add("*");
                 }
                 else if (resource.TryGetValue("db", out BsonValue named) && named.IsString)
                 {
-                    writable.Add(named.AsString);
+                    _ = writable.Add(named.AsString);
                 }
             }
             return new(user, roles, writable);
@@ -484,7 +484,7 @@ internal sealed partial class MongoConnection : IAsyncDisposable
     public async Task<int> PingAsync(CancellationToken cancellationToken = default)
     {
         var watch = Stopwatch.StartNew();
-        await Client.GetDatabase("admin").RunCommandAsync<BsonDocument>(new BsonDocument("ping", 1), cancellationToken: cancellationToken)
+        _ = await Client.GetDatabase("admin").RunCommandAsync<BsonDocument>(new BsonDocument("ping", 1), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         int ms = (int)Math.Max(1, watch.ElapsedMilliseconds);
         LatencyMs = ms;
@@ -568,7 +568,7 @@ internal sealed partial class MongoConnection : IAsyncDisposable
         {
             if (op.AsBsonDocument.TryGetValue("opid", out BsonValue opid))
             {
-                await RunCommandAsync("admin", new BsonDocument { { "killOp", 1 }, { "op", opid } }, cancellationToken)
+                _ = await RunCommandAsync("admin", new BsonDocument { { "killOp", 1 }, { "op", opid } }, cancellationToken)
                     .ConfigureAwait(false);
                 killed++;
             }

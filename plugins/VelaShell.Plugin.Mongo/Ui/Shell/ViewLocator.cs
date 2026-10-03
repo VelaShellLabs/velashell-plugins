@@ -127,8 +127,8 @@ internal sealed class TabContentHost : Panel
         HashSet<WorkspaceTab> alive = [.. Tabs ?? []];
         foreach (WorkspaceTab gone in _views.Keys.Where(t => !alive.Contains(t)).ToList())
         {
-            Children.Remove(_views[gone]);
-            _views.Remove(gone);
+            _ = Children.Remove(_views[gone]);
+            _ = _views.Remove(gone);
         }
         if (Active is { } active && !_views.ContainsKey(active))
         {

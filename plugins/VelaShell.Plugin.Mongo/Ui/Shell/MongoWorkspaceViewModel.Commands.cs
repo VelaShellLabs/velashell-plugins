@@ -139,7 +139,7 @@ internal sealed partial class MongoWorkspaceViewModel
 
     private void InitializeCommands()
     {
-        NewConnectionCommand = new(() => NewConnection());
+        NewConnectionCommand = new(NewConnection);
         NewQueryCommand = new(() => WithDatabase((s, db) => s.OpenQuery(db)));
         AggregateCommand = new(() => WithCollection((s, db, coll) => s.OpenPipeline(db, coll)));
         CollectionsCommand = new(() => WithSession(s =>
@@ -302,13 +302,13 @@ internal sealed partial class MongoWorkspaceViewModel
         }
         long? count = await session.Connection.EstimatedCountAsync(node.Database, node.Name).ConfigureAwait(true);
         if (!await ConfirmAsync(new()
-            {
-                Title = Loc["Tree_EmptyTitle"],
-                Message = Loc.Format("Tree_EmptyBody", node.Namespace, BsonText.Grouped(count ?? 0)),
-                ConfirmLabel = Loc["Tree_EmptyConfirm"],
-                IconKey = "Mongo.eraser",
-                TypeToConfirm = session.Guard.ConfirmWrites ? node.Name : null
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Tree_EmptyTitle"],
+            Message = Loc.Format("Tree_EmptyBody", node.Namespace, BsonText.Grouped(count ?? 0)),
+            ConfirmLabel = Loc["Tree_EmptyConfirm"],
+            IconKey = "Mongo.eraser",
+            TypeToConfirm = session.Guard.ConfirmWrites ? node.Name : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -450,12 +450,12 @@ internal sealed partial class MongoWorkspaceViewModel
             return;
         }
         if (!await ConfirmAsync(new()
-            {
-                Title = Loc["Confirm_DropDbTitle"],
-                Message = Loc.Format("Confirm_DropDbBody", node.Name),
-                ConfirmLabel = Loc["Confirm_DropDbTitle"],
-                TypeToConfirm = node.Name
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Confirm_DropDbTitle"],
+            Message = Loc.Format("Confirm_DropDbBody", node.Name),
+            ConfirmLabel = Loc["Confirm_DropDbTitle"],
+            TypeToConfirm = node.Name
+        }).ConfigureAwait(true))
         {
             return;
         }

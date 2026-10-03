@@ -7,5 +7,8 @@ namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
 public sealed partial class LogsView : UserControl
 {
     /// <summary>建视图。</summary>
-    public LogsView() => AvaloniaXamlLoader.Load(this);
+    public LogsView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

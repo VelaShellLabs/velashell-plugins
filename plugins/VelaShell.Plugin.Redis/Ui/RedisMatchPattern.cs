@@ -49,9 +49,9 @@ public static class RedisMatchPattern
             // Redis 的 glob 元字符:* ? [ ] \ 以及字符类里的 ^。
             if (c is '*' or '?' or '[' or ']' or '\\' or '^')
             {
-                builder.Append('\\');
+                _ = builder.Append('\\');
             }
-            builder.Append(c);
+            _ = builder.Append(c);
         }
         return builder.ToString();
     }

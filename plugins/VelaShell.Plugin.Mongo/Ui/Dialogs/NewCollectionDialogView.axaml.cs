@@ -22,7 +22,7 @@ public sealed partial class NewCollectionDialogView : UserControl
         DataContext = viewModel;
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            NameBox.Focus();
+            _ = NameBox.Focus();
             FitPreview();
         });
         NameBox.KeyDown += (_, e) =>

@@ -13,7 +13,7 @@ public class ModelTests
     [TestMethod]
     public void Stats_CpuPercentMatchesDockerStatsFormula()
     {
-        var sample = JsonSerializer.Deserialize<ContainerStats>("""
+        ContainerStats? sample = JsonSerializer.Deserialize<ContainerStats>("""
             {
               "cpu_stats": { "cpu_usage": { "total_usage": 2000 }, "system_cpu_usage": 20000, "online_cpus": 4 },
               "precpu_stats": { "cpu_usage": { "total_usage": 1000 }, "system_cpu_usage": 10000, "online_cpus": 4 }
@@ -28,7 +28,7 @@ public class ModelTests
     [TestMethod]
     public void Stats_FirstFrameHasNoPreviousSampleAndReportsZero()
     {
-        var sample = JsonSerializer.Deserialize<ContainerStats>("""
+        ContainerStats? sample = JsonSerializer.Deserialize<ContainerStats>("""
             { "cpu_stats": { "cpu_usage": { "total_usage": 2000 }, "system_cpu_usage": 20000 } }
             """, DockerJson.Options);
 
@@ -39,7 +39,7 @@ public class ModelTests
     [TestMethod]
     public void Stats_MemoryExcludesPageCache()
     {
-        var sample = JsonSerializer.Deserialize<ContainerStats>("""
+        ContainerStats? sample = JsonSerializer.Deserialize<ContainerStats>("""
             { "memory_stats": { "usage": 1000, "limit": 4000, "stats": { "inactive_file": 400 } } }
             """, DockerJson.Options);
 
@@ -50,7 +50,7 @@ public class ModelTests
     [TestMethod]
     public void Stats_FallsBackToCgroupV1CacheField()
     {
-        var sample = JsonSerializer.Deserialize<ContainerStats>("""
+        ContainerStats? sample = JsonSerializer.Deserialize<ContainerStats>("""
             { "memory_stats": { "usage": 1000, "limit": 4000, "stats": { "cache": 250 } } }
             """, DockerJson.Options);
 
@@ -60,7 +60,7 @@ public class ModelTests
     [TestMethod]
     public void ContainerSummary_StripsTheLeadingSlashFromNames()
     {
-        var summary = JsonSerializer.Deserialize<ContainerSummary>("""
+        ContainerSummary? summary = JsonSerializer.Deserialize<ContainerSummary>("""
             { "Id": "abc123", "Names": ["/nginx-proxy"], "State": "running" }
             """, DockerJson.Options);
 
@@ -70,7 +70,7 @@ public class ModelTests
     [TestMethod]
     public void ContainerSummary_ReadsComposeLabels()
     {
-        var summary = JsonSerializer.Deserialize<ContainerSummary>("""
+        ContainerSummary? summary = JsonSerializer.Deserialize<ContainerSummary>("""
             {
               "Id": "abc",
               "Labels": { "com.docker.compose.project": "web-stack", "com.docker.compose.service": "proxy" }
@@ -84,10 +84,10 @@ public class ModelTests
     [TestMethod]
     public void ImageSummary_DetectsDanglingImages()
     {
-        var dangling = JsonSerializer.Deserialize<ImageSummary>("""
+        ImageSummary? dangling = JsonSerializer.Deserialize<ImageSummary>("""
             { "Id": "sha256:aaa", "RepoTags": ["<none>:<none>"] }
             """, DockerJson.Options);
-        var tagged = JsonSerializer.Deserialize<ImageSummary>("""
+        ImageSummary? tagged = JsonSerializer.Deserialize<ImageSummary>("""
             { "Id": "sha256:bbb", "RepoTags": ["nginx:1.27-alpine"] }
             """, DockerJson.Options);
 
@@ -99,7 +99,7 @@ public class ModelTests
     [TestMethod]
     public void NetworkSummary_KnowsThePredefinedNetworksCannotBeDeleted()
     {
-        foreach (var name in new[] { "bridge", "host", "none" })
+        foreach (string? name in new[] { "bridge", "host", "none" })
         {
             Assert.IsTrue(new NetworkSummary { Name = name }.IsPredefined, name);
         }
@@ -110,7 +110,7 @@ public class ModelTests
     public void DockerJson_ToleratesNumbersEncodedAsStrings()
     {
         // compose 与几条统计流会把数字写成字符串;严格模式下这会整条反序列化失败。
-        var port = JsonSerializer.Deserialize<DockerPort>("""
+        DockerPort? port = JsonSerializer.Deserialize<DockerPort>("""
             { "PrivatePort": "80", "PublicPort": "8080", "Type": "tcp" }
             """, DockerJson.Options);
 
@@ -121,7 +121,7 @@ public class ModelTests
     [TestMethod]
     public void Ports_DeduplicatesTheIPv4AndIPv6BindingsOfOnePort()
     {
-        var text = Humanize.Ports([
+        string text = Humanize.Ports([
             new() { IP = "0.0.0.0", PrivatePort = 80, PublicPort = 8080, Type = "tcp" },
             new() { IP = "::", PrivatePort = 80, PublicPort = 8080, Type = "tcp" }
         ]);
@@ -133,7 +133,7 @@ public class ModelTests
     [TestMethod]
     public void Ports_ShowsUnpublishedPortsSeparately()
     {
-        var text = Humanize.Ports([new() { PrivatePort = 8000, PublicPort = 0, Type = "tcp" }]);
+        string text = Humanize.Ports([new() { PrivatePort = 8000, PublicPort = 0, Type = "tcp" }]);
         Assert.AreEqual("8000/tcp", text);
     }
 

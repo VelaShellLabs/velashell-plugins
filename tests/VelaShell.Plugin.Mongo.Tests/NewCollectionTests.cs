@@ -100,7 +100,7 @@ public sealed class NewCollectionTests
         {
             IMongoCollection<BsonDocument> source = database.GetCollection<BsonDocument>("source");
             await source.InsertOneAsync(new BsonDocument { { "sku", "a" }, { "at", DateTime.UtcNow } });
-            await source.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("sku", 1), new CreateIndexOptions { Name = "sku_1", Unique = true }));
+            _ = await source.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("sku", 1), new CreateIndexOptions { Name = "sku_1", Unique = true }));
 
             await CreateAsync(bench, db, vm => { vm.Name = "plain"; vm.CopyIndexes = true; vm.CopyIndexesFrom = "source"; });
             await CreateAsync(bench, db, vm => { vm.Name = "metrics"; vm.Kind = NewCollectionKind.TimeSeries; vm.TimeField = "ts"; vm.MetaField = "device"; vm.Granularity = "hours"; vm.ExpireValue = "2"; vm.ExpireUnit = vm.ExpireUnits[2]; });

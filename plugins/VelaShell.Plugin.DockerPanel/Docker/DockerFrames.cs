@@ -51,7 +51,7 @@ public sealed class DockerFrameDecoder(bool tty, bool timestamps)
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task ReadAsync(Stream stream, Action<DockerLogLine> onLine, CancellationToken cancellationToken)
     {
-        var payload = new byte[64 * 1024];
+        byte[] payload = new byte[64 * 1024];
         while (!cancellationToken.IsCancellationRequested)
         {
             DockerStreamKind kind;
@@ -96,30 +96,30 @@ public sealed class DockerFrameDecoder(bool tty, bool timestamps)
 
     private void Emit(DockerStreamKind kind, ReadOnlySpan<byte> bytes, Action<DockerLogLine> onLine)
     {
-        var needed = _decoder.GetCharCount(bytes, flush: false);
+        int needed = _decoder.GetCharCount(bytes, flush: false);
         if (needed > _chars.Length)
         {
             _chars = new char[needed];
         }
-        var produced = _decoder.GetChars(bytes, _chars, flush: false);
-        var buffer = kind == DockerStreamKind.StdErr ? _stderr : _stdout;
-        for (var i = 0; i < produced; i++)
+        int produced = _decoder.GetChars(bytes, _chars, flush: false);
+        StringBuilder buffer = kind == DockerStreamKind.StdErr ? _stderr : _stdout;
+        for (int i = 0; i < produced; i++)
         {
-            var c = _chars[i];
+            char c = _chars[i];
             if (c == '\n')
             {
                 PublishLine(kind, buffer, onLine);
             }
             else if (c != '\r')
             {
-                buffer.Append(c);
+                _ = buffer.Append(c);
             }
         }
     }
 
     private void FlushRemainder(DockerStreamKind kind, Action<DockerLogLine> onLine)
     {
-        var buffer = kind == DockerStreamKind.StdErr ? _stderr : _stdout;
+        StringBuilder buffer = kind == DockerStreamKind.StdErr ? _stderr : _stdout;
         if (buffer.Length > 0)
         {
             PublishLine(kind, buffer, onLine);
@@ -128,10 +128,10 @@ public sealed class DockerFrameDecoder(bool tty, bool timestamps)
 
     private void PublishLine(DockerStreamKind kind, StringBuilder buffer, Action<DockerLogLine> onLine)
     {
-        var text = buffer.ToString();
-        buffer.Clear();
+        string text = buffer.ToString();
+        _ = buffer.Clear();
         DateTimeOffset? stamp = null;
-        if (timestamps && TrySplitTimestamp(text, out var parsed, out var rest))
+        if (timestamps && TrySplitTimestamp(text, out DateTimeOffset parsed, out string? rest))
         {
             stamp = parsed;
             text = rest;
@@ -147,7 +147,7 @@ public sealed class DockerFrameDecoder(bool tty, bool timestamps)
     {
         timestamp = default;
         rest = line;
-        var space = line.IndexOf(' ');
+        int space = line.IndexOf(' ');
         // RFC3339 至少是 "2026-08-21T09:41:22Z" 这么长。
         if (space is < 20 or > 40)
         {
@@ -164,10 +164,10 @@ public sealed class DockerFrameDecoder(bool tty, bool timestamps)
 
     private static async ValueTask<bool> ReadExactlyAsync(Stream stream, Memory<byte> buffer, CancellationToken cancellationToken)
     {
-        var read = 0;
+        int read = 0;
         while (read < buffer.Length)
         {
-            var n = await stream.ReadAsync(buffer[read..], cancellationToken).ConfigureAwait(false);
+            int n = await stream.ReadAsync(buffer[read..], cancellationToken).ConfigureAwait(false);
             if (n <= 0)
             {
                 return false;

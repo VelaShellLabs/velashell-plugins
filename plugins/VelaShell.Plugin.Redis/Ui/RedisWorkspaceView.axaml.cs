@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Input;
 // SetTextAsync 在 Avalonia 12 里是 IClipboard 的扩展方法,住在这个命名空间。
 using Avalonia.Input.Platform;
@@ -137,7 +137,7 @@ public sealed partial class RedisWorkspaceView : UserControl
         {
             case Key.OemQuestion or Key.Divide when !typing:
             case Key.F when control:
-                FilterBox.Focus();
+                _ = FilterBox.Focus();
                 FilterBox.SelectAll();
                 e.Handled = true;
                 return;

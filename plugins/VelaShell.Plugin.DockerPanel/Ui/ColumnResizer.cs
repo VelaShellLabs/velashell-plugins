@@ -1,9 +1,9 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-using System.Globalization;
 
 namespace VelaShell.Plugin.DockerPanel.Ui;
 
@@ -39,7 +39,7 @@ public sealed class ColumnResizer
         _header = host.GetControl<Grid>(headerName);
         _chrome = chrome;
         // 轨道在 XAML 里只写 Classes 与 Tag,事件在这里挂 —— 四个页面就不必各抄一遍转发方法。
-        foreach (var grip in _header.Children.OfType<Border>().Where(b => b.Tag is string))
+        foreach (Border? grip in _header.Children.OfType<Border>().Where(b => b.Tag is string))
         {
             grip.PointerPressed += OnPressed;
             grip.PointerReleased += OnReleased;
@@ -66,7 +66,7 @@ public sealed class ColumnResizer
         _active = key;
         _startX = e.GetPosition(_host).X;
         _startWidths.Clear();
-        foreach (var other in columns.Keys)
+        foreach (string other in columns.Keys)
         {
             _startWidths[other] = columns.Get(other);
         }
@@ -77,11 +77,11 @@ public sealed class ColumnResizer
     private void OnMoved(object? sender, PointerEventArgs e)
     {
         if (_active is not { } key || Columns is not { } columns ||
-            !_startWidths.TryGetValue(key, out var start))
+            !_startWidths.TryGetValue(key, out double start))
         {
             return;
         }
-        var delta = e.GetPosition(_host).X - _startX;
+        double delta = e.GetPosition(_host).X - _startX;
         columns.Set(key, Math.Clamp(start + delta, columns.Min(key), Max(columns, key)));
         e.Handled = true;
     }
@@ -103,8 +103,8 @@ public sealed class ColumnResizer
     /// </summary>
     private double Max(ListColumns columns, string key)
     {
-        var others = columns.Keys.Where(k => k != key).Sum(columns.Get);
-        var available = _header.Bounds.Width > 0 ? _header.Bounds.Width : _host.Bounds.Width;
+        double others = columns.Keys.Where(k => k != key).Sum(columns.Get);
+        double available = _header.Bounds.Width > 0 ? _header.Bounds.Width : _host.Bounds.Width;
         return Math.Max(columns.Min(key),
             available - others - (columns.Keys.Count * ListColumns.TrackWidth) - _chrome);
     }
@@ -122,12 +122,12 @@ public sealed class ColumnResizer
         {
             return;
         }
-        var size = Resource(key is "name" or "repo" ? "VelaFontSize12" : "VelaFontSize11") as double? ?? 11;
+        double size = Resource(key is "name" or "repo" ? "VelaFontSize12" : "VelaFontSize11") as double? ?? 11;
         Typeface mono = new(Resource("VelaUiMonoFont") as FontFamily ?? FontFamily.Default);
         Typeface ui = new(FontFamily.Default);
         // 表头那几个字也要装得下。文字直接从列头里读,免得把同一串标题在代码里再写一遍。
-        var widest = Measure(HeaderText(grip), ui, size);
-        foreach (var text in page.ColumnTexts(key))
+        double widest = Measure(HeaderText(grip), ui, size);
+        foreach (string text in page.ColumnTexts(key))
         {
             widest = Math.Max(widest, Measure(text, key is "name" or "repo" ? ui : mono, size));
         }
@@ -146,5 +146,5 @@ public sealed class ColumnResizer
                 typeface, size, Brushes.Black).Width;
 
     private object? Resource(string key) =>
-        _host.TryFindResource(key, (_host as StyledElement)?.ActualThemeVariant, out var value) ? value : null;
+        _host.TryFindResource(key, (_host as StyledElement)?.ActualThemeVariant, out object? value) ? value : null;
 }

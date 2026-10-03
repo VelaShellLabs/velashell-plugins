@@ -30,22 +30,12 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     private bool _loaded;
     private bool _disposed;
     private bool _failureShown;
-    private int _level;
     private int _slowMs = 100;
     private double _sampleRate = 1;
-    private string _slowMsText = "100";
-    private string _sampleRateText = "1.0";
-    private bool _onlyLong;
     private bool _ownOpsOnly;
-    private int _activeCount;
-    private string _mode = "shape";
-    private string _sortKey = "avg";
     private ProfilerShapeRow? _selectedShape;
     private ProfilerEntryRow? _selectedEntry;
-    private ProfilerDetail? _detail;
-    private long _profileCount;
     private bool _profileDenied;
-    private string _slowEmptyText = "";
     private DateTime _slowLoadedAt = DateTime.MinValue;
     private List<ProfilerShapeRow> _groups = [];
 
@@ -65,17 +55,17 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         ClearCommand = new AsyncCommand(ClearAsync);
         KillCommand = new AsyncCommand<ProfilerOpRow>(KillAsync);
         SortCommand = new RelayCommand<string>(key => SortKey = key);
-        CreateIndexCommand = new AsyncCommand(CreateIndexAsync, () => _detail?.CanCreateIndex == true);
+        CreateIndexCommand = new AsyncCommand(CreateIndexAsync, () => Detail?.CanCreateIndex == true);
         OpenInEditorCommand = new RelayCommand(() =>
         {
-            if (_detail is { } d)
+            if (Detail is { } d)
             {
                 Workspace.OpenQuery(Database, d.Statement);
             }
         });
         ExplainCommand = new RelayCommand(() =>
         {
-            if (_detail is { } d)
+            if (Detail is { } d)
             {
                 Workspace.OpenQuery(Database, d.Explain, run: true);
             }
@@ -103,10 +93,10 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     /// <summary>当前 profiler 级别(0 / 1 / 2)。</summary>
     public int Level
     {
-        get => _level;
+        get;
         private set
         {
-            _level = value;
+            field = value;
             // 无论值变没变都通知:分段按钮被点过之后自己已经切了勾,确认框里点了取消要把它扳回来。
             RaisePropertyChanged();
             RaisePropertyChanged(nameof(LevelKey));
@@ -114,39 +104,39 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     }
 
     /// <summary>级别的字符串形式(分段按钮用 IsEqual 比较)。</summary>
-    public string LevelKey => _level.ToString(CultureInfo.InvariantCulture);
+    public string LevelKey => Level.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>slowms 输入框。</summary>
     public string SlowMsText
     {
-        get => _slowMsText;
+        get;
         set
         {
-            if (SetProperty(ref _slowMsText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(SlowMsInvalid));
             }
         }
-    }
+    } = "100";
 
     /// <summary>sampleRate 输入框。</summary>
     public string SampleRateText
     {
-        get => _sampleRateText;
+        get;
         set
         {
-            if (SetProperty(ref _sampleRateText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(SampleRateInvalid));
             }
         }
-    }
+    } = "1.0";
 
     /// <summary>slowms 不是非负整数。</summary>
-    public bool SlowMsInvalid => !TryParseSlowMs(_slowMsText, out _);
+    public bool SlowMsInvalid => !TryParseSlowMs(SlowMsText, out _);
 
     /// <summary>sampleRate 不在 (0, 1]。</summary>
-    public bool SampleRateInvalid => !TryParseSampleRate(_sampleRateText, out _);
+    public bool SampleRateInvalid => !TryParseSampleRate(SampleRateText, out _);
 
     /// <summary>切级别(参数 "0" / "1" / "2";level 2 要确认)。</summary>
     public AsyncCommand<string> SetLevelCommand { get; }
@@ -168,10 +158,10 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     /// <summary>活跃操作数。</summary>
     public int ActiveCount
     {
-        get => _activeCount;
+        get;
         private set
         {
-            if (SetProperty(ref _activeCount, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(OpsHeader), nameof(HasOps));
             }
@@ -179,18 +169,18 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     }
 
     /// <summary>有没有操作。</summary>
-    public bool HasOps => _activeCount > 0;
+    public bool HasOps => ActiveCount > 0;
 
     /// <summary>「$currentOp · 活跃 4 · 每 2 s 刷新」。</summary>
-    public string OpsHeader => Loc.Format(_ownOpsOnly ? "Prof_OpsHeaderOwn" : "Prof_OpsHeader", _activeCount);
+    public string OpsHeader => Loc.Format(_ownOpsOnly ? "Prof_OpsHeaderOwn" : "Prof_OpsHeader", ActiveCount);
 
     /// <summary>仅显示运行 &gt; 1 s。</summary>
     public bool OnlyLong
     {
-        get => _onlyLong;
+        get;
         set
         {
-            if (SetProperty(ref _onlyLong, value))
+            if (SetProperty(ref field, value))
             {
                 _ = RefreshOpsAsync(CancellationToken.None);
             }
@@ -205,10 +195,10 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     /// <summary>按形状(<c>shape</c>)还是逐条(<c>entry</c>)。</summary>
     public string Mode
     {
-        get => _mode;
+        get;
         set
         {
-            if (value is "shape" or "entry" && SetProperty(ref _mode, value))
+            if (value is "shape" or "entry" && SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShapeMode), nameof(EntryMode));
                 // 换模式时详情跟着那一边的选中项走;逐条那边还没选过就保留当前详情。
@@ -222,26 +212,26 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
                 }
             }
         }
-    }
+    } = "shape";
 
     /// <summary>按形状模式。</summary>
-    public bool ShapeMode => _mode == "shape";
+    public bool ShapeMode => Mode == "shape";
 
     /// <summary>逐条模式。</summary>
-    public bool EntryMode => _mode == "entry";
+    public bool EntryMode => Mode == "entry";
 
     /// <summary>按哪一列排序(<c>count</c> / <c>avg</c> / <c>max</c>,都是降序)。</summary>
     public string SortKey
     {
-        get => _sortKey;
+        get;
         set
         {
-            if (value is "count" or "avg" or "max" && SetProperty(ref _sortKey, value))
+            if (value is "count" or "avg" or "max" && SetProperty(ref field, value))
             {
                 ApplyShapes(_groups);
             }
         }
-    }
+    } = "avg";
 
     /// <summary>点列头换排序。</summary>
     public RelayCommand<string> SortCommand { get; }
@@ -281,10 +271,10 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     /// <summary>右侧详情;没选中为 null。</summary>
     public ProfilerDetail? Detail
     {
-        get => _detail;
+        get;
         private set
         {
-            if (SetProperty(ref _detail, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasDetail));
                 CreateIndexCommand.RaiseCanExecuteChanged();
@@ -293,26 +283,26 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     }
 
     /// <summary>有没有详情。</summary>
-    public bool HasDetail => _detail is not null;
+    public bool HasDetail => Detail is not null;
 
     /// <summary>慢查询列表为空时的说明(profiler 没开 / 近 24 小时没有 / 没权限)。</summary>
     public string SlowEmptyText
     {
-        get => _slowEmptyText;
+        get;
         private set
         {
-            if (SetProperty(ref _slowEmptyText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(SlowEmpty));
             }
         }
-    }
+    } = "";
 
     /// <summary>慢查询列表是空的。</summary>
-    public bool SlowEmpty => _slowEmptyText.Length > 0;
+    public bool SlowEmpty => SlowEmptyText.Length > 0;
 
     /// <summary>近 24 小时的 profile 记录数。</summary>
-    public long ProfileCount => _profileCount;
+    public long ProfileCount { get; private set; }
 
     /// <summary>创建建议索引。</summary>
     public AsyncCommand CreateIndexCommand { get; }
@@ -391,7 +381,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         }
         finally
         {
-            _tickGate.Release();
+            _ = _tickGate.Release();
         }
     }
 
@@ -447,21 +437,21 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         {
             return;
         }
-        if (level == _level)
+        if (level == Level)
         {
-            Level = _level;
+            Level = Level;
             return;
         }
         if (level == 2 && !await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Prof_Level2Title"],
-                Message = Loc.Format("Prof_Level2Body", Database),
-                ConfirmLabel = Loc["Prof_Level2Confirm"],
-                IconKey = "Mongo.triangle-alert",
-                Danger = false
-            }).ConfigureAwait(true))
         {
-            Level = _level;
+            Title = Loc["Prof_Level2Title"],
+            Message = Loc.Format("Prof_Level2Body", Database),
+            ConfirmLabel = Loc["Prof_Level2Confirm"],
+            IconKey = "Mongo.triangle-alert",
+            Danger = false
+        }).ConfigureAwait(true))
+        {
+            Level = Level;
             return;
         }
         await ApplyProfileAsync(level, _slowMs, _sampleRate).ConfigureAwait(true);
@@ -469,7 +459,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
 
     private async Task ApplySettingsAsync()
     {
-        if (!TryParseSlowMs(_slowMsText, out int slowMs) || !TryParseSampleRate(_sampleRateText, out double rate))
+        if (!TryParseSlowMs(SlowMsText, out int slowMs) || !TryParseSampleRate(SampleRateText, out double rate))
         {
             return;
         }
@@ -477,7 +467,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         {
             return;
         }
-        await ApplyProfileAsync(_level, slowMs, rate).ConfigureAwait(true);
+        await ApplyProfileAsync(Level, slowMs, rate).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -489,18 +479,18 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     {
         try
         {
-            await Workspace.Connection.RunCommandAsync(Database, Tagged(new BsonDocument
+            _ = await Workspace.Connection.RunCommandAsync(Database, Tagged(new BsonDocument
             {
                 { "profile", level },
                 { "slowms", slowMs },
                 { "sampleRate", sampleRate }
             })).ConfigureAwait(true);
             await LoadProfileStatusAsync(CancellationToken.None).ConfigureAwait(true);
-            Workspace.Toast(new() { Title = Loc.Format("Prof_LevelApplied", _level, _slowMs), Kind = ToastKind.Success });
+            Workspace.Toast(new() { Title = Loc.Format("Prof_LevelApplied", Level, _slowMs), Kind = ToastKind.Success });
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            Level = _level;
+            Level = Level;
             Workspace.Toast(new() { Title = Loc.Format("Common_Failed", MongoConnector.Describe(ex)), Kind = ToastKind.Error });
         }
     }
@@ -517,22 +507,22 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
             return;
         }
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Prof_ClearTitle"],
-                Message = Loc.Format("Prof_ClearBody", Database, BsonText.Grouped(_profileCount), _level),
-                ConfirmLabel = Loc["Prof_ClearConfirm"],
-                IconKey = "Mongo.eraser",
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? "system.profile" : null
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["Prof_ClearTitle"],
+            Message = Loc.Format("Prof_ClearBody", Database, BsonText.Grouped(ProfileCount), Level),
+            ConfirmLabel = Loc["Prof_ClearConfirm"],
+            IconKey = "Mongo.eraser",
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? "system.profile" : null
+        }).ConfigureAwait(true))
         {
             return;
         }
-        int original = _level;
+        int original = Level;
         try
         {
             if (original > 0)
             {
-                await Workspace.Connection.RunCommandAsync(Database, Tagged(new BsonDocument("profile", 0))).ConfigureAwait(true);
+                _ = await Workspace.Connection.RunCommandAsync(Database, Tagged(new BsonDocument("profile", 0))).ConfigureAwait(true);
             }
             await Workspace.Connection.Database(Database).DropCollectionAsync("system.profile").ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Prof_Cleared", Database), Kind = ToastKind.Success });
@@ -547,7 +537,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
             {
                 try
                 {
-                    await Workspace.Connection.RunCommandAsync(Database, Tagged(new BsonDocument
+                    _ = await Workspace.Connection.RunCommandAsync(Database, Tagged(new BsonDocument
                     {
                         { "profile", original },
                         { "slowms", _slowMs },
@@ -582,7 +572,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
             { "command.isMaster", new BsonDocument("$exists", false) },
             { "command.ismaster", new BsonDocument("$exists", false) }
         };
-        if (_onlyLong)
+        if (OnlyLong)
         {
             match["microsecs_running"] = new BsonDocument("$gte", 1_000_000);
         }
@@ -667,29 +657,29 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
             case "aggregate":
                 return Line($"aggregate {Stages(cmd)}");
             case "getMore":
-            {
-                BsonDocument origin = op.GetValue("cursor", new BsonDocument()) is BsonDocument c
-                                      && c.GetValue("originatingCommand", BsonNull.Value) is BsonDocument oc
-                    ? oc
-                    : op.GetValue("originatingCommand", new BsonDocument()) as BsonDocument ?? [];
-                string id = cmd.GetValue("getMore", 0).ToString() ?? "";
-                string cursor = id.Length > 4 ? $"cursor {id[..4]}…" : $"cursor {id}";
-                string what = origin.Contains("aggregate") ? $"aggregate {Stages(origin)}"
-                    : origin.Contains("find") ? $"find {Filter(origin.GetValue("filter", new BsonDocument()))}"
-                    : "getMore";
-                return Line($"{what} · {cursor}");
-            }
+                {
+                    BsonDocument origin = op.GetValue("cursor", new BsonDocument()) is BsonDocument c
+                                          && c.GetValue("originatingCommand", BsonNull.Value) is BsonDocument oc
+                        ? oc
+                        : op.GetValue("originatingCommand", new BsonDocument()) as BsonDocument ?? [];
+                    string id = cmd.GetValue("getMore", 0).ToString() ?? "";
+                    string cursor = id.Length > 4 ? $"cursor {id[..4]}…" : $"cursor {id}";
+                    string what = origin.Contains("aggregate") ? $"aggregate {Stages(origin)}"
+                        : origin.Contains("find") ? $"find {Filter(origin.GetValue("filter", new BsonDocument()))}"
+                        : "getMore";
+                    return Line($"{what} · {cursor}");
+                }
             case "update" when cmd.GetValue("updates", BsonNull.Value) is BsonArray { Count: > 0 } updates && updates[0] is BsonDocument first:
                 return Line($"{(first.GetValue("multi", false).ToBoolean() ? "updateMany" : "updateOne")} {Filter(first.GetValue("q", new BsonDocument()))}");
             case "delete" when cmd.GetValue("deletes", BsonNull.Value) is BsonArray { Count: > 0 } deletes && deletes[0] is BsonDocument d:
                 return Line($"{(d.GetValue("limit", 0).ToDouble() == 0 ? "deleteMany" : "deleteOne")} {Filter(d.GetValue("q", new BsonDocument()))}");
             case "createIndexes":
-            {
-                string names = cmd.GetValue("indexes", new BsonArray()) is BsonArray specs
-                    ? string.Join(", ", specs.OfType<BsonDocument>().Select(static s => s.GetValue("name", "").ToString()))
-                    : "";
-                return Line($"createIndexes {cmd[0]}.{names}");
-            }
+                {
+                    string names = cmd.GetValue("indexes", new BsonArray()) is BsonArray specs
+                        ? string.Join(", ", specs.OfType<BsonDocument>().Select(static s => s.GetValue("name", "").ToString()))
+                        : "";
+                    return Line($"createIndexes {cmd[0]}.{names}");
+                }
             case "count" or "distinct":
                 return Line($"{head} {Filter(cmd.GetValue("query", new BsonDocument()))}");
             default:
@@ -713,24 +703,24 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     private async Task KillAsync(ProfilerOpRow row)
     {
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Prof_KillTitle"],
-                Message = Loc.Format("Prof_KillBody", row.OpIdText, row.Type, row.Namespace, row.ElapsedText),
-                ConfirmLabel = Loc["Prof_Kill"],
-                IconKey = "Mongo.octagon-x",
-                Facts =
+        {
+            Title = Loc["Prof_KillTitle"],
+            Message = Loc.Format("Prof_KillBody", row.OpIdText, row.Type, row.Namespace, row.ElapsedText),
+            ConfirmLabel = Loc["Prof_Kill"],
+            IconKey = "Mongo.octagon-x",
+            Facts =
                 [
                     new(Loc["Prof_ColCommand"], row.Summary.Length > 60 ? row.Summary[..60] + "…" : row.Summary),
                     new(Loc["Prof_ColClient"], row.Client)
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? row.OpIdText : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? row.OpIdText : null
+        }).ConfigureAwait(true))
         {
             return;
         }
         try
         {
-            await Workspace.Connection.RunCommandAsync("admin", Tagged(new BsonDocument { { "killOp", 1 }, { "op", row.OpId } }))
+            _ = await Workspace.Connection.RunCommandAsync("admin", Tagged(new BsonDocument { { "killOp", 1 }, { "op", row.OpId } }))
                 .ConfigureAwait(true);
             Workspace.Toast(new() { Title = Loc.Format("Prof_Killed", row.OpIdText), Kind = ToastKind.Success });
         }
@@ -787,7 +777,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         {
             return;
         }
-        _profileCount = count;
+        ProfileCount = count;
         RaisePropertyChanged(nameof(ProfileCount));
         List<ProfileEntry> entries = [.. docs.Select(ProfileEntry.Parse).Where(static e => !e.IsDiagnostic)];
         double overall = entries.Sum(static e => e.Millis);
@@ -795,7 +785,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         ApplyShapes(_groups);
 
         // 逐条:按时间倒序,复用形状行里的统计(详情要"占比")。
-        Dictionary<string, ProfilerShapeRow> byKey = _groups.ToDictionary(static g => g.Shape.Key, StringComparer.Ordinal);
+        var byKey = _groups.ToDictionary(static g => g.Shape.Key, StringComparer.Ordinal);
         ProfileEntry? keepEntry = _selectedEntry?.Entry;
         Entries.Clear();
         foreach (ProfileEntry e in entries)
@@ -817,7 +807,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
             ? Loc["Prof_EmptyDenied"]
             : _groups.Count > 0
                 ? ""
-                : _level == 0 ? Loc["Prof_EmptyOff"] : Loc["Prof_EmptyNone"];
+                : Level == 0 ? Loc["Prof_EmptyOff"] : Loc["Prof_EmptyNone"];
         if (_groups.Count == 0)
         {
             Detail = null;
@@ -828,7 +818,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
     private void ApplyShapes(List<ProfilerShapeRow> groups)
     {
         string? keep = _selectedShape?.Shape.Key;
-        IEnumerable<ProfilerShapeRow> sorted = _sortKey switch
+        IEnumerable<ProfilerShapeRow> sorted = SortKey switch
         {
             "count" => groups.OrderByDescending(static g => g.Count),
             "max" => groups.OrderByDescending(static g => g.MaxMillis),
@@ -867,7 +857,7 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
         }
         IReadOnlyList<BsonDocument> indexes = await Workspace.Connection.ListIndexesAsync(Database, detail.Collection).ConfigureAwait(true);
         BsonDocument? hit = indexes.FirstOrDefault(i => i.GetValue("key", BsonNull.Value) is BsonDocument key && advice.CoveredBy(key));
-        if (hit is not null && ReferenceEquals(detail, _detail))
+        if (hit is not null && ReferenceEquals(detail, Detail))
         {
             detail.AdviceText = Loc.Format("Prof_AdviceExists", hit.GetValue("name", "").ToString());
             detail.CanCreateIndex = false;
@@ -877,26 +867,26 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
 
     private async Task CreateIndexAsync()
     {
-        if (_detail is not { Advice: { } advice } detail || !Workspace.EnsureWritable(Database))
+        if (Detail is not { Advice: { } advice } detail || !Workspace.EnsureWritable(Database))
         {
             return;
         }
         string ns = $"{Database}.{detail.Collection}";
         long? docs = await Workspace.Connection.EstimatedCountAsync(Database, detail.Collection).ConfigureAwait(true);
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["Prof_CreateIndexTitle"],
-                Message = Loc.Format("Prof_CreateIndexBody", ns),
-                ConfirmLabel = Loc["Prof_CreateIndex"],
-                IconKey = "Mongo.key-round",
-                Danger = false,
-                Facts =
+        {
+            Title = Loc["Prof_CreateIndexTitle"],
+            Message = Loc.Format("Prof_CreateIndexBody", ns),
+            ConfirmLabel = Loc["Prof_CreateIndex"],
+            IconKey = "Mongo.key-round",
+            Danger = false,
+            Facts =
                 [
                     new(Loc["Prof_FactKeys"], advice.KeysText),
                     new(Loc["Prof_FactDocs"], docs is { } n ? BsonText.Grouped(n) : "—")
                 ],
-                TypeToConfirm = Workspace.Guard.ConfirmWrites ? detail.Collection : null
-            }).ConfigureAwait(true))
+            TypeToConfirm = Workspace.Guard.ConfirmWrites ? detail.Collection : null
+        }).ConfigureAwait(true))
         {
             return;
         }
@@ -917,9 +907,9 @@ internal sealed class ProfilerTabViewModel : WorkspaceTab
 
     private void UpdateStatus()
     {
-        string level = _level == 0
+        string level = Level == 0
             ? Loc["Prof_StatusOff"]
-            : Loc.Format("Prof_StatusLevel", _level, _slowMs);
-        StatusText = Loc.Format("Prof_Status", BsonText.Grouped(_profileCount), level);
+            : Loc.Format("Prof_StatusLevel", Level, _slowMs);
+        StatusText = Loc.Format("Prof_Status", BsonText.Grouped(ProfileCount), level);
     }
 }

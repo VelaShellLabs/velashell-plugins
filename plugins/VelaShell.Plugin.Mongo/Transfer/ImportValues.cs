@@ -101,19 +101,19 @@ internal static partial class ImportValues
                     ? ConvertOutcome.Ok(new BsonDateTime(utc))
                     : ConvertOutcome.Fail(ImportIssueKind.BadDate, GuessDateFormat(trimmed, includeTime: false) ?? trimmed);
             case BsonKind.ObjectId:
-            {
-                string hex = Unwrap(trimmed, "ObjectId");
-                return ObjectId.TryParse(hex, out ObjectId id)
-                    ? ConvertOutcome.Ok(id)
-                    : ConvertOutcome.Fail(ImportIssueKind.BadValue, trimmed);
-            }
+                {
+                    string hex = Unwrap(trimmed, "ObjectId");
+                    return ObjectId.TryParse(hex, out ObjectId id)
+                        ? ConvertOutcome.Ok(id)
+                        : ConvertOutcome.Fail(ImportIssueKind.BadValue, trimmed);
+                }
             case BsonKind.Uuid:
-            {
-                string guid = Unwrap(trimmed, "UUID");
-                return Guid.TryParse(guid, out Guid g)
-                    ? ConvertOutcome.Ok(new BsonBinaryData(g, GuidRepresentation.Standard))
-                    : ConvertOutcome.Fail(ImportIssueKind.BadValue, trimmed);
-            }
+                {
+                    string guid = Unwrap(trimmed, "UUID");
+                    return Guid.TryParse(guid, out Guid g)
+                        ? ConvertOutcome.Ok(new BsonBinaryData(g, GuidRepresentation.Standard))
+                        : ConvertOutcome.Fail(ImportIssueKind.BadValue, trimmed);
+                }
             case BsonKind.Object or BsonKind.Array:
                 try
                 {
@@ -248,7 +248,7 @@ internal static partial class ImportValues
                 case '¥' or '￥' or '$' or '€' or '£':
                     break;
                 default:
-                    builder.Append(c);
+                    _ = builder.Append(c);
                     break;
             }
         }

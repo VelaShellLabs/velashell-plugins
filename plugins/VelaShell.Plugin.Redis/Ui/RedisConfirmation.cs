@@ -100,7 +100,7 @@ public sealed class RedisConfirmation : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(CanConfirm));
             ConfirmCommand.RaiseCanExecuteChanged();
         }
@@ -168,6 +168,6 @@ public sealed class RedisConfirmation : ObservableObject
         TaskCompletionSource<bool>? pending = _pending;
         _pending = null;
         IsOpen = false;
-        pending?.TrySetResult(answer);
+        _ = (pending?.TrySetResult(answer));
     }
 }

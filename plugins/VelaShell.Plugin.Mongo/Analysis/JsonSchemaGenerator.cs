@@ -42,7 +42,7 @@ internal static class JsonSchemaGenerator
             }
             if (parentPresent > 0 && field.Present >= parentPresent)
             {
-                required.Add(field.Name);
+                _ = required.Add(field.Name);
             }
             properties[field.Name] = PropertySchema(report, field);
         }
@@ -170,9 +170,9 @@ internal static class JsonSchemaGenerator
         var builder = new StringBuilder();
         if (compactRoot && value is BsonDocument { ElementCount: 1 } root && root.GetElement(0).Value is BsonDocument { ElementCount: > 0 } inner)
         {
-            builder.Append("{ ").Append(BsonText.FieldName(root.GetElement(0).Name)).Append(": ");
+            _ = builder.Append("{ ").Append(BsonText.FieldName(root.GetElement(0).Name)).Append(": ");
             WriteExpanded(builder, inner, 0, width);
-            builder.Append(" }");
+            _ = builder.Append(" }");
             return builder.ToString();
         }
         Write(builder, value, 0, width);
@@ -184,7 +184,7 @@ internal static class JsonSchemaGenerator
         string inline = BsonText.Literal(value);
         if (value is not (BsonDocument or BsonArray) || (depth * 2) + used + inline.Length <= width)
         {
-            b.Append(inline);
+            _ = b.Append(inline);
             return;
         }
         WriteExpanded(b, value, depth, width);
@@ -195,20 +195,20 @@ internal static class JsonSchemaGenerator
         string pad = new(' ', (depth + 1) * 2);
         if (value is BsonDocument doc)
         {
-            b.Append('{');
+            _ = b.Append('{');
             int i = 0;
             foreach (BsonElement element in doc)
             {
-                b.Append(i++ == 0 ? "\n" : ",\n").Append(pad);
+                _ = b.Append(i++ == 0 ? "\n" : ",\n").Append(pad);
                 string key = BsonText.FieldName(element.Name) + ": ";
-                b.Append(key);
+                _ = b.Append(key);
                 Write(b, element.Value, depth + 1, width, key.Length);
             }
-            b.Append('\n').Append(' ', depth * 2).Append('}');
+            _ = b.Append('\n').Append(' ', depth * 2).Append('}');
             return;
         }
         BsonArray array = value.AsBsonArray;
-        b.Append('[');
+        _ = b.Append('[');
         if (array.All(static v => v is not (BsonDocument or BsonArray)))
         {
             // 全是标量(required、enum 的取值表):按宽度流式排,一行放得下几个放几个 ——
@@ -219,25 +219,25 @@ internal static class JsonSchemaGenerator
                 string item = BsonText.Literal(array[i]) + (i < array.Count - 1 ? "," : "");
                 if (column + 1 + item.Length > width && column > pad.Length)
                 {
-                    b.Append('\n').Append(pad);
+                    _ = b.Append('\n').Append(pad);
                     column = pad.Length;
                 }
                 else if (i > 0)
                 {
-                    b.Append(' ');
+                    _ = b.Append(' ');
                     column++;
                 }
-                b.Append(item);
+                _ = b.Append(item);
                 column += item.Length;
             }
-            b.Append('\n').Append(' ', depth * 2).Append(']');
+            _ = b.Append('\n').Append(' ', depth * 2).Append(']');
             return;
         }
         for (int i = 0; i < array.Count; i++)
         {
-            b.Append(i == 0 ? "\n" : ",\n").Append(pad);
+            _ = b.Append(i == 0 ? "\n" : ",\n").Append(pad);
             Write(b, array[i], depth + 1, width);
         }
-        b.Append('\n').Append(' ', depth * 2).Append(']');
+        _ = b.Append('\n').Append(' ', depth * 2).Append(']');
     }
 }

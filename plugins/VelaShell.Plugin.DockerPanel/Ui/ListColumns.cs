@@ -40,7 +40,7 @@ public abstract class ListColumns : ObservableObject
     /// <summary>用户拖出来的列宽只可能是像素值 —— 星形和 Auto 在这里没有意义。</summary>
     protected GridLength Clamp(GridLength value, string key)
     {
-        var min = Min(key);
+        double min = Min(key);
         return new(Math.Max(min, value.IsAbsolute ? value.Value : min));
     }
 }

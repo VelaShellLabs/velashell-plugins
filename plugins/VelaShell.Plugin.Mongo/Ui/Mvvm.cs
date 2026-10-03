@@ -75,16 +75,15 @@ public abstract class ObservableObject : INotifyPropertyChanged
 /// <param name="canExecute">可用性判定;为 null 即恒可用。</param>
 public sealed class AsyncCommand(Func<Task> execute, Func<bool>? canExecute = null) : ICommand
 {
-    private bool _running;
 
     /// <inheritdoc />
     public event EventHandler? CanExecuteChanged;
 
     /// <summary>正在执行。</summary>
-    public bool IsRunning => _running;
+    public bool IsRunning { get; private set; }
 
     /// <inheritdoc />
-    public bool CanExecute(object? parameter) => !_running && (canExecute?.Invoke() ?? true);
+    public bool CanExecute(object? parameter) => !IsRunning && (canExecute?.Invoke() ?? true);
 
     /// <inheritdoc />
     public async void Execute(object? parameter) => await ExecuteAsync().ConfigureAwait(true);
@@ -97,7 +96,7 @@ public sealed class AsyncCommand(Func<Task> execute, Func<bool>? canExecute = nu
         {
             return;
         }
-        _running = true;
+        IsRunning = true;
         RaiseCanExecuteChanged();
         try
         {
@@ -110,7 +109,7 @@ public sealed class AsyncCommand(Func<Task> execute, Func<bool>? canExecute = nu
         }
         finally
         {
-            _running = false;
+            IsRunning = false;
             RaiseCanExecuteChanged();
         }
     }

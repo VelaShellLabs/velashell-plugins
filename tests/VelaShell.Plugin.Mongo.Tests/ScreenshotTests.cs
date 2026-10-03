@@ -1,5 +1,4 @@
 using Avalonia.Media.Imaging;
-using VelaShell.Plugin.Mongo.Ui;
 
 namespace VelaShell.Plugin.Mongo.Tests;
 

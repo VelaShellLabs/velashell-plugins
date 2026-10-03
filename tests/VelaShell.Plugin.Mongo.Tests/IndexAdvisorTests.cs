@@ -38,7 +38,7 @@ public sealed class IndexAdvisorTests
         var spec = new BsonDocument { { "v", 2 }, { "key", key }, { "name", name } };
         if (extra is not null)
         {
-            spec.Merge(extra);
+            _ = spec.Merge(extra);
         }
         return new AdvisorIndex(name, key, spec, ops, Now.AddDays(-ageDays), 64L << 20);
     }
@@ -77,7 +77,7 @@ public sealed class IndexAdvisorTests
     [TestMethod]
     public void Slow_queries_group_by_shape_and_ignore_cheap_index_scans()
     {
-        var profile = new[]
+        BsonDocument[] profile = new[]
         {
             Find(BsonDocument.Parse("{ status: 'paid', total: { $gte: 1 } }"), BsonDocument.Parse("{ total: -1 }")),
             Find(BsonDocument.Parse("{ status: 'shipped', total: { $gte: 9 } }"), BsonDocument.Parse("{ total: -1 }"), millis: 600),

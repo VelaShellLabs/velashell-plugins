@@ -14,7 +14,7 @@ public sealed partial class GridFsRenameDialogView : UserControl
         DataContext = viewModel;
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            NameBox.Focus();
+            _ = NameBox.Focus();
             string text = NameBox.Text ?? "";
             int slash = text.LastIndexOf('/');
             int dot = viewModel.Entry.IsFolder ? -1 : text.LastIndexOf('.');

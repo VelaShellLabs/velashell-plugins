@@ -41,7 +41,7 @@ public sealed class Glyph : Control
     {
         AffectsRender<Glyph>(DataProperty, BrushProperty, SizeProperty);
         AffectsMeasure<Glyph>(SizeProperty);
-        KeyProperty.Changed.AddClassHandler<Glyph>((glyph, _) => glyph.ResolveKey());
+        _ = KeyProperty.Changed.AddClassHandler<Glyph>((glyph, _) => glyph.ResolveKey());
         // 图标是定尺寸的,默认的 Stretch 对它没有意义:排版会把它拉成整行高,
         // 而 Render 从原点开画 —— 于是图标贴在行顶,旁边居中的文字与它错开一截。
         // 这是"图标和文字不在一个水平中轴上"的根因,逐处补 VerticalAlignment 补不干净。
@@ -94,7 +94,7 @@ public sealed class Glyph : Control
         {
             return;
         }
-        if (this.TryFindResource(key, out var resource) && resource is Geometry geometry)
+        if (this.TryFindResource(key, out object? resource) && resource is Geometry geometry)
         {
             Data = geometry;
         }
@@ -107,11 +107,11 @@ public sealed class Glyph : Control
         {
             return;
         }
-        var scale = Size / ViewBox;
+        double scale = Size / ViewBox;
         // 在实际分到的框里居中再画。默认对齐下这一步是零位移(框正好是 Size×Size);
         // 但调用方显式写了 Stretch、或父容器给了更大的框时,图标仍然待在正中,
         // 而不是缩在左上角。
-        var transform = Matrix.CreateScale(scale, scale) *
+        Matrix transform = Matrix.CreateScale(scale, scale) *
                            Matrix.CreateTranslation((Bounds.Width - Size) / 2, (Bounds.Height - Size) / 2);
         using (context.PushTransform(transform))
         {

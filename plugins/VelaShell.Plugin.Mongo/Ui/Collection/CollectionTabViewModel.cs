@@ -21,23 +21,13 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// </summary>
 internal sealed partial class CollectionTabViewModel : WorkspaceTab
 {
-    private CollectionInfo _info;
-    private CollectionViewMode _viewMode = CollectionViewMode.Grid;
-    private IReadOnlyList<CollectionColumn> _columns = [];
-    private ObservableCollection<CollectionRow> _rows = [];
     private List<BsonDocument> _documents = [];
     private CollectionRow? _selectedRow;
     private IReadOnlyList<CollectionRow> _selectedRows = [];
     private CollectionColumn? _currentColumn;
     private EjsonMode _ejson;
-    private bool _isLoading;
     private bool _loadedOnce;
-    private long? _totalCount;
-    private TimeSpan _elapsed;
-    private string _planSummary = "";
-    private CollectionSample _sample = CollectionSample.Empty;
     private Task? _sampleTask;
-    private CollectionStats? _stats;
     private bool _disposed;
 
     /// <summary>构造(外壳在用的签名,保持不变)。</summary>
@@ -47,7 +37,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     public CollectionTabViewModel(IMongoWorkspace workspace, CollectionInfo info, string? filter)
         : base(workspace)
     {
-        _info = info;
+        Info = info;
         Title = info.Name;
         Scope = "@" + info.Database;
         _ejson = workspace.Connection.Settings.Ejson;
@@ -62,13 +52,13 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     }
 
     /// <summary>集合信息。</summary>
-    public CollectionInfo Info => _info;
+    public CollectionInfo Info { get; private set; }
 
     /// <summary>库名。</summary>
-    public string Database => _info.Database;
+    public string Database => Info.Database;
 
     /// <summary>集合名。</summary>
-    public string CollectionName => _info.Name;
+    public string CollectionName => Info.Name;
 
     /// <inheritdoc />
     public override TabKind Kind => TabKind.Collection;
@@ -96,10 +86,9 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// <summary>当前视图。</summary>
     public CollectionViewMode ViewMode
     {
-        get => _viewMode;
-        set
+        get; set
         {
-            if (SetProperty(ref _viewMode, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsGridMode), nameof(IsTreeMode), nameof(IsJsonMode), nameof(PendingText));
                 if (value == CollectionViewMode.Tree)
@@ -112,12 +101,10 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
                 }
             }
         }
-    }
+    } = CollectionViewMode.Grid;
 
     /// <summary>上一次右侧面板是开着还是收着:新开的集合标签照这个来(Navicat 也记着)。</summary>
     private static bool s_sidePanelVisible = true;
-
-    private bool _isSidePanelVisible = s_sidePanelVisible;
 
     /// <summary>
     /// 数据区右侧的面板(网格的文档检查器、JSON 视图的大纲)开着吗。底栏右下角那颗按钮切换它;
@@ -125,29 +112,26 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// </summary>
     public bool IsSidePanelVisible
     {
-        get => _isSidePanelVisible;
-        set
+        get; set
         {
-            if (SetProperty(ref _isSidePanelVisible, value))
+            if (SetProperty(ref field, value))
             {
                 s_sidePanelVisible = value;
                 RaisePropertyChanged(nameof(SidePanelTip));
             }
         }
-    }
+    } = s_sidePanelVisible;
 
     /// <summary>按钮的提示:「隐藏右侧面板」/「显示右侧面板」。</summary>
-    public string SidePanelTip => Loc[_isSidePanelVisible ? "Cw_HideSidePanel" : "Cw_ShowSidePanel"];
+    public string SidePanelTip => Loc[IsSidePanelVisible ? "Cw_HideSidePanel" : "Cw_ShowSidePanel"];
 
     /// <summary>收起 / 展开右侧面板。</summary>
-    public RelayCommand ToggleSidePanelCommand => _toggleSidePanel ??= new RelayCommand(() => IsSidePanelVisible = !IsSidePanelVisible);
-
-    private RelayCommand? _toggleSidePanel;
+    public RelayCommand ToggleSidePanelCommand => field ??= new RelayCommand(() => IsSidePanelVisible = !IsSidePanelVisible);
 
     /// <summary>网格视图(分段按钮双向绑定)。</summary>
     public bool IsGridMode
     {
-        get => _viewMode == CollectionViewMode.Grid;
+        get => ViewMode == CollectionViewMode.Grid;
         set
         {
             if (value)
@@ -160,7 +144,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// <summary>树视图。</summary>
     public bool IsTreeMode
     {
-        get => _viewMode == CollectionViewMode.Tree;
+        get => ViewMode == CollectionViewMode.Tree;
         set
         {
             if (value)
@@ -173,7 +157,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// <summary>JSON 视图。</summary>
     public bool IsJsonMode
     {
-        get => _viewMode == CollectionViewMode.Json;
+        get => ViewMode == CollectionViewMode.Json;
         set
         {
             if (value)
@@ -245,28 +229,26 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// <summary>列。</summary>
     public IReadOnlyList<CollectionColumn> Columns
     {
-        get => _columns;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _columns, value) && _drill is null)
+            if (SetProperty(ref field, value) && _drill is null)
             {
                 RaisePropertyChanged(nameof(GridColumns));
             }
         }
-    }
+    } = [];
 
     /// <summary>行(本页文档 + 暂存的新文档)。</summary>
     public ObservableCollection<CollectionRow> Rows
     {
-        get => _rows;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _rows, value) && _drill is null)
+            if (SetProperty(ref field, value) && _drill is null)
             {
                 RaisePropertyChanged(nameof(GridRows));
             }
         }
-    }
+    } = [];
 
     /// <summary>本页从服务器读到的文档。</summary>
     public IReadOnlyList<BsonDocument> Documents => _documents;
@@ -333,24 +315,19 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     public bool IsCurrentRow(CollectionRow row) => ReferenceEquals(row, GridSelectedRow);
 
     /// <summary>补全用的抽样(没抽到时为空样本)。</summary>
-    public CollectionSample Sample => _sample;
+    public CollectionSample Sample { get; private set; } = CollectionSample.Empty;
 
     /// <summary>集合统计(检查器「集合信息」页、对象树底部之外的另一个入口)。</summary>
-    public CollectionStats? Stats
-    {
-        get => _stats;
-        private set => SetProperty(ref _stats, value);
-    }
+    public CollectionStats? Stats { get; private set => SetProperty(ref field, value); }
 
     // ── 加载状态 ─────────────────────────────────────────────────────────────
 
     /// <summary>正在查询。</summary>
     public bool IsLoading
     {
-        get => _isLoading;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _isLoading, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsEmptyCollection), nameof(IsNoResult), nameof(ShowData));
                 StopCommand.RaiseCanExecuteChanged();
@@ -359,27 +336,26 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     }
 
     /// <summary>本页往返耗时。</summary>
-    public TimeSpan Elapsed => _elapsed;
+    public TimeSpan Elapsed { get; private set; }
 
     /// <summary>执行计划摘要(<c>IXSCAN status_1_createdAt_-1</c>)。</summary>
     public string PlanSummary
     {
-        get => _planSummary;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _planSummary, value))
+            if (SetProperty(ref field, value))
             {
                 UpdateStatus();
             }
         }
-    }
+    } = "";
 
     /// <summary>空集合(没有筛选、一份文档都没有):设计稿 22 的「空集合」卡。</summary>
-    public bool IsEmptyCollection => _loadedOnce && !_isLoading && _documents.Count == 0 && Staging.InsertCount == 0
+    public bool IsEmptyCollection => _loadedOnce && !IsLoading && _documents.Count == 0 && Staging.InsertCount == 0
                                      && !HasActiveFilter && _pageIndex == 0;
 
     /// <summary>筛选无结果。</summary>
-    public bool IsNoResult => _loadedOnce && !_isLoading && _documents.Count == 0 && Staging.InsertCount == 0
+    public bool IsNoResult => _loadedOnce && !IsLoading && _documents.Count == 0 && Staging.InsertCount == 0
                               && (HasActiveFilter || _pageIndex > 0);
 
     /// <summary>显示数据区(不是空态)。</summary>
@@ -440,7 +416,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
             BsonDocument? raw = await cursor.FirstOrDefaultAsync().ConfigureAwait(true);
             if (raw is not null)
             {
-                _info = MongoConnection.ToCollectionInfo(Database, raw);
+                Info = MongoConnection.ToCollectionInfo(Database, raw);
                 RaisePropertiesChanged(nameof(Info), nameof(IconKey), nameof(CanEdit), nameof(IsEditable), nameof(ShowViewBanner),
                     nameof(ViewBannerText));
                 Inspector.RefreshValidation();
@@ -461,7 +437,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
         {
             try
             {
-                _sample = await CollectionSample.LoadAsync(Workspace.Connection, Database, CollectionName,
+                Sample = await CollectionSample.LoadAsync(Workspace.Connection, Database, CollectionName,
                     Workspace.Connection.Settings.SampleSize, _lifetime.Token).ConfigureAwait(true);
                 RaisePropertyChanged(nameof(Sample));
             }
@@ -475,7 +451,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// <summary>统计(检查器「集合信息」页第一次打开时取)。</summary>
     internal async Task LoadStatsAsync()
     {
-        if (_stats is not null)
+        if (Stats is not null)
         {
             return;
         }
@@ -507,7 +483,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
         }
         _selectedRows = [];
         _selectedRow = null;
-        Rows = new ObservableCollection<CollectionRow>(rows);
+        Rows = [with(rows)];
         _trackedIds = [.. Staging.Edits.Select(static e => e.Id).Concat(Staging.Deletes.Select(static d => d.Id))];
         CollectionRow? select = rows.FirstOrDefault(r => keepId is not null && keepId.Equals(r.Id))
                           ?? rows.FirstOrDefault(r => keepInsert is not null && r.Insert?.Key == keepInsert)
@@ -560,7 +536,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
         {
             order.Insert(0, "_id");
         }
-        Dictionary<string, CollectionColumn> previous = _columns.ToDictionary(static c => c.Name, StringComparer.Ordinal);
+        var previous = Columns.ToDictionary(static c => c.Name, StringComparer.Ordinal);
         BsonDocument sort = ParsedSort ?? [];
         var columns = new List<CollectionColumn>(order.Count);
         foreach (string name in order)
@@ -627,10 +603,10 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     private void UpdateStatus()
     {
         string text = Loc.Format("Cw_Status", Info.Namespace, BsonText.Grouped(_documents.Count),
-            ((int)_elapsed.TotalMilliseconds).ToString(CultureInfo.InvariantCulture));
-        if (_planSummary.Length > 0)
+            ((int)Elapsed.TotalMilliseconds).ToString(CultureInfo.InvariantCulture));
+        if (PlanSummary.Length > 0)
         {
-            text += " · " + _planSummary;
+            text += " · " + PlanSummary;
         }
         if (!Staging.IsEmpty)
         {
@@ -642,7 +618,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// <summary>从执行计划里挑出获胜阶段的摘要(<c>IXSCAN 索引名</c> / <c>COLLSCAN</c> / <c>IDHACK</c>)。</summary>
     internal static string SummarizePlan(BsonDocument explain)
     {
-        BsonDocument? planner = explain.GetValue("queryPlanner", BsonNull.Value) as BsonDocument;
+        var planner = explain.GetValue("queryPlanner", BsonNull.Value) as BsonDocument;
         if (planner is null && explain.GetValue("stages", BsonNull.Value) is BsonArray stages
             && stages.FirstOrDefault() is BsonDocument first
             && first.GetValue("$cursor", BsonNull.Value) is BsonDocument cursor)

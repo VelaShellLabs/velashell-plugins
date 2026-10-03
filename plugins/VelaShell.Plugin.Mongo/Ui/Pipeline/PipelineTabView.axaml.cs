@@ -246,7 +246,7 @@ public sealed partial class PipelineTabView : UserControl
 
     private void EndDrag()
     {
-        _draggingCard?.Classes.Remove("dragging");
+        _ = (_draggingCard?.Classes.Remove("dragging"));
         _draggingCard = null;
         _dragging = null;
     }
@@ -254,7 +254,7 @@ public sealed partial class PipelineTabView : UserControl
     /// <summary>换位后卡片的容器可能是新的:把高亮挪到新容器上。</summary>
     private void RestyleDragged()
     {
-        _draggingCard?.Classes.Remove("dragging");
+        _ = (_draggingCard?.Classes.Remove("dragging"));
         _draggingCard = null;
         if (_dragging is { } stage && StageList.ContainerFromItem(stage) is Control container
             && container.GetVisualDescendants().OfType<Border>().FirstOrDefault(static b => b.Classes.Contains("stage")) is { } card)

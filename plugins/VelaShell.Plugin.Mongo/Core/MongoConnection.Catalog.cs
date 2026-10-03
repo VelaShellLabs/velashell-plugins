@@ -89,7 +89,7 @@ internal sealed partial class MongoConnection
         BsonDocument storage;
         try
         {
-            var pipeline = new[]
+            BsonDocument[] pipeline = new[]
             {
                 new BsonDocument("$collStats", new BsonDocument("storageStats", new BsonDocument()))
             };

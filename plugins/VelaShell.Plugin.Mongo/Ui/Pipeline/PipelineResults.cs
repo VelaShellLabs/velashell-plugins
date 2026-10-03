@@ -12,7 +12,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 /// <param name="typeName">主要类型(列头提示)。</param>
 internal sealed class PipelineColumn(string name, double width, bool isNumeric, bool isGhost, string typeName) : ObservableObject
 {
-    private double _width = width;
 
     /// <summary>字段名。</summary>
     public string Name { get; } = name;
@@ -20,9 +19,9 @@ internal sealed class PipelineColumn(string name, double width, bool isNumeric, 
     /// <summary>列宽(拖分隔线改,双击分隔线按内容自适应)。</summary>
     public double Width
     {
-        get => _width;
-        set => SetProperty(ref _width, Math.Clamp(value, 40, 1200));
-    }
+        get;
+        set => SetProperty(ref field, Math.Clamp(value, 40, 1200));
+    } = width;
 
     /// <summary>数值列(右对齐)。</summary>
     public bool IsNumeric { get; } = isNumeric;
@@ -88,10 +87,10 @@ internal static class PipelineResults
     /// 那些"重塑文档"的阶段:它们之后,前面停用的阶段加的字段反正也不会出现在输出里,
     /// 不必为它们画提示列。
     /// </summary>
-    private static readonly HashSet<string> Reshaping = new(StringComparer.Ordinal)
-    {
-        "$group", "$project", "$replaceRoot", "$replaceWith", "$bucket", "$bucketAuto", "$count", "$facet", "$sortByCount"
-    };
+    private static readonly HashSet<string> Reshaping =
+    [
+with(StringComparer.Ordinal),         "$group", "$project", "$replaceRoot", "$replaceWith", "$bucket", "$bucketAuto", "$count", "$facet", "$sortByCount"
+    ];
 
     /// <summary>排出列与行。</summary>
     public static (IReadOnlyList<PipelineColumn> Columns, IReadOnlyList<PipelineRow> Rows) Build(
@@ -188,12 +187,12 @@ internal static class PipelineResults
             switch (op)
             {
                 case "$lookup" or "$graphLookup" when body.TryGetValue("as", out BsonValue asValue) && asValue.IsString:
-                {
-                    string field = asValue.AsString;
-                    string? sub = body.TryGetValue("from", out BsonValue from) && from.IsString ? lookupSample?.Invoke(from.AsString) : null;
-                    ghosts.Add(new(sub is null ? field : $"{field}.{sub}", i + 1));
-                    break;
-                }
+                    {
+                        string field = asValue.AsString;
+                        string? sub = body.TryGetValue("from", out BsonValue from) && from.IsString ? lookupSample?.Invoke(from.AsString) : null;
+                        ghosts.Add(new(sub is null ? field : $"{field}.{sub}", i + 1));
+                        break;
+                    }
                 case "$addFields" or "$set":
                     ghosts.AddRange(body.Names.Select(n => new PipelineGhost(n, i + 1)));
                     break;

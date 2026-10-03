@@ -33,14 +33,13 @@ internal static class S3ClientFactory
             MaxErrorRetry = 3,
             RetryMode = RequestRetryMode.Standard,
             HttpClientFactory = new ProbingHttpClientFactory(probe, info.Settings.UseTls),
+            // AWSSDK v4 默认对每个请求计算 CRC32 并要求响应回带校验和。这是 AWS 的新行为,
+            // 而相当一部分 S3 兼容实现(较旧的 MinIO / Ceph RGW / 各类网关)不认这些头,
+            // 表现为上传直接被拒或下载报校验失败。改成"仅在协议要求时"计算,
+            // 既保留 DeleteObjects 这类必须带校验和的场景,又不会把兼容实现挡在门外。
+            RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+            ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED
         };
-
-        // AWSSDK v4 默认对每个请求计算 CRC32 并要求响应回带校验和。这是 AWS 的新行为,
-        // 而相当一部分 S3 兼容实现(较旧的 MinIO / Ceph RGW / 各类网关)不认这些头,
-        // 表现为上传直接被拒或下载报校验失败。改成"仅在协议要求时"计算,
-        // 既保留 DeleteObjects 这类必须带校验和的场景,又不会把兼容实现挡在门外。
-        config.RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED;
-        config.ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED;
 
         return new(CreateCredentials(info), config);
     }

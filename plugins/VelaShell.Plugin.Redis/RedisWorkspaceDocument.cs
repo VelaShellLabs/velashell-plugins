@@ -1,4 +1,4 @@
-﻿using Avalonia.Threading;
+using Avalonia.Threading;
 using VelaShell.Plugin.Redis.Ui;
 using VelaShell.PluginSdk;
 using VelaShell.PluginSdk.Protocols;
@@ -66,7 +66,7 @@ internal sealed class RedisWorkspaceDocument : IWorkspaceDocument
         // PING 成功即恢复,失败就如实报错,而不是让按钮点了没有任何反馈。
         try
         {
-            await _connection.PingAsync().ConfigureAwait(false);
+            _ = await _connection.PingAsync().ConfigureAwait(false);
             await _connection.RefreshKeyspaceAsync(cancellationToken).ConfigureAwait(false);
             Publish(new(ProtocolSessionState.Connected, Describe()));
         }

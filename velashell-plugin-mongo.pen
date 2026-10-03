@@ -110751,10 +110751,97 @@
                                   "id": "jbSmY",
                                   "name": "T",
                                   "fill": "$textMuted",
-                                  "content": "shop · 数据 + 索引",
+                                  "content": "全部库 · 数据 + 索引",
                                   "fontFamily": "$fontUi",
                                   "fontSize": 10,
                                   "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "zz0vL",
+                              "name": "ColHeader",
+                              "width": "fill_container",
+                              "height": 16,
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "gm5Xj",
+                                  "name": "H-集合",
+                                  "width": 118,
+                                  "height": "fill_container",
+                                  "padding": [
+                                    0,
+                                    6,
+                                    0,
+                                    0
+                                  ],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "bHSOh",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "集合",
+                                      "fontFamily": "$fontUi",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "xP9qc",
+                                      "name": "Grip",
+                                      "fill": "$borderSecondary",
+                                      "width": 1,
+                                      "height": 12
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "mUEhK",
+                                  "name": "H-bar",
+                                  "width": "fill_container",
+                                  "height": "fill_container",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "K09WYS",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "数据 + 索引",
+                                      "fontFamily": "$fontUi",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "faVXa",
+                                  "name": "H-占用",
+                                  "width": 52,
+                                  "height": "fill_container",
+                                  "justifyContent": "end",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "NsVvv",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "占用",
+                                      "fontFamily": "$fontUi",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 }
                               ]
                             },
@@ -110767,16 +110854,34 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "ldKTk",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "textGrowth": "fixed-width",
-                                  "width": 70,
-                                  "content": "orders",
-                                  "fontFamily": "$fontMono",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "dI1rp",
+                                  "name": "Name",
+                                  "width": 118,
+                                  "height": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Viuq4",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "shop.",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "vOlQE",
+                                      "name": "T",
+                                      "fill": "$textPrimary",
+                                      "content": "orders",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "frame",
@@ -110834,16 +110939,34 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "TUxN6",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "textGrowth": "fixed-width",
-                                  "width": 70,
-                                  "content": "events",
-                                  "fontFamily": "$fontMono",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "bWBuV",
+                                  "name": "Name",
+                                  "width": 118,
+                                  "height": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Aiga6",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "shop.",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "WTZxG",
+                                      "name": "T",
+                                      "fill": "$textPrimary",
+                                      "content": "events",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "frame",
@@ -110901,16 +111024,34 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "PYvvw",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "textGrowth": "fixed-width",
-                                  "width": 70,
-                                  "content": "fs.chunks",
-                                  "fontFamily": "$fontMono",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "ObY10",
+                                  "name": "Name",
+                                  "width": 118,
+                                  "height": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Fcphd",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "shop.",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "PBlfc",
+                                      "name": "T",
+                                      "fill": "$textPrimary",
+                                      "content": "fs.chunks",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "frame",
@@ -110968,16 +111109,34 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "cKySE",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "textGrowth": "fixed-width",
-                                  "width": 70,
-                                  "content": "products",
-                                  "fontFamily": "$fontMono",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "ZUMjj",
+                                  "name": "Name",
+                                  "width": 118,
+                                  "height": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "o3D9fh",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "logs.",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "qjRUW",
+                                      "name": "T",
+                                      "fill": "$textPrimary",
+                                      "content": "access_2026",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "frame",
@@ -111035,16 +111194,34 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "ufh68",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "textGrowth": "fixed-width",
-                                  "width": 70,
-                                  "content": "reviews",
-                                  "fontFamily": "$fontMono",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "T1wsF",
+                                  "name": "Name",
+                                  "width": 118,
+                                  "height": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "zsRYe",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "shop.",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "mNMc6",
+                                      "name": "T",
+                                      "fill": "$textPrimary",
+                                      "content": "reviews",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "frame",
@@ -111102,16 +111279,34 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "V4AuuH",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "textGrowth": "fixed-width",
-                                  "width": 70,
-                                  "content": "customers",
-                                  "fontFamily": "$fontMono",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "hg0K3",
+                                  "name": "Name",
+                                  "width": 118,
+                                  "height": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "rrRkm",
+                                      "name": "T",
+                                      "fill": "$textMuted",
+                                      "content": "shop.",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "FmXJg",
+                                      "name": "T",
+                                      "fill": "$textPrimary",
+                                      "content": "customers",
+                                      "fontFamily": "$fontMono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "frame",

@@ -1,10 +1,10 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
-using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Threading;
 using AvaloniaEdit.Document;
@@ -300,7 +300,7 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
             (int row, int column) = (e.GridRow, e.GridColumn);
             items.Add(Item(vm.Loc["Cw_MenuDrill"], "Mongo.table-2", () =>
             {
-                grid.DrillInto(row, column);
+                _ = grid.DrillInto(row, column);
                 return Task.CompletedTask;
             }));
             items.Add(new Separator());
@@ -365,7 +365,7 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
         data.Add(DataTransferItem.CreateText(field.Path));
         try
         {
-            await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy);
+            _ = await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy);
         }
         catch (InvalidOperationException)
         {

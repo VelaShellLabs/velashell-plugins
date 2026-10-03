@@ -68,15 +68,16 @@ internal static class PipelinePreview
     public const int DocsPerStage = 50;
 
     /// <summary>必须是管道第一个阶段的那些(抽样的 <c>$limit</c> 只能挂在它们后面)。</summary>
-    internal static readonly HashSet<string> FirstOnly = new(StringComparer.Ordinal)
-    {
+    internal static readonly HashSet<string> FirstOnly =
+    [
+        with(StringComparer.Ordinal),
         "$geoNear", "$collStats", "$indexStats", "$documents", "$search", "$searchMeta", "$vectorSearch",
         "$currentOp", "$listSessions", "$listLocalSessions", "$changeStream", "$planCacheStats",
         "$listSearchIndexes", "$shardedDataDistribution", "$querySettings"
-    };
+    ];
 
     /// <summary>写入阶段。</summary>
-    internal static readonly HashSet<string> WriteStages = new(StringComparer.Ordinal) { "$out", "$merge" };
+    internal static readonly HashSet<string> WriteStages = [with(StringComparer.Ordinal), "$out", "$merge"];
 
     /// <summary>跑一次预览。</summary>
     /// <param name="collection">源集合。</param>

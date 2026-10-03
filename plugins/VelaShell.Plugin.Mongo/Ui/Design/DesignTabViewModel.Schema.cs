@@ -16,21 +16,7 @@ internal sealed partial class DesignTabViewModel
     public static IReadOnlyList<int> SampleSizes { get; } = [100, 1000, 5000];
 
     private int _sampleSize;
-    private string _schemaFilter = "";
     private bool _filterSeeded;
-    private bool _isAnalyzing;
-    private string _schemaTiming = "";
-    private string _sampledText = "";
-    private AnalyzedSchema? _schema;
-    private IReadOnlyList<BsonDocument> _sample = [];
-    private BsonDocument? _generated;
-    private string _generatedText = "";
-    private string _genLevel = "moderate";
-    private string _genAction = "warn";
-    private bool _isGenChecking;
-    private long _genFailCount = -1;
-    private string _genCheckTitle = "";
-    private string _genCheckReasons = "";
 
     /// <summary>抽样文档数。</summary>
     public int SampleSize
@@ -51,9 +37,9 @@ internal sealed partial class DesignTabViewModel
     /// <summary>沿用的筛选条件(mongosh 写法;空 = 全集合抽样)。</summary>
     public string SchemaFilter
     {
-        get => _schemaFilter;
-        set => SetProperty(ref _schemaFilter, value ?? "");
-    }
+        get;
+        set => SetProperty(ref field, value ?? "");
+    } = "";
 
     /// <summary>字段行。</summary>
     public ObservableCollection<SchemaFieldRow> SchemaFields { get; } = [];
@@ -61,10 +47,10 @@ internal sealed partial class DesignTabViewModel
     /// <summary>正在抽样分析。</summary>
     public bool IsAnalyzing
     {
-        get => _isAnalyzing;
+        get;
         private set
         {
-            if (SetProperty(ref _isAnalyzing, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(ShowSchemaEmpty));
                 UpdateStatus();
@@ -73,29 +59,29 @@ internal sealed partial class DesignTabViewModel
     }
 
     /// <summary>抽样结果为空(空集合或筛选不到)。</summary>
-    public bool ShowSchemaEmpty => !_isAnalyzing && _schema is { Sampled: 0 };
+    public bool ShowSchemaEmpty => !IsAnalyzing && Schema is { Sampled: 0 };
 
     /// <summary>工具行右侧:<c>分析用时 0.4 s · 2026-09-26 21:08</c>。</summary>
     public string SchemaTiming
     {
-        get => _schemaTiming;
-        private set => SetProperty(ref _schemaTiming, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>抽到了多少(<c>抽样 1,000 / 1,284,902</c>)。</summary>
     public string SampledText
     {
-        get => _sampledText;
-        private set => SetProperty(ref _sampledText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>最近一次的分析结果。</summary>
     public AnalyzedSchema? Schema
     {
-        get => _schema;
+        get;
         private set
         {
-            if (SetProperty(ref _schema, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(ShowSchemaEmpty));
             }
@@ -103,15 +89,14 @@ internal sealed partial class DesignTabViewModel
     }
 
     /// <summary>抽样到的文档(验证规则页的试写文档以其中一份起头)。</summary>
-    internal IReadOnlyList<BsonDocument> Sample => _sample;
+    internal IReadOnlyList<BsonDocument> Sample { get; private set; } = [];
 
     /// <summary>由抽样生成的 validator。</summary>
     public BsonDocument? Generated
     {
-        get => _generated;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _generated, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasGenerated));
             }
@@ -119,77 +104,55 @@ internal sealed partial class DesignTabViewModel
     }
 
     /// <summary>有生成结果。</summary>
-    public bool HasGenerated => _generated is not null;
+    public bool HasGenerated => Generated is not null;
 
     /// <summary>生成规则的预览文本。</summary>
-    public string GeneratedText
-    {
-        get => _generatedText;
-        private set => SetProperty(ref _generatedText, value);
-    }
+    public string GeneratedText { get; private set => SetProperty(ref field, value); } = "";
 
     /// <summary>生成规则用的 validationLevel(默认 moderate:只校验新写入与本来就合规的文档的更新)。</summary>
     public string GenLevel
     {
-        get => _genLevel;
-        set
+        get; set
         {
-            if (SetProperty(ref _genLevel, value ?? "moderate"))
+            if (SetProperty(ref field, value ?? "moderate"))
             {
                 RaisePropertyChanged(nameof(GenCheckReasons));
             }
         }
-    }
+    } = "moderate";
 
     /// <summary>生成规则用的 validationAction(默认 warn:先观察,不拦写入)。</summary>
-    public string GenAction
-    {
-        get => _genAction;
-        set => SetProperty(ref _genAction, value ?? "warn");
-    }
+    public string GenAction { get; set => SetProperty(ref field, value ?? "warn"); } = "warn";
 
     /// <summary>正在做现有数据预检。</summary>
-    public bool IsGenChecking
-    {
-        get => _isGenChecking;
-        private set => SetProperty(ref _isGenChecking, value);
-    }
+    public bool IsGenChecking { get; private set => SetProperty(ref field, value); }
 
     /// <summary>预检不通过的份数;未检为 -1。</summary>
     public long GenFailCount
     {
-        get => _genFailCount;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _genFailCount, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(GenHasFailures), nameof(GenAllPass), nameof(GenFailLink));
             }
         }
-    }
+    } = -1;
 
     /// <summary>有不通过的文档(橙色预检框)。</summary>
-    public bool GenHasFailures => _genFailCount > 0;
+    public bool GenHasFailures => GenFailCount > 0;
 
     /// <summary>全部通过(绿色预检框)。</summary>
-    public bool GenAllPass => _genFailCount == 0;
+    public bool GenAllPass => GenFailCount == 0;
 
     /// <summary>预检标题。</summary>
-    public string GenCheckTitle
-    {
-        get => _genCheckTitle;
-        private set => SetProperty(ref _genCheckTitle, value);
-    }
+    public string GenCheckTitle { get; private set => SetProperty(ref field, value); } = "";
 
     /// <summary>主要原因 + 建议。</summary>
-    public string GenCheckReasons
-    {
-        get => _genCheckReasons;
-        private set => SetProperty(ref _genCheckReasons, value);
-    }
+    public string GenCheckReasons { get; private set => SetProperty(ref field, value); } = "";
 
     /// <summary>「在查询编辑器中查看这 37 份文档 →」。</summary>
-    public string GenFailLink => Loc.Format("Design_GenViewFailures", BsonText.Grouped(Math.Max(0, _genFailCount)));
+    public string GenFailLink => Loc.Format("Design_GenViewFailures", BsonText.Grouped(Math.Max(0, GenFailCount)));
 
     /// <summary>重新分析。</summary>
     public AsyncCommand AnalyzeCommand { get; private set; } = null!;
@@ -222,30 +185,30 @@ internal sealed partial class DesignTabViewModel
         });
         CopyGeneratedCommand = new(async () =>
         {
-            if (_generated is not null)
+            if (Generated is not null)
             {
-                await Workspace.CopyAsync(JsonSchemaGenerator.Format(_generated)).ConfigureAwait(true);
+                await Workspace.CopyAsync(JsonSchemaGenerator.Format(Generated)).ConfigureAwait(true);
                 Workspace.Toast(new() { Title = Loc["Common_Copied"], Kind = ToastKind.Success });
             }
         });
         ViewGeneratedFailuresCommand = new(() =>
         {
-            if (_generated is not null)
+            if (Generated is not null)
             {
-                Workspace.OpenQuery(Database, FailingQuery(_generated), run: true);
+                Workspace.OpenQuery(Database, FailingQuery(Generated), run: true);
             }
         });
         EditGeneratedCommand = new(() =>
         {
-            if (_generated is not null)
+            if (Generated is not null)
             {
-                LoadRuleIntoEditor(_generated, _genLevel, _genAction);
+                LoadRuleIntoEditor(Generated, GenLevel, GenAction);
                 Page = DesignPage.Validation;
             }
         });
-        ApplyGeneratedCommand = new(() => _generated is null
+        ApplyGeneratedCommand = new(() => Generated is null
             ? Task.CompletedTask
-            : ApplyValidatorAsync(_generated, _genLevel, _genAction, _genFailCount));
+            : ApplyValidatorAsync(Generated, GenLevel, GenAction, GenFailCount));
     }
 
     /// <summary>不符合某条 validator 的文档的查询(<c>db.orders.find({ $nor: [ … ] })</c>)。</summary>
@@ -258,7 +221,7 @@ internal sealed partial class DesignTabViewModel
     /// </summary>
     internal async Task AnalyzeAsync()
     {
-        if (_isAnalyzing || _disposed)
+        if (IsAnalyzing || _disposed)
         {
             return;
         }
@@ -269,12 +232,12 @@ internal sealed partial class DesignTabViewModel
             {
                 _filterSeeded = true;
                 IReadOnlyList<string> history = await Workspace.Store.LoadFilterHistoryAsync(Workspace.ConnectionKey, Namespace).ConfigureAwait(true);
-                if (_schemaFilter.Length == 0 && history.Count > 0)
+                if (SchemaFilter.Length == 0 && history.Count > 0)
                 {
                     SchemaFilter = history[0];
                 }
             }
-            BsonDocument filter = ShellJson.ParseDocument(_schemaFilter);
+            BsonDocument filter = ShellJson.ParseDocument(SchemaFilter);
             var pipeline = new List<BsonDocument>();
             if (filter.ElementCount > 0)
             {
@@ -295,7 +258,7 @@ internal sealed partial class DesignTabViewModel
             watch.Stop();
             long? total = await Workspace.Connection.EstimatedCountAsync(Database, CollectionName, Lifetime).ConfigureAwait(true);
 
-            _sample = docs;
+            Sample = docs;
             Schema = schema;
             SchemaFields.Clear();
             foreach (SchemaFieldRow row in rows)
@@ -363,11 +326,11 @@ internal sealed partial class DesignTabViewModel
         switch (viz)
         {
             case AnalyzedViz.Bars:
-            {
-                string token = BsonKinds.ColorToken(field.DominantKind);
-                bars =
-                [
-                    .. field.Values
+                {
+                    string token = BsonKinds.ColorToken(field.DominantKind);
+                    bars =
+                    [
+                        .. field.Values
                         .OrderByDescending(static v => v.Value)
                         .Take(SchemaAnalyzer.MaxBars)
                         .Select(v =>
@@ -376,35 +339,35 @@ internal sealed partial class DesignTabViewModel
                             string label = v.Key.IsString ? BsonText.OneLine(v.Key.AsString) : SchemaAnalyzer.Label(v.Key);
                             return new ValueBar(label, Percent(ratio), ratio, token);
                         })
-                ];
-                break;
-            }
+                    ];
+                    break;
+                }
             case AnalyzedViz.Histogram:
-            {
-                (double[] bins, double min, double max, bool clipped) = SchemaAnalyzer.Histogram(field);
-                histogram = [new ChartSeries(field.Path, "VelaShellGreen", bins)];
-                double width = (max - min) / Math.Max(1, bins.Length);
-                labels = [.. bins.Select((_, i) => $"{SchemaAnalyzer.Number(min + (width * i))} – {SchemaAnalyzer.Number(min + (width * (i + 1)))}")];
-                axisMin = SchemaAnalyzer.Number(min);
-                axisMax = SchemaAnalyzer.Number(max) + (clipped ? "+" : "");
-                break;
-            }
+                {
+                    (double[] bins, double min, double max, bool clipped) = SchemaAnalyzer.Histogram(field);
+                    histogram = [new ChartSeries(field.Path, "VelaShellGreen", bins)];
+                    double width = (max - min) / Math.Max(1, bins.Length);
+                    labels = [.. bins.Select((_, i) => $"{SchemaAnalyzer.Number(min + (width * i))} – {SchemaAnalyzer.Number(min + (width * (i + 1)))}")];
+                    axisMin = SchemaAnalyzer.Number(min);
+                    axisMax = SchemaAnalyzer.Number(max) + (clipped ? "+" : "");
+                    break;
+                }
             case AnalyzedViz.Timeline:
-            {
-                (double[] bins, DateTime start, DateTime end, int perBin) = SchemaAnalyzer.Timeline(field);
-                histogram = [new ChartSeries(field.Path, "VelaShellMagenta", bins)];
-                labels = [.. bins.Select((_, i) => start.AddDays(i * perBin).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))];
-                axisMin = start.ToString("MM-dd", CultureInfo.InvariantCulture);
-                axisMax = end.ToString("MM-dd", CultureInfo.InvariantCulture);
-                break;
-            }
+                {
+                    (double[] bins, DateTime start, DateTime end, int perBin) = SchemaAnalyzer.Timeline(field);
+                    histogram = [new ChartSeries(field.Path, "VelaShellMagenta", bins)];
+                    labels = [.. bins.Select((_, i) => start.AddDays(i * perBin).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))];
+                    axisMin = start.ToString("MM-dd", CultureInfo.InvariantCulture);
+                    axisMax = end.ToString("MM-dd", CultureInfo.InvariantCulture);
+                    break;
+                }
             case AnalyzedViz.Lengths:
-            {
-                IReadOnlyList<AnalyzedBucket> buckets = SchemaAnalyzer.Lengths(field);
-                double peak = buckets.Count == 0 ? 1 : Math.Max(0.0001, buckets.Max(static b => b.Ratio));
-                lengths = [.. buckets.Select(b => new LengthBar(b.Label, Math.Round(36 * b.Ratio / peak), b.Count))];
-                break;
-            }
+                {
+                    IReadOnlyList<AnalyzedBucket> buckets = SchemaAnalyzer.Lengths(field);
+                    double peak = buckets.Count == 0 ? 1 : Math.Max(0.0001, buckets.Max(static b => b.Ratio));
+                    lengths = [.. buckets.Select(b => new LengthBar(b.Label, Math.Round(36 * b.Ratio / peak), b.Count))];
+                    break;
+                }
         }
         return new SchemaFieldRow
         {
@@ -438,7 +401,7 @@ internal sealed partial class DesignTabViewModel
         try
         {
             (long count, IReadOnlyList<(string Label, int Count)> reasons) = await CountFailuresAsync(validator).ConfigureAwait(true);
-            if (!ReferenceEquals(validator, _generated))
+            if (!ReferenceEquals(validator, Generated))
             {
                 return;
             }
@@ -480,7 +443,7 @@ internal sealed partial class DesignTabViewModel
         }
         catch (MongoExecutionTimeoutException)
         {
-            count = _sample.Count(doc => !SampleMatches(validator, doc));
+            count = Sample.Count(doc => !SampleMatches(validator, doc));
         }
         List<BsonDocument> failing = count == 0
             ? []

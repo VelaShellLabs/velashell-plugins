@@ -1,6 +1,6 @@
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using Avalonia.Threading;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -28,32 +28,16 @@ internal sealed partial class CollectionTabViewModel
     private static readonly TimeSpan LongQueryThreshold = TimeSpan.FromMilliseconds(700);
 
     private string _filterText;
-    private string? _filterError;
-    private IReadOnlyList<EditorDiagnostic> _filterDiagnostics = [];
-    private string _projectionText = "";
-    private bool _projectionInvalid;
-    private string _sortText = "";
-    private bool _sortInvalid;
-    private string _skipText = "0";
     private string _limitText;
-    private bool _skipInvalid;
-    private bool _limitInvalid;
-    private IReadOnlyList<string> _hintChoices = [];
     private string _selectedHint = "";
-    private bool _isFavorite;
     private IReadOnlyList<string> _favorites = [];
     private IReadOnlyList<string> _history = [];
     private int _pageIndex;
-    private string _pageText = "1";
     private CancellationTokenSource? _queryCts;
     private string? _queryComment;
     private Stopwatch? _queryWatch;
     private DispatcherTimer? _longQueryTimer;
-    private bool _isLongQuery;
-    private string _longQueryText = "";
     private long? _opid;
-    private string _lastRunFilter = "";
-    private FindRequest? _lastRequest;
     private int _countVersion;
 
     /// <summary>查找(Ctrl+Enter)。</summary>
@@ -119,10 +103,10 @@ internal sealed partial class CollectionTabViewModel
         FirstPageCommand = new(() => GoToPageAsync(0), () => _pageIndex > 0);
         PreviousPageCommand = new(() => GoToPageAsync(_pageIndex - 1), () => _pageIndex > 0);
         NextPageCommand = new(() => GoToPageAsync(_pageIndex + 1), () => _pageIndex < PageCount - 1);
-        LastPageCommand = new(() => GoToPageAsync(PageCount - 1), () => _totalCount is not null && _pageIndex < PageCount - 1);
+        LastPageCommand = new(() => GoToPageAsync(PageCount - 1), () => TotalCount is not null && _pageIndex < PageCount - 1);
         GoToPageCommand = new(() =>
         {
-            if (int.TryParse(_pageText.Replace(",", "", StringComparison.Ordinal), NumberStyles.Integer, CultureInfo.InvariantCulture, out int page))
+            if (int.TryParse(PageText.Replace(",", "", StringComparison.Ordinal), NumberStyles.Integer, CultureInfo.InvariantCulture, out int page))
             {
                 return GoToPageAsync(Math.Clamp(page - 1, 0, Math.Max(0, PageCount - 1)));
             }
@@ -164,10 +148,9 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>筛选的语法错误(标红 + 提示);没有为 <see langword="null" />。</summary>
     public string? FilterError
     {
-        get => _filterError;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _filterError, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasFilterError));
             }
@@ -175,76 +158,57 @@ internal sealed partial class CollectionTabViewModel
     }
 
     /// <summary>有语法错误。</summary>
-    public bool HasFilterError => _filterError is not null;
+    public bool HasFilterError => FilterError is not null;
 
     /// <summary>编辑器上的诊断(红色波浪线)。</summary>
-    public IReadOnlyList<EditorDiagnostic> FilterDiagnostics
-    {
-        get => _filterDiagnostics;
-        private set => SetProperty(ref _filterDiagnostics, value);
-    }
+    public IReadOnlyList<EditorDiagnostic> FilterDiagnostics { get; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>投影。</summary>
     public string ProjectionText
     {
-        get => _projectionText;
-        set
+        get; set
         {
-            if (SetProperty(ref _projectionText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
-                ProjectionInvalid = !ShellJson.TryParseDocument(_projectionText, out _, out _);
+                ProjectionInvalid = !ShellJson.TryParseDocument(field, out _, out _);
                 RaisePropertyChanged(nameof(EchoText));
             }
         }
-    }
+    } = "";
 
     /// <summary>投影写错了。</summary>
-    public bool ProjectionInvalid
-    {
-        get => _projectionInvalid;
-        private set => SetProperty(ref _projectionInvalid, value);
-    }
+    public bool ProjectionInvalid { get; private set => SetProperty(ref field, value); }
 
     /// <summary>排序。</summary>
     public string SortText
     {
-        get => _sortText;
-        set
+        get; set
         {
-            if (SetProperty(ref _sortText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
-                SortInvalid = !ShellJson.TryParseDocument(_sortText, out _, out _);
+                SortInvalid = !ShellJson.TryParseDocument(field, out _, out _);
                 RaisePropertyChanged(nameof(EchoText));
             }
         }
-    }
+    } = "";
 
     /// <summary>排序写错了。</summary>
-    public bool SortInvalid
-    {
-        get => _sortInvalid;
-        private set => SetProperty(ref _sortInvalid, value);
-    }
+    public bool SortInvalid { get; private set => SetProperty(ref field, value); }
 
     /// <summary>跳过。</summary>
     public string SkipText
     {
-        get => _skipText;
-        set
+        get; set
         {
-            if (SetProperty(ref _skipText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
-                SkipInvalid = ParseCount(_skipText, 0) is null;
+                SkipInvalid = ParseCount(field, 0) is null;
             }
         }
-    }
+    } = "0";
 
     /// <summary>跳过写错了。</summary>
-    public bool SkipInvalid
-    {
-        get => _skipInvalid;
-        private set => SetProperty(ref _skipInvalid, value);
-    }
+    public bool SkipInvalid { get; private set => SetProperty(ref field, value); }
 
     /// <summary>限制(每页行数)。</summary>
     public string LimitText
@@ -260,18 +224,10 @@ internal sealed partial class CollectionTabViewModel
     }
 
     /// <summary>限制写错了。</summary>
-    public bool LimitInvalid
-    {
-        get => _limitInvalid;
-        private set => SetProperty(ref _limitInvalid, value);
-    }
+    public bool LimitInvalid { get; private set => SetProperty(ref field, value); }
 
     /// <summary>索引提示的选项(第一项「自动」)。</summary>
-    public IReadOnlyList<string> HintChoices
-    {
-        get => _hintChoices.Count == 0 ? [Loc["Cw_HintAuto"]] : _hintChoices;
-        private set => SetProperty(ref _hintChoices, value);
-    }
+    public IReadOnlyList<string> HintChoices { get => field.Count == 0 ? [Loc["Cw_HintAuto"]] : field; private set => SetProperty(ref field, value); } = [];
 
     /// <summary>选中的索引提示。</summary>
     public string SelectedHint
@@ -281,11 +237,7 @@ internal sealed partial class CollectionTabViewModel
     }
 
     /// <summary>当前筛选是不是收藏(星标填色)。</summary>
-    public bool IsFavorite
-    {
-        get => _isFavorite;
-        private set => SetProperty(ref _isFavorite, value);
-    }
+    public bool IsFavorite { get; private set => SetProperty(ref field, value); }
 
     /// <summary>历史下拉的内容:收藏在前,历史在后。</summary>
     public IReadOnlyList<CollectionFilterItem> HistoryItems =>
@@ -298,42 +250,38 @@ internal sealed partial class CollectionTabViewModel
     public bool HasHistory => _favorites.Count > 0 || _history.Count > 0;
 
     /// <summary>筛选非空(决定空态是「空集合」还是「无结果」)。</summary>
-    public bool HasActiveFilter => _lastRunFilter.Length > 0 && _lastRunFilter != "{}";
+    public bool HasActiveFilter => LastRunFilter.Length > 0 && LastRunFilter != "{}";
 
     /// <summary>最近一次执行的筛选(无结果卡片里回显)。</summary>
-    public string LastRunFilter => _lastRunFilter;
+    public string LastRunFilter { get; private set; } = "";
 
     /// <summary>当前查询(导出向导「导出当前查询结果」用)。</summary>
-    public FindRequest? CurrentRequest => _lastRequest;
+    public FindRequest? CurrentRequest { get; private set; }
 
     /// <summary>解析好的排序(列头的箭头用);写错为 <see langword="null" />。</summary>
-    internal BsonDocument? ParsedSort => ShellJson.TryParseDocument(_sortText, out BsonDocument doc, out _) ? doc : null;
+    internal BsonDocument? ParsedSort => ShellJson.TryParseDocument(SortText, out BsonDocument doc, out _) ? doc : null;
 
     // ── 分页 ─────────────────────────────────────────────────────────────────
 
     /// <summary>总数(有筛选用 countDocuments,无筛选用 estimatedDocumentCount);没数完为 <see langword="null" />。</summary>
-    public long? TotalCount => _totalCount;
+    public long? TotalCount { get; private set; }
 
     /// <summary>每页行数。</summary>
     public int PageSize => ParseCount(_limitText, 1) ?? Workspace.Connection.Settings.PageSize;
 
     /// <summary>基础跳过数。</summary>
-    public int BaseSkip => ParseCount(_skipText, 0) ?? 0;
+    public int BaseSkip => ParseCount(SkipText, 0) ?? 0;
 
     /// <summary>总页数(总数未知时至少当前页 + 1)。</summary>
-    public int PageCount => _totalCount is { } total
+    public int PageCount => TotalCount is { } total
         ? (int)Math.Max(1, Math.Ceiling(Math.Max(0, total - BaseSkip) / (double)PageSize))
         : _pageIndex + (_documents.Count >= PageSize ? 2 : 1);
 
     /// <summary>页码框。</summary>
-    public string PageText
-    {
-        get => _pageText;
-        set => SetProperty(ref _pageText, value ?? "");
-    }
+    public string PageText { get; set => SetProperty(ref field, value ?? ""); } = "1";
 
     /// <summary><c>/ 25,699 页</c>。</summary>
-    public string PageCountText => _totalCount is null ? Loc["Cw_PageCountUnknown"] : Loc.Format("Cw_PageCount", BsonText.Grouped(PageCount));
+    public string PageCountText => TotalCount is null ? Loc["Cw_PageCountUnknown"] : Loc.Format("Cw_PageCount", BsonText.Grouped(PageCount));
 
     /// <summary><c>1–50 / 1,284,902</c>。</summary>
     public string RangeText
@@ -341,7 +289,7 @@ internal sealed partial class CollectionTabViewModel
         get
         {
             long first = BaseSkip + (long)_pageIndex * PageSize;
-            string total = _totalCount is { } t ? BsonText.Grouped(t) : "…";
+            string total = TotalCount is { } t ? BsonText.Grouped(t) : "…";
             return _documents.Count == 0
                 ? $"0 / {total}"
                 : $"{BsonText.Grouped(first + 1)}–{BsonText.Grouped(first + _documents.Count)} / {total}";
@@ -354,21 +302,13 @@ internal sealed partial class CollectionTabViewModel
     // ── 长查询 ───────────────────────────────────────────────────────────────
 
     /// <summary>长查询卡片(设计稿 22「正在查询 shop.orders…」)。</summary>
-    public bool IsLongQuery
-    {
-        get => _isLongQuery;
-        private set => SetProperty(ref _isLongQuery, value);
-    }
+    public bool IsLongQuery { get; private set => SetProperty(ref field, value); }
 
     /// <summary>长查询卡片标题。</summary>
     public string LongQueryTitle => Loc.Format("State_LongQueryTitle", Info.Namespace);
 
     /// <summary><c>已运行 6.2 s · 服务端 opid 8812045</c>。</summary>
-    public string LongQueryText
-    {
-        get => _longQueryText;
-        private set => SetProperty(ref _longQueryText, value);
-    }
+    public string LongQueryText { get; private set => SetProperty(ref field, value); } = "";
 
     // ── 执行 ─────────────────────────────────────────────────────────────────
 
@@ -422,8 +362,8 @@ internal sealed partial class CollectionTabViewModel
             }
             _elapsed = watch.Elapsed;
             _loadedOnce = true;
-            _lastRequest = request;
-            _lastRunFilter = _filterText.Trim();
+            CurrentRequest = request;
+            LastRunFilter = _filterText.Trim();
             ApplyResults(documents, request.Skip + 1);
             RaisePropertiesChanged(nameof(Elapsed), nameof(LastRunFilter), nameof(HasActiveFilter), nameof(CurrentRequest),
                 nameof(EchoText), nameof(RangeText), nameof(PageCountText));
@@ -432,7 +372,7 @@ internal sealed partial class CollectionTabViewModel
             _ = ExplainPlanAsync(request);
             if (HasActiveFilter)
             {
-                _ = RememberFilterAsync(_lastRunFilter);
+                _ = RememberFilterAsync(LastRunFilter);
             }
         }
         catch (OperationCanceledException)
@@ -465,13 +405,13 @@ internal sealed partial class CollectionTabViewModel
     {
         request = null!;
         ValidateFilter();
-        if (_filterError is not null || _projectionInvalid || _sortInvalid || _skipInvalid || _limitInvalid)
+        if (FilterError is not null || ProjectionInvalid || SortInvalid || SkipInvalid || LimitInvalid)
         {
             return false;
         }
         BsonDocument filter = ShellJson.ParseDocument(_filterText);
-        BsonDocument projection = ShellJson.ParseDocument(_projectionText);
-        BsonDocument sort = ShellJson.ParseDocument(_sortText);
+        BsonDocument projection = ShellJson.ParseDocument(ProjectionText);
+        BsonDocument sort = ShellJson.ParseDocument(SortText);
         request = new FindRequest
         {
             Database = Database,
@@ -566,7 +506,7 @@ internal sealed partial class CollectionTabViewModel
     private async Task CountAsync(FindRequest request)
     {
         int version = ++_countVersion;
-        _totalCount = null;
+        TotalCount = null;
         RaisePropertiesChanged(nameof(TotalCount), nameof(PageCountText), nameof(RangeText));
         try
         {
@@ -581,7 +521,7 @@ internal sealed partial class CollectionTabViewModel
             {
                 return;
             }
-            _totalCount = count;
+            TotalCount = count;
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException or OperationCanceledException)
         {
@@ -648,7 +588,7 @@ internal sealed partial class CollectionTabViewModel
         {
             return;
         }
-        if (!_isLongQuery)
+        if (!IsLongQuery)
         {
             IsLongQuery = true;
             _ = FindOpidAsync(_queryComment);
@@ -768,30 +708,30 @@ internal sealed partial class CollectionTabViewModel
     internal string BuildStatement(bool abbreviate, int? skipOverride = null)
     {
         string filter = string.IsNullOrWhiteSpace(_filterText) ? "{}" : abbreviate ? "{…}" : _filterText.Trim();
-        string projection = string.IsNullOrWhiteSpace(_projectionText) ? "" : ", " + _projectionText.Trim();
-        var text = new System.Text.StringBuilder()
+        string projection = string.IsNullOrWhiteSpace(ProjectionText) ? "" : ", " + ProjectionText.Trim();
+        StringBuilder text = new System.Text.StringBuilder()
             .Append("db.").Append(MongoWorkspaceViewModel.ShellCollectionRef(CollectionName))
             .Append(".find(").Append(filter).Append(projection).Append(')');
-        if (!string.IsNullOrWhiteSpace(_sortText))
+        if (!string.IsNullOrWhiteSpace(SortText))
         {
-            text.Append(".sort(").Append(_sortText.Trim()).Append(')');
+            _ = text.Append(".sort(").Append(SortText.Trim()).Append(')');
         }
         if (_selectedHint.Length > 0)
         {
-            text.Append(".hint(").Append(BsonText.Quote(_selectedHint)).Append(')');
+            _ = text.Append(".hint(").Append(BsonText.Quote(_selectedHint)).Append(')');
         }
         int skip = skipOverride ?? (BaseSkip + _pageIndex * PageSize);
         if (skip > 0)
         {
-            text.Append(".skip(").Append(skip.ToString(CultureInfo.InvariantCulture)).Append(')');
+            _ = text.Append(".skip(").Append(skip.ToString(CultureInfo.InvariantCulture)).Append(')');
         }
-        text.Append(".limit(").Append(PageSize.ToString(CultureInfo.InvariantCulture)).Append(')');
+        _ = text.Append(".limit(").Append(PageSize.ToString(CultureInfo.InvariantCulture)).Append(')');
         return text.ToString();
     }
 
     private void OpenExplain()
     {
-        if (_filterError is not null)
+        if (FilterError is not null)
         {
             return;
         }

@@ -5,7 +5,6 @@ using VelaShell.Plugin.Mongo.Bson;
 namespace VelaShell.Plugin.Mongo.Tests;
 
 // 测试方法的名字就是它的说明(一句完整的句子),不再逐个写 XML 注释。
-#pragma warning disable CS1591
 
 /// <summary>
 /// 客户端 <c>$jsonSchema</c> 预检:常用关键字逐个过一遍,外加"认不出的一律放行"这条底线 ——
@@ -39,10 +38,7 @@ public sealed class JsonSchemaValidatorTests
     }
 
     [TestMethod]
-    public void A_query_expression_validator_is_not_evaluated()
-    {
-        Assert.HasCount(0, Check("{ status: { $in: ['paid'] } }", "{ status: 'refunded' }"));
-    }
+    public void A_query_expression_validator_is_not_evaluated() => Assert.HasCount(0, Check("{ status: { $in: ['paid'] } }", "{ status: 'refunded' }"));
 
     [TestMethod]
     public void A_valid_document_has_no_violations()
@@ -192,10 +188,7 @@ public sealed class JsonSchemaValidatorTests
     }
 
     [TestMethod]
-    public void Number_keywords_ignore_non_numbers()
-    {
-        Assert.HasCount(0, Check("{ properties: { n: { minimum: 0, maxLength: 1 } } }", "{ n: 'not a number' }").Where(static v => v.Keyword == "minimum").ToList());
-    }
+    public void Number_keywords_ignore_non_numbers() => Assert.HasCount(0, Check("{ properties: { n: { minimum: 0, maxLength: 1 } } }", "{ n: 'not a number' }").Where(static v => v.Keyword == "minimum").ToList());
 
     // ── 字符串 ──────────────────────────────────────────────────────────────
 
@@ -341,8 +334,8 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void Arguments_are_required()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate(null!, [], Zh));
-        Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate([], null!, Zh));
-        Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate([], [], null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate(null!, [], Zh));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate([], null!, Zh));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate([], [], null!));
     }
 }

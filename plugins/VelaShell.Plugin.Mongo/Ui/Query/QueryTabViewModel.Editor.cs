@@ -10,42 +10,38 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed partial class QueryTabViewModel
 {
     private readonly DispatcherTimer _diagnosticTimer;
-    private readonly Dictionary<string, Task<IReadOnlyList<CollectionInfo>>> _collections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<IReadOnlyList<CollectionInfo>>> _collections = [with(StringComparer.Ordinal)];
     private readonly Dictionary<(string, string), Task<SampledSchema?>> _schemas = [];
     private readonly Dictionary<(string, string), Task<IReadOnlyList<string>>> _indexNames = [];
-    private IReadOnlyList<ShellStatement> _statements = [];
-    private IReadOnlyList<EditorDiagnostic> _diagnostics = [];
-    private Func<CompletionRequest, Task<CompletionSet?>>? _completionProvider;
 
     /// <summary>当前脚本切出的语句(code lens 按它摆)。</summary>
-    public IReadOnlyList<ShellStatement> Statements => _statements;
+    public IReadOnlyList<ShellStatement> Statements { get; private set; } = [];
 
     /// <summary>诊断(波浪线、行号旁红点、行尾提示)。</summary>
     public IReadOnlyList<EditorDiagnostic> Diagnostics
     {
-        get => _diagnostics;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _diagnostics, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(ProblemCount));
                 RaisePropertyChanged(nameof(HasProblems));
                 RaisePropertyChanged(nameof(ProblemText));
             }
         }
-    }
+    } = [];
 
     /// <summary>问题数。</summary>
-    public int ProblemCount => _diagnostics.Count;
+    public int ProblemCount => Diagnostics.Count;
 
     /// <summary>有问题。</summary>
-    public bool HasProblems => _diagnostics.Count > 0;
+    public bool HasProblems => Diagnostics.Count > 0;
 
     /// <summary>状态条右侧的 <c>1 个问题</c>。</summary>
-    public string ProblemText => Loc.Format("Query_Problems", _diagnostics.Count);
+    public string ProblemText => Loc.Format("Query_Problems", Diagnostics.Count);
 
     /// <summary>补全来源(绑给 <c>CodeEditor.CompletionProvider</c>)。</summary>
-    public Func<CompletionRequest, Task<CompletionSet?>> CompletionProvider => _completionProvider ??= ProvideCompletionAsync;
+    public Func<CompletionRequest, Task<CompletionSet?>> CompletionProvider => field ??= ProvideCompletionAsync;
 
     /// <summary>光标换了语句时也要重算诊断(光标所在的那条不报"还没写完"的解析错误)。</summary>
     internal void OnCaretSettled()
@@ -57,9 +53,9 @@ internal sealed partial class QueryTabViewModel
     /// <summary>重切语句、重算诊断。</summary>
     private void Analyze()
     {
-        _statements = ShellScript.Split(_text);
+        Statements = ShellScript.Split(_text);
         var diagnostics = new List<EditorDiagnostic>();
-        foreach (ShellStatement statement in _statements)
+        foreach (ShellStatement statement in Statements)
         {
             IReadOnlyList<ShellDiagnostic> found = ShellJson.Diagnose(statement.Text);
             foreach (ShellDiagnostic d in found)
@@ -77,13 +73,13 @@ internal sealed partial class QueryTabViewModel
         }
         Diagnostics = diagnostics;
         RaisePropertyChanged(nameof(Statements));
-        _ = CheckCollectionsAsync(_statements, diagnostics);
+        _ = CheckCollectionsAsync(Statements, diagnostics);
     }
 
     /// <summary>Alt+↵:应用光标所在行的快捷修复(没有就应用全文唯一的那一个)。</summary>
     internal bool ApplyQuickFix()
     {
-        List<EditorDiagnostic> fixable = [.. _diagnostics.Where(static d => d.FixText is not null)];
+        List<EditorDiagnostic> fixable = [.. Diagnostics.Where(static d => d.FixText is not null)];
         if (fixable.Count == 0)
         {
             return false;
@@ -300,21 +296,21 @@ internal sealed partial class QueryTabViewModel
         switch (context.Role)
         {
             case ObjectRole.Stage:
-            {
-                (PipelineShape? shape, _) = await UpstreamAsync(context, database).ConfigureAwait(true);
-                string? chipsTitle = shape is null ? null : Loc.Format("Query_UpstreamFields", shape.Source);
-                IReadOnlyList<string> chips = shape?.Fields ?? [];
-                foreach (VocabularyEntry entry in MongoVocabulary.Stages)
                 {
-                    items.Add(WithChips(MongoVocabulary.ToCompletion(entry, zh), chipsTitle, chips));
+                    (PipelineShape? shape, _) = await UpstreamAsync(context, database).ConfigureAwait(true);
+                    string? chipsTitle = shape is null ? null : Loc.Format("Query_UpstreamFields", shape.Source);
+                    IReadOnlyList<string> chips = shape?.Fields ?? [];
+                    foreach (VocabularyEntry entry in MongoVocabulary.Stages)
+                    {
+                        items.Add(WithChips(MongoVocabulary.ToCompletion(entry, zh), chipsTitle, chips));
+                    }
+                    items.AddRange(StageSnippets(chipsTitle, chips));
+                    if (!dollar && shape is not null)
+                    {
+                        items.AddRange(await UpstreamItemsAsync(context, database, keyInsert: true).ConfigureAwait(true));
+                    }
+                    break;
                 }
-                items.AddRange(StageSnippets(chipsTitle, chips));
-                if (!dollar && shape is not null)
-                {
-                    items.AddRange(await UpstreamItemsAsync(context, database, keyInsert: true).ConfigureAwait(true));
-                }
-                break;
-            }
             case ObjectRole.Filter:
                 if (!dollar)
                 {
@@ -376,15 +372,15 @@ internal sealed partial class QueryTabViewModel
         switch (context.Role)
         {
             case ObjectRole.Pipeline:
-            {
-                (PipelineShape? shape, _) = await UpstreamAsync(context, database).ConfigureAwait(true);
-                string? chipsTitle = shape is null ? null : Loc.Format("Query_UpstreamFields", shape.Source);
-                return MongoVocabulary.Stages.Select(e =>
                 {
-                    CompletionItem item = MongoVocabulary.ToCompletion(e, zh);
-                    return WithChips(Clone(item, "{ " + (item.InsertText ?? item.Label) + " }"), chipsTitle, shape?.Fields ?? []);
-                });
-            }
+                    (PipelineShape? shape, _) = await UpstreamAsync(context, database).ConfigureAwait(true);
+                    string? chipsTitle = shape is null ? null : Loc.Format("Query_UpstreamFields", shape.Source);
+                    return MongoVocabulary.Stages.Select(e =>
+                    {
+                        CompletionItem item = MongoVocabulary.ToCompletion(e, zh);
+                        return WithChips(Clone(item, "{ " + (item.InsertText ?? item.Label) + " }"), chipsTitle, shape?.Fields ?? []);
+                    });
+                }
             case ObjectRole.Sort:
                 return [Constant("-1", Loc["Query_ValDesc"]), Constant("1", Loc["Query_ValAsc"])];
             case ObjectRole.IndexKeys:
@@ -393,23 +389,23 @@ internal sealed partial class QueryTabViewModel
                 return [Constant("1", Loc["Query_ValInclude"]), Constant("0", Loc["Query_ValExclude"]),
                     .. (await FieldPathsAsync(context, database).ConfigureAwait(true)).Select(p => Constant($"\"${p.Path}\"", p.Category))];
             case ObjectRole.Group or ObjectRole.Accumulator or ObjectRole.Expression or ObjectRole.Projection:
-            {
-                var items = new List<CompletionItem>();
-                foreach ((string path, string category, string token) in await FieldPathsAsync(context, database).ConfigureAwait(true))
                 {
-                    items.Add(new CompletionItem { Label = $"\"${path}\"", IconKey = "Mongo.variable", IconToken = token, Category = category });
-                }
-                if (context.Role != ObjectRole.Group || context.FieldKey != "_id")
-                {
-                    items.AddRange(MongoVocabulary.Expressions.Select(e =>
+                    var items = new List<CompletionItem>();
+                    foreach ((string path, string category, string token) in await FieldPathsAsync(context, database).ConfigureAwait(true))
                     {
-                        CompletionItem item = MongoVocabulary.ToCompletion(e, zh);
-                        return Clone(item, "{ " + (item.InsertText ?? item.Label) + " }");
-                    }));
+                        items.Add(new CompletionItem { Label = $"\"${path}\"", IconKey = "Mongo.variable", IconToken = token, Category = category });
+                    }
+                    if (context.Role != ObjectRole.Group || context.FieldKey != "_id")
+                    {
+                        items.AddRange(MongoVocabulary.Expressions.Select(e =>
+                        {
+                            CompletionItem item = MongoVocabulary.ToCompletion(e, zh);
+                            return Clone(item, "{ " + (item.InsertText ?? item.Label) + " }");
+                        }));
+                    }
+                    items.Add(Constant("null", "null"));
+                    return items;
                 }
-                items.Add(Constant("null", "null"));
-                return items;
-            }
             case ObjectRole.Filter or ObjectRole.Operator or ObjectRole.ValueList or ObjectRole.UpdateFields or ObjectRole.Document:
                 return ValueSnippets(context.Role is ObjectRole.Filter);
             default:
@@ -611,7 +607,7 @@ internal sealed partial class QueryTabViewModel
             return (null, types);
         }
         SampledSchema? schema = context.Collection is { } collection ? await SchemaAsync(database, collection).ConfigureAwait(true) : null;
-        BsonDocument? group = context.PrecedingStages
+        var group = context.PrecedingStages
             .Select(static t => ShellJson.TryParseDocument(t, out BsonDocument d, out _) ? d : null)
             .LastOrDefault(static d => d?.Contains("$group") == true)?["$group"] as BsonDocument;
         if (shape.Source == "$group" && group is not null)
@@ -665,7 +661,7 @@ internal sealed partial class QueryTabViewModel
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            _collections.Remove(database);
+            _ = _collections.Remove(database);
             return [];
         }
     }
@@ -699,7 +695,7 @@ internal sealed partial class QueryTabViewModel
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            _schemas.Remove((database, collection));
+            _ = _schemas.Remove((database, collection));
             Workspace.Log.Info($"Sampling {database}.{collection} for completion failed: {ex.Message}");
             return null;
         }
@@ -725,7 +721,7 @@ internal sealed partial class QueryTabViewModel
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException)
         {
-            _indexNames.Remove((database, collection));
+            _ = _indexNames.Remove((database, collection));
             return [];
         }
     }

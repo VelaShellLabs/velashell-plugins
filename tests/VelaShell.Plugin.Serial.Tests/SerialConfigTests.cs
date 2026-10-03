@@ -22,7 +22,7 @@ public sealed class SerialConfigTests
     public void Parse_DefaultsTo115200_8N1_NoFlowControl()
     {
         // 这是市面上串口工具的通行默认,也是绝大多数设备控制台的出厂设置。
-        SerialConfig config = SerialConfig.Parse(Request());
+        var config = SerialConfig.Parse(Request());
 
         Assert.AreEqual("COM3", config.PortName);
         Assert.AreEqual(115200, config.BaudRate);
@@ -37,7 +37,7 @@ public sealed class SerialConfigTests
     {
         // 默认不改写任何字节:粘贴内容与 ZMODEM 帧因此天然安全,
         // 而"每行盖上一行"这类症状要用户明确打开开关才修 —— 与 PuTTY 一致。
-        SerialConfig config = SerialConfig.Parse(Request());
+        var config = SerialConfig.Parse(Request());
 
         Assert.AreEqual(SerialEnterMode.Cr, config.EnterMode);
         Assert.IsFalse(config.ImplicitLf);
@@ -50,7 +50,7 @@ public sealed class SerialConfigTests
     public void Parse_DefaultsDtrAndRtsToAsserted()
     {
         // 部分 USB CDC 设备不置 DTR 就不出数据;PuTTY / Tera Term 也都默认拉起两根线。
-        SerialConfig config = SerialConfig.Parse(Request());
+        var config = SerialConfig.Parse(Request());
 
         Assert.IsTrue(config.Dtr);
         Assert.IsTrue(config.Rts);
@@ -76,7 +76,7 @@ public sealed class SerialConfigTests
     [TestMethod]
     public void Parse_MapsEveryFrameFormat()
     {
-        SerialConfig config = SerialConfig.Parse(Request("COM3",
+        var config = SerialConfig.Parse(Request("COM3",
             ("dataBits", "7"), ("stopBits", "2"), ("parity", "even")));
 
         Assert.AreEqual(7, config.DataBits);
@@ -107,7 +107,7 @@ public sealed class SerialConfigTests
     public void Parse_FallsBackOnUnknownEnumValues()
     {
         // 老配置里可能留着已经不存在的取值(插件升级换过枚举)。回落而不是抛。
-        SerialConfig config = SerialConfig.Parse(Request("COM3",
+        var config = SerialConfig.Parse(Request("COM3",
             ("parity", "whatever"), ("flowControl", "dsrdtr"), ("stopBits", "3"), ("dataBits", "9")));
 
         Assert.AreEqual(Parity.None, config.Parity);
@@ -127,9 +127,7 @@ public sealed class SerialConfigTests
     }
 
     [TestMethod]
-    public void Parse_TrimsThePortName()
-    {
+    public void Parse_TrimsThePortName() =>
         // 端口名允许手输,粘进来带空格是常事;SerialPort 不会替我们 trim。
         Assert.AreEqual("/dev/ttyUSB0", SerialConfig.Parse(Request("  /dev/ttyUSB0 ")).PortName);
-    }
 }

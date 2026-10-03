@@ -58,7 +58,7 @@ public class LogLevelTests
     public void OnlyLooksAtTheHeadOfTheLine()
     {
         // 一行很长的正文,末尾才出现 ERROR —— 那多半是被引用的内容,不是这一行的级别。
-        var line = new string('x', 200) + " ERROR";
+        string line = new string('x', 200) + " ERROR";
 
         Assert.AreEqual(LogLevel.None, LogLevels.Detect(line));
     }

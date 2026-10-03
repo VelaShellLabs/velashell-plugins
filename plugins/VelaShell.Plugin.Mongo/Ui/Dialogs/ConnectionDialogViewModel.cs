@@ -11,8 +11,6 @@ internal sealed class HostRowViewModel : ObservableObject
 {
     private string _host;
     private string _port;
-    private string? _badge;
-    private Tone _badgeTone;
 
     /// <summary>构造。</summary>
     public HostRowViewModel(string host, int port, bool isFirst, Action<HostRowViewModel> remove, Action changed)
@@ -64,10 +62,10 @@ internal sealed class HostRowViewModel : ObservableObject
     /// <summary>测试后发现的角色。</summary>
     public string? Badge
     {
-        get => _badge;
+        get;
         set
         {
-            if (SetProperty(ref _badge, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasBadge));
             }
@@ -75,15 +73,15 @@ internal sealed class HostRowViewModel : ObservableObject
     }
 
     /// <summary>有角色徽章。</summary>
-    public bool HasBadge => !string.IsNullOrEmpty(_badge);
+    public bool HasBadge => !string.IsNullOrEmpty(Badge);
 
     /// <summary>徽章语气色。</summary>
     public Tone BadgeTone
     {
-        get => _badgeTone;
+        get;
         set
         {
-            if (SetProperty(ref _badgeTone, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsBadgeOk), nameof(IsBadgeInfo), nameof(IsBadgeWarn), nameof(IsBadgeErr));
             }
@@ -91,16 +89,16 @@ internal sealed class HostRowViewModel : ObservableObject
     }
 
     /// <summary>主节点 / 单机(绿)。</summary>
-    public bool IsBadgeOk => _badgeTone == Tone.Success;
+    public bool IsBadgeOk => BadgeTone == Tone.Success;
 
     /// <summary>从节点(蓝)。</summary>
-    public bool IsBadgeInfo => _badgeTone == Tone.Info;
+    public bool IsBadgeInfo => BadgeTone == Tone.Info;
 
     /// <summary>恢复中(橙)。</summary>
-    public bool IsBadgeWarn => _badgeTone == Tone.Warning;
+    public bool IsBadgeWarn => BadgeTone == Tone.Warning;
 
     /// <summary>不可达(红)。</summary>
-    public bool IsBadgeErr => _badgeTone == Tone.Danger;
+    public bool IsBadgeErr => BadgeTone == Tone.Danger;
 
     /// <summary>删掉这一行。</summary>
     public RelayCommand RemoveCommand { get; }
@@ -244,7 +242,6 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     private readonly MongoWorkspaceViewModel _shell;
     private readonly MongoProfile _original;
     private readonly string? _passwordFrom;
-    private bool _hasStoredPassword;
     private string _name;
     private string _group;
     private string _environment;
@@ -257,8 +254,6 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     private string _mechanism;
     private string _authSource;
     private string _username;
-    private string _password = "";
-    private bool _passwordVisible;
     private bool _sshEnabled;
     private SshChoice? _sshChoice;
     private bool _tlsEnabled;
@@ -268,7 +263,6 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     private bool _confirmWrites;
     private bool _disableDropDatabase;
     private bool _policyTouched;
-    private bool _showAdvanced;
     private bool _directConnection;
     private string _appName;
     private string _connectTimeout;
@@ -276,13 +270,7 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     private string _pageSize;
     private string _sampleSize;
     private string _ejson;
-    private bool _showSystemDatabases;
-    private string _previewText = "";
-    private bool _isTesting;
-    private string _testSummary = "";
     private bool? _testSucceeded;
-    private string _error = "";
-    private bool _isSaving;
     private CancellationTokenSource? _probe;
 
     /// <summary>构造。</summary>
@@ -361,7 +349,7 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
         AddHostCommand = new RelayCommand(AddHost);
         TogglePasswordCommand = new RelayCommand(() => PasswordVisible = !PasswordVisible);
         ToggleAdvancedCommand = new RelayCommand(() => ShowAdvanced = !ShowAdvanced);
-        CopyPreviewCommand = new AsyncCommand(() => _shell.CopyAsync(_previewText));
+        CopyPreviewCommand = new AsyncCommand(() => _shell.CopyAsync(PreviewText));
         BrowseCaCommand = new AsyncCommand(async () => TlsCaFile = await PickAsync(TlsCaFile, Loc["Mongo_TlsCaFile"], new FileKind("PEM", "*.pem", "*.crt", "*.cer")).ConfigureAwait(true));
         BrowseCertCommand = new AsyncCommand(async () => TlsCertFile = await PickAsync(TlsCertFile, Loc["Mongo_TlsCertFile"], new FileKind("PFX / PEM", "*.pfx", "*.p12", "*.pem")).ConfigureAwait(true));
         TestCommand = new AsyncCommand(TestAsync);
@@ -604,30 +592,30 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>口令(编辑时留空 = 不改)。</summary>
     public string Password
     {
-        get => _password;
+        get;
         set
         {
-            if (SetProperty(ref _password, value))
+            if (SetProperty(ref field, value))
             {
                 ClearProbe();
             }
         }
-    }
+    } = "";
 
     /// <summary>口令明文显示。</summary>
     public bool PasswordVisible
     {
-        get => _passwordVisible;
-        set => SetProperty(ref _passwordVisible, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>密钥库里已经存着这条连接的口令(口令框的占位字写「已保存」)。</summary>
     public bool HasStoredPassword
     {
-        get => _hasStoredPassword;
+        get;
         private set
         {
-            if (SetProperty(ref _hasStoredPassword, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(PasswordPlaceholder));
             }
@@ -635,7 +623,7 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     }
 
     /// <summary>口令框的占位字。</summary>
-    public string PasswordPlaceholder => _hasStoredPassword ? Loc["Conn_PasswordStored"] : "";
+    public string PasswordPlaceholder => HasStoredPassword ? Loc["Conn_PasswordStored"] : "";
 
     /// <summary>切换明文显示。</summary>
     public RelayCommand TogglePasswordCommand { get; }
@@ -754,8 +742,8 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>「高级」展开着。</summary>
     public bool ShowAdvanced
     {
-        get => _showAdvanced;
-        set => SetProperty(ref _showAdvanced, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>展开 / 收起「高级」。</summary>
@@ -829,8 +817,8 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>对象树列出系统库。</summary>
     public bool ShowSystemDatabases
     {
-        get => _showSystemDatabases;
-        set => SetProperty(ref _showSystemDatabases, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     // ── 右侧栏:连接字符串 ─────────────────────────────────────────────────
@@ -841,9 +829,9 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>整串(复制用)。</summary>
     public string PreviewText
     {
-        get => _previewText;
-        private set => SetProperty(ref _previewText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>复制连接串。</summary>
     public AsyncCommand CopyPreviewCommand { get; }
@@ -865,25 +853,25 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>正在测。</summary>
     public bool IsProbing
     {
-        get => _isTesting;
-        private set => SetProperty(ref _isTesting, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>页脚的结论(<c>连接成功 · 38 ms</c>)。</summary>
     public string TestSummary
     {
-        get => _testSummary;
+        get;
         private set
         {
-            if (SetProperty(ref _testSummary, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasTestSummary));
             }
         }
-    }
+    } = "";
 
     /// <summary>有结论。</summary>
-    public bool HasTestSummary => _testSummary.Length > 0;
+    public bool HasTestSummary => TestSummary.Length > 0;
 
     /// <summary>测试通过了。</summary>
     public bool TestPassed => _testSucceeded == true;
@@ -899,24 +887,24 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>页脚的错误(名字没填、主机没填、存不下)。</summary>
     public string Error
     {
-        get => _error;
+        get;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
         }
-    }
+    } = "";
 
     /// <summary>有错误。</summary>
-    public bool HasError => _error.Length > 0;
+    public bool HasError => Error.Length > 0;
 
     /// <summary>正在存(按钮灰掉,免得点两次)。</summary>
     public bool IsSaving
     {
-        get => _isSaving;
-        private set => SetProperty(ref _isSaving, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>仅保存。</summary>
@@ -998,7 +986,7 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     private void ClearProbe()
     {
         _probe?.Cancel();
-        if (Steps.Count == 0 && Members.Count == 0 && _testSummary.Length == 0)
+        if (Steps.Count == 0 && Members.Count == 0 && TestSummary.Length == 0)
         {
             return;
         }
@@ -1059,7 +1047,7 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
         p.Set(MongoSettings.KeyPageSize, NonDefault(_pageSize, 50));
         p.Set(MongoSettings.KeySampleSize, NonDefault(_sampleSize, 1000));
         p.Set(MongoSettings.KeyEjson, _ejson == "relaxed" ? null : _ejson);
-        p.Set(MongoSettings.KeyShowSystemDatabases, _showSystemDatabases ? "true" : null);
+        p.Set(MongoSettings.KeyShowSystemDatabases, ShowSystemDatabases ? "true" : null);
         return p;
 
         static string Bool(bool value) => value ? "true" : "false";
@@ -1091,9 +1079,9 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     /// <summary>口令框为空时,测试与连接用密钥库里存着的那个。</summary>
     private async Task<string> EffectivePasswordAsync()
     {
-        if (_password.Length > 0 || _username.Trim().Length == 0)
+        if (Password.Length > 0 || _username.Trim().Length == 0)
         {
-            return _password;
+            return Password;
         }
         return await _shell.Profiles.GetPasswordAsync(_passwordFrom ?? _original.Id).ConfigureAwait(true);
     }
@@ -1197,9 +1185,9 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
         }
         // 口令:填了就存;匿名就把存着的删掉;复制来的连接带上原来那条的;其余(编辑时留空)不动。
         string? password;
-        if (_password.Length > 0)
+        if (Password.Length > 0)
         {
-            password = _password;
+            password = Password;
         }
         else if (profile.Username.Length == 0)
         {

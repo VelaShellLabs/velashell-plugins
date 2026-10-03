@@ -16,11 +16,7 @@ internal sealed class PipelineStage : ObservableObject
     private string _operator;
     private string _body;
     private bool _isEnabled;
-    private bool _isExpanded;
-    private int _index;
     private PipelineBodyParse _parse = new(null);
-    private PipelineStageOutcome _outcome = PipelineStageOutcome.Pending;
-    private IReadOnlyList<PipelineFieldSample> _upstream = [];
 
     /// <summary>构造。</summary>
     /// <param name="owner">所在的管道。</param>
@@ -35,7 +31,7 @@ internal sealed class PipelineStage : ObservableObject
         _isEnabled = enabled;
         Reparse();
         CompletionProvider = request => Task.FromResult(
-            PipelineFields.Complete(request, Operator, _upstream, _owner.SampleSize, _owner.Loc));
+            PipelineFields.Complete(request, Operator, UpstreamFields, _owner.SampleSize, _owner.Loc));
         ToggleExpandCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
         RemoveCommand = new RelayCommand(() => _owner.RemoveStage(this));
         DuplicateCommand = new RelayCommand(() => _owner.DuplicateStage(this));
@@ -96,10 +92,10 @@ internal sealed class PipelineStage : ObservableObject
     /// <summary>展开(左编辑器 + 右输出预览)。</summary>
     public bool IsExpanded
     {
-        get => _isExpanded;
+        get;
         set
         {
-            if (SetProperty(ref _isExpanded, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ChevronKey), nameof(ShowInline));
             }
@@ -109,8 +105,8 @@ internal sealed class PipelineStage : ObservableObject
     /// <summary>序号(1 起;拖动重排后由管道重新编号)。</summary>
     public int Index
     {
-        get => _index;
-        set => SetProperty(ref _index, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>灰色说明(<c>筛选文档</c>;停用时加「· 已停用」)。</summary>
@@ -179,7 +175,7 @@ internal sealed class PipelineStage : ObservableObject
             DiagnosticSeverity.Error, _parse.Fix, _parse.Fix is null ? null : Loc["Pipe_FixHint"])];
 
     /// <summary>服务器在预览里对这个阶段的报错。</summary>
-    public string? ServerError => _outcome.State == PipelineStageState.Error ? _outcome.Error : null;
+    public string? ServerError => Outcome.State == PipelineStageState.Error ? Outcome.Error : null;
 
     /// <summary>卡片右上角的错误标记文字;没有为空。</summary>
     public string ErrorText => ParseError ?? ServerError ?? "";
@@ -191,10 +187,10 @@ internal sealed class PipelineStage : ObservableObject
     public string ErrorBadge => ParseError is not null ? Loc["Pipe_SyntaxError"] : Loc["Pipe_ServerError"];
 
     /// <summary>预览结局。</summary>
-    public PipelineStageOutcome Outcome => _outcome;
+    public PipelineStageOutcome Outcome { get; private set; } = PipelineStageOutcome.Pending;
 
     /// <summary>预览带回的文档(放大看全部)。</summary>
-    public IReadOnlyList<BsonDocument> PreviewDocuments => _outcome.Documents;
+    public IReadOnlyList<BsonDocument> PreviewDocuments => Outcome.Documents;
 
     /// <summary>卡片右侧的两张小文档卡。</summary>
     public IReadOnlyList<PipelineMiniDoc> PreviewCards { get; private set; } = [];
@@ -203,24 +199,24 @@ internal sealed class PipelineStage : ObservableObject
     public bool HasPreviewCards => PreviewCards.Count > 0;
 
     /// <summary>右上角计数:<c>1,284</c>;没算出来为「—」。</summary>
-    public string CountText => IsEnabled && _outcome.State == PipelineStageState.Ok ? BsonText.Grouped(_outcome.Count) : "—";
+    public string CountText => IsEnabled && Outcome.State == PipelineStageState.Ok ? BsonText.Grouped(Outcome.Count) : "—";
 
     /// <summary>计数的悬停说明(说清是抽样上的计数)。</summary>
-    public string CountTip => _outcome.State == PipelineStageState.Ok
-        ? Loc.Format("Pipe_CountTip", BsonText.Grouped(_outcome.Count), _owner.SampleSize)
+    public string CountTip => Outcome.State == PipelineStageState.Ok
+        ? Loc.Format("Pipe_CountTip", BsonText.Grouped(Outcome.Count), _owner.SampleSize)
         : "";
 
     /// <summary>预览面板的副标题:<c>前 2 / 1,284</c>。</summary>
-    public string PreviewHeader => _outcome.State == PipelineStageState.Ok
-        ? Loc.Format("Pipe_PreviewFirst", PreviewCards.Count, BsonText.Grouped(_outcome.Count))
+    public string PreviewHeader => Outcome.State == PipelineStageState.Ok
+        ? Loc.Format("Pipe_PreviewFirst", PreviewCards.Count, BsonText.Grouped(Outcome.Count))
         : "";
 
     /// <summary>预览面板没有卡片时的那一句(计算中 / 无输出 / 上游出错 / 写入阶段不预览 …)。</summary>
-    public string PreviewNote => _outcome.State switch
+    public string PreviewNote => Outcome.State switch
     {
-        PipelineStageState.Ok when _outcome.Count == 0 => Loc["Pipe_PreviewEmpty"],
+        PipelineStageState.Ok when Outcome.Count == 0 => Loc["Pipe_PreviewEmpty"],
         PipelineStageState.Ok => "",
-        PipelineStageState.Error => _outcome.Error ?? "",
+        PipelineStageState.Error => Outcome.Error ?? "",
         PipelineStageState.Blocked => Loc["Pipe_PreviewBlocked"],
         PipelineStageState.Invalid => Loc["Pipe_PreviewInvalid"],
         PipelineStageState.Skipped => Loc["Pipe_PreviewSkipped"],
@@ -229,17 +225,13 @@ internal sealed class PipelineStage : ObservableObject
     };
 
     /// <summary>预览说明是不是一条错误(红字)。</summary>
-    public bool PreviewNoteIsError => _outcome.State == PipelineStageState.Error;
+    public bool PreviewNoteIsError => Outcome.State == PipelineStageState.Error;
 
     /// <summary>能不能放大看全部预览。</summary>
-    public bool CanShowPreview => _outcome.State == PipelineStageState.Ok && _outcome.Documents.Count > 0;
+    public bool CanShowPreview => Outcome.State == PipelineStageState.Ok && Outcome.Documents.Count > 0;
 
     /// <summary>上游字段(补全用:前一个启用阶段的输出预览里抽出来的)。</summary>
-    public IReadOnlyList<PipelineFieldSample> UpstreamFields
-    {
-        get => _upstream;
-        set => SetProperty(ref _upstream, value);
-    }
+    public IReadOnlyList<PipelineFieldSample> UpstreamFields { get; set => SetProperty(ref field, value); } = [];
 
     /// <summary>阶段编辑器的补全来源。</summary>
     public Func<CompletionRequest, Task<CompletionSet?>> CompletionProvider { get; }
@@ -265,7 +257,7 @@ internal sealed class PipelineStage : ObservableObject
     /// <summary>把一次预览的结局挂到卡片上。</summary>
     internal void ApplyOutcome(PipelineStageOutcome outcome)
     {
-        _outcome = outcome;
+        Outcome = outcome;
         PreviewCards = outcome.State == PipelineStageState.Ok ? [.. outcome.Documents.Take(2).Select(d => PipelineResults.Mini(d))] : [];
         RaisePropertiesChanged(nameof(Outcome), nameof(PreviewDocuments), nameof(PreviewCards), nameof(HasPreviewCards), nameof(CountText),
             nameof(CountTip), nameof(PreviewHeader), nameof(PreviewNote), nameof(PreviewNoteIsError), nameof(CanShowPreview),

@@ -165,7 +165,7 @@ internal sealed class SshTunnel : IMongoTunnel
             NetworkStream local = client.GetStream();
             Task up = local.CopyToAsync(remote, _lifetime.Token);
             Task down = remote.CopyToAsync(local, _lifetime.Token);
-            await Task.WhenAny(up, down).ConfigureAwait(false);
+            _ = await Task.WhenAny(up, down).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -177,7 +177,7 @@ internal sealed class SshTunnel : IMongoTunnel
         }
         finally
         {
-            _pumps.TryRemove(id, out _);
+            _ = _pumps.TryRemove(id, out _);
             client.Dispose();
             if (remote is not null)
             {
@@ -215,7 +215,7 @@ internal sealed class SshTunnel : IMongoTunnel
     private sealed class JumpLease : IAsyncDisposable
     {
         private static readonly Lock Gate = new();
-        private static readonly Dictionary<string, Shared> Open = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, Shared> Open = [with(StringComparer.Ordinal)];
 
         private readonly IPluginContext _context;
         private readonly string _savedSessionId;
@@ -272,7 +272,7 @@ internal sealed class SshTunnel : IMongoTunnel
                 {
                     return;
                 }
-                Open.Remove(_savedSessionId);
+                _ = Open.Remove(_savedSessionId);
             }
             try
             {

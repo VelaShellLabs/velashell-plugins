@@ -1,5 +1,4 @@
 using System.Globalization;
-using MongoDB.Bson;
 using VelaShell.Plugin.Mongo.Analysis;
 using VelaShell.Plugin.Mongo.Bson;
 using VelaShell.Plugin.Mongo.Shell;
@@ -95,21 +94,15 @@ internal sealed record ExplainStat(string Label, string Value, bool Warn = false
 internal sealed class ExplainPane : QueryPane
 {
     private readonly QueryTabViewModel _owner;
-    private ExplainPlan? _plan;
-    private string _verbosity = "executionStats";
-    private string _viewMode = "visual";
-    private bool _isBusy;
-    private string? _error;
-    private string _commandText = "";
 
     /// <summary>构造。</summary>
     public ExplainPane(QueryTabViewModel owner)
         : base(owner.Loc)
     {
         _owner = owner;
-        CreateIndexCommand = new AsyncCommand(() => _plan?.Advice is { } advice ? owner.CreateSuggestedIndexAsync(advice.Keys) : Task.CompletedTask,
-            () => _plan?.Advice is not null);
-        HintCompareCommand = new AsyncCommand(owner.CompareWithHintAsync, () => _plan is not null && Command is not null);
+        CreateIndexCommand = new AsyncCommand(() => Plan?.Advice is { } advice ? owner.CreateSuggestedIndexAsync(advice.Keys) : Task.CompletedTask,
+            () => Plan?.Advice is not null);
+        HintCompareCommand = new AsyncCommand(owner.CompareWithHintAsync, () => Plan is not null && Command is not null);
         RefreshCommand = new AsyncCommand(() => Command is null ? Task.CompletedTask : owner.ExplainAsync(Command, Database ?? owner.Database));
     }
 
@@ -128,23 +121,23 @@ internal sealed class ExplainPane : QueryPane
     /// <summary>当前 verbosity(改了就重跑)。</summary>
     public string Verbosity
     {
-        get => _verbosity;
+        get;
         set
         {
-            if (SetProperty(ref _verbosity, value) && Command is not null)
+            if (SetProperty(ref field, value) && Command is not null)
             {
                 RefreshCommand.Execute(null);
             }
         }
-    }
+    } = "executionStats";
 
     /// <summary>看法(<c>visual</c> / <c>tree</c> / <c>raw</c>)。</summary>
     public string ViewMode
     {
-        get => _viewMode;
+        get;
         set
         {
-            if (SetProperty(ref _viewMode, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(IsVisual));
                 RaisePropertyChanged(nameof(IsTree));
@@ -155,16 +148,16 @@ internal sealed class ExplainPane : QueryPane
                 RaisePropertyChanged(nameof(RawJson));
             }
         }
-    }
+    } = "visual";
 
     /// <summary>可视化。</summary>
-    public bool IsVisual => _viewMode == "visual";
+    public bool IsVisual => ViewMode == "visual";
 
     /// <summary>树。</summary>
-    public bool IsTree => _viewMode == "tree";
+    public bool IsTree => ViewMode == "tree";
 
     /// <summary>原始 JSON。</summary>
-    public bool IsRaw => _viewMode == "raw";
+    public bool IsRaw => ViewMode == "raw";
 
     /// <summary>显示阶段流(有计划且是可视化看法)。</summary>
     public bool ShowVisual => HasPlan && IsVisual;
@@ -182,21 +175,20 @@ internal sealed class ExplainPane : QueryPane
     public string? Database { get; private set; }
 
     /// <summary>解读结果。</summary>
-    public ExplainPlan? Plan => _plan;
+    public ExplainPlan? Plan { get; private set; }
 
     /// <summary>有计划可看。</summary>
-    public bool HasPlan => _plan is not null && !_isBusy;
+    public bool HasPlan => Plan is not null && !IsBusy;
 
     /// <summary>空态(还没跑过)。</summary>
-    public bool IsEmpty => _plan is null && !_isBusy && _error is null;
+    public bool IsEmpty => Plan is null && !IsBusy && Error is null;
 
     /// <summary>跑着。</summary>
     public bool IsBusy
     {
-        get => _isBusy;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _isBusy, value))
+            if (SetProperty(ref field, value))
             {
                 RaiseState();
             }
@@ -206,10 +198,9 @@ internal sealed class ExplainPane : QueryPane
     /// <summary>失败原因。</summary>
     public string? Error
     {
-        get => _error;
-        private set
+        get; private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaiseState();
             }
@@ -217,14 +208,10 @@ internal sealed class ExplainPane : QueryPane
     }
 
     /// <summary>有没有失败。</summary>
-    public bool HasError => _error is not null && !_isBusy;
+    public bool HasError => Error is not null && !IsBusy;
 
     /// <summary>标题旁的语句摘要(<c>db.orders.find(…).sort({ createdAt: -1 }).limit(100)</c>)。</summary>
-    public string CommandText
-    {
-        get => _commandText;
-        private set => SetProperty(ref _commandText, value);
-    }
+    public string CommandText { get; private set => SetProperty(ref field, value); } = "";
 
     /// <summary>阶段流(卡片与箭头交替)。</summary>
     public IReadOnlyList<object> FlowItems { get; private set; } = [];
@@ -242,10 +229,10 @@ internal sealed class ExplainPane : QueryPane
     public IReadOnlyList<ExplainStat> Stats { get; private set; } = [];
 
     /// <summary>有优化建议。</summary>
-    public bool HasAdvice => _plan?.Advice is not null;
+    public bool HasAdvice => Plan?.Advice is not null;
 
     /// <summary>没有建议(计划健康)。</summary>
-    public bool NoAdvice => _plan is not null && _plan.Advice is null;
+    public bool NoAdvice => Plan is not null && Plan.Advice is null;
 
     /// <summary>建议的说明。</summary>
     public string AdviceText { get; private set; } = "";
@@ -263,10 +250,10 @@ internal sealed class ExplainPane : QueryPane
     public IReadOnlyList<ExplainTreeRow> TreeRows { get; private set; } = [];
 
     /// <summary>原始 JSON(只在切到原始视图时才拼)。</summary>
-    public string RawJson => IsRaw && _plan is not null ? BsonText.Pretty(_plan.Raw, EjsonMode.Relaxed) : "";
+    public string RawJson => IsRaw && Plan is not null ? BsonText.Pretty(Plan.Raw, EjsonMode.Relaxed) : "";
 
     /// <summary>整份原始 JSON(复制 / 导出)。</summary>
-    public string? RawText => _plan is null ? null : BsonText.Pretty(_plan.Raw, EjsonMode.Relaxed);
+    public string? RawText => Plan is null ? null : BsonText.Pretty(Plan.Raw, EjsonMode.Relaxed);
 
     /// <summary>创建建议的索引。</summary>
     public AsyncCommand CreateIndexCommand { get; }
@@ -297,7 +284,7 @@ internal sealed class ExplainPane : QueryPane
     /// <summary>摆出一份执行计划。</summary>
     internal void Show(ExplainPlan plan)
     {
-        _plan = plan;
+        Plan = plan;
         BuildFlow(plan);
         BuildCandidates(plan);
         BuildStats(plan);
@@ -335,16 +322,16 @@ internal sealed class ExplainPane : QueryPane
         var b = new System.Text.StringBuilder("db");
         if (command.Collection is { } c)
         {
-            b.Append('.').Append(c);
+            _ = b.Append('.').Append(c);
         }
         if (command.Method is { } method)
         {
-            b.Append('.').Append(method.Name).Append('(').Append(method.Arguments.Count == 0 ? "" : "…").Append(')');
+            _ = b.Append('.').Append(method.Name).Append('(').Append(method.Arguments.Count == 0 ? "" : "…").Append(')');
         }
         foreach (ShellCall call in command.Chain)
         {
             string args = string.Join(", ", call.Arguments.Select(static a => BsonText.Literal(a.Value)));
-            b.Append('.').Append(call.Name).Append('(').Append(args.Length > 40 ? "…" : args).Append(')');
+            _ = b.Append('.').Append(call.Name).Append('(').Append(args.Length > 40 ? "…" : args).Append(')');
         }
         return b.ToString();
     }
@@ -510,7 +497,7 @@ internal sealed class ExplainPane : QueryPane
 
     private void BuildStats(ExplainPlan plan)
     {
-        string Dash(long? value) => value is { } v ? BsonText.Grouped(v) : "—";
+        static string Dash(long? value) => value is { } v ? BsonText.Grouped(v) : "—";
         double? ratio = plan.ExaminedRatio;
         Stats =
         [

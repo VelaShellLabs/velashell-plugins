@@ -54,7 +54,7 @@ internal sealed class MongoSessionRegistry
     {
         lock (_gate)
         {
-            _entries.Remove(entry);
+            _ = _entries.Remove(entry);
         }
         Changed?.Invoke();
     }

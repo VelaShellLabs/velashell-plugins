@@ -26,7 +26,7 @@ public sealed partial class PipelineNameDialogView : UserControl
         base.OnLoaded(e);
         Dispatcher.UIThread.Post(() =>
         {
-            NameBox.Focus();
+            _ = NameBox.Focus();
             NameBox.SelectAll();
         });
     }

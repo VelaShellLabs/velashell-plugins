@@ -19,7 +19,7 @@ public sealed class TransferTests
     [TestMethod]
     public void Create_command_carries_options_and_drops_what_the_server_would_reject()
     {
-        BsonDocument options = BsonDocument.Parse("""
+        var options = BsonDocument.Parse("""
             {
               "capped": true, "size": 4096,
               "validator": { "$jsonSchema": { "required": ["a"] } }, "validationLevel": "moderate",
@@ -55,7 +55,7 @@ public sealed class TransferTests
 
         gate.Pause();
         using var cts = new CancellationTokenSource(50);
-        await Assert.ThrowsAsync<OperationCanceledException>(() => gate.WaitAsync(cts.Token));
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => gate.WaitAsync(cts.Token));
     }
 
     [TestMethod]
@@ -71,17 +71,17 @@ public sealed class TransferTests
         try
         {
             // 源:带 validator 与唯一索引的集合、一个视图、一个 GridFS 桶
-            await source.RunCommandAsync(from, new BsonDocument
+            _ = await source.RunCommandAsync(from, new BsonDocument
             {
                 { "create", "items" },
                 { "validator", BsonDocument.Parse("{ $jsonSchema: { required: ['sku'] } }") }
             });
             IMongoCollection<BsonDocument> items = source.Collection(from, "items");
             await items.InsertManyAsync(Enumerable.Range(1, 2345).Select(static i => new BsonDocument { { "sku", $"SKU-{i}" }, { "qty", i } }));
-            await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("sku", 1), new CreateIndexOptions { Unique = true }));
-            await source.RunCommandAsync(from, BsonDocument.Parse("{ create: 'v_items', viewOn: 'items', pipeline: [{ $match: { qty: { $gt: 10 } } }] }"));
+            _ = await items.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("sku", 1), new CreateIndexOptions { Unique = true }));
+            _ = await source.RunCommandAsync(from, BsonDocument.Parse("{ create: 'v_items', viewOn: 'items', pipeline: [{ $match: { qty: { $gt: 10 } } }] }"));
             var bucket = new GridFSBucket(source.Database(from), new GridFSBucketOptions { BucketName = "fs", ChunkSizeBytes = 1024 });
-            await bucket.UploadFromBytesAsync("a.bin", new byte[5000]);
+            _ = await bucket.UploadFromBytesAsync("a.bin", new byte[5000]);
 
             IReadOnlyList<CollectionInfo> infos = await source.ListCollectionsAsync(from);
             CollectionInfo itemsInfo = infos.Single(static c => c.Name == "items");
@@ -98,7 +98,7 @@ public sealed class TransferTests
             Assert.IsNotNull(targetItems.Validator, "validation rules travel with the collection");
             Assert.IsTrue((await target.ListIndexesAsync(to, "items")).Any(static i => i["name"] == "sku_1" && i["unique"].ToBoolean()));
 
-            await CollectionCopier.CopyAsync(source, from, target, to, new XferItem("v_items", XferObjectKind.View, viewInfo, XferAction.Create),
+            _ = await CollectionCopier.CopyAsync(source, from, target, to, new XferItem("v_items", XferObjectKind.View, viewInfo, XferAction.Create),
                 options, new XferPauseGate(), _ => { }, (t, tone) => log.Add((t, tone)), loc, CancellationToken.None);
             long viewCount = await target.Collection(to, "v_items").CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
             Assert.AreEqual(2335, viewCount, "the view definition was recreated on the target");
@@ -124,7 +124,7 @@ public sealed class TransferTests
             Assert.AreEqual(2345, after);
 
             // 新建:目标已有同名时拒绝(向导会默认改成跳过)
-            await Assert.ThrowsAsync<InvalidOperationException>(() => CollectionCopier.CopyAsync(source, from, target, to,
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(() => CollectionCopier.CopyAsync(source, from, target, to,
                 new XferItem("items", XferObjectKind.Collection, itemsInfo, XferAction.Create), options, new XferPauseGate(), _ => { },
                 (t, tone) => log.Add((t, tone)), loc, CancellationToken.None));
             XferOutcome skipped = await CollectionCopier.CopyAsync(source, from, target, to, new XferItem("items", XferObjectKind.Collection, itemsInfo, XferAction.Skip),
@@ -204,7 +204,7 @@ public sealed class TransferTests
             vm.UseTarget(new TransferTarget("mongo-test-02", second, owned: false));
             vm.TargetDatabase = to;
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "21-transfer-target");
+            _ = Screens.Capture(bench.Window, "21-transfer-target");
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsStep1 && vm.Objects.Count > 0 && !vm.IsBusy, 20_000);
             string[] wanted = ["customers", "products", "inventory", "orders", "reviews", "coupons"];
@@ -215,11 +215,11 @@ public sealed class TransferTests
             TransferObjectRow inventory = vm.Objects.Single(static o => o.Name == "inventory");
             inventory.Action = inventory.Actions.Single(static a => (XferAction)a.Value == XferAction.Append);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "21-transfer-objects");
+            _ = Screens.Capture(bench.Window, "21-transfer-objects");
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsStep2);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "21-transfer-options");
+            _ = Screens.Capture(bench.Window, "21-transfer-options");
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsFinished, 60_000);
             await Screens.PumpAsync(40);

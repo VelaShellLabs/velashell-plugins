@@ -66,12 +66,7 @@ internal enum FolderKind
 /// </summary>
 internal sealed class TreeNode : ObservableObject
 {
-    private bool _isExpanded;
-    private string _meta = "";
-    private string? _tag;
-    private string _tagClass = "muted";
     private string _name;
-    private string _dotClass = "off";
 
     /// <summary>构造。</summary>
     /// <param name="kind">种类。</param>
@@ -97,9 +92,9 @@ internal sealed class TreeNode : ObservableObject
     /// <summary>连接行的色点:<c>ok</c> 连着、<c>connecting</c> 正在连、<c>err</c> 没连上、<c>off</c> 没连。</summary>
     public string DotClass
     {
-        get => _dotClass;
-        set => SetProperty(ref _dotClass, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "off";
 
     /// <summary>种类。</summary>
     public NodeKind Kind { get; }
@@ -141,10 +136,10 @@ internal sealed class TreeNode : ObservableObject
     /// <summary>展开状态。</summary>
     public bool IsExpanded
     {
-        get => _isExpanded;
+        get;
         set
         {
-            if (SetProperty(ref _isExpanded, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ChevronKey), nameof(IconToken), nameof(IsEmphasized));
             }
@@ -154,17 +149,17 @@ internal sealed class TreeNode : ObservableObject
     /// <summary>右侧小字(大小 / 计数 / 版本)。</summary>
     public string Meta
     {
-        get => _meta;
-        set => SetProperty(ref _meta, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>徽章文字(<c>TTL</c> / <c>时序</c> / <c>固定</c>);没有为 <see langword="null" />。</summary>
     public string? Tag
     {
-        get => _tag;
+        get;
         set
         {
-            if (SetProperty(ref _tag, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasTag));
             }
@@ -174,12 +169,12 @@ internal sealed class TreeNode : ObservableObject
     /// <summary>徽章配色类(<c>warn</c> / <c>info</c> / <c>muted</c>)。</summary>
     public string TagClass
     {
-        get => _tagClass;
-        set => SetProperty(ref _tagClass, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = "muted";
 
     /// <summary>有没有徽章。</summary>
-    public bool HasTag => !string.IsNullOrEmpty(_tag);
+    public bool HasTag => !string.IsNullOrEmpty(Tag);
 
     /// <summary>左侧缩进(设计稿:连接 8、库 22、文件夹 36、对象 50 —— 每层 14)。</summary>
     public double Indent => 8 + (Depth * 14);

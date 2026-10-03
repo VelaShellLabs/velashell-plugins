@@ -18,16 +18,14 @@ namespace VelaShell.Plugin.Mongo;
 /// <param name="locale">宿主当前语言(如 <c>zh-Hans</c>、<c>en</c>)。</param>
 public sealed partial class Loc(string locale)
 {
-    private readonly bool _chinese = locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>当前是不是中文表(少数地方要按语言挑数字或单位的写法)。</summary>
-    public bool IsChinese => _chinese;
+    public bool IsChinese { get; } = locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>取一条文案;未收录的键原样返回(方便一眼看出漏了哪条)。</summary>
     /// <param name="key">文案键。</param>
     /// <returns>文案。</returns>
     public string this[string key] =>
-        (_chinese ? Tables.Chinese : Tables.English).TryGetValue(key, out string? value) ? value : key;
+        (IsChinese ? Tables.Chinese : Tables.English).TryGetValue(key, out string? value) ? value : key;
 
     /// <summary>取一条文案(索引器的具名形式,便于在表达式里连用)。</summary>
     /// <param name="key">文案键。</param>

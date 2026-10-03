@@ -457,6 +457,184 @@
           </ControlTemplate>
         </Setter>
       </ControlTheme>
+
+      <!-- ══ 月历(日期弹层 DatePickFlyout、文档编辑器的日历按钮)══════════════════════════
+           Fluent 的月历是按触屏量的:40px 一格、20 号字、近黑的表头、选中 / 今天是系统强调蓝 ——
+           放进 VelaBgSurface 的浮层里像一块别家的控件。这里整套换掉:
+           · 一格 30×26、行距 28(DESIGN.md 的 28px 行),日期数字 VelaUiMonoFont 11,星期 10 号 VelaTextTertiary;
+           · 今天 = VelaAccent 1px 描边;选中 = VelaAccentDim 底 + VelaAccent 字(同主操作药丸、分段选中);
+           · 不在本月的日子退成 VelaTextMuted;表头是月份标题(点它进年 / 十年视图)+ 两颗 lucide 箭头。
+           四个主题都按**类型**作键:日格(CalendarDayButton)与月格(CalendarButton)是 CalendarItem 在代码里
+           new 出来的,只能靠隐式主题够到;Calendar / CalendarItem 一并按类型,插件里任何一处 new Calendar()
+           都自动是这一套,调用点不用接线。作用域只到引了本文件的视图(浮层的逻辑父是锚点),不碰宿主。 -->
+      <ControlTheme x:Key="{x:Type CalendarDayButton}" TargetType="CalendarDayButton">
+        <Setter Property="ClickMode" Value="Release" />
+        <Setter Property="Margin" Value="1" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+        <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate>
+            <Border Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}">
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                Foreground="{TemplateBinding Foreground}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                Margin="{TemplateBinding Padding}" />
+            </Border>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+          <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+        </Style>
+        <Style Selector="^:pressed">
+          <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+        </Style>
+        <Style Selector="^:inactive">
+          <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+        </Style>
+        <Style Selector="^:blackout">
+          <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+        </Style>
+        <Style Selector="^:today">
+          <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+        </Style>
+        <!-- 排在悬停 / 按下之后:选中那一格悬停时仍是选中底,只补一圈描边作反馈。 -->
+        <Style Selector="^:selected">
+          <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+          <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="^:selected:pointerover">
+          <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+        </Style>
+        <Style Selector="^:disabled">
+          <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+      </ControlTheme>
+
+      <!-- 年视图的月格 / 十年视图的年格:同一套状态色,字用 VelaUiFont("1月"、"2026")。
+           格子钉 36 高、在 63 高的行里居中:撑满一整行的话,选中那一格是一大块紫底,比月视图重得多。 -->
+      <ControlTheme x:Key="{x:Type CalendarButton}" TargetType="CalendarButton">
+        <Setter Property="ClickMode" Value="Release" />
+        <Setter Property="Margin" Value="2" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+        <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate>
+            <Border Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}">
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                Foreground="{TemplateBinding Foreground}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                Margin="{TemplateBinding Padding}" />
+            </Border>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+          <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+        </Style>
+        <Style Selector="^:pressed">
+          <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+        </Style>
+        <Style Selector="^:inactive">
+          <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+        </Style>
+        <Style Selector="^:selected">
+          <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+          <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="^:selected:pointerover">
+          <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+        </Style>
+      </ControlTheme>
+
+      <!-- 表头的月份标题:工具行文字按钮的手感,字换成 12 号 SemiBold 主文字色。
+           十年视图里它会被禁用(没有更上一层),那时不该变灰 —— 它仍是这一屏的标题。 -->
+      <ControlTheme x:Key="MongoCalendarHeader" TargetType="Button" BasedOn="{StaticResource MongoToolButton}">
+        <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+        <Setter Property="FontSize" Value="{DynamicResource VelaFontSize12}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Style Selector="^:disabled">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+      </ControlTheme>
+
+      <!-- 7 列 × 32 = 224 宽;月视图 22(星期)+ 6 × 28 = 190 高,年视图钉同一高度,切视图时弹层不跳。 -->
+      <ControlTheme x:Key="{x:Type CalendarItem}" TargetType="CalendarItem">
+        <Setter Property="DayTitleTemplate">
+          <Template x:DataType="x:String">
+            <TextBlock Text="{Binding}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontFamily="{DynamicResource VelaUiFont}" FontSize="{DynamicResource VelaFontSize10}"
+                       Foreground="{DynamicResource VelaTextTertiary}" />
+          </Template>
+        </Setter>
+        <Setter Property="Template">
+          <ControlTemplate>
+            <Grid Width="224" RowDefinitions="28,Auto">
+              <DockPanel>
+                <Button Name="PART_NextButton" DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}">
+                  <ui:Glyph Key="Mongo.chevron-right" Size="14" Brush="{DynamicResource VelaTextSecondary}" />
+                </Button>
+                <Button Name="PART_PreviousButton" DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}">
+                  <ui:Glyph Key="Mongo.chevron-left" Size="14" Brush="{DynamicResource VelaTextSecondary}" />
+                </Button>
+                <Button Name="PART_HeaderButton" Theme="{StaticResource MongoCalendarHeader}" />
+              </DockPanel>
+              <Grid Name="PART_MonthView" Grid.Row="1" Margin="0,4,0,0" IsVisible="False"
+                    RowDefinitions="22,28,28,28,28,28,28" ColumnDefinitions="*,*,*,*,*,*,*" />
+              <Grid Name="PART_YearView" Grid.Row="1" Margin="0,4,0,0" Height="190" IsVisible="False"
+                    RowDefinitions="*,*,*" ColumnDefinitions="*,*,*,*" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+
+      <!-- 透明底:月历直接坐在浮层的 VelaBgSurface 上,不再自带一层框。 -->
+      <ControlTheme x:Key="{x:Type Calendar}" TargetType="Calendar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Template">
+          <ControlTemplate>
+            <StackPanel Name="PART_Root">
+              <CalendarItem Name="PART_CalendarItem" Background="{TemplateBinding Background}" />
+            </StackPanel>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
     </ResourceDictionary>
   </Styles.Resources>
 

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Avalonia.Controls;
-using Avalonia.Input;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -27,7 +26,7 @@ public sealed partial class CompletionPopupView : UserControl
             {
                 try
                 {
-                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                    _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                 }
                 catch (Exception)
                 {

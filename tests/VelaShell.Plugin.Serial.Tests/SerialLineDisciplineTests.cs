@@ -100,7 +100,7 @@ public sealed class SerialLineDisciplineTests
         // 吞掉的必须只有紧挨着的那一个;第二块开头是别的字节时,一个字节都不能少。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        Receive(discipline, Cr);
+        _ = Receive(discipline, Cr);
         byte[] second = Receive(discipline, (byte)'x', Lf);
 
         Assert.AreSequenceEqual([(byte)'x', Lf], second, "上一块末尾那个 CR 已经结清,第二块开头不该再补 LF;而这里的裸 LF 也不该被吞");
@@ -132,7 +132,7 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(implicitCr: true));
 
-        Receive(discipline, (byte)'a', Cr);
+        _ = Receive(discipline, (byte)'a', Cr);
         byte[] second = Receive(discipline, Lf, (byte)'b');
 
         Assert.AreSequenceEqual([Lf, (byte)'b'], second, "上一块以 CR 收尾,这个 LF 就是它的另一半,不该再补一个 CR");

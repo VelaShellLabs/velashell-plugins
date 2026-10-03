@@ -27,13 +27,10 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     private ImportSource? _source;
     private CollectionInfo? _target;
     private ImportRules _baseRules = new();
-    private HashSet<string> _uniqueKeys = new(StringComparer.Ordinal);
-    private Dictionary<string, BsonKind> _targetKinds = new(StringComparer.Ordinal);
+    private HashSet<string> _uniqueKeys = [with(StringComparer.Ordinal)];
+    private Dictionary<string, BsonKind> _targetKinds = [with(StringComparer.Ordinal)];
     private List<ConvertedRow> _dryRows = [];
-    private string _filePath = "";
-    private string _fileInfo = "";
     private long? _rowCount;
-    private bool _counting;
     private XferOption _encodingChoice;
     private XferOption _delimiterChoice;
     private bool _hasHeader = true;
@@ -44,28 +41,14 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     private ImportWriteMode _mode = ImportWriteMode.Insert;
     private XferOption? _matchKey;
     private XferOption _onError;
-    private bool _unordered = true;
-    private bool _backup = true;
-    private string _dateFormat = "";
-    private bool _editingDate;
     private string _dateGuess = "";
-    private string _estInsert = "—";
-    private string _estUpdate = "—";
-    private string _estSkip = "—";
-    private bool _dryRunning;
     private CancellationTokenSource? _countCts;
     private CancellationTokenSource? _run;
-    private double _progress;
-    private string _progressText = "";
-    private string _percentText = "0%";
-    private string _rateText = "";
-    private string _resultText = "";
     private string _resultTone = "ok";
     private string? _errorReport;
     private long _inserted;
     private long _updated;
     private long _skipped;
-    private XferOption? _profile;
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -136,29 +119,29 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>文件路径。</summary>
     public string FilePath
     {
-        get => _filePath;
+        get;
         set
         {
-            if (SetProperty(ref _filePath, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(FileName), nameof(HasFile));
                 _ = OpenFileAsync();
             }
         }
-    }
+    } = "";
 
     /// <summary>选了文件。</summary>
     public bool HasFile => _source is not null;
 
     /// <summary>文件名。</summary>
-    public string FileName => _filePath.Length > 0 ? Path.GetFileName(_filePath) : Loc["Imp_NoFile"];
+    public string FileName => FilePath.Length > 0 ? Path.GetFileName(FilePath) : Loc["Imp_NoFile"];
 
     /// <summary>文件头那一行(<c>12.4 MB · UTF-8 · 逗号分隔 · 1,246,302 行</c>)。</summary>
     public string FileInfo
     {
-        get => _fileInfo;
-        private set => SetProperty(ref _fileInfo, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>文件图标(CSV 绿表格 / JSON 花括号 / BSON 归档)。</summary>
     public string FileIconKey => _source?.Format switch
@@ -177,8 +160,8 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>正在数行。</summary>
     public bool Counting
     {
-        get => _counting;
-        private set => SetProperty(ref _counting, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>编码选项。</summary>
@@ -241,10 +224,10 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>选中一份配置即套用(映射在选了文件之后套用)。</summary>
     public XferOption? Profile
     {
-        get => _profile;
+        get;
         set
         {
-            if (SetProperty(ref _profile, value) && value?.Value is SavedItem item && ExportProfile.Parse(item.Content) is { } profile)
+            if (SetProperty(ref field, value) && value?.Value is SavedItem item && ExportProfile.Parse(item.Content) is { } profile)
             {
                 ApplyProfile(profile);
             }
@@ -281,8 +264,8 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>dry-run 进行中。</summary>
     public bool DryRunning
     {
-        get => _dryRunning;
-        private set => SetProperty(ref _dryRunning, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>芯片:全部。</summary>
@@ -329,21 +312,21 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     public ObservableCollection<ImportIssueRow> Issues { get; } = [];
 
     /// <summary>没有问题。</summary>
-    public bool NoIssues => Issues.Count == 0 && !_dryRunning;
+    public bool NoIssues => Issues.Count == 0 && !DryRunning;
 
     /// <summary>显示「指定日期格式」。</summary>
-    public bool ShowDateFix => _dateGuess.Length > 0 || _dateFormat.Length > 0;
+    public bool ShowDateFix => _dateGuess.Length > 0 || DateFormat.Length > 0;
 
     /// <summary>「📅 指定日期格式 MM/dd/yy HH:mm…」。</summary>
-    public string DateFixText => Loc.Format("Imp_DateFix", _dateFormat.Length > 0 ? _dateFormat : _dateGuess);
+    public string DateFixText => Loc.Format("Imp_DateFix", DateFormat.Length > 0 ? DateFormat : _dateGuess);
 
     /// <summary>正在编辑日期格式。</summary>
     public bool EditingDate
     {
-        get => _editingDate;
+        get;
         set
         {
-            if (SetProperty(ref _editingDate, value) && value && _dateFormat.Length == 0)
+            if (SetProperty(ref field, value) && value && DateFormat.Length == 0)
             {
                 DateFormat = _dateGuess;
             }
@@ -353,15 +336,15 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>日期格式(.NET 写法,<c>MM/dd/yy HH:mm</c>)。</summary>
     public string DateFormat
     {
-        get => _dateFormat;
+        get;
         set
         {
-            if (SetProperty(ref _dateFormat, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(DateFixText), nameof(ShowDateFix));
             }
         }
-    }
+    } = "";
 
     /// <summary>开始编辑日期格式。</summary>
     public RelayCommand EditDateCommand { get; }
@@ -430,7 +413,7 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
         {
             if (value is not null)
             {
-                SetProperty(ref _onError, value);
+                _ = SetProperty(ref _onError, value);
             }
         }
     }
@@ -438,9 +421,9 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>批量 ordered: false。</summary>
     public bool Unordered
     {
-        get => _unordered;
-        set => SetProperty(ref _unordered, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = true;
 
     /// <summary>「批大小 1,000 · ordered: false」。</summary>
     public string BatchText => Loc.Format("Imp_Batch", BsonText.Grouped(1000));
@@ -448,60 +431,60 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>导入前备份将被覆盖的文档。</summary>
     public bool Backup
     {
-        get => _backup;
-        set => SetProperty(ref _backup, value);
-    }
+        get;
+        set => SetProperty(ref field, value);
+    } = true;
 
     /// <summary>预计新增。</summary>
     public string EstInsert
     {
-        get => _estInsert;
-        private set => SetProperty(ref _estInsert, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     /// <summary>预计更新(upsert 命中)。</summary>
     public string EstUpdate
     {
-        get => _estUpdate;
-        private set => SetProperty(ref _estUpdate, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     /// <summary>预计跳过(错误)。</summary>
     public string EstSkip
     {
-        get => _estSkip;
-        private set => SetProperty(ref _estSkip, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "—";
 
     // ── 第四步:导入 ─────────────────────────────────────────────────────
 
     /// <summary>进度 0–100。</summary>
     public double Progress
     {
-        get => _progress;
-        private set => SetProperty(ref _progress, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     /// <summary>进度说明。</summary>
     public string ProgressText
     {
-        get => _progressText;
-        private set => SetProperty(ref _progressText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>百分比。</summary>
     public string PercentText
     {
-        get => _percentText;
-        private set => SetProperty(ref _percentText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "0%";
 
     /// <summary>速率。</summary>
     public string RateText
     {
-        get => _rateText;
-        private set => SetProperty(ref _rateText, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>已新增。</summary>
     public string InsertedText => BsonText.Grouped(_inserted);
@@ -515,24 +498,24 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     /// <summary>结果说明。</summary>
     public string ResultText
     {
-        get => _resultText;
+        get;
         private set
         {
-            if (SetProperty(ref _resultText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasResult));
             }
         }
-    }
+    } = "";
 
     /// <summary>有结果。</summary>
-    public bool HasResult => _resultText.Length > 0;
+    public bool HasResult => ResultText.Length > 0;
 
     /// <summary>结果成功。</summary>
-    public bool ResultOk => _resultText.Length > 0 && _resultTone == "ok";
+    public bool ResultOk => ResultText.Length > 0 && _resultTone == "ok";
 
     /// <summary>结果失败或取消。</summary>
-    public bool ResultFailed => _resultText.Length > 0 && _resultTone != "ok";
+    public bool ResultFailed => ResultText.Length > 0 && _resultTone != "ok";
 
     /// <summary>错误报告路径。</summary>
     public string ErrorReport => _errorReport ?? "";
@@ -571,12 +554,12 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
             _target = all.FirstOrDefault(c => c.Name == Collection) ?? new CollectionInfo(Database, Collection, CollectionKind.Collection, []);
             _baseRules = ImportRules.FromValidator(_target.Validator, _target.ValidationAction);
             IReadOnlyList<BsonDocument> indexes = await Workspace.Connection.ListIndexesAsync(Database, Collection).ConfigureAwait(true);
-            _uniqueKeys = new HashSet<string>(StringComparer.Ordinal) { "_id" };
+            _uniqueKeys = [with(StringComparer.Ordinal), "_id"];
             foreach (BsonDocument index in indexes)
             {
                 if (index.GetValue("unique", false).ToBoolean() && index.GetValue("key", new BsonDocument()) is BsonDocument key && key.ElementCount == 1)
                 {
-                    _uniqueKeys.Add(key.GetElement(0).Name);
+                    _ = _uniqueKeys.Add(key.GetElement(0).Name);
                 }
             }
             IReadOnlyList<BsonDocument> sample = await SchemaSampler.SampleAsync(
@@ -612,16 +595,16 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
     private async Task OpenFileAsync()
     {
         _countCts?.Cancel();
-        if (!File.Exists(_filePath))
+        if (!File.Exists(FilePath))
         {
             _source = null;
             RaisePropertiesChanged(nameof(HasFile), nameof(IsCsv), nameof(IsText), nameof(FileIconKey));
-            FileInfo = _filePath.Length > 0 ? Loc["Imp_FileMissing"] : "";
+            FileInfo = FilePath.Length > 0 ? Loc["Imp_FileMissing"] : "";
             return;
         }
         try
         {
-            ImportSource sniffed = ImportSource.Sniff(_filePath);
+            var sniffed = ImportSource.Sniff(FilePath);
             if (_encodingChoice.Value is TextEncodingKind encoding)
             {
                 sniffed = sniffed with { Encoding = encoding };
@@ -637,13 +620,13 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
             HeadLines.Clear();
             if (_source.Format != ImportFormat.Bson)
             {
-                foreach (string line in ImportSource.HeadLines(_filePath, _source.Encoding, 8))
+                foreach (string line in ImportSource.HeadLines(FilePath, _source.Encoding, 8))
                 {
                     HeadLines.Add(line);
                 }
             }
             UpdateFileInfo();
-            Steps[0].Summary = Path.GetFileName(_filePath);
+            Steps[0].Summary = Path.GetFileName(FilePath);
             // 默认目标类型要用到目标集合的 validator 与抽样:等它们就绪再生成映射。
             ImportSource current = _source;
             await _ready.ConfigureAwait(true);
@@ -662,7 +645,7 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
         }
     }
 
-    private Task ReopenAsync() => _filePath.Length > 0 ? OpenFileAsync() : Task.CompletedTask;
+    private Task ReopenAsync() => FilePath.Length > 0 ? OpenFileAsync() : Task.CompletedTask;
 
     private async Task CountAsync(ImportSource source)
     {
@@ -888,7 +871,7 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
 
     private ImportRules Rules => _baseRules with
     {
-        DateFormat = _dateFormat.Trim().Length > 0 ? _dateFormat.Trim() : null,
+        DateFormat = DateFormat.Trim().Length > 0 ? DateFormat.Trim() : null,
         Mode = _mode,
         MatchKey = _mode == ImportWriteMode.Insert ? null : _matchKey?.Value as string
     };
@@ -1171,8 +1154,8 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
             Columns = Columns,
             Rules = Rules,
             StopOnError = (bool)_onError.Value,
-            Ordered = !_unordered,
-            Backup = _backup && _mode != ImportWriteMode.Insert,
+            Ordered = !Unordered,
+            Backup = Backup && _mode != ImportWriteMode.Insert,
             EstimatedTotal = _rowCount ?? 0,
             ReportDirectory = ReportDirectory(source.Path)
         };
@@ -1221,7 +1204,8 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
                 {
                     Reveal(path);
                     return Task.CompletedTask;
-                } : null,
+                }
+                : null,
                 Duration = TimeSpan.FromSeconds(8)
             });
         }
@@ -1313,9 +1297,9 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
             { "mode", _mode.ToString() },
             { "matchKey", _matchKey?.Value as string ?? "" },
             { "stopOnError", (bool)_onError.Value },
-            { "unordered", _unordered },
-            { "backup", _backup },
-            { "dateFormat", _dateFormat },
+            { "unordered", Unordered },
+            { "backup", Backup },
+            { "dateFormat", DateFormat },
             { "columns", new BsonArray(Mappings.Select(static m => new BsonDocument
                 {
                     { "source", m.Source },
@@ -1325,13 +1309,13 @@ internal sealed class ImportWizardViewModel : XferWizardViewModel
                 }))
             }
         };
-        string name = $"{TargetNamespace} · {(_filePath.Length > 0 ? Path.GetFileName(_filePath) : Loc["Imp_NoFile"])}";
+        string name = $"{TargetNamespace} · {(FilePath.Length > 0 ? Path.GetFileName(FilePath) : Loc["Imp_NoFile"])}";
         var item = new SavedItem(name, ExportProfile.Serialize(profile), DateTimeOffset.Now);
         await Workspace.Store.SaveItemAsync("import", Workspace.ConnectionKey, item).ConfigureAwait(true);
         XferOption? existing = Profiles.FirstOrDefault(p => p.Label == name);
         if (existing is not null)
         {
-            Profiles.Remove(existing);
+            _ = Profiles.Remove(existing);
         }
         Profiles.Insert(0, new XferOption(item, name));
         RaisePropertyChanged(nameof(HasProfiles));

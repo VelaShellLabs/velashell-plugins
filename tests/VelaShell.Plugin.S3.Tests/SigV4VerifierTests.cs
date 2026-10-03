@@ -242,17 +242,14 @@ public sealed class SigV4VerifierTests
             ["host"] = "example.com",
             ["content-type"] = "application/xml",
         };
-        SigV4Verifier.CreateCanonicalRequest(
+        _ = SigV4Verifier.CreateCanonicalRequest(
             "PUT", "/", string.Empty, headers, SigV4Verifier.EmptyPayloadHash, out string signedHeaders);
         Assert.AreEqual("content-type;host;x-amz-date", signedHeaders);
     }
 
     /// <summary>空负载哈希常量必须等于 SHA-256("")。</summary>
     [TestMethod]
-    public void EmptyPayloadHash_IsSha256OfEmptyInput()
-    {
-        Assert.AreEqual(SigV4Verifier.EmptyPayloadHash, SigV4Verifier.HashHex(ReadOnlySpan<byte>.Empty));
-    }
+    public void EmptyPayloadHash_IsSha256OfEmptyInput() => Assert.AreEqual(SigV4Verifier.EmptyPayloadHash, SigV4Verifier.HashHex(ReadOnlySpan<byte>.Empty));
 
     /// <summary>负载哈希用的是真实内容的 SHA-256(以文档 PUT 示例的正文对拍)。</summary>
     [TestMethod]

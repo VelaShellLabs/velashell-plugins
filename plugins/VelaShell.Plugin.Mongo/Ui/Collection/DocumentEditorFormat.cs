@@ -78,32 +78,32 @@ internal static class DocumentEditorFormat
             case BsonType.ObjectId:
                 return $"ObjectId(\"{BsonText.Shorten(value.AsObjectId.ToString())}\")";
             case BsonType.String:
-            {
-                string text = BsonText.OneLine(value.AsString);
-                return BsonText.Quote(text.Length > 60 ? text[..60] + "…" : text);
-            }
+                {
+                    string text = BsonText.OneLine(value.AsString);
+                    return BsonText.Quote(text.Length > 60 ? text[..60] + "…" : text);
+                }
             case BsonType.Document:
-            {
-                BsonDocument doc = value.AsBsonDocument;
-                return doc.ElementCount == 0 ? "{}" : $"{{ …{doc.ElementCount} }}";
-            }
+                {
+                    BsonDocument doc = value.AsBsonDocument;
+                    return doc.ElementCount == 0 ? "{}" : $"{{ …{doc.ElementCount} }}";
+                }
             case BsonType.Array:
-            {
-                BsonArray array = value.AsBsonArray;
-                if (array.Count == 0)
                 {
-                    return "[]";
-                }
-                if (array.Count <= 6 && array.All(static v => v.BsonType is not (BsonType.Document or BsonType.Array)))
-                {
-                    string inline = "[ " + string.Join(", ", array.Select(v => Short(v, loc, depth + 1))) + " ]";
-                    if (inline.Length <= 60)
+                    BsonArray array = value.AsBsonArray;
+                    if (array.Count == 0)
                     {
-                        return inline;
+                        return "[]";
                     }
+                    if (array.Count <= 6 && array.All(static v => v.BsonType is not (BsonType.Document or BsonType.Array)))
+                    {
+                        string inline = "[ " + string.Join(", ", array.Select(v => Short(v, loc, depth + 1))) + " ]";
+                        if (inline.Length <= 60)
+                        {
+                            return inline;
+                        }
+                    }
+                    return loc.Format("Doc_PreviewItems", array.Count);
                 }
-                return loc.Format("Doc_PreviewItems", array.Count);
-            }
             default:
                 return BsonText.Literal(value);
         }
@@ -121,10 +121,10 @@ internal static class DocumentEditorFormat
     public static string Command(string collectionRef, string method, BsonDocument? filter, BsonDocument body)
     {
         var b = new StringBuilder();
-        b.Append("db.").Append(collectionRef).Append('.').Append(method).Append("(\n");
+        _ = b.Append("db.").Append(collectionRef).Append('.').Append(method).Append("(\n");
         if (filter is not null)
         {
-            b.Append("  ").Append(BsonText.Literal(filter)).Append(",\n");
+            _ = b.Append("  ").Append(BsonText.Literal(filter)).Append(",\n");
         }
         if (method == "updateOne")
         {
@@ -132,9 +132,9 @@ internal static class DocumentEditorFormat
         }
         else
         {
-            b.Append(Indent(BsonText.Pretty(body, EjsonMode.Shell), "  "));
+            _ = b.Append(Indent(BsonText.Pretty(body, EjsonMode.Shell), "  "));
         }
-        b.Append("\n)");
+        _ = b.Append("\n)");
         return b.ToString();
     }
 
@@ -147,21 +147,21 @@ internal static class DocumentEditorFormat
         int op = 0;
         foreach (BsonElement element in update)
         {
-            b.Append(op++ == 0 ? "  { " : "    ").Append(element.Name).Append(": {");
+            _ = b.Append(op++ == 0 ? "  { " : "    ").Append(element.Name).Append(": {");
             if (element.Value is BsonDocument fields)
             {
                 int i = 0;
                 foreach (BsonElement field in fields)
                 {
-                    b.Append(i++ == 0 ? "\n" : ",\n");
-                    b.Append("      ").Append(BsonText.FieldName(field.Name)).Append(": ").Append(BsonText.Literal(field.Value));
+                    _ = b.Append(i++ == 0 ? "\n" : ",\n");
+                    _ = b.Append("      ").Append(BsonText.FieldName(field.Name)).Append(": ").Append(BsonText.Literal(field.Value));
                 }
             }
-            b.Append(op == update.ElementCount ? "\n  } }" : "\n    },\n");
+            _ = b.Append(op == update.ElementCount ? "\n  } }" : "\n    },\n");
         }
         if (update.ElementCount == 0)
         {
-            b.Append("  {}");
+            _ = b.Append("  {}");
         }
     }
 

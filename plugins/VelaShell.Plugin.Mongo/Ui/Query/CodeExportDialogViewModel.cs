@@ -13,7 +13,6 @@ internal sealed class CodeExportDialogViewModel : DialogViewModel, IViewFactory
     private readonly string _database;
     private readonly string _connectionString;
     private string _target;
-    private string _code = "";
 
     /// <summary>构造。</summary>
     public CodeExportDialogViewModel(IMongoWorkspace workspace, ShellCommand command, string database, string connectionString, CodeTarget target)
@@ -54,9 +53,9 @@ internal sealed class CodeExportDialogViewModel : DialogViewModel, IViewFactory
     /// <summary>生成的代码。</summary>
     public string Code
     {
-        get => _code;
-        private set => SetProperty(ref _code, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>复制。</summary>
     public AsyncCommand CopyCommand { get; }
@@ -67,7 +66,7 @@ internal sealed class CodeExportDialogViewModel : DialogViewModel, IViewFactory
 
     private async Task CopyAsync()
     {
-        await Workspace.CopyAsync(_code).ConfigureAwait(true);
+        await Workspace.CopyAsync(Code).ConfigureAwait(true);
         Workspace.Toast(new ToastRequest { Title = Loc.Format("Query_CodeCopied", CodeExport.Name(Parsed)), Kind = ToastKind.Success });
     }
 

@@ -211,10 +211,7 @@ public sealed partial class GridFsTabView : UserControl
         Loc loc = _viewModel.Loc;
         var items = new List<Control>();
 
-        void Add(string label, string icon, System.Windows.Input.ICommand command, object? parameter = null, bool danger = false)
-        {
-            items.Add(MenuKit.Command(label, icon, command, parameter, danger));
-        }
+        void Add(string label, string icon, System.Windows.Input.ICommand command, object? parameter = null, bool danger = false) => items.Add(MenuKit.Command(label, icon, command, parameter, danger));
 
         if (entry.IsFolder)
         {
@@ -244,7 +241,7 @@ public sealed partial class GridFsTabView : UserControl
             {
                 return true;
             }
-            using Process? process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
             // UseShellExecute 交给已在运行的程序打开时会返回 null,那也算成功。
             return true;
         }

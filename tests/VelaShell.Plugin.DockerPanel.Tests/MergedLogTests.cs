@@ -19,7 +19,7 @@ public sealed class MergedLogTests
     [TestMethod]
     public void Split_TakesTheComposePrefixAndTheSpaceAfterTheBar()
     {
-        (var source, var body) = MergedLog.Split("web    | listening on :8080", Known);
+        (string? source, string? body) = MergedLog.Split("web    | listening on :8080", Known);
 
         Assert.AreEqual("web", source);
         Assert.AreEqual("listening on :8080", body);
@@ -29,7 +29,7 @@ public sealed class MergedLogTests
     public void Split_KeepsBarsInsideTheBody()
     {
         // 只切第一根竖线 —— 正文里的竖线是正文的一部分。
-        (var source, var body) = MergedLog.Split("web | a | b | c", Known);
+        (string? source, string? body) = MergedLog.Split("web | a | b | c", Known);
 
         Assert.AreEqual("web", source);
         Assert.AreEqual("a | b | c", body);
@@ -40,7 +40,7 @@ public sealed class MergedLogTests
     {
         // 这是一行**没有** compose 前缀、自己带竖线的日志。把 2026-08-23 当成服务名的话,
         // 用户看到的正文就少了日期,而且会多出一个莫名其妙的"服务"。
-        (var source, var body) = MergedLog.Split("2026-08-23 | INFO | ok", Known);
+        (string? source, string? body) = MergedLog.Split("2026-08-23 | INFO | ok", Known);
 
         Assert.AreEqual("", source);
         Assert.AreEqual("2026-08-23 | INFO | ok", body);
@@ -49,7 +49,7 @@ public sealed class MergedLogTests
     [TestMethod]
     public void Split_LeavesComposesOwnChatterAlone()
     {
-        (var source, var body) = MergedLog.Split("Attaching to web, db", Known);
+        (string? source, string? body) = MergedLog.Split("Attaching to web, db", Known);
 
         Assert.AreEqual("", source);
         Assert.AreEqual("Attaching to web, db", body);
@@ -59,7 +59,7 @@ public sealed class MergedLogTests
     public void Split_AcceptsContainerNamesToo()
     {
         // compose 的前缀有时是服务名、有时是容器名,取决于版本与 container_name。
-        (var source, var body) = MergedLog.Split("easilynet-mongo-1  | waiting for connections", Known);
+        (string? source, string? body) = MergedLog.Split("easilynet-mongo-1  | waiting for connections", Known);
 
         Assert.AreEqual("easilynet-mongo-1", source);
         Assert.AreEqual("waiting for connections", body);

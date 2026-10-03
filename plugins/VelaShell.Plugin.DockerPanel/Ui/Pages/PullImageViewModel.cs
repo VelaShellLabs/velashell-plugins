@@ -71,8 +71,8 @@ public sealed class PullImageViewModel : ObservableObject, IAsyncDisposable
         _shell = shell;
         if (!string.IsNullOrWhiteSpace(initialReference))
         {
-            var colon = initialReference!.LastIndexOf(':');
-            var slash = initialReference.LastIndexOf('/');
+            int colon = initialReference!.LastIndexOf(':');
+            int slash = initialReference.LastIndexOf('/');
             if (colon > slash && colon > 0)
             {
                 _reference = initialReference[..colon];
@@ -353,7 +353,7 @@ public sealed class PullImageViewModel : ObservableObject, IAsyncDisposable
         }
         try
         {
-            var status = await auth.GetStatusAsync(Reference.Trim(), _shell.Lifetime).ConfigureAwait(true);
+            RegistryAuthStatus status = await auth.GetStatusAsync(Reference.Trim(), _shell.Lifetime).ConfigureAwait(true);
             AuthState = status.State;
             AuthText = status.State switch
             {
@@ -382,13 +382,13 @@ public sealed class PullImageViewModel : ObservableObject, IAsyncDisposable
         _lastBytes = 0;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(_shell.Lifetime);
         _task = _shell.Tasks.Start("Docker.arrow-down-to-line", $"拉取 {FullReference}", indeterminate: false);
-        var reference = Reference.Trim();
-        var tag = Tag.Trim();
-        var platform = Platform.Trim();
-        var allTags = AllTags;
+        string reference = Reference.Trim();
+        string tag = Tag.Trim();
+        string platform = Platform.Trim();
+        bool allTags = AllTags;
         try
         {
-            var header = _shell.RegistryAuth is { } auth
+            string? header = _shell.RegistryAuth is { } auth
                 ? await auth.GetAuthHeaderAsync(reference, _cts.Token).ConfigureAwait(true)
                 : null;
             await client.PullImageAsync(reference, tag, platform, allTags, header,
@@ -438,22 +438,22 @@ public sealed class PullImageViewModel : ObservableObject, IAsyncDisposable
 
     private void UpdateSpeed()
     {
-        var now = DateTimeOffset.UtcNow;
-        var span = now - _lastSample;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        TimeSpan span = now - _lastSample;
         if (span < TimeSpan.FromMilliseconds(700))
         {
             return;
         }
-        var bytes = _aggregator.CurrentBytes;
-        var delta = bytes - _lastBytes;
+        long bytes = _aggregator.CurrentBytes;
+        long delta = bytes - _lastBytes;
         _lastBytes = bytes;
         _lastSample = now;
         if (delta <= 0)
         {
             return;
         }
-        var perSecond = delta / span.TotalSeconds;
-        var remaining = _aggregator.TotalBytes - bytes;
+        double perSecond = delta / span.TotalSeconds;
+        long remaining = _aggregator.TotalBytes - bytes;
         SpeedText = remaining > 0 && perSecond > 0
             ? $"{Humanize.Bytes((long)perSecond)}/s · 剩余 ~{Humanize.Duration(TimeSpan.FromSeconds(remaining / perSecond))}"
             : $"{Humanize.Bytes((long)perSecond)}/s";
@@ -465,15 +465,15 @@ public sealed class PullImageViewModel : ObservableObject, IAsyncDisposable
     /// </summary>
     private void SyncLayers()
     {
-        foreach ((var id, var status, var progress, var sizeText) in _aggregator.Snapshot())
+        foreach ((string? id, string? status, double progress, string? sizeText) in _aggregator.Snapshot())
         {
-            var complete = progress >= 1;
-            var reused = status.Contains("Already exists", StringComparison.OrdinalIgnoreCase);
+            bool complete = progress >= 1;
+            bool reused = status.Contains("Already exists", StringComparison.OrdinalIgnoreCase);
             if (reused)
             {
                 continue;
             }
-            if (_layerMap.TryGetValue(id, out var item))
+            if (_layerMap.TryGetValue(id, out PullLayerItem? item))
             {
                 item.Update(status, progress, sizeText);
             }

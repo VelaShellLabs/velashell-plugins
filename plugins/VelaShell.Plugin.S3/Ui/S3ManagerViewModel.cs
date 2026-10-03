@@ -193,13 +193,13 @@ public sealed class S3ManagerViewModel : ObservableObject
                 return;
             }
             _selectedSection.IsSelected = false;
-            SetProperty(ref _selectedSection, value);
+            _ = SetProperty(ref _selectedSection, value);
             _selectedSection.IsSelected = true;
             RaiseLayoutChanged();
             // 换一节 = 换一代。之前那一代的续体回来时会自行作废,
             // 否则快速点 清单 → 分析 会把两节的 id 混进同一个集合,
             // 再拿甲节的 id 去查乙节的配置。
-            Interlocked.Increment(ref _loadGeneration);
+            _ = Interlocked.Increment(ref _loadGeneration);
             _ = LoadSelectedAsync();
         }
     }
@@ -214,7 +214,7 @@ public sealed class S3ManagerViewModel : ObservableObject
             // 而 LoadConfigIdsThenConfigAsync 里的赋值也会经过这里 —— 两处叠加就是每次切换两发 GET,
             // 两次 RunAsync 的忙态/错误态还会互相覆盖。
             string? previous = field;
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             if (value is not null && !string.Equals(previous, value, StringComparison.Ordinal))
             {
                 _ = LoadConfigAsync();
@@ -497,7 +497,7 @@ public sealed class S3ManagerViewModel : ObservableObject
         await RunAsync(async () =>
         {
             await _management.AbortMultipartUploadAsync(_sessionId, Bucket, row.Key, row.UploadId).ConfigureAwait(true);
-            Uploads.Remove(row);
+            _ = Uploads.Remove(row);
             return _loc.Get("S3Msg_UploadAborted");
         }).ConfigureAwait(true);
     }
@@ -511,7 +511,7 @@ public sealed class S3ManagerViewModel : ObservableObject
         await RunAsync(async () =>
         {
             await _management.DeleteObjectVersionAsync(_sessionId, Bucket, row.Key, versionId).ConfigureAwait(true);
-            Versions.Remove(row);
+            _ = Versions.Remove(row);
             return _loc.Get("S3Msg_VersionDeleted");
         }).ConfigureAwait(true);
     }
@@ -528,7 +528,7 @@ public sealed class S3ManagerViewModel : ObservableObject
             // 调不带 RunAsync 外壳的那一版:套两层的话,内层把 IsError 置 true 之后,
             // 外层仍会用自己的返回值把 StatusMessage 覆盖成「版本已恢复」——
             // 刷新失败被伪装成完全成功,而列表还停在恢复前的快照上。
-            await ReloadVersionsCoreAsync().ConfigureAwait(true);
+            _ = await ReloadVersionsCoreAsync().ConfigureAwait(true);
             return _loc.Get("S3Msg_VersionRestored");
         }).ConfigureAwait(true);
     }

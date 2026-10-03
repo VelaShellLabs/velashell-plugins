@@ -43,11 +43,11 @@ public sealed partial class ContainerFilesView : UserControl
 
     private static void ReportCaret(ContainerFilesViewModel viewModel, TextBox editor)
     {
-        var text = editor.Text ?? "";
-        var caret = Math.Clamp(editor.CaretIndex, 0, text.Length);
-        var line = 1;
-        var lineStart = 0;
-        for (var i = 0; i < caret; i++)
+        string text = editor.Text ?? "";
+        int caret = Math.Clamp(editor.CaretIndex, 0, text.Length);
+        int line = 1;
+        int lineStart = 0;
+        for (int i = 0; i < caret; i++)
         {
             if (text[i] == '\n')
             {
@@ -60,7 +60,7 @@ public sealed partial class ContainerFilesView : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        var acceptable = DataContext is ContainerFilesViewModel { CanPickFiles: true }
+        bool acceptable = DataContext is ContainerFilesViewModel { CanPickFiles: true }
                           && e.DataTransfer.TryGetFiles()?.Length > 0;
         e.DragEffects = acceptable ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -73,7 +73,7 @@ public sealed partial class ContainerFilesView : UserControl
             return;
         }
         // 只接第一个:一次拖十个文件进容器,失败到一半留下的半套文件比什么都不做更糟。
-        var file = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().FirstOrDefault();
+        IStorageFile? file = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().FirstOrDefault();
         if (file is not null)
         {
             _ = viewModel.UploadDroppedAsync(file);

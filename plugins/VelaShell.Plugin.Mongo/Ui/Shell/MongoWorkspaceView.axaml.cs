@@ -191,11 +191,9 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
         return items;
     }
 
-    private void OnScrimPressed(object? sender, PointerPressedEventArgs e)
-    {
+    private void OnScrimPressed(object? sender, PointerPressedEventArgs e) =>
         // 点遮罩不关对话框:向导填了一半、编辑器改了一半时误点一下就全没了,代价太大。
         e.Handled = true;
-    }
 
     /// <summary>
     /// 面板级快捷键:Ctrl+F 筛选对象树、Ctrl+W 关标签、Ctrl+T 新查询、F5 刷新当前标签、Esc 关对话框。
@@ -218,7 +216,7 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
         {
             case Key.F when control && e.KeyModifiers.HasFlag(KeyModifiers.Shift):
             case Key.F when control && IsWithin(TreeList):
-                TreeFilterBox.Focus();
+                _ = TreeFilterBox.Focus();
                 TreeFilterBox.SelectAll();
                 e.Handled = true;
                 return;

@@ -51,9 +51,9 @@ public static class BatchRunner
         CancellationToken cancellationToken = default)
     {
         List<BatchOutcome> outcomes = [with(targets.Count)];
-        for (var i = 0; i < targets.Count; i++)
+        for (int i = 0; i < targets.Count; i++)
         {
-            (var target, var name) = targets[i];
+            (T? target, string? name) = targets[i];
             if (cancellationToken.IsCancellationRequested)
             {
                 outcomes.Add(new(name, false, "已取消,这个目标没有执行。"));
@@ -73,7 +73,7 @@ public static class BatchRunner
             {
                 // 连接没了就没有必要继续戳后面的目标 —— 它们只会拿到同一条错误。
                 outcomes.Add(new(name, false, ex.Message));
-                for (var j = i + 1; j < targets.Count; j++)
+                for (int j = i + 1; j < targets.Count; j++)
                 {
                     outcomes.Add(new(targets[j].Name, false, "连接已断开,这个目标没有执行。"));
                 }

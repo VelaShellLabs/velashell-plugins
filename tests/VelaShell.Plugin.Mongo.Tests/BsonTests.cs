@@ -102,7 +102,7 @@ public sealed class BsonTests
         Assert.AreEqual("Shell_DottedKey", diagnostic.MessageKey);
         Assert.AreEqual("\"customer.name\"", diagnostic.Fix);
         Assert.AreEqual(14, diagnostic.Offset);
-        Assert.ThrowsExactly<ShellJsonException>(() => ShellJson.ParseDocument("{ customer.name: 1 }"));
+        _ = Assert.ThrowsExactly<ShellJsonException>(() => ShellJson.ParseDocument("{ customer.name: 1 }"));
         Assert.AreEqual(1, ShellJson.ParseDocument("{ \"customer.name\": 1 }")["customer.name"].AsInt32);
     }
 

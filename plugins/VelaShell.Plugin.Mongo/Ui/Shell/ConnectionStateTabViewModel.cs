@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Globalization;
-using VelaShell.Plugin.Mongo.Core;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -11,7 +10,6 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed class ConnectionStateTabViewModel : WorkspaceTab
 {
     private readonly MongoWorkspaceViewModel _shell;
-    private string _jumpName = "";
 
     /// <summary>构造。</summary>
     /// <param name="shell">工作台外壳。</param>
@@ -61,9 +59,12 @@ internal sealed class ConnectionStateTabViewModel : WorkspaceTab
     /// 卡片副标题:连接中写「MongoDB · 经 SSH 跳板 bastion-ops」,失败写全(<c>MongoDB · 10.20.3.21:27017 · 经 bastion-ops</c>)——
     /// 失败时用户要知道到底连的是哪儿。
     /// </summary>
-    public string Detail => IsConnecting
-        ? _jumpName.Length > 0 ? $"MongoDB · {Loc.Format("Conn_ViaJump", _jumpName)}" : Entry.Detail
-        : _jumpName.Length > 0 ? $"{Entry.Detail} · {Loc.Format("Conn_ViaJump", _jumpName)}" : Entry.Detail;
+    public string Detail
+    {
+        get => IsConnecting
+        ? field.Length > 0 ? $"MongoDB · {Loc.Format("Conn_ViaJump", field)}" : Entry.Detail
+        : field.Length > 0 ? $"{Entry.Detail} · {Loc.Format("Conn_ViaJump", field)}" : Entry.Detail; private set;
+    } = "";
 
     /// <summary>失败原因(等宽字的错误框里)。</summary>
     public string ErrorMessage => Entry.Failure?.Message ?? "";
@@ -100,7 +101,7 @@ internal sealed class ConnectionStateTabViewModel : WorkspaceTab
         {
             IReadOnlyList<VelaShell.PluginSdk.Sessions.SavedSessionInfo> saved =
                 await _shell.Context.Sessions.ListSavedAsync().ConfigureAwait(true);
-            _jumpName = saved.FirstOrDefault(s => s.SavedSessionId == id)?.Name ?? "";
+            Detail = saved.FirstOrDefault(s => s.SavedSessionId == id)?.Name ?? "";
             RaisePropertyChanged(nameof(Detail));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

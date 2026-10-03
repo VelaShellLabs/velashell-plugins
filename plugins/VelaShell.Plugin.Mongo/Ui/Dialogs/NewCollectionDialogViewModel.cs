@@ -58,28 +58,12 @@ internal sealed record NewCollUnit(string Label, long Factor)
 /// </summary>
 internal sealed class NewCollectionDialogViewModel : DialogViewModel
 {
-    private readonly HashSet<string> _existing = new(StringComparer.Ordinal);
-    private string _name = "";
+    private readonly HashSet<string> _existing = [with(StringComparer.Ordinal)];
     private NewCollectionKind _kind = NewCollectionKind.Plain;
-    private string _timeField = "ts";
-    private string _metaField = "";
-    private string _granularity = "seconds";
-    private string _expireValue = "";
     private NewCollUnit _expireUnit;
-    private string _cappedSize = "100";
     private NewCollUnit _cappedUnit;
-    private string _cappedMax = "";
     private string? _viewSource;
-    private string _pipelineText = "[\n  { $match: {} }\n]";
-    private bool _useCollation;
-    private string _collationLocale = "zh";
-    private int _collationStrength = 2;
-    private bool _copyIndexes;
-    private string? _copyIndexesFrom;
     private IReadOnlyList<BsonDocument> _sourceIndexes = [];
-    private bool _editValidationAfter;
-    private bool _isCreating;
-    private string _error = "";
 
     /// <summary>构造。</summary>
     /// <param name="workspace">外壳服务。</param>
@@ -108,7 +92,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
         CreateCommand = new(CreateAsync, () => CanCreate);
         foreach (CollectionInfo info in workspace.CollectionsOf(database))
         {
-            _existing.Add(info.Name);
+            _ = _existing.Add(info.Name);
         }
         FillSources(workspace.CollectionsOf(database));
         _ = LoadExistingAsync();
@@ -130,33 +114,33 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     public override double Height => 560;
 
     /// <inheritdoc />
-    public override bool CanCloseWithEscape => !_isCreating;
+    public override bool CanCloseWithEscape => !IsCreating;
 
     // ── 名称 ─────────────────────────────────────────────────────────────
 
     /// <summary>集合名称。</summary>
     public string Name
     {
-        get => _name;
+        get;
         set
         {
-            if (SetProperty(ref _name, value))
+            if (SetProperty(ref field, value))
             {
                 Changed(nameof(NameState), nameof(NameMessage), nameof(NameOk), nameof(NameBad), nameof(NameIconKey));
             }
         }
-    }
+    } = "";
 
     /// <summary>名称校验结论。</summary>
-    public CollectionNameState NameState => ValidateName(_name, Database, _existing, out _);
+    public CollectionNameState NameState => ValidateName(Name, Database, _existing, out _);
 
     /// <summary>名称旁那行小字(<c>✓ 可用 · shop.device_metrics</c> / <c>已存在 · shop.orders</c> / 非法原因)。</summary>
     public string NameMessage
     {
         get
         {
-            CollectionNameState state = ValidateName(_name, Database, _existing, out string? reason);
-            string ns = $"{Database}.{_name.Trim()}";
+            CollectionNameState state = ValidateName(Name, Database, _existing, out string? reason);
+            string ns = $"{Database}.{Name.Trim()}";
             return state switch
             {
                 CollectionNameState.Available => Loc.Format("NewColl_NameAvailable", ns),
@@ -292,63 +276,63 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>timeField(必填)。</summary>
     public string TimeField
     {
-        get => _timeField;
+        get;
         set
         {
-            if (SetProperty(ref _timeField, value))
+            if (SetProperty(ref field, value))
             {
                 Changed(nameof(SampleDocument));
             }
         }
-    }
+    } = "ts";
 
     /// <summary>metaField(可选)。</summary>
     public string MetaField
     {
-        get => _metaField;
+        get;
         set
         {
-            if (SetProperty(ref _metaField, value))
+            if (SetProperty(ref field, value))
             {
                 Changed(nameof(SampleDocument));
             }
         }
-    }
+    } = "";
 
     /// <summary>粒度:<c>seconds</c> / <c>minutes</c> / <c>hours</c>。</summary>
     public string Granularity
     {
-        get => _granularity;
+        get;
         set
         {
-            if (SetProperty(ref _granularity, value))
+            if (SetProperty(ref field, value))
             {
                 Changed(nameof(IsSeconds), nameof(IsMinutes), nameof(IsHours));
             }
         }
-    }
+    } = "seconds";
 
     /// <summary>分段:seconds。</summary>
-    public bool IsSeconds { get => _granularity == "seconds"; set { if (value) { Granularity = "seconds"; } } }
+    public bool IsSeconds { get => Granularity == "seconds"; set { if (value) { Granularity = "seconds"; } } }
 
     /// <summary>分段:minutes。</summary>
-    public bool IsMinutes { get => _granularity == "minutes"; set { if (value) { Granularity = "minutes"; } } }
+    public bool IsMinutes { get => Granularity == "minutes"; set { if (value) { Granularity = "minutes"; } } }
 
     /// <summary>分段:hours。</summary>
-    public bool IsHours { get => _granularity == "hours"; set { if (value) { Granularity = "hours"; } } }
+    public bool IsHours { get => Granularity == "hours"; set { if (value) { Granularity = "hours"; } } }
 
     /// <summary>自动过期的数值(空 = 不过期)。</summary>
     public string ExpireValue
     {
-        get => _expireValue;
+        get;
         set
         {
-            if (SetProperty(ref _expireValue, value))
+            if (SetProperty(ref field, value))
             {
                 Changed(nameof(ExpireSecondsText));
             }
         }
-    }
+    } = "";
 
     /// <summary>自动过期的单位。</summary>
     public NewCollUnit ExpireUnit
@@ -371,7 +355,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
 
     /// <summary>换算后的秒数;没填或填错为 <see langword="null" />。</summary>
     public long? ExpireSeconds =>
-        long.TryParse(_expireValue.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long n)
+        long.TryParse(ExpireValue.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long n)
         && n > 0 && n <= long.MaxValue / _expireUnit.Factor
             ? n * _expireUnit.Factor
             : null;
@@ -381,8 +365,8 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     {
         get
         {
-            string time = _timeField.Trim().Length > 0 ? BsonText.FieldName(_timeField.Trim()) : "ts";
-            string meta = _metaField.Trim().Length > 0 ? $", {BsonText.FieldName(_metaField.Trim())}: {{ … }}" : "";
+            string time = TimeField.Trim().Length > 0 ? BsonText.FieldName(TimeField.Trim()) : "ts";
+            string meta = MetaField.Trim().Length > 0 ? $", {BsonText.FieldName(MetaField.Trim())}: {{ … }}" : "";
             return $"{{ {time}: ISODate(…){meta}, value: 21.4 }}";
         }
     }
@@ -392,9 +376,9 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>容量上限的数值。</summary>
     public string CappedSize
     {
-        get => _cappedSize;
-        set => SetAndRefresh(ref _cappedSize, value);
-    }
+        get;
+        set => SetAndRefresh(ref field, value);
+    } = "100";
 
     /// <summary>容量单位。</summary>
     public NewCollUnit CappedUnit
@@ -415,9 +399,9 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>文档数上限(可选)。</summary>
     public string CappedMax
     {
-        get => _cappedMax;
-        set => SetAndRefresh(ref _cappedMax, value);
-    }
+        get;
+        set => SetAndRefresh(ref field, value);
+    } = "";
 
     // ── 视图选项 ─────────────────────────────────────────────────────────
 
@@ -431,9 +415,9 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>视图的管道(mongosh 写法)。</summary>
     public string PipelineText
     {
-        get => _pipelineText;
-        set => SetAndRefresh(ref _pipelineText, value ?? "");
-    }
+        get;
+        set => SetAndRefresh(ref field, value ?? "");
+    } = "[\n  { $match: {} }\n]";
 
     /// <summary>可选的源集合(集合与视图)。</summary>
     public ObservableCollection<string> ViewSources { get; } = [];
@@ -443,41 +427,41 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>指定排序规则。</summary>
     public bool UseCollation
     {
-        get => _useCollation;
-        set => SetAndRefresh(ref _useCollation, value);
+        get;
+        set => SetAndRefresh(ref field, value);
     }
 
     /// <summary>排序规则的 locale。</summary>
     public string CollationLocale
     {
-        get => _collationLocale;
-        set => SetAndRefresh(ref _collationLocale, value);
-    }
+        get;
+        set => SetAndRefresh(ref field, value);
+    } = "zh";
 
     /// <summary>排序规则的 strength(1–5)。</summary>
     public int CollationStrength
     {
-        get => _collationStrength;
-        set => SetAndRefresh(ref _collationStrength, Math.Clamp(value, 1, 5));
-    }
+        get;
+        set => SetAndRefresh(ref field, Math.Clamp(value, 1, 5));
+    } = 2;
 
     /// <summary>strength 下拉的选项。</summary>
     public IReadOnlyList<int> Strengths { get; } = [1, 2, 3, 4, 5];
 
     /// <summary>排序规则未勾选时那行灰字(<c>locale: "zh", strength: 2</c>)。</summary>
-    public string CollationSummary => $"locale: {BsonText.Quote(_collationLocale)}, strength: {_collationStrength}";
+    public string CollationSummary => $"locale: {BsonText.Quote(CollationLocale)}, strength: {CollationStrength}";
 
     /// <summary>复制索引。</summary>
     public bool CopyIndexes
     {
-        get => _copyIndexes;
+        get;
         set
         {
-            if (!SetProperty(ref _copyIndexes, value))
+            if (!SetProperty(ref field, value))
             {
                 return;
             }
-            if (value && _copyIndexesFrom is null && IndexSources.Count > 0)
+            if (value && CopyIndexesFrom is null && IndexSources.Count > 0)
             {
                 CopyIndexesFrom = IndexSources[0];
             }
@@ -488,10 +472,10 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>从哪个集合复制索引。</summary>
     public string? CopyIndexesFrom
     {
-        get => _copyIndexesFrom;
+        get;
         set
         {
-            if (SetProperty(ref _copyIndexesFrom, value))
+            if (SetProperty(ref field, value))
             {
                 _sourceIndexes = [];
                 Changed();
@@ -509,8 +493,8 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>创建后立即打开「验证规则」页。</summary>
     public bool EditValidationAfter
     {
-        get => _editValidationAfter;
-        set => SetProperty(ref _editValidationAfter, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>「创建后编辑验证规则」可用(时序集合与视图不支持验证规则)。</summary>
@@ -523,7 +507,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     {
         get
         {
-            string name = _name.Trim().Length > 0 ? _name.Trim() : Loc["NewColl_NamePlaceholder"];
+            string name = Name.Trim().Length > 0 ? Name.Trim() : Loc["NewColl_NamePlaceholder"];
             BsonDocument command = BuildCreateCommand(lenient: true);
             if (_kind == NewCollectionKind.View)
             {
@@ -532,7 +516,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
             }
             var options = new BsonDocument(command.Where(static e => e.Name != "create"));
             var lines = new List<string> { ObjectScripts.CreateCollection(name, options) };
-            if (_copyIndexes && CanCopyIndexes)
+            if (CopyIndexes && CanCopyIndexes)
             {
                 lines.AddRange(_sourceIndexes.Where(ObjectScripts.IsReplayable).Select(i => ObjectScripts.CreateIndex(name, i)));
             }
@@ -548,33 +532,33 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
             switch (_kind)
             {
                 case NewCollectionKind.TimeSeries:
-                {
-                    string time = _timeField.Trim();
-                    string meta = _metaField.Trim();
-                    if (time.Length == 0)
                     {
-                        return Loc["NewColl_ErrTimeField"];
+                        string time = TimeField.Trim();
+                        string meta = MetaField.Trim();
+                        if (time.Length == 0)
+                        {
+                            return Loc["NewColl_ErrTimeField"];
+                        }
+                        if (time.Contains('$', StringComparison.Ordinal) || time.Contains('.', StringComparison.Ordinal) || time == "_id")
+                        {
+                            return Loc["NewColl_ErrFieldName"];
+                        }
+                        if (meta.Length > 0 && (meta == time || meta == "_id" || meta.Contains('$', StringComparison.Ordinal) || meta.Contains('.', StringComparison.Ordinal)))
+                        {
+                            return Loc["NewColl_ErrMetaField"];
+                        }
+                        if (ExpireValue.Trim().Length > 0 && ExpireSeconds is null)
+                        {
+                            return Loc["NewColl_ErrExpire"];
+                        }
+                        break;
                     }
-                    if (time.Contains('$', StringComparison.Ordinal) || time.Contains('.', StringComparison.Ordinal) || time == "_id")
-                    {
-                        return Loc["NewColl_ErrFieldName"];
-                    }
-                    if (meta.Length > 0 && (meta == time || meta == "_id" || meta.Contains('$', StringComparison.Ordinal) || meta.Contains('.', StringComparison.Ordinal)))
-                    {
-                        return Loc["NewColl_ErrMetaField"];
-                    }
-                    if (_expireValue.Trim().Length > 0 && ExpireSeconds is null)
-                    {
-                        return Loc["NewColl_ErrExpire"];
-                    }
-                    break;
-                }
                 case NewCollectionKind.Capped:
                     if (CappedBytes is null)
                     {
                         return Loc["NewColl_ErrSize"];
                     }
-                    if (_cappedMax.Trim().Length > 0 && CappedMaxDocs is null)
+                    if (CappedMax.Trim().Length > 0 && CappedMaxDocs is null)
                     {
                         return Loc["NewColl_ErrMax"];
                     }
@@ -590,11 +574,11 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
                     }
                     break;
             }
-            if (_useCollation && _collationLocale.Trim().Length == 0)
+            if (UseCollation && CollationLocale.Trim().Length == 0)
             {
                 return Loc["NewColl_ErrCollation"];
             }
-            if (_copyIndexes && CanCopyIndexes && _copyIndexesFrom is null)
+            if (CopyIndexes && CanCopyIndexes && CopyIndexesFrom is null)
             {
                 return Loc["NewColl_ErrCopySource"];
             }
@@ -603,15 +587,15 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     }
 
     /// <summary>能不能点「创建集合」。</summary>
-    public bool CanCreate => !_isCreating && NameState == CollectionNameState.Available && OptionsError.Length == 0;
+    public bool CanCreate => !IsCreating && NameState == CollectionNameState.Available && OptionsError.Length == 0;
 
     /// <summary>正在创建。</summary>
     public bool IsCreating
     {
-        get => _isCreating;
+        get;
         private set
         {
-            if (SetProperty(ref _isCreating, value))
+            if (SetProperty(ref field, value))
             {
                 Changed();
             }
@@ -621,15 +605,15 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// <summary>底栏左侧的错误(选项错误或服务器拒绝的原因)。</summary>
     public string Error
     {
-        get => _error.Length > 0 ? _error : OptionsError;
+        get => field.Length > 0 ? field : OptionsError;
         private set
         {
-            if (SetProperty(ref _error, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(HasError));
             }
         }
-    }
+    } = "";
 
     /// <summary>底栏有没有错误。</summary>
     public bool HasError => Error.Length > 0;
@@ -638,18 +622,18 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     public AsyncCommand CreateCommand { get; }
 
     private long? CappedBytes =>
-        double.TryParse(_cappedSize.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double n) && n > 0
+        double.TryParse(CappedSize.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double n) && n > 0
             ? (long)Math.Ceiling(n * _cappedUnit.Factor)
             : null;
 
     private long? CappedMaxDocs =>
-        long.TryParse(_cappedMax.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long n) && n > 0 ? n : null;
+        long.TryParse(CappedMax.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long n) && n > 0 ? n : null;
 
     private bool TryParsePipeline(out BsonArray pipeline, out string? error)
     {
         try
         {
-            pipeline = ShellJson.ParseArray(_pipelineText);
+            pipeline = ShellJson.ParseArray(PipelineText);
             if (pipeline.Any(static s => !s.IsBsonDocument || s.AsBsonDocument.ElementCount != 1))
             {
                 error = Loc["NewColl_ErrStage"];
@@ -672,50 +656,50 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     /// </summary>
     internal BsonDocument BuildCreateCommand(bool lenient = false)
     {
-        var command = new BsonDocument("create", _name.Trim());
+        var command = new BsonDocument("create", Name.Trim());
         switch (_kind)
         {
             case NewCollectionKind.TimeSeries:
-            {
-                var ts = new BsonDocument("timeField", _timeField.Trim());
-                if (_metaField.Trim().Length > 0)
                 {
-                    ts.Add("metaField", _metaField.Trim());
+                    var ts = new BsonDocument("timeField", TimeField.Trim());
+                    if (MetaField.Trim().Length > 0)
+                    {
+                        _ = ts.Add("metaField", MetaField.Trim());
+                    }
+                    _ = ts.Add("granularity", Granularity);
+                    _ = command.Add("timeseries", ts);
+                    if (ExpireSeconds is { } seconds)
+                    {
+                        _ = command.Add("expireAfterSeconds", Number(seconds));
+                    }
+                    break;
                 }
-                ts.Add("granularity", _granularity);
-                command.Add("timeseries", ts);
-                if (ExpireSeconds is { } seconds)
-                {
-                    command.Add("expireAfterSeconds", Number(seconds));
-                }
-                break;
-            }
             case NewCollectionKind.Capped:
-                command.Add("capped", true);
-                command.Add("size", Number(CappedBytes ?? 0));
+                _ = command.Add("capped", true);
+                _ = command.Add("size", Number(CappedBytes ?? 0));
                 if (CappedMaxDocs is { } max)
                 {
-                    command.Add("max", Number(max));
+                    _ = command.Add("max", Number(max));
                 }
                 break;
             case NewCollectionKind.Clustered:
-                command.Add("clusteredIndex", new BsonDocument
+                _ = command.Add("clusteredIndex", new BsonDocument
                 {
                     { "key", new BsonDocument("_id", 1) },
                     { "unique", true }
                 });
                 break;
             case NewCollectionKind.View:
-                command.Add("viewOn", _viewSource ?? "");
-                command.Add("pipeline", TryParsePipeline(out BsonArray pipeline, out _) || lenient ? pipeline : []);
+                _ = command.Add("viewOn", _viewSource ?? "");
+                _ = command.Add("pipeline", TryParsePipeline(out BsonArray pipeline, out _) || lenient ? pipeline : []);
                 break;
         }
-        if (_useCollation && _collationLocale.Trim().Length > 0)
+        if (UseCollation && CollationLocale.Trim().Length > 0)
         {
-            command.Add("collation", new BsonDocument
+            _ = command.Add("collation", new BsonDocument
             {
-                { "locale", _collationLocale.Trim() },
-                { "strength", _collationStrength }
+                { "locale", CollationLocale.Trim() },
+                { "strength", CollationStrength }
             });
         }
         return command;
@@ -731,15 +715,15 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
         {
             return;
         }
-        string name = _name.Trim();
+        string name = Name.Trim();
         NewCollectionKind kind = _kind;
-        bool editValidation = _editValidationAfter && CanEditValidation;
+        bool editValidation = EditValidationAfter && CanEditValidation;
         IsCreating = true;
         Error = "";
         try
         {
-            await Workspace.Connection.RunCommandAsync(Database, BuildCreateCommand()).ConfigureAwait(true);
-            (int copied, List<string> failed) = _copyIndexes && CanCopyIndexes && _copyIndexesFrom is { } source
+            _ = await Workspace.Connection.RunCommandAsync(Database, BuildCreateCommand()).ConfigureAwait(true);
+            (int copied, List<string> failed) = CopyIndexes && CanCopyIndexes && CopyIndexesFrom is { } source
                 ? await CopyIndexesAsync(source, name).ConfigureAwait(true)
                 : (0, []);
             Workspace.Toast(new()
@@ -784,10 +768,10 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
         foreach (BsonDocument index in indexes.Where(ObjectScripts.IsReplayable))
         {
             var spec = new BsonDocument("key", index["key"]);
-            spec.AddRange(ObjectScripts.IndexOptions(index));
+            _ = spec.AddRange(ObjectScripts.IndexOptions(index));
             try
             {
-                await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
+                _ = await Workspace.Connection.RunCommandAsync(Database, new BsonDocument
                 {
                     { "createIndexes", target },
                     { "indexes", new BsonArray { spec } }
@@ -813,7 +797,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
             _existing.Clear();
             foreach (CollectionInfo info in all)
             {
-                _existing.Add(info.Name);
+                _ = _existing.Add(info.Name);
             }
             FillSources(all);
             Changed(nameof(NameState), nameof(NameMessage), nameof(NameOk), nameof(NameBad), nameof(NameIconKey));
@@ -856,7 +840,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
         try
         {
             IReadOnlyList<BsonDocument> indexes = await Workspace.Connection.ListIndexesAsync(Database, source).ConfigureAwait(true);
-            if (_copyIndexesFrom == source)
+            if (CopyIndexesFrom == source)
             {
                 _sourceIndexes = indexes;
                 Changed();
@@ -871,7 +855,7 @@ internal sealed class NewCollectionDialogViewModel : DialogViewModel
     {
         if (SetProperty(ref field, value, name))
         {
-            Changed(name == nameof(UseCollation) || name == nameof(CollationLocale) || name == nameof(CollationStrength)
+            Changed(name is (nameof(UseCollation)) or (nameof(CollationLocale)) or (nameof(CollationStrength))
                 ? nameof(CollationSummary)
                 : null);
         }

@@ -64,7 +64,7 @@ public sealed partial class RunContainerForm : PanelForm
             ImportLabel = "从 .env 导入"
         };
         _network = new("网络") { Value = "bridge" };
-        foreach (var network in networks)
+        foreach (string network in networks)
         {
             _network.Options.Add(new(network, network));
         }
@@ -73,7 +73,7 @@ public sealed partial class RunContainerForm : PanelForm
             _network.Options.Add(new("bridge", "bridge"));
         }
         _restart = new("重启策略") { Value = "unless-stopped" };
-        foreach (var policy in new[] { "no", "on-failure", "always", "unless-stopped" })
+        foreach (string? policy in new[] { "no", "on-failure", "always", "unless-stopped" })
         {
             _restart.Options.Add(new(policy, policy));
         }
@@ -153,16 +153,16 @@ public sealed partial class RunContainerForm : PanelForm
     {
         Dictionary<string, PortBindingRequest[]> bindings = [];
         Dictionary<string, object> exposed = [];
-        foreach (var row in Ports.Filled)
+        foreach (PairRow row in Ports.Filled)
         {
-            var containerPort = row.Value.Trim();
-            var key = containerPort.Contains('/', StringComparison.Ordinal) ? containerPort : $"{containerPort}/tcp";
+            string containerPort = row.Value.Trim();
+            string key = containerPort.Contains('/', StringComparison.Ordinal) ? containerPort : $"{containerPort}/tcp";
             bindings[key] = [new() { HostPort = row.Key.Trim() }];
             exposed[key] = new object();
         }
         string[] binds = [.. Volumes.Filled.Select(r => $"{r.Key.Trim()}:{r.Value.Trim()}")];
         string[] env = [.. Env.Filled.Select(r => $"{r.Key.Trim()}={r.Value.Trim()}")];
-        var command = _command.Value.Trim();
+        string command = _command.Value.Trim();
         return new()
         {
             Image = Image,
@@ -191,21 +191,21 @@ public sealed partial class RunContainerForm : PanelForm
             _name.Error = "只能包含字母、数字与 _ . -,且必须以字母或数字开头。";
             return false;
         }
-        foreach (var row in Ports.Filled)
+        foreach (PairRow row in Ports.Filled)
         {
-            if (!int.TryParse(row.Key.Trim(), out var host) || host is < 1 or > 65535)
+            if (!int.TryParse(row.Key.Trim(), out int host) || host is < 1 or > 65535)
             {
                 Ports.Error = $"宿主端口 {row.Key} 不是一个合法端口。";
                 return false;
             }
-            var container = row.Value.Trim().Split('/')[0];
-            if (!int.TryParse(container, out var inner) || inner is < 1 or > 65535)
+            string container = row.Value.Trim().Split('/')[0];
+            if (!int.TryParse(container, out int inner) || inner is < 1 or > 65535)
             {
                 Ports.Error = $"容器端口 {row.Value} 不是一个合法端口。";
                 return false;
             }
         }
-        foreach (var row in Volumes.Filled)
+        foreach (PairRow row in Volumes.Filled)
         {
             if (!row.Value.Trim().StartsWith('/'))
             {
@@ -228,56 +228,56 @@ public sealed partial class RunContainerForm : PanelForm
         var sb = new StringBuilder("docker run");
         if (_detach.Value)
         {
-            sb.Append(" -d");
+            _ = sb.Append(" -d");
         }
         if (_autoRemove.Value)
         {
-            sb.Append(" --rm");
+            _ = sb.Append(" --rm");
         }
         if (_tty.Value)
         {
-            sb.Append(" -t");
+            _ = sb.Append(" -t");
         }
         if (_privileged.Value)
         {
-            sb.Append(" --privileged");
+            _ = sb.Append(" --privileged");
         }
         if (ContainerName.Length > 0)
         {
-            sb.Append(" --name ").Append(ContainerName);
+            _ = sb.Append(" --name ").Append(ContainerName);
         }
-        foreach (var row in Ports.Filled)
+        foreach (PairRow row in Ports.Filled)
         {
-            sb.Append(" -p ").Append(row.Key.Trim()).Append(':').Append(row.Value.Trim());
+            _ = sb.Append(" -p ").Append(row.Key.Trim()).Append(':').Append(row.Value.Trim());
         }
-        foreach (var row in Volumes.Filled)
+        foreach (PairRow row in Volumes.Filled)
         {
-            sb.Append(" -v ").Append(row.Key.Trim()).Append(':').Append(row.Value.Trim());
+            _ = sb.Append(" -v ").Append(row.Key.Trim()).Append(':').Append(row.Value.Trim());
         }
-        foreach (var row in Env.Filled)
+        foreach (PairRow row in Env.Filled)
         {
-            sb.Append(" -e ").Append(row.Key.Trim()).Append('=').Append(row.Value.Trim());
+            _ = sb.Append(" -e ").Append(row.Key.Trim()).Append('=').Append(row.Value.Trim());
         }
         if (_network.Value.Length > 0)
         {
-            sb.Append(" --network ").Append(_network.Value);
+            _ = sb.Append(" --network ").Append(_network.Value);
         }
         if (!_autoRemove.Value)
         {
-            sb.Append(" --restart ").Append(_restart.Value);
+            _ = sb.Append(" --restart ").Append(_restart.Value);
         }
         if (_workdir.Value.Trim().Length > 0)
         {
-            sb.Append(" -w ").Append(_workdir.Value.Trim());
+            _ = sb.Append(" -w ").Append(_workdir.Value.Trim());
         }
         if (ExtraArgs.Value.Trim().Length > 0)
         {
-            sb.Append(' ').Append(ExtraArgs.Value.Trim());
+            _ = sb.Append(' ').Append(ExtraArgs.Value.Trim());
         }
-        sb.Append(' ').Append(Image);
+        _ = sb.Append(' ').Append(Image);
         if (_command.Value.Trim().Length > 0)
         {
-            sb.Append(' ').Append(_command.Value.Trim());
+            _ = sb.Append(' ').Append(_command.Value.Trim());
         }
         CommandPreview = "POST /containers/create  +  POST /containers/{id}/start";
         CommandNote = $"等价于  {sb}";
@@ -290,8 +290,8 @@ public sealed partial class RunContainerForm : PanelForm
     {
         List<string> parts = [];
         var current = new StringBuilder();
-        var quote = '\0';
-        foreach (var c in command)
+        char quote = '\0';
+        foreach (char c in command)
         {
             if (quote != '\0')
             {
@@ -301,7 +301,7 @@ public sealed partial class RunContainerForm : PanelForm
                 }
                 else
                 {
-                    current.Append(c);
+                    _ = current.Append(c);
                 }
             }
             else if (c is '"' or '\'')
@@ -313,12 +313,12 @@ public sealed partial class RunContainerForm : PanelForm
                 if (current.Length > 0)
                 {
                     parts.Add(current.ToString());
-                    current.Clear();
+                    _ = current.Clear();
                 }
             }
             else
             {
-                current.Append(c);
+                _ = current.Append(c);
             }
         }
         if (current.Length > 0)

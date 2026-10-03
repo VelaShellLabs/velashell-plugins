@@ -3,8 +3,8 @@ using Avalonia.Threading;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Bson;
-using VelaShell.Plugin.Mongo.Staging;
 using VelaShell.Plugin.Mongo.Core;
+using VelaShell.Plugin.Mongo.Staging;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
@@ -322,7 +322,7 @@ internal sealed partial class CollectionTabViewModel
             Workspace.Toast(new() { Title = Loc["Cw_ViewReadOnly"], Kind = ToastKind.Warning });
             return;
         }
-        BsonDocument document = (BsonDocument)row.Document.DeepClone();
+        var document = (BsonDocument)row.Document.DeepClone();
         Workspace.ShowDialog(new DocumentEditorDialogViewModel(Workspace, Info, document, async saved =>
         {
             DiscardDocument(row);
@@ -439,7 +439,7 @@ internal sealed partial class CollectionTabViewModel
         {
             if (BsonPath.Get(doc, path) is BsonString s)
             {
-                distinct.Add(s.Value);
+                _ = distinct.Add(s.Value);
                 if (distinct.Count > 8)
                 {
                     return [];
@@ -535,10 +535,10 @@ internal sealed partial class CollectionTabViewModel
         {
             var copy = (BsonArray)array.DeepClone();
             copy.RemoveAt(index);
-            Stage(row, path[..dot], copy);
+            _ = Stage(row, path[..dot], copy);
             return;
         }
-        Stage(row, path, null);
+        _ = Stage(row, path, null);
     }
 
     /// <summary>在数组末尾插入一个元素(类型照第一项;文档元素给同样的键、空值)。</summary>
@@ -553,7 +553,7 @@ internal sealed partial class CollectionTabViewModel
             : array[0] is BsonDocument template
                 ? new BsonDocument(template.Elements.Select(static e => new BsonElement(e.Name, BsonEdit.Empty(BsonKinds.Of(e.Value)))))
                 : BsonEdit.Empty(BsonKinds.Of(array[0]));
-        Stage(row, $"{arrayPath}.{array.Count.ToString(CultureInfo.InvariantCulture)}", element);
+        _ = Stage(row, $"{arrayPath}.{array.Count.ToString(CultureInfo.InvariantCulture)}", element);
     }
 
     /// <summary>添加字段(弹一个小对话框问名字、类型、值)。</summary>
@@ -776,13 +776,13 @@ internal sealed partial class CollectionTabViewModel
     private async Task UnlockAsync()
     {
         if (!await Workspace.ConfirmAsync(new()
-            {
-                Title = Loc["State_UnlockTitle"],
-                Message = Loc.Format("State_UnlockBody", Workspace.ConnectionName),
-                ConfirmLabel = Loc["State_UnlockConfirm"],
-                IconKey = "Mongo.lock-open",
-                Danger = Workspace.Guard.IsProduction
-            }).ConfigureAwait(true))
+        {
+            Title = Loc["State_UnlockTitle"],
+            Message = Loc.Format("State_UnlockBody", Workspace.ConnectionName),
+            ConfirmLabel = Loc["State_UnlockConfirm"],
+            IconKey = "Mongo.lock-open",
+            Danger = Workspace.Guard.IsProduction
+        }).ConfigureAwait(true))
         {
             return;
         }

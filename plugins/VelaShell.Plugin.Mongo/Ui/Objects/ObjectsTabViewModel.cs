@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
-using MongoDB.Bson;
 using MongoDB.Driver;
-using VelaShell.Plugin.Mongo.Bson;
 using VelaShell.Plugin.Mongo.Core;
 
 namespace VelaShell.Plugin.Mongo.Ui;
@@ -21,15 +19,8 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     private readonly List<ObjectItem> _all = [];
     private readonly ConcurrentDictionary<ObjectItem, Task> _statsTasks = new();
     private ObjectFilter _filter;
-    private string _search = "";
-    private ObjectViewMode _viewMode = ObjectViewMode.Details;
-    private ObjectItem? _selected;
-    private string _sortColumn = "DataSize";
-    private bool _sortDescending = true;
-    private bool _isLoading;
     private bool _rebuilding;
     private bool _loaded;
-    private string _errorText = "";
     private DateTime _loadedAt;
     private CancellationTokenSource? _load;
 
@@ -45,16 +36,16 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
         Title = workspace.Loc["Nav_Objects"];
         Scope = "· " + database;
 
-        OpenCommand = new(OpenSelected, () => _selected is not null);
-        DesignCommand = new(() => Design(DesignPage.Indexes), () => _selected?.IsCollection == true);
-        PipelineCommand = new(OpenPipeline, () => _selected is { Kind: not ObjectKind.Bucket });
+        OpenCommand = new(OpenSelected, () => SelectedItem is not null);
+        DesignCommand = new(() => Design(DesignPage.Indexes), () => SelectedItem?.IsCollection == true);
+        PipelineCommand = new(OpenPipeline, () => SelectedItem is { Kind: not ObjectKind.Bucket });
         QueryCommand = new(OpenQuery);
         NewCollectionCommand = new(() => Workspace.ShowDialog(new NewCollectionDialogViewModel(Workspace, Database)));
-        DropCommand = new(DropSelectedAsync, () => _selected is not null);
-        EmptyCommand = new(EmptySelectedAsync, () => _selected is { Kind: ObjectKind.Collection or ObjectKind.TimeSeries or ObjectKind.Clustered });
-        CopyStructureCommand = new(CopyStructureAsync, () => _selected is not null);
-        CopyNameCommand = new(() => _selected is { } s ? Workspace.CopyAsync(s.Name) : Task.CompletedTask, () => _selected is not null);
-        ImportCommand = new(Import, () => _selected?.IsCollection == true);
+        DropCommand = new(DropSelectedAsync, () => SelectedItem is not null);
+        EmptyCommand = new(EmptySelectedAsync, () => SelectedItem is { Kind: ObjectKind.Collection or ObjectKind.TimeSeries or ObjectKind.Clustered });
+        CopyStructureCommand = new(CopyStructureAsync, () => SelectedItem is not null);
+        CopyNameCommand = new(() => SelectedItem is { } s ? Workspace.CopyAsync(s.Name) : Task.CompletedTask, () => SelectedItem is not null);
+        ImportCommand = new(Import, () => SelectedItem?.IsCollection == true);
         ExportCommand = new(Export);
         SortCommand = new(SortBy);
         CopyDdlCommand = new(CopyDdlAsync, () => DdlText.Length > 0);
@@ -114,37 +105,37 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     /// <summary>右上角的「搜索对象」。</summary>
     public string SearchText
     {
-        get => _search;
+        get;
         set
         {
-            if (SetProperty(ref _search, value))
+            if (SetProperty(ref field, value))
             {
                 Rebuild();
             }
         }
-    }
+    } = "";
 
     /// <summary>视图:网格大图标 / 列表 / 详情。</summary>
     public ObjectViewMode ViewMode
     {
-        get => _viewMode;
+        get;
         set
         {
-            if (SetProperty(ref _viewMode, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsGridMode), nameof(IsListMode), nameof(IsDetailsMode));
             }
         }
-    }
+    } = ObjectViewMode.Details;
 
     /// <summary>网格大图标。</summary>
-    public bool IsGridMode { get => _viewMode == ObjectViewMode.Grid; set { if (value) { ViewMode = ObjectViewMode.Grid; } } }
+    public bool IsGridMode { get => ViewMode == ObjectViewMode.Grid; set { if (value) { ViewMode = ObjectViewMode.Grid; } } }
 
     /// <summary>列表。</summary>
-    public bool IsListMode { get => _viewMode == ObjectViewMode.List; set { if (value) { ViewMode = ObjectViewMode.List; } } }
+    public bool IsListMode { get => ViewMode == ObjectViewMode.List; set { if (value) { ViewMode = ObjectViewMode.List; } } }
 
     /// <summary>详情。</summary>
-    public bool IsDetailsMode { get => _viewMode == ObjectViewMode.Details; set { if (value) { ViewMode = ObjectViewMode.Details; } } }
+    public bool IsDetailsMode { get => ViewMode == ObjectViewMode.Details; set { if (value) { ViewMode = ObjectViewMode.Details; } } }
 
     /// <summary>
     /// 排序列:<c>Name</c> / <c>Type</c> / <c>Count</c> / <c>AvgSize</c> / <c>DataSize</c> / <c>StorageSize</c> /
@@ -152,25 +143,25 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     /// </summary>
     public string SortColumn
     {
-        get => _sortColumn;
-        private set => SetProperty(ref _sortColumn, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "DataSize";
 
     /// <summary>倒序。</summary>
     public bool SortDescending
     {
-        get => _sortDescending;
+        get;
         private set
         {
-            if (SetProperty(ref _sortDescending, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertyChanged(nameof(SortIconKey));
             }
         }
-    }
+    } = true;
 
     /// <summary>列头上那枚箭头。</summary>
-    public string SortIconKey => _sortDescending ? "Mongo.arrow-down" : "Mongo.arrow-up";
+    public string SortIconKey => SortDescending ? "Mongo.arrow-down" : "Mongo.arrow-up";
 
     // ── 列表 ─────────────────────────────────────────────────────────────
 
@@ -195,10 +186,10 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     /// <summary>正在列集合。</summary>
     public bool IsLoading
     {
-        get => _isLoading;
+        get;
         private set
         {
-            if (SetProperty(ref _isLoading, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShowEmpty), nameof(EmptyText));
             }
@@ -208,30 +199,30 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     /// <summary>列集合失败的原因(列表区域显示它而不是一张空表)。</summary>
     public string ErrorText
     {
-        get => _errorText;
+        get;
         private set
         {
-            if (SetProperty(ref _errorText, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(ShowEmpty), nameof(EmptyText));
             }
         }
-    }
+    } = "";
 
     /// <summary>列表区域显示空态。</summary>
     public bool ShowEmpty => Items.Count == 0;
 
     /// <summary>空态文字:加载中 / 失败原因 / 搜索无结果 / 空库。</summary>
     public string EmptyText =>
-        _isLoading ? Loc["Common_Loading"]
-        : _errorText.Length > 0 ? _errorText
+        IsLoading ? Loc["Common_Loading"]
+        : ErrorText.Length > 0 ? ErrorText
         : _all.Count > 0 ? Loc["Obj_NoMatch"]
         : Loc.Format("Obj_EmptyDatabase", Database);
 
     /// <summary>选中的对象。</summary>
     public ObjectItem? SelectedItem
     {
-        get => _selected;
+        get;
         set
         {
             // 重建列表时 ListBox 会把选中项推回 null —— 那不是用户的意图,忽略。
@@ -239,19 +230,13 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
             {
                 return;
             }
-            if (ReferenceEquals(_selected, value))
+            if (ReferenceEquals(field, value))
             {
                 return;
             }
-            if (_selected is not null)
-            {
-                _selected.IsSelected = false;
-            }
-            _selected = value;
-            if (value is not null)
-            {
-                value.IsSelected = true;
-            }
+            field?.IsSelected = false;
+            field = value;
+            value?.IsSelected = true;
             RaisePropertyChanged();
             RaisePropertiesChanged(nameof(HasSelection), nameof(DetailIconKey), nameof(DetailIconToken), nameof(DetailTitle),
                 nameof(DetailSubtitle), nameof(OpenLabel), nameof(CanDesign), nameof(CanPipeline), nameof(PrivilegeActionsTitle));
@@ -262,7 +247,7 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     }
 
     /// <summary>有选中项(详情面板显示内容,否则显示提示)。</summary>
-    public bool HasSelection => _selected is not null;
+    public bool HasSelection => SelectedItem is not null;
 
     // ── 命令 ─────────────────────────────────────────────────────────────
 
@@ -329,7 +314,7 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     protected override void OnActivated()
     {
         // 切回来时数据可能已经过时(别的标签里建删了集合);半分钟内的不重拉,免得来回切标签时闪。
-        if (_loaded && !_isLoading && DateTime.UtcNow - _loadedAt > TimeSpan.FromSeconds(30))
+        if (_loaded && !IsLoading && DateTime.UtcNow - _loadedAt > TimeSpan.FromSeconds(30))
         {
             _ = ReloadAsync();
         }
@@ -373,12 +358,12 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
             return;
         }
 
-        ObjectItem? keep = _selected;
+        ObjectItem? keep = SelectedItem;
         // 按(种类, 名字)对号:桶 fs 与一个恰好也叫 fs 的集合可以同时存在。
         var previous = new Dictionary<(ObjectKind, string), ObjectItem>();
         foreach (ObjectItem old in _all)
         {
-            previous.TryAdd((old.Kind, old.Name), old);
+            _ = previous.TryAdd((old.Kind, old.Name), old);
         }
         List<ObjectItem> fresh = BuildItems(Database, list, Loc);
         foreach (ObjectItem item in fresh)
@@ -441,7 +426,7 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
                 }
                 finally
                 {
-                    gate.Release();
+                    _ = gate.Release();
                 }
             })).ConfigureAwait(true);
         }
@@ -449,7 +434,7 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
         {
             return;
         }
-        if (!cancellationToken.IsCancellationRequested && _sortColumn is not ("Name" or "Type" or "Validation"))
+        if (!cancellationToken.IsCancellationRequested && SortColumn is not ("Name" or "Type" or "Validation"))
         {
             RebuildKeepingSelection();
         }
@@ -475,27 +460,27 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
                 case ObjectKind.View:
                     return;
                 case ObjectKind.Bucket:
-                {
-                    GridFsBucketInfo bucket = item.Bucket!;
-                    CollectionStats files = await connection.GetStatsAsync(Database, bucket.FilesCollection, cancellationToken).ConfigureAwait(false);
-                    CollectionStats chunks = await connection.GetStatsAsync(Database, bucket.ChunksCollection, cancellationToken).ConfigureAwait(false);
-                    item.SetBucketStats(files, chunks);
-                    return;
-                }
-                default:
-                {
-                    CollectionStats stats = await connection.GetStatsAsync(Database, item.Name, cancellationToken).ConfigureAwait(false);
-                    long? estimated = item.Kind == ObjectKind.TimeSeries && stats.Count == 0
-                        ? await connection.EstimatedCountAsync(Database, item.Name, cancellationToken).ConfigureAwait(false)
-                        : null;
-                    item.SetStats(stats, estimated);
-                    if (item.Kind == ObjectKind.Collection)
                     {
-                        item.Indexes = await connection.ListIndexesAsync(Database, item.Name, cancellationToken).ConfigureAwait(false);
-                        item.IsTtl = MongoConnection.HasTtl(item.Indexes);
+                        GridFsBucketInfo bucket = item.Bucket!;
+                        CollectionStats files = await connection.GetStatsAsync(Database, bucket.FilesCollection, cancellationToken).ConfigureAwait(false);
+                        CollectionStats chunks = await connection.GetStatsAsync(Database, bucket.ChunksCollection, cancellationToken).ConfigureAwait(false);
+                        item.SetBucketStats(files, chunks);
+                        return;
                     }
-                    return;
-                }
+                default:
+                    {
+                        CollectionStats stats = await connection.GetStatsAsync(Database, item.Name, cancellationToken).ConfigureAwait(false);
+                        long? estimated = item.Kind == ObjectKind.TimeSeries && stats.Count == 0
+                            ? await connection.EstimatedCountAsync(Database, item.Name, cancellationToken).ConfigureAwait(false)
+                            : null;
+                        item.SetStats(stats, estimated);
+                        if (item.Kind == ObjectKind.Collection)
+                        {
+                            item.Indexes = await connection.ListIndexesAsync(Database, item.Name, cancellationToken).ConfigureAwait(false);
+                            item.IsTtl = MongoConnection.HasTtl(item.Indexes);
+                        }
+                        return;
+                    }
             }
         }
         catch (Exception ex) when (ex is MongoException or TimeoutException or OperationCanceledException)
@@ -515,7 +500,7 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
             ObjectFilter.GridFs => item.Kind == ObjectKind.Bucket,
             _ => true
         }
-        && (_search.Trim().Length == 0 || item.DisplayName.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase));
+        && (SearchText.Trim().Length == 0 || item.DisplayName.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>按过滤、搜索与排序重算可见行。</summary>
     private void Rebuild()
@@ -523,15 +508,15 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
         IEnumerable<ObjectItem> rows = _all.Where(Matches);
         // 视图与还没取到统计的行在数字列排序里一律沉底,不管正序倒序。
         IComparer<IComparable> comparer = Comparer<IComparable>.Default;
-        string column = _sortColumn;
-        List<ObjectItem> sorted = _sortDescending
+        string column = SortColumn;
+        List<ObjectItem> sorted = SortDescending
             ? [.. rows.OrderBy(i => IsBlank(i, column)).ThenByDescending(i => i.SortKey(column), comparer).ThenBy(static i => i.DisplayName, StringComparer.Ordinal)]
             : [.. rows.OrderBy(i => IsBlank(i, column)).ThenBy(i => i.SortKey(column), comparer).ThenBy(static i => i.DisplayName, StringComparer.Ordinal)];
         if (sorted.SequenceEqual(Items))
         {
             return;
         }
-        ObjectItem? selected = _selected;
+        ObjectItem? selected = SelectedItem;
         bool wasRebuilding = _rebuilding;
         _rebuilding = true;
         try
@@ -577,9 +562,9 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
 
     private void SortBy(string column)
     {
-        if (_sortColumn == column)
+        if (SortColumn == column)
         {
-            SortDescending = !_sortDescending;
+            SortDescending = !SortDescending;
         }
         else
         {
@@ -593,7 +578,7 @@ internal sealed partial class ObjectsTabViewModel : WorkspaceTab
     // ── 状态行 ───────────────────────────────────────────────────────────
 
     private void UpdateStatus() =>
-        StatusText = _selected is { } s
+        StatusText = SelectedItem is { } s
             ? Loc.Format("Obj_StatusSelected", s.DisplayName, s.KindName, Items.Count)
             : Loc.Format("Obj_StatusCount", Items.Count);
 

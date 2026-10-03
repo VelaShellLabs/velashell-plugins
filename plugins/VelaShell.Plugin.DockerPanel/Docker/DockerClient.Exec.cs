@@ -17,11 +17,11 @@ public readonly record struct ExecCapture(string StandardOutput, string Standard
     {
         get
         {
-            foreach (var candidate in new[] { StandardError, StandardOutput })
+            foreach (string? candidate in new[] { StandardError, StandardOutput })
             {
-                foreach (var line in candidate.Split('\n'))
+                foreach (string line in candidate.Split('\n'))
                 {
-                    var trimmed = line.Trim();
+                    string trimmed = line.Trim();
                     if (trimmed.Length > 0)
                     {
                         return trimmed;
@@ -98,15 +98,15 @@ public sealed partial class DockerClient
     public async Task<DockerExecSession> StartExecAsync(string containerId, string[] command, bool tty,
         string? user = null, string? workingDir = null, CancellationToken cancellationToken = default)
     {
-        var created = await CreateExecAsync(containerId, command, tty, attachStdin: true, user, workingDir,
+        ExecCreateResponse created = await CreateExecAsync(containerId, command, tty, attachStdin: true, user, workingDir,
             cancellationToken).ConfigureAwait(false);
         // 劫持端点要独占一条流:HttpClient 的连接池不能用,它没法在同一条连接上
         // 边写 stdin 边读 stdout。
-        var stream = await Transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+        Stream stream = await Transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var body = JsonSerializer.Serialize(new { Detach = false, Tty = tty }, DockerJson.Options);
-            (var status, var reason, var hijacked) = await DockerRawHttp
+            string body = JsonSerializer.Serialize(new { Detach = false, Tty = tty }, DockerJson.Options);
+            (int status, string? reason, Stream? hijacked) = await DockerRawHttp
                 .PostAsync(stream, $"/exec/{Uri.EscapeDataString(created.Id)}/start", body, upgrade: true, cancellationToken)
                 .ConfigureAwait(false);
             return status is not (200 or 101) ? throw new DockerApiException((System.Net.HttpStatusCode)status, $"启动 exec 失败:HTTP {status} {reason}") : new(created.Id, hijacked, this, tty);
@@ -129,15 +129,15 @@ public sealed partial class DockerClient
     public async Task<ExecCapture> ExecCaptureAsync(string containerId, string[] command,
         string? user = null, string? workingDir = null, CancellationToken cancellationToken = default)
     {
-        var created = await CreateExecAsync(containerId, command, tty: false, attachStdin: false,
+        ExecCreateResponse created = await CreateExecAsync(containerId, command, tty: false, attachStdin: false,
             user, workingDir, cancellationToken).ConfigureAwait(false);
-        var stream = await Transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+        Stream stream = await Transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
         await using (stream.ConfigureAwait(false))
         {
-            var body = JsonSerializer.Serialize(new { Detach = false, Tty = false }, DockerJson.Options);
-            (var status, var reason, var hijacked) = await DockerRawHttp
+            string body = JsonSerializer.Serialize(new { Detach = false, Tty = false }, DockerJson.Options);
+            (int status, string? reason, Stream? hijacked) = await DockerRawHttp
                 .PostAsync(stream, $"/exec/{Uri.EscapeDataString(created.Id)}/start", body, upgrade: true, cancellationToken)
                 .ConfigureAwait(false);
             if (status is not (200 or 101))
@@ -147,11 +147,11 @@ public sealed partial class DockerClient
             var decoder = new DockerFrameDecoder(tty: false, timestamps: false);
             await decoder.ReadAsync(hijacked, line =>
             {
-                var target = line.Kind == DockerStreamKind.StdErr ? stderr : stdout;
-                target.Append(line.Text).Append('\n');
+                StringBuilder target = line.Kind == DockerStreamKind.StdErr ? stderr : stdout;
+                _ = target.Append(line.Text).Append('\n');
             }, cancellationToken).ConfigureAwait(false);
         }
-        var inspect = await InspectExecAsync(created.Id, cancellationToken).ConfigureAwait(false);
+        ExecInspectResponse inspect = await InspectExecAsync(created.Id, cancellationToken).ConfigureAwait(false);
         return new(stdout.ToString(), stderr.ToString(), inspect.ExitCode);
     }
 

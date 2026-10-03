@@ -38,19 +38,10 @@ internal sealed class DocumentEditorRow : ObservableObject
 {
     private readonly DocumentEditorDialogViewModel _owner;
     private string _name;
-    private BsonKind _kind;
     private BsonValue _value = BsonNull.Value;
     private string _text = "";
     private string? _parseError;
-    private string? _nameError;
     private bool _isExpanded;
-    private DocumentEditorRowState _state;
-    private string? _message;
-    private BsonValue? _originalValue;
-    private bool _isAddingItem;
-    private string _newItemText = "";
-    private bool _newItemInvalid;
-    private IReadOnlyList<string> _enumOptions = [];
 
     /// <summary>构造(容器值会递归建出子行)。</summary>
     /// <param name="owner">所属对话框。</param>
@@ -115,7 +106,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     public string SchemaPath => Parent is null ? _name : IsArrayItem ? Parent.SchemaPath : BsonPath.Join(Parent.SchemaPath, _name);
 
     /// <summary>是不是数组里的一项(名字是下标,不能改)。</summary>
-    public bool IsArrayItem => Parent?._kind == BsonKind.Array;
+    public bool IsArrayItem => Parent?.Kind == BsonKind.Array;
 
     /// <summary>顶层 <c>_id</c>。</summary>
     public bool IsId => Parent is null && _name == "_id";
@@ -168,8 +159,8 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>字段名本身的问题(空、重复、<c>$</c> 开头、含点号);由视图模型在重算时填。</summary>
     public string? NameError
     {
-        get => _nameError;
-        internal set => SetProperty(ref _nameError, value);
+        get;
+        internal set => SetProperty(ref field, value);
     }
 
     /// <summary>数组项重排之后改下标。</summary>
@@ -186,15 +177,15 @@ internal sealed class DocumentEditorRow : ObservableObject
     // ── 类型与值 ────────────────────────────────────────────────────────────
 
     /// <summary>类型。</summary>
-    public BsonKind Kind => _kind;
+    public BsonKind Kind { get; private set; }
 
     /// <summary>类型下拉的选中项(设它 = 换类型)。</summary>
     public BsonKind SelectedKind
     {
-        get => _kind;
+        get => Kind;
         set
         {
-            if (value != _kind)
+            if (value != Kind)
             {
                 ChangeKind(value);
             }
@@ -203,7 +194,7 @@ internal sealed class DocumentEditorRow : ObservableObject
 
     /// <summary>类型下拉的可选项(设计稿 01 的类型菜单;当前是少见类型时把它也放进去,否则下拉显示为空)。</summary>
     public IReadOnlyList<BsonKind> KindOptions =>
-        BsonKinds.Editable.Contains(_kind) ? BsonKinds.Editable : [.. BsonKinds.Editable, _kind];
+        BsonKinds.Editable.Contains(Kind) ? BsonKinds.Editable : [.. BsonKinds.Editable, Kind];
 
     /// <summary>编辑框里的文本(标量)。</summary>
     public string Text
@@ -264,23 +255,22 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>验证规则里这条路径的 enum(字符串)。由视图模型在重算时填。</summary>
     public IReadOnlyList<string> EnumOptions
     {
-        get => _enumOptions;
-        internal set
+        get; internal set
         {
-            if (!_enumOptions.SequenceEqual(value))
+            if (!field.SequenceEqual(value))
             {
-                _enumOptions = value;
+                field = value;
                 RaisePropertiesChanged(nameof(EnumOptions), nameof(EnumHint));
                 RaiseShape();
             }
         }
-    }
+    } = [];
 
     /// <summary><c>enum: 普通 · VIP · SVIP</c>。</summary>
-    public string EnumHint => _owner.Loc.Format("Doc_EnumHint", string.Join(" · ", _enumOptions));
+    public string EnumHint => _owner.Loc.Format("Doc_EnumHint", string.Join(" · ", EnumOptions));
 
     /// <summary>当前值(容器由子行拼出;解析失败的标量保留上一个合法值 —— 反正挡着保存)。</summary>
-    public BsonValue BuildValue() => _kind switch
+    public BsonValue BuildValue() => Kind switch
     {
         BsonKind.Object => BuildDocument(Children),
         BsonKind.Array => new BsonArray(Children.Select(static c => c.BuildValue())),
@@ -304,7 +294,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>换类型:按 <see cref="BsonEdit.Convert" /> 换算;换算不了的值重置并提示。</summary>
     public void ChangeKind(BsonKind kind)
     {
-        if (!IsValueEditable || kind == _kind)
+        if (!IsValueEditable || kind == Kind)
         {
             RaisePropertyChanged(nameof(SelectedKind));
             return;
@@ -336,7 +326,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>设值但不通知(构造与重建时用)。</summary>
     private void LoadValue(BsonValue value)
     {
-        _kind = BsonKinds.Of(value);
+        Kind = BsonKinds.Of(value);
         Children.Clear();
         _parseError = null;
         if (value is BsonDocument document)
@@ -365,7 +355,7 @@ internal sealed class DocumentEditorRow : ObservableObject
 
     private void ParseText()
     {
-        if (BsonEdit.TryParse(_text, _kind, out BsonValue parsed, out string? error))
+        if (BsonEdit.TryParse(_text, Kind, out BsonValue parsed, out string? error))
         {
             _value = parsed;
             ParseError = null;
@@ -393,7 +383,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     // ── 容器 ────────────────────────────────────────────────────────────────
 
     /// <summary>是不是容器(对象 / 数组)。</summary>
-    public bool IsContainer => BsonKinds.IsContainer(_kind);
+    public bool IsContainer => BsonKinds.IsContainer(Kind);
 
     /// <summary>展开着。</summary>
     public bool IsExpanded
@@ -412,10 +402,10 @@ internal sealed class DocumentEditorRow : ObservableObject
     internal bool ExpansionDecided { get; set; }
 
     /// <summary>数组里全是标量(收起时画成一排芯片)。</summary>
-    public bool IsScalarArray => _kind == BsonKind.Array && Children.All(static c => !c.IsContainer);
+    public bool IsScalarArray => Kind == BsonKind.Array && Children.All(static c => !c.IsContainer);
 
     /// <summary>容器的个数徽记:<c>{3}</c> / <c>[4]</c>。</summary>
-    public string ContainerCount => _kind == BsonKind.Object ? $"{{{Children.Count}}}" : $"[{Children.Count}]";
+    public string ContainerCount => Kind == BsonKind.Object ? $"{{{Children.Count}}}" : $"[{Children.Count}]";
 
     /// <summary>
     /// 容器摘要:对象给字段名(<c>id, name, level</c>),对象数组给每项的"名字 ×数量"
@@ -425,7 +415,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     {
         get
         {
-            if (_kind == BsonKind.Object)
+            if (Kind == BsonKind.Object)
             {
                 return string.Join(", ", Children.Take(8).Select(static c => c._name)) + (Children.Count > 8 ? ", …" : "");
             }
@@ -437,23 +427,23 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>数组项的一句话摘要。</summary>
     private string ItemSummary()
     {
-        if (_kind != BsonKind.Object)
+        if (Kind != BsonKind.Object)
         {
             return IsContainer ? ContainerCount : BsonText.Cell(_value);
         }
-        string? head = Children.FirstOrDefault(static c => c._kind == BsonKind.String)?._value.AsString;
+        string? head = Children.FirstOrDefault(static c => c.Kind == BsonKind.String)?._value.AsString;
         // 订单行那种"SKU ×数量":只认常见的数量字段名,免得把 { name, age } 写成"张三 ×30"。
         DocumentEditorRow? count = Children.FirstOrDefault(static c =>
-            c._name is "qty" or "quantity" or "count" or "num" or "amount" && BsonKinds.IsNumeric(c._kind));
+            c._name is "qty" or "quantity" or "count" or "num" or "amount" && BsonKinds.IsNumeric(c.Kind));
         string text = head is null ? ContainerCount : BsonText.OneLine(head);
         return count is null ? text : $"{text} ×{BsonText.Cell(count._value)}";
     }
 
     /// <summary>芯片上的字(标量数组的项)。</summary>
-    public string ChipText => _kind == BsonKind.String ? BsonText.OneLine(_text) : BsonText.Cell(_value);
+    public string ChipText => Kind == BsonKind.String ? BsonText.OneLine(_text) : BsonText.Cell(_value);
 
     /// <summary>「+ String」:追加一项时用的类型 —— 跟最后一项走,空数组给字符串。</summary>
-    public BsonKind NewItemKind => Children.Count > 0 && !Children[^1].IsContainer ? Children[^1]._kind : BsonKind.String;
+    public BsonKind NewItemKind => Children.Count > 0 && !Children[^1].IsContainer ? Children[^1].Kind : BsonKind.String;
 
     /// <summary>「+ String」上的字。</summary>
     public string NewItemLabel => BsonKinds.Name(NewItemKind);
@@ -461,10 +451,9 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>正在芯片行里输入新的一项。</summary>
     public bool IsAddingItem
     {
-        get => _isAddingItem;
-        set
+        get; set
         {
-            if (SetProperty(ref _isAddingItem, value) && !value)
+            if (SetProperty(ref field, value) && !value)
             {
                 NewItemText = "";
             }
@@ -474,22 +463,17 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>新一项的文本。</summary>
     public string NewItemText
     {
-        get => _newItemText;
-        set
+        get; set
         {
-            if (SetProperty(ref _newItemText, value ?? ""))
+            if (SetProperty(ref field, value ?? ""))
             {
                 NewItemInvalid = false;
             }
         }
-    }
+    } = "";
 
     /// <summary>新一项解析不了(输入框标红)。</summary>
-    public bool NewItemInvalid
-    {
-        get => _newItemInvalid;
-        private set => SetProperty(ref _newItemInvalid, value);
-    }
+    public bool NewItemInvalid { get; private set => SetProperty(ref field, value); }
 
     /// <summary>
     /// 回车:追加这一项,输入框留着接着输下一项(打标签通常是一口气打好几个);
@@ -497,12 +481,12 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// </summary>
     private void CommitItem()
     {
-        if (_newItemText.Length == 0)
+        if (NewItemText.Length == 0)
         {
             IsAddingItem = false;
             return;
         }
-        if (!BsonEdit.TryParse(_newItemText, NewItemKind, out BsonValue item, out _))
+        if (!BsonEdit.TryParse(NewItemText, NewItemKind, out BsonValue item, out _))
         {
             NewItemInvalid = true;
             return;
@@ -514,14 +498,14 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>输入框失焦:有内容就追加,然后收起。</summary>
     internal void FinishItem()
     {
-        if (!_isAddingItem)
+        if (!IsAddingItem)
         {
             return;
         }
-        if (_newItemText.Trim().Length > 0)
+        if (NewItemText.Trim().Length > 0)
         {
             CommitItem();
-            if (_newItemInvalid)
+            if (NewItemInvalid)
             {
                 // 解析不了的内容不悄悄丢掉:留着输入框(标红)让用户改。
                 return;
@@ -533,7 +517,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>子行增删之后重排下标、刷新摘要。</summary>
     internal void OnChildrenChanged()
     {
-        if (_kind == BsonKind.Array)
+        if (Kind == BsonKind.Array)
         {
             for (int i = 0; i < Children.Count; i++)
             {
@@ -548,68 +532,67 @@ internal sealed class DocumentEditorRow : ObservableObject
     /// <summary>原文档同一路径上的值(没有 = 新增);由视图模型在重算时填。</summary>
     internal BsonValue? OriginalValue
     {
-        get => _originalValue;
-        set
+        get; set
         {
-            _originalValue = value;
+            field = value;
             RaisePropertyChanged(nameof(OriginalText));
         }
     }
 
     /// <summary>状态。</summary>
-    public DocumentEditorRowState State => _state;
+    public DocumentEditorRowState State { get; private set; }
 
     /// <summary>行尾那句话(错误 / 警告)。</summary>
-    public string? Message => _message;
+    public string? Message { get; private set; }
 
     /// <summary>重算后设状态。</summary>
     internal void SetState(DocumentEditorRowState state, string? message)
     {
-        if (_state == state && _message == message)
+        if (State == state && Message == message)
         {
             return;
         }
-        _state = state;
-        _message = message;
+        State = state;
+        Message = message;
         RaisePropertiesChanged(nameof(State), nameof(Message), nameof(IsModified), nameof(IsAdded), nameof(IsError),
             nameof(IsValueError), nameof(IsWarning), nameof(ShowMessage), nameof(ShowRevert), nameof(ShowEnumHint), nameof(ShowDateExtras),
             nameof(IsoEcho), nameof(TimeZoneText));
     }
 
     /// <summary>已修改(橙底)。</summary>
-    public bool IsModified => _state == DocumentEditorRowState.Modified;
+    public bool IsModified => State == DocumentEditorRowState.Modified;
 
     /// <summary>新增(绿底)。</summary>
-    public bool IsAdded => _state == DocumentEditorRowState.Added;
+    public bool IsAdded => State == DocumentEditorRowState.Added;
 
     /// <summary>错误(红底)。</summary>
-    public bool IsError => _state == DocumentEditorRowState.Error;
+    public bool IsError => State == DocumentEditorRowState.Error;
 
     /// <summary>错误出在值上(值框标红;字段名的错误只把字段名标红)。</summary>
-    public bool IsValueError => _state == DocumentEditorRowState.Error && NameError is null;
+    public bool IsValueError => State == DocumentEditorRowState.Error && NameError is null;
 
     /// <summary>警告(validationAction = warn 时的违规)。</summary>
-    public bool IsWarning => _state == DocumentEditorRowState.Warning;
+    public bool IsWarning => State == DocumentEditorRowState.Warning;
 
     /// <summary>显示行尾的错误 / 警告。</summary>
-    public bool ShowMessage => _message is not null && _state is DocumentEditorRowState.Error or DocumentEditorRowState.Warning;
+    public bool ShowMessage => Message is not null && State is DocumentEditorRowState.Error or DocumentEditorRowState.Warning;
 
     /// <summary>显示「原值 … ↺ 还原」。</summary>
-    public bool ShowRevert => _state == DocumentEditorRowState.Modified && _originalValue is not null && _owner.CanEdit;
+    public bool ShowRevert => State == DocumentEditorRowState.Modified && OriginalValue is not null && _owner.CanEdit;
 
     /// <summary><c>原值 "paid"</c>。</summary>
     public string OriginalText
     {
         get
         {
-            if (_originalValue is null)
+            if (OriginalValue is null)
             {
                 return "";
             }
             // 原值只是提示:长字符串截到 16 个字符,别让它把输入框挤窄(完整的原值在对比模式里)。
-            string text = _originalValue.IsString && _originalValue.AsString.Length > 16
-                ? BsonText.Quote(BsonText.OneLine(_originalValue.AsString[..16]) + "…")
-                : BsonText.Inline(_originalValue, _owner.Loc, shortenIds: true);
+            string text = OriginalValue.IsString && OriginalValue.AsString.Length > 16
+                ? BsonText.Quote(BsonText.OneLine(OriginalValue.AsString[..16]) + "…")
+                : BsonText.Inline(OriginalValue, _owner.Loc, shortenIds: true);
             return _owner.Loc.Format("Doc_WasValue", text);
         }
     }
@@ -620,35 +603,35 @@ internal sealed class DocumentEditorRow : ObservableObject
     // ── 值编辑器的形态 ──────────────────────────────────────────────────────
 
     /// <summary>枚举下拉。</summary>
-    public bool ShowEnum => _kind == BsonKind.String && _enumOptions.Count > 0 && !IsIdLocked;
+    public bool ShowEnum => Kind == BsonKind.String && EnumOptions.Count > 0 && !IsIdLocked;
 
     /// <summary>宽文本框(字符串、UUID 与少见类型的字面量)。</summary>
-    public bool ShowText => _kind is BsonKind.String or BsonKind.Uuid or BsonKind.Binary or BsonKind.Regex
+    public bool ShowText => Kind is BsonKind.String or BsonKind.Uuid or BsonKind.Binary or BsonKind.Regex
         or BsonKind.Timestamp or BsonKind.Other && !ShowEnum;
 
     /// <summary>数值框(右对齐、160 宽)。</summary>
-    public bool ShowNumber => BsonKinds.IsNumeric(_kind);
+    public bool ShowNumber => BsonKinds.IsNumeric(Kind);
 
     /// <summary>开关。</summary>
-    public bool ShowBool => _kind == BsonKind.Boolean;
+    public bool ShowBool => Kind == BsonKind.Boolean;
 
     /// <summary>日期。</summary>
-    public bool ShowDate => _kind == BsonKind.Date;
+    public bool ShowDate => Kind == BsonKind.Date;
 
     /// <summary>ObjectId(+ 生成)。</summary>
-    public bool ShowObjectId => _kind == BsonKind.ObjectId;
+    public bool ShowObjectId => Kind == BsonKind.ObjectId;
 
     /// <summary>null(+ 设为字符串)。</summary>
-    public bool ShowNull => _kind == BsonKind.Null;
+    public bool ShowNull => Kind == BsonKind.Null;
 
     /// <summary>对象摘要。</summary>
-    public bool ShowObjectSummary => _kind == BsonKind.Object;
+    public bool ShowObjectSummary => Kind == BsonKind.Object;
 
     /// <summary>芯片(收起的标量数组)。</summary>
-    public bool ShowChips => _kind == BsonKind.Array && !_isExpanded && IsScalarArray;
+    public bool ShowChips => Kind == BsonKind.Array && !_isExpanded && IsScalarArray;
 
     /// <summary>数组摘要(对象数组,或展开着的数组)。</summary>
-    public bool ShowArraySummary => _kind == BsonKind.Array && !ShowChips;
+    public bool ShowArraySummary => Kind == BsonKind.Array && !ShowChips;
 
     /// <summary>「展开 / 收起」链接上的字。</summary>
     public string ToggleText => _owner.Loc[_isExpanded ? "Doc_Collapse" : "Doc_Expand"];
@@ -657,7 +640,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     public string ChevronKey => _isExpanded ? "Mongo.chevron-down" : "Mongo.chevron-right";
 
     /// <summary>日期旁的时区芯片与 ISO 回显(改过、新加的日期才显示,免得每个日期行都拖一串)。</summary>
-    public bool ShowDateExtras => ShowDate && _state is DocumentEditorRowState.Modified or DocumentEditorRowState.Added;
+    public bool ShowDateExtras => ShowDate && State is DocumentEditorRowState.Modified or DocumentEditorRowState.Added;
 
     /// <summary>时区芯片:<c>UTC+08:00</c>(表单里的日期按本地时间填)。</summary>
     public string TimeZoneText
@@ -758,7 +741,7 @@ internal sealed class DocumentEditorRow : ObservableObject
     }
 
     /// <inheritdoc />
-    public override string ToString() => $"{Path} ({BsonKinds.Name(_kind)})";
+    public override string ToString() => $"{Path} ({BsonKinds.Name(Kind)})";
 }
 
 /// <summary>表单末尾那一格:文档级的问题(缺少必填字段…)+「添加字段」。</summary>

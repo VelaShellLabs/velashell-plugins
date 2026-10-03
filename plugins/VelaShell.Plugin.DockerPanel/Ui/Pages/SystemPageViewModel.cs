@@ -139,9 +139,9 @@ public sealed class SystemPageViewModel : PageViewModel
         {
             // 这三条一起发:df 在镜像多的机器上要几秒,而它是这一页的主角,
             // 不该等 info 与 version 串行跑完才开始。
-            var usageTask = client.DiskUsageAsync(cancellationToken);
-            var infoTask = client.InfoAsync(cancellationToken);
-            var versionTask = client.VersionAsync(cancellationToken);
+            Task<DiskUsage> usageTask = client.DiskUsageAsync(cancellationToken);
+            Task<SystemInfo> infoTask = client.InfoAsync(cancellationToken);
+            Task<SystemVersion> versionTask = client.VersionAsync(cancellationToken);
             await Task.WhenAll(usageTask, infoTask, versionTask).ConfigureAwait(true);
             _usage = usageTask.Result;
             _info = infoTask.Result;
@@ -197,10 +197,10 @@ public sealed class SystemPageViewModel : PageViewModel
         }
         // 每张卡的第三行都是"这个数字的分母或去向" —— 光看「镜像 34」说明不了任何事,
         // 「其中 14 个没人用」才是让人动手的那一句。
-        var volumes = _usage?.Volumes?.Length ?? 0;
-        var volumesIdle = _usage?.Volumes?.Count(v => v.UsageData is not { RefCount: > 0 }) ?? 0;
-        var imagesDangling = _usage?.Images?.Count(i => i.IsDangling) ?? 0;
-        var cacheRecords = _usage?.BuildCache?.Length ?? 0;
+        int volumes = _usage?.Volumes?.Length ?? 0;
+        int volumesIdle = _usage?.Volumes?.Count(v => v.UsageData is not { RefCount: > 0 }) ?? 0;
+        int imagesDangling = _usage?.Images?.Count(i => i.IsDangling) ?? 0;
+        int cacheRecords = _usage?.BuildCache?.Length ?? 0;
         Stats.Add(new("Docker.box", "容器", info.Containers.ToString(),
             $"运行中 {info.ContainersRunning}",
             info.ContainersRunning > 0 ? RowTone.Ok : RowTone.Idle));
@@ -226,10 +226,10 @@ public sealed class SystemPageViewModel : PageViewModel
     /// </summary>
     private async Task LoadHostDiskAsync(DockerClient client, CancellationToken cancellationToken)
     {
-        var root = _info?.DockerRootDir is { Length: > 0 } dir ? dir : "/var/lib/docker";
+        string root = _info?.DockerRootDir is { Length: > 0 } dir ? dir : "/var/lib/docker";
         try
         {
-            var result = await client
+            ExecCapture result = await client
                 .ExecCaptureAsync(FirstRunningContainerId ?? "", ["/bin/sh", "-c", $"df -PB1 {Sh.Quote(root)}"],
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
@@ -258,11 +258,11 @@ public sealed class SystemPageViewModel : PageViewModel
     /// <summary>解一行 <c>df -PB1</c>。返回 (总量, 已用)。</summary>
     internal static (long Total, long Used)? ParseDf(string output)
     {
-        foreach (var line in output.Split('\n').Skip(1))
+        foreach (string? line in output.Split('\n').Skip(1))
         {
-            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             // Filesystem 1-blocks Used Available Capacity Mounted
-            if (parts.Length >= 4 && long.TryParse(parts[1], out var total) && long.TryParse(parts[2], out var used))
+            if (parts.Length >= 4 && long.TryParse(parts[1], out long total) && long.TryParse(parts[2], out long used))
             {
                 return (total, used);
             }
@@ -278,16 +278,16 @@ public sealed class SystemPageViewModel : PageViewModel
         {
             return;
         }
-        var reclaim = DiskMath.Reclaimable(usage);
-        var imageTotal = usage.Images?.Sum(i => i.Size) ?? 0;
-        var imageReclaim = reclaim.Images;
+        ReclaimBreakdown reclaim = DiskMath.Reclaimable(usage);
+        long imageTotal = usage.Images?.Sum(i => i.Size) ?? 0;
+        long imageReclaim = reclaim.Images;
         // 可写层大小只有 /system/df 会给(/containers/json 要带 size=1 才算,那对每个容器做一次
         // diff,贵得多)—— 这一页正好是 df,所以这里能拿到真值。
-        var containerTotal = usage.Containers?.Sum(c => c.SizeRw) ?? 0;
+        long containerTotal = usage.Containers?.Sum(c => c.SizeRw) ?? 0;
         // 「已停止的容器」能回收的是**已停止那些**的可写层,不是全部容器的。
-        var containerReclaim = usage.Containers?.Where(c => c.State != "running").Sum(c => c.SizeRw) ?? 0;
-        var volumeTotal = usage.Volumes?.Sum(v => v.UsageData is { Size: > 0 } u ? u.Size : 0) ?? 0;
-        var volumeReclaim = reclaim.Volumes;
+        long containerReclaim = usage.Containers?.Where(c => c.State != "running").Sum(c => c.SizeRw) ?? 0;
+        long volumeTotal = usage.Volumes?.Sum(v => v.UsageData is { Size: > 0 } u ? u.Size : 0) ?? 0;
+        long volumeReclaim = reclaim.Volumes;
         _buildCacheBytes = reclaim.BuildCache;
 
         DiskRows.Add(new("镜像", (usage.Images?.Length ?? 0).ToString(),
@@ -307,7 +307,7 @@ public sealed class SystemPageViewModel : PageViewModel
             Ratio(_buildCacheBytes, usage.BuildCache?.Sum(c => c.Size) ?? 0),
             _buildCacheBytes > 0 ? RowTone.Danger : RowTone.Idle));
 
-        var total = imageTotal + containerTotal + volumeTotal + _buildCacheBytes;
+        long total = imageTotal + containerTotal + volumeTotal + _buildCacheBytes;
         if (total > 0)
         {
             // 权重归一化成 0–1:界面用星形列宽画堆叠条,那条路要的是比例而不是字节。
@@ -324,7 +324,7 @@ public sealed class SystemPageViewModel : PageViewModel
         // df 是这一页跑一次就有的东西,顺手喂给总览那张卡 ——
         // 让用户为了看一眼"能清多少"而必须先来系统页,是没道理的。
         Shell.Overview.AcceptReclaim(reclaim);
-        foreach (var card in PruneCards)
+        foreach (PruneCard card in PruneCards)
         {
             card.SizeText = card.Title switch
             {
@@ -370,7 +370,7 @@ public sealed class SystemPageViewModel : PageViewModel
         {
             return;
         }
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = "清理已停止的容器?",
             Icon = "Icon.trash-2",
@@ -399,7 +399,7 @@ public sealed class SystemPageViewModel : PageViewModel
         {
             return;
         }
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = "清理构建缓存?",
             Icon = "Docker.database",
@@ -427,7 +427,7 @@ public sealed class SystemPageViewModel : PageViewModel
         {
             return;
         }
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = withVolumes ? "清理以上全部,并删除未使用的卷?" : "清理以上全部?",
             Icon = withVolumes ? "Docker.shield-alert" : "Docker.broom",
@@ -469,11 +469,11 @@ public sealed class SystemPageViewModel : PageViewModel
         }
         await RunPruneAsync(withVolumes ? "全部清理(含卷)" : "全部清理", async () =>
         {
-            var containers = await client.PruneContainersAsync(Shell.Lifetime).ConfigureAwait(false);
-            var images = await client.PruneImagesAsync(false, Shell.Lifetime).ConfigureAwait(false);
-            var networks = await client.PruneNetworksAsync(Shell.Lifetime).ConfigureAwait(false);
-            var cache = await client.PruneBuildCacheAsync(true, Shell.Lifetime).ConfigureAwait(false);
-            var volumes = withVolumes
+            PruneReport containers = await client.PruneContainersAsync(Shell.Lifetime).ConfigureAwait(false);
+            PruneReport images = await client.PruneImagesAsync(false, Shell.Lifetime).ConfigureAwait(false);
+            PruneReport networks = await client.PruneNetworksAsync(Shell.Lifetime).ConfigureAwait(false);
+            PruneReport cache = await client.PruneBuildCacheAsync(true, Shell.Lifetime).ConfigureAwait(false);
+            PruneReport volumes = withVolumes
                 ? await client.PruneVolumesAsync(Shell.Lifetime).ConfigureAwait(false)
                 : new PruneReport();
             return new PruneReport
@@ -491,13 +491,13 @@ public sealed class SystemPageViewModel : PageViewModel
 
     private async Task RunPruneAsync(string title, Func<Task<PruneReport>> action)
     {
-        var task = Shell.Tasks.Start("Docker.broom", title, indeterminate: true);
+        PanelTask task = Shell.Tasks.Start("Docker.broom", title, indeterminate: true);
         try
         {
-            var report = await action().ConfigureAwait(true);
+            PruneReport report = await action().ConfigureAwait(true);
             task.Finish(PanelTaskState.Succeeded, "完成",
                 $"删除 {report.DeletedCount} 项 · 回收 {Humanize.Bytes(report.SpaceReclaimed)}");
-            Shell.Feedback.Notify(FeedbackKind.Success, $"{title} 完成",
+            _ = Shell.Feedback.Notify(FeedbackKind.Success, $"{title} 完成",
                 $"删除 {report.DeletedCount} 项 · 回收 {Humanize.Bytes(report.SpaceReclaimed)}");
             await RefreshAsync(Shell.Lifetime).ConfigureAwait(true);
         }

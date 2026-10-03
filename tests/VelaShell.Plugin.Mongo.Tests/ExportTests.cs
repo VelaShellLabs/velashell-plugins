@@ -79,8 +79,8 @@ public sealed class ExportTests
                 string path = BsonDump.DataPath(dir, "shop", "orders", gzip);
                 using (Stream output = BsonDump.OpenWrite(path, gzip))
                 {
-                    BsonDump.Write(output, Tricky);
-                    BsonDump.Write(output, new BsonDocument("_id", 2));
+                    _ = BsonDump.Write(output, Tricky);
+                    _ = BsonDump.Write(output, new BsonDocument("_id", 2));
                 }
                 using Stream input = BsonDump.OpenRead(path);
                 Assert.AreEqual(Tricky, BsonDump.Read(input));
@@ -102,7 +102,7 @@ public sealed class ExportTests
     {
         byte[] bytes = Tricky.ToBson();
         using var stream = new MemoryStream(bytes[..^3]);
-        Assert.ThrowsExactly<InvalidDataException>(() => BsonDump.Read(stream));
+        _ = Assert.ThrowsExactly<InvalidDataException>(() => BsonDump.Read(stream));
     }
 
     [TestMethod]
@@ -116,7 +116,7 @@ public sealed class ExportTests
             new() { { "v", 2 }, { "key", new BsonDocument("orderNo", 1) }, { "name", "orderNo_1" }, { "unique", true } }
         ];
         var uuid = Guid.Parse("8f3b0c1a-0000-4000-8000-00000000abcd");
-        BsonDocument metadata = BsonDocument.Parse(BsonDump.MetadataJson(BsonDump.Metadata(info, indexes, uuid)));
+        var metadata = BsonDocument.Parse(BsonDump.MetadataJson(BsonDump.Metadata(info, indexes, uuid)));
         CollectionAssert.AreEqual(new[] { "options", "indexes", "uuid", "collectionName", "type" }, metadata.Names.ToArray());
         Assert.AreEqual("orders", metadata["collectionName"].AsString);
         Assert.AreEqual("collection", metadata["type"].AsString);
@@ -145,7 +145,7 @@ public sealed class ExportTests
                 { "total", new BsonDecimal128(Decimal128.Parse($"{i}.5")) },
                 { "status", i % 2 == 0 ? "paid" : "pending" }
             }));
-            await orders.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("orderNo", 1), new CreateIndexOptions { Unique = true }));
+            _ = await orders.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(new BsonDocument("orderNo", 1), new CreateIndexOptions { Unique = true }));
             IReadOnlyList<CollectionInfo> collections = await connection.ListCollectionsAsync(db);
             CollectionInfo info = collections.Single(static c => c.Name == "orders");
             var filter = new BsonDocument("status", "paid");
@@ -160,8 +160,13 @@ public sealed class ExportTests
             var progress = new List<ExportProgress>();
             ExportResult csvResult = await ExportRunner.RunAsync(connection, new ExportJob
             {
-                Database = db, Sources = [new ExportSource(info, columns)], Format = ExportFormat.Csv, Target = csv,
-                Filter = filter, Sort = new BsonDocument("orderNo", 1), EstimatedTotal = 1250
+                Database = db,
+                Sources = [new ExportSource(info, columns)],
+                Format = ExportFormat.Csv,
+                Target = csv,
+                Filter = filter,
+                Sort = new BsonDocument("orderNo", 1),
+                EstimatedTotal = 1250
             }, new SyncProgress<ExportProgress>(progress.Add), CancellationToken.None);
             Assert.AreEqual(1250, csvResult.Documents);
             Assert.IsFalse(File.Exists(csv + ".part"), "the temp file is renamed when the export completes");
@@ -173,9 +178,13 @@ public sealed class ExportTests
 
             // Excel:能被 ZipArchive 读回,行数 = 表头 + 1,250
             string xlsx = Path.Combine(dir, "orders.xlsx");
-            await ExportRunner.RunAsync(connection, new ExportJob
+            _ = await ExportRunner.RunAsync(connection, new ExportJob
             {
-                Database = db, Sources = [new ExportSource(info, columns)], Format = ExportFormat.Excel, Target = xlsx, Filter = filter
+                Database = db,
+                Sources = [new ExportSource(info, columns)],
+                Format = ExportFormat.Excel,
+                Target = xlsx,
+                Filter = filter
             }, null, CancellationToken.None);
             using (ZipArchive zip = ZipFile.OpenRead(xlsx))
             {
@@ -186,14 +195,17 @@ public sealed class ExportTests
 
             // JSON(Canonical):每行都能被驱动读回成原文档
             string json = Path.Combine(dir, "orders.jsonl");
-            await ExportRunner.RunAsync(connection, new ExportJob
+            _ = await ExportRunner.RunAsync(connection, new ExportJob
             {
-                Database = db, Sources = [new ExportSource(info)], Format = ExportFormat.Json, Target = json,
+                Database = db,
+                Sources = [new ExportSource(info)],
+                Format = ExportFormat.Json,
+                Target = json,
                 Json = new JsonOptions { Mode = EjsonMode.Canonical }
             }, null, CancellationToken.None);
             string[] jsonLines = await File.ReadAllLinesAsync(json);
             Assert.HasCount(2500, jsonLines);
-            BsonDocument first = BsonDocument.Parse(jsonLines[0]);
+            var first = BsonDocument.Parse(jsonLines[0]);
             BsonDocument stored = await orders.Find(new BsonDocument("_id", first["_id"])).FirstAsync();
             Assert.AreEqual(stored, first);
 
@@ -201,7 +213,11 @@ public sealed class ExportTests
             string dump = Path.Combine(dir, "dump");
             ExportResult dumpResult = await ExportRunner.RunAsync(connection, new ExportJob
             {
-                Database = db, Sources = [new ExportSource(info)], Format = ExportFormat.BsonDump, Target = dump, TargetIsFolder = true,
+                Database = db,
+                Sources = [new ExportSource(info)],
+                Format = ExportFormat.BsonDump,
+                Target = dump,
+                TargetIsFolder = true,
                 Dump = new DumpOptions { Gzip = true }
             }, null, CancellationToken.None);
             Assert.HasCount(2, dumpResult.Files);
@@ -209,7 +225,7 @@ public sealed class ExportTests
             await using (Stream metadataStream = BsonDump.OpenRead(BsonDump.MetadataPath(dump, db, "orders", gzip: true)))
             using (var reader = new StreamReader(metadataStream))
             {
-                BsonDocument metadata = BsonDocument.Parse(await reader.ReadToEndAsync());
+                var metadata = BsonDocument.Parse(await reader.ReadToEndAsync());
                 Assert.IsTrue(metadata["indexes"].AsBsonArray.Any(static i => i["name"] == "orderNo_1" && i["unique"].ToBoolean()));
                 Assert.AreEqual(32, metadata["uuid"].AsString.Length);
             }
@@ -260,9 +276,12 @@ public sealed class ExportTests
             string target = Path.Combine(dir, "orders.json");
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync();
-            await Assert.ThrowsAsync<OperationCanceledException>(() => ExportRunner.RunAsync(connection, new ExportJob
+            _ = await Assert.ThrowsAsync<OperationCanceledException>(() => ExportRunner.RunAsync(connection, new ExportJob
             {
-                Database = "shop", Sources = [new ExportSource(orders)], Format = ExportFormat.Json, Target = target
+                Database = "shop",
+                Sources = [new ExportSource(orders)],
+                Format = ExportFormat.Json,
+                Target = target
             }, null, cts.Token));
             Assert.IsFalse(File.Exists(target));
             Assert.IsFalse(File.Exists(target + ".part"));
@@ -298,7 +317,7 @@ public sealed class ExportTests
 
         vm.Format = ExportFormat.Json;
         Assert.IsFalse(vm.Fields.Any(static f => f.Path == "customer.name"), "JSON keeps top-level fields only");
-        BsonDocument.Parse(vm.PreviewLines[0].Text); // 预览是合法的 EJSON
+        _ = BsonDocument.Parse(vm.PreviewLines[0].Text); // 预览是合法的 EJSON
 
         vm.Format = ExportFormat.BsonDump;
         Assert.IsFalse(vm.ShowFieldTable);
@@ -323,11 +342,11 @@ public sealed class ExportTests
             await WaitAsync(() => vm.IsStep2);
             vm.TargetPath = Path.Combine(dir, "customers.xlsx");
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "19-export-target");
+            _ = Screens.Capture(bench.Window, "19-export-target");
             vm.NextCommand.Execute(null);
             await WaitAsync(() => vm.IsFinished, 20_000);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "19-export-done");
+            _ = Screens.Capture(bench.Window, "19-export-done");
             Assert.IsTrue(vm.ResultOk, vm.ResultText);
             Assert.IsTrue(File.Exists(vm.TargetPath));
             using ZipArchive zip = ZipFile.OpenRead(vm.TargetPath);
@@ -382,7 +401,7 @@ public sealed class ExportTests
             Assert.IsTrue(vm.Sources.All(static s => s.IsChecked), "a dump takes the whole database by default");
             Assert.IsFalse(vm.Sources.Any(static s => s.Name.StartsWith("system.", StringComparison.Ordinal)));
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "19-export-dump");
+            _ = Screens.Capture(bench.Window, "19-export-dump");
             vm.NextCommand.Execute(null);
             await WaitAsync(() => vm.IsStep1);
             vm.NextCommand.Execute(null);
@@ -425,8 +444,13 @@ public sealed class ExportTests
         // 与设计稿同一组列名(用户在字段表里改过的样子)
         var headers = new Dictionary<string, string>
         {
-            ["_id"] = "id", ["orderNo"] = "订单号", ["customer.name"] = "客户", ["customer.level"] = "等级",
-            ["total"] = "金额", ["status"] = "状态", ["createdAt"] = "下单时间"
+            ["_id"] = "id",
+            ["orderNo"] = "订单号",
+            ["customer.name"] = "客户",
+            ["customer.level"] = "等级",
+            ["total"] = "金额",
+            ["status"] = "状态",
+            ["createdAt"] = "下单时间"
         };
         foreach (ExportFieldRow row in vm.Fields)
         {
@@ -450,7 +474,7 @@ public sealed class ExportTests
             }
         }
         await Screens.PumpAsync(20);
-        Screens.Capture(bench.Window, "19-export-source");
+        _ = Screens.Capture(bench.Window, "19-export-source");
         vm.NextCommand.Execute(null);
         await WaitAsync(() => vm.IsStep1);
         await Screens.PumpAsync(40);
@@ -477,7 +501,7 @@ public sealed class ExportTests
     internal static string TempDir()
     {
         string dir = Path.Combine(Path.GetTempPath(), "velashell-transfer-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
+        _ = Directory.CreateDirectory(dir);
         return dir;
     }
 

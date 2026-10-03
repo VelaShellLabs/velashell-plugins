@@ -648,7 +648,6 @@ public sealed class PipelineTests
 internal sealed class PipelineTestWorkspace(MongoConnection? connection = null) : IMongoWorkspace
 {
     private readonly TestPluginContext _context = new();
-    private MongoStore? _store;
 
     /// <summary>EnsureWritable 的答案。</summary>
     public bool AllowWrites { get; set; } = true;
@@ -672,7 +671,7 @@ internal sealed class PipelineTestWorkspace(MongoConnection? connection = null) 
 
     public MongoConnection Connection => connection ?? throw new InvalidOperationException("No connection in this test.");
 
-    public MongoStore Store => _store ??= new MongoStore(_context);
+    public MongoStore Store => field ??= new MongoStore(_context);
 
     public IPluginLogger Log => _context.Log;
 
@@ -735,7 +734,7 @@ internal sealed class PipelineTestWorkspace(MongoConnection? connection = null) 
 
     public void CloseDialog(DialogViewModel dialog)
     {
-        Dialogs.Remove(dialog);
+        _ = Dialogs.Remove(dialog);
         dialog.OnClosed();
     }
 

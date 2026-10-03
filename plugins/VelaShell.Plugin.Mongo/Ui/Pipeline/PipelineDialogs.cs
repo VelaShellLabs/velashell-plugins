@@ -148,14 +148,14 @@ internal sealed class PipelineNameDialogViewModel : DialogViewModel, IViewFactor
         {
             return;
         }
-        _result.TrySetResult(new(_name.Trim(), _merge));
+        _ = _result.TrySetResult(new(_name.Trim(), _merge));
         Close();
     }
 
     /// <inheritdoc />
     internal override void OnClosed()
     {
-        _result.TrySetResult(null);
+        _ = _result.TrySetResult(null);
         base.OnClosed();
     }
 }
@@ -166,9 +166,7 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     private readonly string _database;
     private readonly string _collection;
     private readonly IReadOnlyList<BsonDocument> _stages;
-    private PipelineCodeLanguage _language = PipelineCodeLanguage.Mongosh;
     private bool _allowDiskUse;
-    private string _code = "";
 
     /// <summary>构造。</summary>
     public PipelineCodeDialogViewModel(IMongoWorkspace workspace, string database, string collection, IReadOnlyList<BsonDocument> stages, bool allowDiskUse)
@@ -196,21 +194,21 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>当前语言。</summary>
     public PipelineCodeLanguage Language
     {
-        get => _language;
+        get;
         set
         {
-            if (SetProperty(ref _language, value))
+            if (SetProperty(ref field, value))
             {
                 RaisePropertiesChanged(nameof(IsMongosh), nameof(IsCSharp), nameof(IsPython), nameof(IsNode), nameof(IsJava));
                 Regenerate();
             }
         }
-    }
+    } = PipelineCodeLanguage.Mongosh;
 
     /// <summary>mongosh 分段。</summary>
     public bool IsMongosh
     {
-        get => _language == PipelineCodeLanguage.Mongosh;
+        get => Language == PipelineCodeLanguage.Mongosh;
         set
         {
             if (value)
@@ -223,7 +221,7 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>C# 分段。</summary>
     public bool IsCSharp
     {
-        get => _language == PipelineCodeLanguage.CSharp;
+        get => Language == PipelineCodeLanguage.CSharp;
         set
         {
             if (value)
@@ -236,7 +234,7 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>Python 分段。</summary>
     public bool IsPython
     {
-        get => _language == PipelineCodeLanguage.Python;
+        get => Language == PipelineCodeLanguage.Python;
         set
         {
             if (value)
@@ -249,7 +247,7 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>Node.js 分段。</summary>
     public bool IsNode
     {
-        get => _language == PipelineCodeLanguage.Node;
+        get => Language == PipelineCodeLanguage.Node;
         set
         {
             if (value)
@@ -262,7 +260,7 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>Java 分段。</summary>
     public bool IsJava
     {
-        get => _language == PipelineCodeLanguage.Java;
+        get => Language == PipelineCodeLanguage.Java;
         set
         {
             if (value)
@@ -288,9 +286,9 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <summary>生成的代码。</summary>
     public string Code
     {
-        get => _code;
-        private set => SetProperty(ref _code, value);
-    }
+        get;
+        private set => SetProperty(ref field, value);
+    } = "";
 
     /// <summary>底栏说明(<c>5 个启用阶段 · 停用的阶段不导出</c>)。</summary>
     public string Note => Loc.Format("Pipe_CodeNote", _stages.Count);
@@ -301,7 +299,7 @@ internal sealed class PipelineCodeDialogViewModel : DialogViewModel, IViewFactor
     /// <inheritdoc />
     public Control CreateView() => new PipelineCodeDialogView(this);
 
-    private void Regenerate() => Code = PipelineCode.Generate(_language, _database, _collection, _stages, _allowDiskUse);
+    private void Regenerate() => Code = PipelineCode.Generate(Language, _database, _collection, _stages, _allowDiskUse);
 
     private async Task CopyAsync()
     {

@@ -24,9 +24,6 @@ internal enum ConnectionState
 internal sealed class ConnectionEntry : ObservableObject
 {
     private MongoProfile _profile;
-    private ConnectionState _state;
-    private MongoSession? _session;
-    private MongoConnectException? _failure;
     private readonly Loc _loc;
 
     /// <summary>构造。</summary>
@@ -64,10 +61,10 @@ internal sealed class ConnectionEntry : ObservableObject
     /// <summary>状态。</summary>
     public ConnectionState State
     {
-        get => _state;
+        get;
         set
         {
-            if (SetProperty(ref _state, value))
+            if (SetProperty(ref field, value))
             {
                 UpdateRoot();
                 StateChanged?.Invoke(this);
@@ -81,15 +78,15 @@ internal sealed class ConnectionEntry : ObservableObject
     /// <summary>连着时的会话。</summary>
     public MongoSession? Session
     {
-        get => _session;
-        set => SetProperty(ref _session, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>没连上的原因。</summary>
     public MongoConnectException? Failure
     {
-        get => _failure;
-        set => SetProperty(ref _failure, value);
+        get;
+        set => SetProperty(ref field, value);
     }
 
     /// <summary>正在连时可取消。</summary>
@@ -117,7 +114,7 @@ internal sealed class ConnectionEntry : ObservableObject
     /// <summary>根行的色点、标签与右侧小字跟着状态与环境走。</summary>
     private void UpdateRoot()
     {
-        Root.DotClass = _state switch
+        Root.DotClass = State switch
         {
             ConnectionState.Connected => "ok",
             ConnectionState.Connecting => "connecting",
@@ -128,9 +125,9 @@ internal sealed class ConnectionEntry : ObservableObject
         {
             MongoEnvironment.Production => (_loc["Mongo_EnvProduction"], "err"),
             MongoEnvironment.Testing => (_loc["Mongo_EnvTesting"], "warn"),
-            _ => ((string?)null, "muted")
+            _ => (null, "muted")
         };
-        if (_state != ConnectionState.Connected)
+        if (State != ConnectionState.Connected)
         {
             Root.Meta = "";
         }

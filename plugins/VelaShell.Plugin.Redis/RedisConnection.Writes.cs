@@ -37,21 +37,21 @@ internal sealed partial class RedisConnection
         IDatabase db = Db();
         if (!keepTtl)
         {
-            await db.StringSetAsync(key.ToRedisKey(), value).ConfigureAwait(false);
+            _ = await db.StringSetAsync(key.ToRedisKey(), value).ConfigureAwait(false);
             return;
         }
         try
         {
             // KEEPTTL 是 Redis 6.0 的选项;老服务器上退回"读 TTL → 写值 → 补回 TTL"。
-            await db.ExecuteAsync("SET", [key.ToRedisKey(), (RedisValue)value, "KEEPTTL"]).ConfigureAwait(false);
+            _ = await db.ExecuteAsync("SET", [key.ToRedisKey(), (RedisValue)value, "KEEPTTL"]).ConfigureAwait(false);
         }
         catch (RedisServerException ex) when (IsSyntaxError(ex))
         {
             TimeSpan? ttl = await db.KeyTimeToLiveAsync(key.ToRedisKey()).ConfigureAwait(false);
-            await db.StringSetAsync(key.ToRedisKey(), value).ConfigureAwait(false);
+            _ = await db.StringSetAsync(key.ToRedisKey(), value).ConfigureAwait(false);
             if (ttl is { } remaining && remaining > TimeSpan.Zero)
             {
-                await db.KeyExpireAsync(key.ToRedisKey(), remaining).ConfigureAwait(false);
+                _ = await db.KeyExpireAsync(key.ToRedisKey(), remaining).ConfigureAwait(false);
             }
         }
     }
@@ -338,7 +338,7 @@ internal sealed partial class RedisConnection
         {
             args.Add("REPLACE");
         }
-        await destination.ExecuteAsync("RESTORE", args).ConfigureAwait(false);
+        _ = await destination.ExecuteAsync("RESTORE", args).ConfigureAwait(false);
         return true;
     }
 

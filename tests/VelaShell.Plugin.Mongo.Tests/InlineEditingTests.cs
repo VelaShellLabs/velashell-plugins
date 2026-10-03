@@ -7,7 +7,6 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using MongoDB.Bson;
-using VelaShell.Plugin.Mongo.Bson;
 using VelaShell.Plugin.Mongo.Staging;
 using VelaShell.Plugin.Mongo.Ui;
 using Calendar = Avalonia.Controls.Calendar;
@@ -69,7 +68,7 @@ public sealed class InlineEditingTests
         await Screens.PumpAsync(10);
         Flyout picker = grid.DatePicker!;
         var content = (StackPanel)picker.Content!;
-        var calendar = (Calendar)content.Children[0];
+        Calendar calendar = content.Children.OfType<Calendar>().Single();
         Assert.AreEqual(original.Date, calendar.SelectedDate, "the calendar opens on the cell's current day");
 
         calendar.SelectedDate = new DateTime(2026, 2, 14);
@@ -88,7 +87,7 @@ public sealed class InlineEditingTests
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         await Screens.PumpAsync(10);
         content = (StackPanel)grid.DatePicker!.Content!;
-        var bar = (DockPanel)content.Children[1];
+        DockPanel bar = content.Children.OfType<DockPanel>().Single();
         TextBox time = bar.Children.OfType<TextBox>().Single();
         Button apply = ((StackPanel)bar.Children[0]).Children.OfType<Button>().Last();
         time.Text = "25:99";
@@ -124,7 +123,7 @@ public sealed class InlineEditingTests
         status.Editor!.Text = "on-hold";
 
         // 点回网格:焦点离开编辑框 → 写进暂存区,编辑框与高亮的类型下拉一起收掉。
-        ((Control)ViewOf(bench).Grid.List.ContainerFromItem(row)!).Focus();
+        _ = ViewOf(bench).Grid.List.ContainerFromItem(row)!.Focus();
         await Screens.PumpAsync(10);
         Assert.IsFalse(tab.Inspector.Fields.Any(static f => f.IsEditing), "no field is left in editing state");
         Assert.AreEqual("on-hold", tab.Staging.EditOf(row.Id)!.Find("status")!.Value!.AsString);
@@ -136,7 +135,7 @@ public sealed class InlineEditingTests
         var item = (ListBoxItem)inspector.Fields.ContainerFromItem(selected)!;
         ContentPresenter presenter = item.GetVisualDescendants().OfType<ContentPresenter>().First();
         Assert.AreEqual(0, ((ISolidColorBrush?)presenter.Background)?.Color.A ?? 0, "an unfocused selection is not painted");
-        item.Focus();
+        _ = item.Focus();
         await Screens.PumpAsync(5);
         Assert.AreNotEqual(0, ((ISolidColorBrush?)presenter.Background)?.Color.A ?? 0, "the focused selection is painted");
 
@@ -145,7 +144,7 @@ public sealed class InlineEditingTests
         tab.Inspector.BeginEdit(total);
         await Screens.PumpAsync(20);
         total.Editor!.Text = "abc";
-        ((Control)ViewOf(bench).Grid.List.ContainerFromItem(row)!).Focus();
+        _ = ViewOf(bench).Grid.List.ContainerFromItem(row)!.Focus();
         await Screens.PumpAsync(10);
         Assert.IsTrue(total.IsEditing);
         Assert.IsTrue(total.Editor!.HasError);
@@ -168,7 +167,7 @@ public sealed class InlineEditingTests
 
         async Task ClickAsync(double x)
         {
-            var container = (Control)inspector.Fields.ContainerFromItem(Tags())!;
+            Control container = inspector.Fields.ContainerFromItem(Tags())!;
             container.BringIntoView();
             await Screens.PumpAsync(5);
             Point at = container.TranslatePoint(new Point(x, container.Bounds.Height / 2), bench.Window)!.Value;
@@ -187,7 +186,7 @@ public sealed class InlineEditingTests
         Assert.IsFalse(tab.Inspector.Fields.Any(static f => f.Path == "tags.0"));
 
         // 双击只翻一次(第二下不再翻回去,也不进入编辑整个数组)。
-        var row = (Control)inspector.Fields.ContainerFromItem(Tags())!;
+        Control row = inspector.Fields.ContainerFromItem(Tags())!;
         Point same = row.TranslatePoint(new Point(150, row.Bounds.Height / 2), bench.Window)!.Value;
         bench.Window.MouseDown(same, MouseButton.Left);
         bench.Window.MouseUp(same, MouseButton.Left);

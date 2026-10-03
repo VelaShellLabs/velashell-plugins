@@ -136,7 +136,7 @@ internal sealed class CsvReader
             return false;
         }
         RecordLine = _line;
-        _field.Clear();
+        _ = _field.Clear();
         bool quoted = false;
         bool fieldStart = true;
         bool sawQuote = false;
@@ -157,7 +157,7 @@ internal sealed class CsvReader
                     if (Peek() == '"')
                     {
                         _position++;
-                        _field.Append('"');
+                        _ = _field.Append('"');
                     }
                     else
                     {
@@ -170,7 +170,7 @@ internal sealed class CsvReader
                     {
                         _line++;
                     }
-                    _field.Append(c);
+                    _ = _field.Append(c);
                 }
                 continue;
             }
@@ -184,11 +184,11 @@ internal sealed class CsvReader
             if (c == _delimiter)
             {
                 fields.Add(_field.ToString());
-                _field.Clear();
+                _ = _field.Clear();
                 fieldStart = true;
                 continue;
             }
-            if (c == '\r' || c == '\n')
+            if (c is '\r' or '\n')
             {
                 if (c == '\r' && Peek() == '\n')
                 {
@@ -200,7 +200,7 @@ internal sealed class CsvReader
                 return true;
             }
             fieldStart = false;
-            _field.Append(c);
+            _ = _field.Append(c);
         }
     }
 

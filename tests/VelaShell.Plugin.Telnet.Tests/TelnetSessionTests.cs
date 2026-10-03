@@ -37,7 +37,7 @@ public sealed class TelnetSessionTests
                 TcpClient client = await _listener.AcceptTcpClientAsync().ConfigureAwait(false);
                 _client = client;
                 _stream = client.GetStream();
-                _accepted.TrySetResult(client);
+                _ = _accepted.TrySetResult(client);
                 byte[] buffer = new byte[4096];
                 try
                 {
@@ -78,7 +78,7 @@ public sealed class TelnetSessionTests
 
         public async Task SendAsync(params byte[] bytes)
         {
-            await _accepted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            _ = await _accepted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             await _stream!.WriteAsync(bytes).ConfigureAwait(false);
             await _stream.FlushAsync().ConfigureAwait(false);
         }
@@ -161,7 +161,7 @@ public sealed class TelnetSessionTests
             {
                 break;
             }
-            text.Append(Encoding.ASCII.GetString(buffer, 0, read));
+            _ = text.Append(Encoding.ASCII.GetString(buffer, 0, read));
         }
         return text.ToString();
     }

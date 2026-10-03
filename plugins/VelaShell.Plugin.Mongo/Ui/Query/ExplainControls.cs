@@ -87,19 +87,13 @@ public sealed class ExplainFlowPanel : Panel
     {
         base.OnAttachedToVisualTree(e);
         _scroller = this.FindAncestorOfType<ScrollViewer>();
-        if (_scroller is not null)
-        {
-            _scroller.PropertyChanged += OnScrollerChanged;
-        }
+        _scroller?.PropertyChanged += OnScrollerChanged;
     }
 
     /// <inheritdoc />
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (_scroller is not null)
-        {
-            _scroller.PropertyChanged -= OnScrollerChanged;
-        }
+        _scroller?.PropertyChanged -= OnScrollerChanged;
         _scroller = null;
         base.OnDetachedFromVisualTree(e);
     }

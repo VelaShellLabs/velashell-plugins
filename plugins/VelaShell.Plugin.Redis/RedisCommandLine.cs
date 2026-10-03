@@ -34,7 +34,7 @@ public static class RedisCommandLine
                 if (inToken)
                 {
                     result.Add(current.ToString());
-                    current.Clear();
+                    _ = current.Clear();
                     inToken = false;
                 }
                 continue;
@@ -60,7 +60,7 @@ public static class RedisCommandLine
                 continue;
             }
             inToken = true;
-            current.Append(c);
+            _ = current.Append(c);
         }
         if (inToken)
         {
@@ -83,7 +83,7 @@ public static class RedisCommandLine
             }
             if (c != '\\')
             {
-                sink.Append(c);
+                _ = sink.Append(c);
                 continue;
             }
             if (i + 1 >= text.Length)
@@ -93,24 +93,24 @@ public static class RedisCommandLine
             char escaped = text[++i];
             switch (escaped)
             {
-                case 'n': sink.Append('\n'); break;
-                case 'r': sink.Append('\r'); break;
-                case 't': sink.Append('\t'); break;
-                case 'a': sink.Append('\a'); break;
-                case 'b': sink.Append('\b'); break;
-                case '\\': sink.Append('\\'); break;
-                case '"': sink.Append('"'); break;
+                case 'n': _ = sink.Append('\n'); break;
+                case 'r': _ = sink.Append('\r'); break;
+                case 't': _ = sink.Append('\t'); break;
+                case 'a': _ = sink.Append('\a'); break;
+                case 'b': _ = sink.Append('\b'); break;
+                case '\\': _ = sink.Append('\\'); break;
+                case '"': _ = sink.Append('"'); break;
                 case 'x' when i + 2 < text.Length
                               && byte.TryParse(text.AsSpan(i + 1, 2), NumberStyles.HexNumber,
                                   CultureInfo.InvariantCulture, out byte hex):
                     // \xNN 是把二进制值敲进控制台的唯一途径 —— 键与值都是字节串,
                     // 没有它,用户就没法操作任何非文本的键。
-                    sink.Append((char)hex);
+                    _ = sink.Append((char)hex);
                     i += 2;
                     break;
                 default:
                     // 认不出的转义按字面量处理(与 redis-cli 一致),不报错。
-                    sink.Append(escaped);
+                    _ = sink.Append(escaped);
                     break;
             }
         }
@@ -128,7 +128,7 @@ public static class RedisCommandLine
                 index = i;
                 return true;
             }
-            sink.Append(text[i]);
+            _ = sink.Append(text[i]);
         }
         error = "unbalanced-quotes";
         return false;

@@ -110,7 +110,7 @@ public sealed class PanelSettings(IPluginStorage storage) : ObservableObject
     /// <summary>读全局设置。</summary>
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        var state = await TryGetAsync<GlobalState>(GlobalKey, cancellationToken).ConfigureAwait(false);
+        GlobalState? state = await TryGetAsync<GlobalState>(GlobalKey, cancellationToken).ConfigureAwait(false);
         if (state is null)
         {
             return;

@@ -1,10 +1,10 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using VelaShell.Plugin.Mongo.Bson;
 using Calendar = Avalonia.Controls.Calendar;
 
@@ -39,53 +39,48 @@ internal static class DatePickFlyout
             DisplayDate = start.Date,
             IsTodayHighlighted = true
         };
+        // 时刻框与两颗按钮用本插件自己的主题(描边输入框、主操作药丸、次操作描边):
+        // 不指定就落到宿主的 Fluent 默认上 —— 圆角大一号、「应用」是系统强调蓝,和上面的月历不是一套。
         var time = new TextBox
         {
+            Theme = ThemeOf(anchor, "MongoTextBox"),
             Text = start.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
-            Width = 96,
-            VerticalContentAlignment = VerticalAlignment.Center
+            Width = 84,
+            Height = 28,
+            VerticalAlignment = VerticalAlignment.Center
         };
-        if (anchor.TryFindResource("VelaUiMonoFont", out object? mono) && mono is FontFamily family)
-        {
-            time.FontFamily = family;
-        }
         ToolTip.SetTip(time, loc["Doc_LocalTime"]);
-        var now = new Button { Content = loc["Cw_DateNow"], VerticalAlignment = VerticalAlignment.Center };
-        var apply = new Button { Content = loc["Common_Apply"], VerticalAlignment = VerticalAlignment.Center };
-        apply.Classes.Add("accent");
+        var now = new Button { Theme = ThemeOf(anchor, "MongoOutlineButton"), Content = loc["Cw_DateNow"], Padding = new Thickness(12, 0) };
+        var apply = new Button { Theme = ThemeOf(anchor, "MongoPillButton"), Content = loc["Common_Apply"], Padding = new Thickness(12, 0) };
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
         buttons.Children.Add(now);
         buttons.Children.Add(apply);
         DockPanel.SetDock(buttons, Dock.Right);
-        var label = new TextBlock
-        {
-            Text = loc["Cw_DateTime"],
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
-            Foreground = ThemeBrushes.Get("VelaTextSecondary", Brushes.Gray)
-        };
+        // .ui = VelaUiFont 11 + VelaTextSecondary(MongoStyles.axaml)。
+        var label = new TextBlock { Text = loc["Cw_DateTime"], Margin = new Thickness(2, 0, 8, 0), Classes = { "ui" } };
         DockPanel.SetDock(label, Dock.Left);
         var bar = new DockPanel { LastChildFill = false };
         bar.Children.Add(buttons);
         bar.Children.Add(label);
         bar.Children.Add(time);
 
+        // 月历与时刻栏之间一条 VelaBorderPrimary 细线:上面是"选哪天",下面是"几点 + 怎么提交"。
+        var divider = new Border { Height = 1, Background = ThemeBrushes.Get("VelaBorderPrimary", Brushes.Gray) };
+
         var flyout = new Flyout
         {
-            Content = new StackPanel { Spacing = 8, Children = { calendar, bar } },
+            Content = new StackPanel { Spacing = 8, Children = { calendar, divider, bar } },
             Placement = PlacementMode.BottomEdgeAlignedRight
         };
-        IBrush? normalBorder = null;
 
         void Commit(DateTime day)
         {
             if (!TryParseTime(time.Text, out TimeSpan of))
             {
-                normalBorder ??= time.BorderBrush;
-                time.BorderBrush = ThemeBrushes.Get("VelaError", Brushes.Red);
+                time.Classes.Set("invalid", true);
                 ToolTip.SetTip(time, loc["Cw_DateBadTime"]);
-                time.Focus();
+                _ = time.Focus();
                 return;
             }
             flyout.Hide();
@@ -116,15 +111,19 @@ internal static class DatePickFlyout
         };
         time.TextChanged += (_, _) =>
         {
-            if (normalBorder is not null)
+            if (time.Classes.Contains("invalid"))
             {
-                time.BorderBrush = normalBorder;
+                time.Classes.Set("invalid", false);
                 ToolTip.SetTip(time, loc["Doc_LocalTime"]);
             }
         };
         flyout.ShowAt(anchor);
         return flyout;
     }
+
+    /// <summary>本插件的具名控件主题(MongoStyles.axaml)。锚点在引了那份样式的视图里,从它往上找得到。</summary>
+    private static ControlTheme? ThemeOf(Control anchor, string key) =>
+        anchor.TryFindResource(key, out object? found) ? found as ControlTheme : null;
 
     /// <summary>时刻框:<c>9:30</c>、<c>09:30</c>、<c>09:30:15</c> 都认。</summary>
     internal static bool TryParseTime(string? text, out TimeSpan time) =>

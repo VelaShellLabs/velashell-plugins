@@ -60,13 +60,10 @@ public sealed partial class TransferWizardView : UserControl
 
     private void Unsubscribe()
     {
-        if (_subscribed is not null)
-        {
-            _subscribed.Log.CollectionChanged -= OnLogChanged;
-            _subscribed = null;
-        }
+        _subscribed?.Log.CollectionChanged -= OnLogChanged;
+        _subscribed = null;
     }
 
     private void OnLogChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
-        Dispatcher.UIThread.Post(() => LogScroll.ScrollToEnd(), DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(LogScroll.ScrollToEnd, DispatcherPriority.Background);
 }

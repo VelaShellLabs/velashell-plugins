@@ -207,7 +207,7 @@ public sealed class UsersTests
             Assert.IsTrue(password.Any(char.IsUpper) && password.Any(char.IsLower) && password.Any(char.IsDigit));
             Assert.IsTrue(password.All(c => char.IsAsciiLetterOrDigit(c) || "-_.~".Contains(c)), password);
             Assert.AreEqual(password, Uri.EscapeDataString(password), "no escaping needed inside a URI");
-            seen.Add(password);
+            _ = seen.Add(password);
         }
         Assert.AreEqual(200, seen.Count);
     }
@@ -285,7 +285,7 @@ public sealed class UsersTests
             created.Roles.Rows.First(r => r.Database == "shop").Cells[0].IsChecked = true;
             Assert.IsTrue(created.CanSave, created.ValidationError);
             await Screens.PumpAsync(30);
-            Screens.Capture(bench.Window, "18-users-new");
+            _ = Screens.Capture(bench.Window, "18-users-new");
             await tab.SaveUserAsync(created);
 
             BsonDocument user = await UserDocAsync(admin, name);
@@ -330,7 +330,7 @@ public sealed class UsersTests
             reset.Confirm = "Reset-Pass-12345";
             Assert.IsFalse(reset.CanApply);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "18-users-reset");
+            _ = Screens.Capture(bench.Window, "18-users-reset");
             reset.Confirm = "Reset-Pass-123456";
             reset.ApplyCommand.Execute(null);
             await WaitAsync(() => bench.ViewModel.Dialog is null);
@@ -348,7 +348,7 @@ public sealed class UsersTests
             var reveal = (RevealPasswordDialogViewModel)bench.ViewModel.Dialog!;
             Assert.AreEqual(24, reveal.Password.Length);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "18-users-reveal");
+            _ = Screens.Capture(bench.Window, "18-users-reveal");
             reveal.Close();
             user = await UserDocAsync(admin, name);
             Assert.IsTrue(user["customData"][UserAdmin.PasswordChangedKey].ToUniversalTime() > before, "rotation refreshes the change time");
@@ -408,7 +408,7 @@ public sealed class UsersTests
             CollectionAssert.AreEqual(new[] { "read@logs" }, Roles(info));
 
             // 有人持有它 → 编辑器里列出持有者。
-            await admin.RunCommandAsync<BsonDocument>(new BsonDocument
+            _ = await admin.RunCommandAsync<BsonDocument>(new BsonDocument
             {
                 { "createUser", holder }, { "pwd", "Holder-Pass-123456" },
                 { "roles", new BsonArray { new BsonDocument { { "role", role }, { "db", "admin" } } } }
@@ -419,7 +419,7 @@ public sealed class UsersTests
             CollectionAssert.Contains(editor.Holders.ToList(), holder + "@admin");
             await WaitAsync(() => !editor.Effective.IsBusy && editor.Effective.Lines.Count > 0);
             await Screens.PumpAsync(20);
-            Screens.Capture(bench.Window, "18-users-roles");
+            _ = Screens.Capture(bench.Window, "18-users-roles");
 
             // 改:去掉 insert、加 update;不再继承 read@logs → revoke + grant 增量命令。
             PrivilegeRowViewModel existing = editor.Privileges.Single();
@@ -452,7 +452,7 @@ public sealed class UsersTests
             await DropUserQuietlyAsync(admin, holder);
             try
             {
-                await admin.RunCommandAsync<BsonDocument>(new BsonDocument("dropRole", role));
+                _ = await admin.RunCommandAsync<BsonDocument>(new BsonDocument("dropRole", role));
             }
             catch (MongoCommandException)
             {
@@ -536,7 +536,7 @@ public sealed class UsersTests
     {
         try
         {
-            await admin.RunCommandAsync<BsonDocument>(new BsonDocument("dropUser", name));
+            _ = await admin.RunCommandAsync<BsonDocument>(new BsonDocument("dropUser", name));
         }
         catch (MongoCommandException)
         {

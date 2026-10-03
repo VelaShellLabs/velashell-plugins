@@ -95,7 +95,7 @@ internal static class PipelineFields
         }
         BsonKind kind = BsonKinds.Of(value);
         byKind[kind] = byKind.GetValueOrDefault(kind) + 1;
-        seen.Add(path);
+        _ = seen.Add(path);
     }
 
     /// <summary>

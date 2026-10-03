@@ -77,9 +77,7 @@ public sealed class MongoPlugin : IVelaPlugin
         {
             await work.WaitAsync(budget, cancellationToken).ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // 停用路径:任何一步的失败都不该让其余收尾半途而废。
         catch (Exception)
-#pragma warning restore CA1031
         {
         }
     }

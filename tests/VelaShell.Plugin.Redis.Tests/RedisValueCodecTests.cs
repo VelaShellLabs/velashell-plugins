@@ -64,8 +64,8 @@ public sealed class RedisValueCodecTests
     [TestMethod]
     public void DetectCompression_ReadsMagicBytes()
     {
-        RedisValueCodec.TryCompress(Json, RedisCompression.GZip, out byte[] gzip, out _);
-        RedisValueCodec.TryCompress(Json, RedisCompression.Deflate, out byte[] zlib, out _);
+        _ = RedisValueCodec.TryCompress(Json, RedisCompression.GZip, out byte[] gzip, out _);
+        _ = RedisValueCodec.TryCompress(Json, RedisCompression.Deflate, out byte[] zlib, out _);
 
         Assert.AreEqual(RedisCompression.GZip, RedisValueCodec.DetectCompression(gzip));
         Assert.AreEqual(RedisCompression.Deflate, RedisValueCodec.DetectCompression(zlib));

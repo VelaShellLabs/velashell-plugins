@@ -30,7 +30,7 @@ public sealed partial class PipelineStagePickerView : UserControl
     /// <summary>打开弹层后把焦点给搜索框。</summary>
     public void FocusSearch()
     {
-        Search.Focus();
+        _ = Search.Focus();
         Search.SelectAll();
     }
 

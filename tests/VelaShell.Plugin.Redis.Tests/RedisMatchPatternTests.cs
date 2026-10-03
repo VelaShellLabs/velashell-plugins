@@ -10,23 +10,15 @@ namespace VelaShell.Plugin.Redis.Tests;
 public sealed class RedisMatchPatternTests
 {
     [TestMethod]
-    public void Prefix_AppendsStar()
-    {
-        Assert.AreEqual("user*", RedisMatchPattern.Build(RedisMatchMode.Prefix, "user"));
-    }
+    public void Prefix_AppendsStar() => Assert.AreEqual("user*", RedisMatchPattern.Build(RedisMatchMode.Prefix, "user"));
 
     [TestMethod]
-    public void Contains_WrapsWithStars()
-    {
-        Assert.AreEqual("*user*", RedisMatchPattern.Build(RedisMatchMode.Contains, "user"));
-    }
+    public void Contains_WrapsWithStars() => Assert.AreEqual("*user*", RedisMatchPattern.Build(RedisMatchMode.Contains, "user"));
 
     [TestMethod]
-    public void Glob_PassesTheInputThroughUntouched()
-    {
+    public void Glob_PassesTheInputThroughUntouched() =>
         // 通配模式下用户输入的**就是**模式 —— 那正是他选这个模式的意思,一个字符都不许改。
         Assert.AreEqual("user:*:profile", RedisMatchPattern.Build(RedisMatchMode.Glob, "user:*:profile"));
-    }
 
     [TestMethod]
     public void EmptyInput_MatchesEverything()
@@ -49,28 +41,18 @@ public sealed class RedisMatchPatternTests
     }
 
     [TestMethod]
-    public void Contains_EscapesGlobMetacharacters()
-    {
-        Assert.AreEqual(@"*a\*b*", RedisMatchPattern.Build(RedisMatchMode.Contains, "a*b"));
-    }
+    public void Contains_EscapesGlobMetacharacters() => Assert.AreEqual(@"*a\*b*", RedisMatchPattern.Build(RedisMatchMode.Contains, "a*b"));
 
     [TestMethod]
-    public void Glob_DoesNotEscape()
-    {
-        Assert.AreEqual("a*b", RedisMatchPattern.Build(RedisMatchMode.Glob, "a*b"));
-    }
+    public void Glob_DoesNotEscape() => Assert.AreEqual("a*b", RedisMatchPattern.Build(RedisMatchMode.Glob, "a*b"));
 
     [TestMethod]
-    public void Input_IsTrimmed()
-    {
+    public void Input_IsTrimmed() =>
         // 从别处粘过来的键名常带首尾空白;不去掉就会得到一个永远匹配不到东西的模式。
         Assert.AreEqual("user*", RedisMatchPattern.Build(RedisMatchMode.Prefix, "  user  "));
-    }
 
     [TestMethod]
-    public void ColonsAreNotEscaped()
-    {
+    public void ColonsAreNotEscaped() =>
         // 冒号不是 glob 元字符,转义它会让 user: 变成一个匹配不到任何键的模式。
         Assert.AreEqual("user:10086*", RedisMatchPattern.Build(RedisMatchMode.Prefix, "user:10086"));
-    }
 }

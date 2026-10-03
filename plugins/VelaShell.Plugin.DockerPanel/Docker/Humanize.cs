@@ -22,7 +22,7 @@ public static class Humanize
             return $"{value} B";
         }
         double size = value;
-        var unit = 0;
+        int unit = 0;
         while (size >= 1000 && unit < SizeUnits.Length - 1)
         {
             size /= 1000;
@@ -63,7 +63,7 @@ public static class Humanize
     /// <summary>把一个时刻说成"多久以前"。</summary>
     public static string Ago(DateTimeOffset moment)
     {
-        var span = DateTimeOffset.UtcNow - moment.ToUniversalTime();
+        TimeSpan span = DateTimeOffset.UtcNow - moment.ToUniversalTime();
         return span < TimeSpan.FromSeconds(5) ? "刚刚" : $"{Duration(span)} 前";
     }
 
@@ -73,7 +73,7 @@ public static class Humanize
     /// 所以这两个入口都得有。
     /// </remarks>
     public static string AgoFromIso(string? iso) =>
-        DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var moment)
+        DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset moment)
             ? Ago(moment)
             : "—";
 
@@ -85,7 +85,7 @@ public static class Humanize
     public static string LocalTime(string? iso)
     {
         return string.IsNullOrWhiteSpace(iso) ? "—"
-            : DateTimeOffset.TryParse(iso, null, DateTimeStyles.RoundtripKind, out var parsed)
+            : DateTimeOffset.TryParse(iso, null, DateTimeStyles.RoundtripKind, out DateTimeOffset parsed)
             ? parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
             : iso;
     }
@@ -101,15 +101,15 @@ public static class Humanize
         }
         // 同一个容器端口可能同时绑在 0.0.0.0 与 :: 上,daemon 会给两条。
         // 界面上它们是同一件事,去重之后才不会显示成 "8080→80, 8080→80"。
-        var published = ports
+        IEnumerable<string> published = ports
             .Where(p => p.PublicPort > 0)
             .Select(p => $"{p.PublicPort}→{p.PrivatePort}")
             .Distinct();
-        var exposed = ports
+        IEnumerable<string> exposed = ports
             .Where(p => p.PublicPort == 0)
             .Select(p => $"{p.PrivatePort}/{p.Type ?? "tcp"}")
             .Distinct();
-        var text = string.Join(", ", published.Concat(exposed));
+        string text = string.Join(", ", published.Concat(exposed));
         return text.Length == 0 ? "—" : text;
     }
 
@@ -120,7 +120,7 @@ public static class Humanize
         {
             return "";
         }
-        var text = id.StartsWith("sha256:", StringComparison.Ordinal) ? id[7..] : id;
+        string text = id.StartsWith("sha256:", StringComparison.Ordinal) ? id[7..] : id;
         return text.Length <= 12 ? text : text[..12];
     }
 }

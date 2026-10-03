@@ -1,6 +1,6 @@
-using Avalonia.Threading;
 using System.Collections.ObjectModel;
 using System.Net;
+using Avalonia.Threading;
 using VelaShell.Plugin.DockerPanel.Docker;
 
 namespace VelaShell.Plugin.DockerPanel.Ui;
@@ -111,7 +111,7 @@ public sealed class Feedback : ObservableObject
     public Toast Notify(FeedbackKind kind, string title, string detail, params ToastAction[] actions)
     {
         var toast = new Toast(kind, title, detail);
-        foreach (var action in actions)
+        foreach (ToastAction action in actions)
         {
             toast.Actions.Add(action);
         }
@@ -126,7 +126,7 @@ public sealed class Feedback : ObservableObject
             }
             if (toast.AutoDismiss)
             {
-                DispatcherTimer.RunOnce(() => Toasts.Remove(toast), TimeSpan.FromSeconds(4));
+                _ = DispatcherTimer.RunOnce(() => Toasts.Remove(toast), TimeSpan.FromSeconds(4));
             }
         });
         return toast;
@@ -147,19 +147,19 @@ public sealed class Feedback : ObservableObject
     {
         if (result.AllSucceeded)
         {
-            var text = $"已{verb} {result.SucceededCount} 个";
+            string text = $"已{verb} {result.SucceededCount} 个";
             if (inView)
             {
                 Status(FeedbackKind.Success, text);
             }
             else
             {
-                Notify(FeedbackKind.Success, text, "");
+                _ = Notify(FeedbackKind.Success, text, "");
             }
             return;
         }
-        var summary = $"已{verb} {result.SucceededCount} 个,{result.FailedCount} 个失败";
-        var detail = string.Join('\n', result.Failures.Take(3).Select(f => $"{f.Target}:{f.Failure}"));
+        string summary = $"已{verb} {result.SucceededCount} 个,{result.FailedCount} 个失败";
+        string detail = string.Join('\n', result.Failures.Take(3).Select(f => $"{f.Target}:{f.Failure}"));
         if (result.FailedCount > 3)
         {
             detail += $"\n…还有 {result.FailedCount - 3} 个";
@@ -170,7 +170,7 @@ public sealed class Feedback : ObservableObject
         {
             actions.Add(new("查看详情", onShowDetail));
         }
-        Notify(FeedbackKind.Warning, summary, detail, [.. actions]);
+        _ = Notify(FeedbackKind.Warning, summary, detail, [.. actions]);
     }
 
     /// <summary>
@@ -192,13 +192,13 @@ public sealed class Feedback : ObservableObject
             Status(FeedbackKind.Info, $"{what} 已取消");
             return;
         }
-        var detail = ex switch
+        string detail = ex switch
         {
             DockerApiException api => Explain(api) is { Length: > 0 } why ? $"{why}\n{api.Message}" : api.Message,
             DockerUnreachableException unreachable => unreachable.Message,
             _ => ex.Message
         };
-        Notify(FeedbackKind.Error, $"{what} 失败", detail, actions);
+        _ = Notify(FeedbackKind.Error, $"{what} 失败", detail, actions);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -14,7 +15,6 @@ using VelaShell.PluginSdk.Testing;
 namespace VelaShell.Plugin.Mongo.Tests;
 
 // 测试方法的名字就是它的说明(一句完整的句子),不再逐个写 XML 注释。
-#pragma warning disable CS1591
 
 /// <summary>
 /// 文档编辑器(设计稿 05):行状态、差异与更新计划、JSON / 对比 / 预览、粘贴与按 Schema 补全,
@@ -73,7 +73,7 @@ public sealed class DocumentEditorTests
         // 而不是当成已存在的文档去 updateOne —— 筛选里没有 _id,那样什么都改不到。
         BsonDocument clone = Order();
         clone.Remove("_id");
-        var vm = Open(new DocEditorWorkspace(), document: clone);
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: clone);
 
         Assert.IsFalse(vm.IsExisting);
         Assert.IsTrue(vm.HasChanges, "新文档总是可保存的");
@@ -86,7 +86,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Opening_an_existing_document_shows_its_fields_without_changes() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         CollectionAssert.AreEqual(
             new[] { "_id", "orderNo", "customer", "items", "total", "status", "paid", "createdAt", "tags", "note" },
             vm.Roots.Select(static r => r.Name).ToArray());
@@ -101,7 +101,7 @@ public sealed class DocumentEditorTests
         Assert.IsFalse(Row(vm, "items").IsExpanded);
         Assert.IsTrue(vm.FormItems.Contains(Row(vm, "customer.level")));
         Assert.IsFalse(vm.FormItems.Contains(Row(vm, "items").Children[0]));
-        Assert.IsInstanceOfType<DocumentEditorTail>(vm.FormItems[^1]);
+        _ = Assert.IsInstanceOfType<DocumentEditorTail>(vm.FormItems[^1]);
         Assert.IsFalse(vm.HasChanges);
         Assert.IsFalse(vm.CanSave);
         Assert.AreEqual("没有修改", vm.FooterHint);
@@ -116,7 +116,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Value_editors_follow_the_kind() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(Row(vm, "orderNo").ShowText);
         Assert.IsTrue(Row(vm, "total").ShowNumber);
         Assert.IsTrue(Row(vm, "paid").ShowBool);
@@ -144,7 +144,7 @@ public sealed class DocumentEditorTests
     public void Edits_mark_rows_and_build_a_minimal_update() => Screens.OnUi(() =>
     {
         var workspace = new DocEditorWorkspace();
-        var vm = Open(workspace, document: Order());
+        DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
 
         Row(vm, "status").Text = "shipped";
         Row(vm, "customer.level").Text = "VIP";
@@ -184,7 +184,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Revert_restores_the_original_value_and_type() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow total = Row(vm, "total");
         total.ChangeKind(BsonKind.Double);
         vm.RecomputeNow();
@@ -204,7 +204,7 @@ public sealed class DocumentEditorTests
     public void Changing_the_kind_converts_or_resets_with_a_notice() => Screens.OnUi(() =>
     {
         var workspace = new DocEditorWorkspace();
-        var vm = Open(workspace, document: Order());
+        DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
         DocumentEditorRow total = Row(vm, "total");
         total.SelectedKind = BsonKind.Int64;
         Assert.AreEqual("8740", total.Text);
@@ -232,7 +232,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Name_and_parse_problems_are_errors_that_block_saving() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow fresh = vm.AddFieldAtEnd()!;
         Assert.AreEqual("newField", fresh.Name);
         Assert.AreEqual("newField2", vm.AddFieldAtEnd()!.Name);
@@ -274,7 +274,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Validator_violations_mark_rows_and_unmatched_ones_become_issues() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), Orders(OrderSchema), Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(OrderSchema), Order());
         DocumentEditorRow level = Row(vm, "customer.level");
         CollectionAssert.AreEqual(new[] { "普通", "VIP", "SVIP" }, level.EnumOptions.ToArray());
         Assert.IsTrue(level.ShowEnum);
@@ -310,7 +310,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void A_warn_only_validator_does_not_block_saving() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), Orders(OrderSchema, action: "warn"), Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(OrderSchema, action: "warn"), Order());
         DocumentEditorRow discount = vm.AddAfter(Row(vm, "total"))!;
         discount.Name = "discount";
         discount.SetValue(new BsonDouble(-1));
@@ -325,7 +325,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Reordering_top_level_fields_switches_to_replaceOne() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(vm.Move(Row(vm, "status"), Row(vm, "orderNo"), after: false));
         vm.RecomputeNow();
         CollectionAssert.AreEqual(new[] { "_id", "status", "orderNo" }, vm.Roots.Take(3).Select(static r => r.Name).ToArray());
@@ -334,7 +334,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(Zh["Doc_ReplaceNoteNoVersion"], vm.CommandNote);
 
         // _id 留在第一位。
-        vm.Move(Row(vm, "status"), Row(vm, "_id"), after: false);
+        _ = vm.Move(Row(vm, "status"), Row(vm, "_id"), after: false);
         Assert.AreEqual("_id", vm.Roots[0].Name);
         Assert.AreEqual("status", vm.Roots[1].Name);
         return Task.CompletedTask;
@@ -343,7 +343,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Reordering_inside_an_object_sets_that_object_and_moves_stay_on_one_level() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(vm.Move(Row(vm, "customer.level"), Row(vm, "customer.id"), after: false));
         vm.RecomputeNow();
         CollectionAssert.AreEqual(new[] { "level", "id", "name" }, Row(vm, "customer").Children.Select(static r => r.Name).ToArray());
@@ -361,7 +361,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Array_chips_append_and_remove_items() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow tags = Row(vm, "tags");
         tags.BeginItemCommand.Execute(null);
         Assert.IsTrue(tags.IsAddingItem);
@@ -392,7 +392,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Search_filters_rows_and_keeps_ancestors() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.IsSearching = true;
         vm.Search = "LEV";
         CollectionAssert.AreEqual(new object[] { Row(vm, "customer"), Row(vm, "customer.level") }, vm.FormItems.Take(2).ToArray());
@@ -411,7 +411,7 @@ public sealed class DocumentEditorTests
     public void Json_mode_round_trips_with_the_form() => Screens.OnUi(() =>
     {
         var workspace = new DocEditorWorkspace();
-        var vm = Open(workspace, document: Order());
+        DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
         vm.Mode = DocumentEditorMode.Json;
         Assert.AreEqual(BsonText.Pretty(Order(), EjsonMode.Shell), vm.JsonText);
 
@@ -448,7 +448,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Json_dotted_keys_get_a_diagnostic_with_a_fix() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.Mode = DocumentEditorMode.Json;
         vm.JsonText = "{ _id: ObjectId(\"66f5c2a1d38b5e1a0c7fe3b7\"), customer.level: 'VIP' }";
         vm.ApplyJson();
@@ -460,7 +460,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Diff_mode_marks_removed_and_added_lines() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Row(vm, "status").Text = "shipped";
         vm.Mode = DocumentEditorMode.Diff;
         string[] left = vm.DiffLeftText.Split('\n');
@@ -477,7 +477,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Preview_marks_changed_added_erroneous_and_removed_lines() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), Orders(OrderSchema), Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(OrderSchema), Order());
         Row(vm, "status").Text = "shipped";
         DocumentEditorRow discount = vm.AddAfter(Row(vm, "total"))!;
         discount.Name = "discount";
@@ -514,7 +514,7 @@ public sealed class DocumentEditorTests
     public void Paste_loads_the_clipboard_document_but_keeps_the_original_id() => Screens.OnUi(() =>
     {
         var workspace = new DocEditorWorkspace();
-        var vm = Open(workspace, document: Order());
+        DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
         vm.ApplyPastedText("""{ "_id": { "$oid": "000000000000000000000001" }, "orderNo": "SO-X", "n": { "$numberDecimal": "1.50" } }""");
         vm.RecomputeNow();
         Assert.AreEqual("_id", vm.Roots[0].Name);
@@ -537,7 +537,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Fill_from_schema_adds_frequent_missing_fields_by_their_dominant_type() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.Remove(Row(vm, "note"));
         var sample = new List<BsonDocument>();
         for (int i = 0; i < 10; i++)
@@ -558,7 +558,7 @@ public sealed class DocumentEditorTests
             }
             sample.Add(doc);
         }
-        DocumentEditorSchema schema = DocumentEditorSchema.From(sample);
+        var schema = DocumentEditorSchema.From(sample);
         Assert.AreEqual(10, schema.Sampled);
 
         List<string> added = vm.FillFrom(schema);
@@ -577,7 +577,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Field_name_suggestions_come_from_the_sample() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.UseSchema(DocumentEditorSchema.From([
             new BsonDocument { ["status"] = "x", ["discount"] = 1.5, ["shippedAt"] = new BsonDateTime(DateTime.UtcNow) },
             new BsonDocument { ["status"] = "x", ["discount"] = 2.5 },
@@ -601,7 +601,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void A_new_document_inserts_and_its_id_can_be_edited() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace());
         Assert.AreEqual("新建文档", vm.Title);
         Assert.IsFalse(vm.IsExisting);
         DocumentEditorRow id = vm.Roots.Single();
@@ -625,7 +625,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void A_view_is_read_only() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), Orders(kind: CollectionKind.View), Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(kind: CollectionKind.View), Order());
         Assert.AreEqual("查看文档", vm.Title);
         Assert.IsFalse(vm.CanEdit);
         Assert.IsFalse(vm.CanSave);
@@ -645,7 +645,7 @@ public sealed class DocumentEditorTests
     public void Copy_sends_the_full_document() => Screens.OnUi(async () =>
     {
         var workspace = new DocEditorWorkspace();
-        var vm = Open(workspace, document: Order());
+        DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
         vm.CopyCommand.Execute(null);
         await Screens.PumpAsync(5);
         Assert.AreEqual(BsonText.Pretty(Order(), EjsonMode.Shell), workspace.Copied);
@@ -654,7 +654,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Picking_a_day_keeps_the_time_of_day() => Screens.OnUi(() =>
     {
-        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow created = Row(vm, "createdAt");
         string time = created.Text[11..];
         created.PickDate(new DateTime(2026, 10, 1));
@@ -671,7 +671,7 @@ public sealed class DocumentEditorTests
     {
         // 只读模式:Ctrl+S 走到写护栏就停,刚好用来验证快捷键接上了保存。
         var workspace = new DocEditorWorkspace(settings: new MongoSettings { ReadOnly = true });
-        var vm = Open(workspace, document: Order());
+        DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
         vm.UseSchema(DocumentEditorSchema.From([new BsonDocument { ["discount"] = 1.5, ["status"] = "paid" }]));
         var view = new DocumentEditorDialogView(vm);
         var window = new Window { Width = 1100, Height = 680, Content = view };
@@ -694,7 +694,7 @@ public sealed class DocumentEditorTests
 
             // Ctrl+Enter 在焦点那一行后面加字段;新字段的名字框拿到焦点并弹出抽样补全。
             TextBox orderNoKey = RowControl("orderNo").GetVisualDescendants().OfType<TextBox>().First(static t => t.Name == "KeyBox");
-            orderNoKey.Focus();
+            _ = orderNoKey.Focus();
             window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.Enter, null);
             await Screens.PumpAsync(20);
             int at = vm.Roots.ToList().FindIndex(static r => r.Name == "orderNo");
@@ -767,7 +767,7 @@ public sealed class DocumentEditorTests
     {
         BsonDocument before = Order();
         BsonDocument after = Order();
-        after["tags"].AsBsonArray.Add("新");
+        _ = after["tags"].AsBsonArray.Add("新");
         after["customer"] = new BsonDocument { ["name"] = "张伟", ["id"] = before["customer"]["id"], ["level"] = "SVIP" };
         after["paid"] = "yes";
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(before, after);
@@ -818,7 +818,7 @@ public sealed class DocumentEditorTests
         (removed, added) = DocumentEditorDiff.Lines(["x", "y", "z"], ["x", "Y", "z"]);
         CollectionAssert.AreEqual(new[] { 2 }, removed.ToArray());
         CollectionAssert.AreEqual(new[] { 2 }, added.ToArray());
-        (removed, added) = DocumentEditorDiff.Lines([], ["a", "b"]);
+        (_, added) = DocumentEditorDiff.Lines([], ["a", "b"]);
         CollectionAssert.AreEquivalent(new[] { 1, 2 }, added.ToArray());
     }
 
@@ -840,7 +840,7 @@ public sealed class DocumentEditorTests
     {
         BsonDocument order = Order();
         order["updatedAt"] = new BsonDateTime(new DateTime(2026, 9, 27, 1, 0, 0, DateTimeKind.Utc));
-        var vm = Open(new DocEditorWorkspace(), document: order);
+        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: order);
         Row(vm, "status").Text = "shipped";
         vm.RecomputeNow();
         Assert.AreEqual(Zh["Doc_OnlyChanged"], vm.CommandNote);
@@ -857,7 +857,7 @@ public sealed class DocumentEditorTests
     [TestMethod]
     public void Sampled_schema_counts_documents_and_dominant_types()
     {
-        DocumentEditorSchema schema = DocumentEditorSchema.From([
+        var schema = DocumentEditorSchema.From([
             new BsonDocument { ["a"] = 1, ["items"] = new BsonArray { new BsonDocument("sku", "x"), new BsonDocument("sku", "y") } },
             new BsonDocument { ["a"] = "s", ["items"] = new BsonArray() },
             new BsonDocument { ["a"] = 2 }
@@ -910,7 +910,7 @@ public sealed class DocumentEditorTests
             await collection.InsertOneAsync(order.DeepClone().AsBsonDocument);
             var workspace = new DocEditorWorkspace(connection);
             BsonDocument? savedDoc = null;
-            var vm = Open(workspace, Info(database), order, doc =>
+            DocumentEditorDialogViewModel vm = Open(workspace, Info(database), order, doc =>
             {
                 savedDoc = doc;
                 return Task.CompletedTask;
@@ -920,7 +920,7 @@ public sealed class DocumentEditorTests
             vm.RecomputeNow();
 
             // 编辑期间别人改了另一个字段:只 $set 变更字段时,这次修改不会被抹掉。
-            await collection.UpdateOneAsync(new BsonDocument("_id", order["_id"]), new BsonDocument("$set", new BsonDocument("paid", false)));
+            _ = await collection.UpdateOneAsync(new BsonDocument("_id", order["_id"]), new BsonDocument("$set", new BsonDocument("paid", false)));
 
             vm.SaveCommand.Execute(null);
             await WaitAsync(() => workspace.ClosedDialogs.Count > 0);
@@ -953,12 +953,12 @@ public sealed class DocumentEditorTests
             order["updatedAt"] = new BsonDateTime(new DateTime(2026, 9, 27, 1, 0, 0, DateTimeKind.Utc));
             await collection.InsertOneAsync(order.DeepClone().AsBsonDocument);
             var workspace = new DocEditorWorkspace(connection);
-            var vm = Open(workspace, Info(database), order);
+            DocumentEditorDialogViewModel vm = Open(workspace, Info(database), order);
             Row(vm, "status").Text = "shipped";
             vm.RecomputeNow();
 
             var later = new BsonDateTime(new DateTime(2026, 9, 27, 3, 0, 0, DateTimeKind.Utc));
-            await collection.UpdateOneAsync(new BsonDocument("_id", order["_id"]),
+            _ = await collection.UpdateOneAsync(new BsonDocument("_id", order["_id"]),
                 new BsonDocument("$set", new BsonDocument { ["paid"] = false, ["updatedAt"] = later }));
 
             vm.SaveCommand.Execute(null);
@@ -1002,7 +1002,7 @@ public sealed class DocumentEditorTests
             await collection.InsertOneAsync(order.DeepClone().AsBsonDocument);
             var workspace = new DocEditorWorkspace(connection);
             BsonDocument? copy = null;
-            var vm = Open(workspace, Info(database), order, doc =>
+            DocumentEditorDialogViewModel vm = Open(workspace, Info(database), order, doc =>
             {
                 copy = doc;
                 return Task.CompletedTask;
@@ -1016,7 +1016,7 @@ public sealed class DocumentEditorTests
             Assert.AreEqual("SO2609-10403", (await collection.Find(new BsonDocument("_id", order["_id"])).FirstAsync())["orderNo"].AsString,
                 "the original is untouched");
 
-            var fresh = Open(workspace, Info(database));
+            DocumentEditorDialogViewModel fresh = Open(workspace, Info(database));
             DocumentEditorRow name = fresh.AddFieldAtEnd()!;
             name.Name = "orderNo";
             name.Text = "SO-NEW";
@@ -1043,7 +1043,7 @@ public sealed class DocumentEditorTests
             await collection.InsertOneAsync(order.DeepClone().AsBsonDocument);
 
             var readOnly = new DocEditorWorkspace(connection, new MongoSettings { ReadOnly = true });
-            var vm = Open(readOnly, Info(database), order);
+            DocumentEditorDialogViewModel vm = Open(readOnly, Info(database), order);
             Row(vm, "status").Text = "shipped";
             vm.RecomputeNow();
             Assert.AreEqual(Zh["Doc_ReadOnlyMode"], vm.FooterHint);
@@ -1094,7 +1094,7 @@ public sealed class DocumentEditorTests
             BsonDocument order = Order();
             await collection.InsertOneAsync(order.DeepClone().AsBsonDocument);
             var workspace = new DocEditorWorkspace(connection);
-            var vm = Open(workspace, Info(database, validator), order);
+            DocumentEditorDialogViewModel vm = Open(workspace, Info(database, validator), order);
             Row(vm, "status").Text = "bogus";
             vm.RecomputeNow();
             Assert.IsTrue(vm.CanSave);
@@ -1117,7 +1117,7 @@ public sealed class DocumentEditorTests
         await TestServer.RequireAsync();
         await using MongoConnection connection = await TestServer.OpenAsync();
         var workspace = new DocEditorWorkspace(connection);
-        var vm = Open(workspace, new CollectionInfo(Screens.Database, "orders", CollectionKind.Collection, []),
+        DocumentEditorDialogViewModel vm = Open(workspace, new CollectionInfo(Screens.Database, "orders", CollectionKind.Collection, []),
             await connection.Collection(Screens.Database, "orders").Find(FilterDefinition<BsonDocument>.Empty).FirstOrDefaultAsync());
         DocumentEditorSchema? schema = await vm.EnsureSampleAsync(reportErrors: true);
         if (schema is null || schema.Sampled == 0)
@@ -1161,10 +1161,10 @@ public sealed class DocumentEditorTests
         await Screens.PumpAsync(40);
 
         // 焦点放到 customer.name 的值上(设计稿那一格是聚焦态)。
-        var view = bench.View.GetVisualDescendants().OfType<DocumentEditorDialogView>().Single();
+        DocumentEditorDialogView view = bench.View.GetVisualDescendants().OfType<DocumentEditorDialogView>().Single();
         Control? nameRow = view.GetVisualDescendants().OfType<ItemsControl>().First(static c => c.Name == "FormList")
             .ContainerFromItem(Row(vm, "customer.name"));
-        nameRow?.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(static t => t.Name != "KeyBox" && t.IsEffectivelyVisible)?.Focus();
+        _ = (nameRow?.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(static t => t.Name != "KeyBox" && t.IsEffectivelyVisible)?.Focus());
         await Screens.PumpAsync(40);
 
         WriteableBitmap? frame = Screens.Capture(bench.Window, "05-doceditor");
@@ -1193,12 +1193,11 @@ public sealed class DocumentEditorTests
 /// <summary>测试用的外壳:记下提示、确认与关闭,连接可有可无。</summary>
 internal sealed class DocEditorWorkspace : IMongoWorkspace
 {
-    private readonly MongoConnection? _connection;
     private readonly TestPluginContext _context = new();
 
     public DocEditorWorkspace(MongoConnection? connection = null, MongoSettings? settings = null, string locale = "zh-CN")
     {
-        _connection = connection;
+        Connection = connection;
         Loc = new Loc(locale);
         Store = new MongoStore(_context);
         Guard = new WriteGuard(settings ?? new MongoSettings(), PrivilegeSummary.Unrestricted);
@@ -1216,7 +1215,8 @@ internal sealed class DocEditorWorkspace : IMongoWorkspace
 
     public Loc Loc { get; }
 
-    public MongoConnection Connection => _connection ?? throw new InvalidOperationException("This test has no server.");
+    [AllowNull]
+    public MongoConnection Connection => field ?? throw new InvalidOperationException("This test has no server.");
 
     public MongoStore Store { get; }
 
