@@ -1,0 +1,878 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.UsersTabView"
+             x:DataType="ui:UsersTabViewModel">
+
+  <!-- 用户与角色(设计稿 18):36px 工具行 / 左栏 420px 列表(26px 列头 + 44px 行)| 右侧编辑器
+       (48px 头部 + 滚动正文 + 48px 底栏:命令预览 + 放弃 / 保存)。 -->
+
+  <UserControl.Resources>
+    <!-- 矩阵里的勾选框:实心强调色 + 前景色对勾(设计稿 18 的 CB),与服务器现状不同的格子转橙色。
+         不用共享的 MongoCheck(淡底描边那种):矩阵里一屏几十个格子,实心的才一眼看得出"授予了哪些"。 -->
+    <ControlTheme x:Key="UsersMatrixCheck" TargetType="CheckBox">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Box" Width="14" Height="14" CornerRadius="2" BorderThickness="1"
+                  BorderBrush="{DynamicResource VelaBorderSecondary}" Background="Transparent">
+            <ui:Glyph Name="Tick" Key="Mongo.check" Size="10" Brush="{DynamicResource VelaAccentForeground}" IsVisible="False" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#Box">
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+      </Style>
+      <Style Selector="^:checked /template/ Border#Box">
+        <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+      </Style>
+      <Style Selector="^:checked /template/ ui|Glyph#Tick">
+        <Setter Property="IsVisible" Value="True" />
+      </Style>
+      <Style Selector="^.pending /template/ Border#Box">
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaWarning}" />
+      </Style>
+      <Style Selector="^.pending:checked /template/ Border#Box">
+        <Setter Property="Background" Value="{DynamicResource VelaWarning}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaWarning}" />
+      </Style>
+    </ControlTheme>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+
+    <!-- 分段:选中的那格字重 Medium(设计稿 S-用户)。 -->
+    <Style Selector="Border.segments RadioButton:checked">
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+
+    <!-- 列表行:选中 = VelaBgActive(ListBox.rows 给)+ 左侧 2px 强调条 + 名字转强调色。 -->
+    <Style Selector="ListBox.users ListBoxItem:selected Border.selbar">
+      <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="ListBox.users ListBoxItem:selected TextBlock.uname">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 头像圆:普通 VelaBgSurface + 三级字图标;root 红色淡底 + 红色盾牌。 -->
+    <Style Selector="Border.avatar">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSurface}" />
+    </Style>
+    <Style Selector="Border.avatar ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="Border.avatar.root">
+      <Setter Property="Background" Value="{ui:Dim VelaError, 0.12}" />
+    </Style>
+    <Style Selector="Border.avatar.root ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Border.bigavatar">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+    </Style>
+    <Style Selector="Border.bigavatar ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="Border.bigavatar.root">
+      <Setter Property="Background" Value="{ui:Dim VelaError, 0.12}" />
+    </Style>
+    <Style Selector="Border.bigavatar.root ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaError}" />
+    </Style>
+
+    <!-- 列表里的角色标签:VelaBgActive 底 + 按角色上色的 9px 等宽字。 -->
+    <Style Selector="Border.rtag">
+      <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Padding" Value="5,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.rtag > TextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize9}" />
+    </Style>
+
+    <!-- 密码年龄徽章:橙色淡底;已过期转红。 -->
+    <Style Selector="Border.pwage">
+      <Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" />
+    </Style>
+    <Style Selector="Border.pwage TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Border.pwage ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Border.pwage.expired">
+      <Setter Property="Background" Value="{ui:Dim VelaError, 0.12}" />
+    </Style>
+    <Style Selector="Border.pwage.expired TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Border.pwage.expired ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaError}" />
+    </Style>
+
+    <!-- 矩阵格子:透明底(整格可点、悬停提示);待保存的格子橙色淡底。底色写在样式里而不是元素上 ——
+         元素上的本地值优先级高于样式,写了 Background="Transparent" 橙底就永远出不来。 -->
+    <Style Selector="Border.cell">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.cell.pending">
+      <Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" />
+    </Style>
+
+    <!-- 芯片:自定义角色 AccentDim + Accent;新加未保存的橙色;其余内置角色灰。 -->
+    <Style Selector="Border.chip">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Padding" Value="8,0,4,0" />
+    </Style>
+    <Style Selector="Border.chip TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="Border.chip ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="Border.chip.builtin">
+      <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+    </Style>
+    <Style Selector="Border.chip.builtin TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+    <Style Selector="Border.chip.builtin ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+    <Style Selector="Border.chip.pending">
+      <Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" />
+    </Style>
+    <Style Selector="Border.chip.pending TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Border.chip.pending ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaWarning}" />
+    </Style>
+
+    <!-- 「+ 添加角色」:VelaBorderSecondary 描边的 22px 小按钮。 -->
+    <Style Selector="Button.addchip">
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderSecondary}" />
+    </Style>
+
+    <!-- 小节标题:10px Medium VelaTextMuted(设计稿「内置角色」「自定义角色」…)。 -->
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="36,*">
+
+    <!-- ══ 工具行 ══════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="0" Classes="toolrow">
+      <DockPanel>
+        <Border DockPanel.Dock="Right" Classes="segments">
+          <StackPanel Orientation="Horizontal" Spacing="1">
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="UsersMode" IsChecked="{Binding IsUsersMode}"
+                         Content="{Binding Loc[Toolbar_Users]}" />
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="UsersMode" IsChecked="{Binding IsRolesMode}"
+                         Content="{Binding Loc[Toolbar_Roles]}" />
+          </StackPanel>
+        </Border>
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding NewUserCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.user-plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Users_NewUser]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding NewRoleCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.shield-plus" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Users_NewRole]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ResetPasswordCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.key-round" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Users_ResetPassword]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding DeleteCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="{Binding DeleteIcon}" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[Common_Delete]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="420" MinWidth="260" MaxWidth="860" />
+        <ColumnDefinition Width="0" />
+        <ColumnDefinition Width="*" MinWidth="360" />
+      </Grid.ColumnDefinitions>
+
+      <!-- ══ 左栏:用户 / 角色列表 ══════════════════════════════════════════ -->
+      <Border Grid.Column="0" Background="{DynamicResource VelaBgTerminal}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="26,Auto,*">
+          <Border Grid.Row="0" Classes="colheader">
+            <Grid ColumnDefinitions="*,70,150" ui:TableColumns.Header="principals">
+              <TextBlock Grid.Column="0" Classes="ui small muted" Margin="10,0" Text="{Binding NameHeader}" />
+              <TextBlock Grid.Column="1" Classes="ui small muted" Margin="10,0" Text="{Binding DbHeader}" />
+              <TextBlock Grid.Column="2" Classes="ui small muted" Margin="10,0" Text="{Binding RolesHeader}" />
+            </Grid>
+          </Border>
+
+          <Border Grid.Row="1" Classes="notice warn" Margin="8,8,8,0" Padding="10,7" IsVisible="{Binding HasNotice}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="Mongo.info" Size="12" Brush="{DynamicResource VelaWarning}" />
+              <TextBlock Classes="ui small warn" TextWrapping="Wrap" MaxWidth="360" Text="{Binding Notice}" />
+            </StackPanel>
+          </Border>
+
+          <Panel Grid.Row="2">
+            <ListBox x:Name="UserList" Classes="rows users" ItemsSource="{Binding Users}" SelectedItem="{Binding SelectedUser}"
+                     IsVisible="{Binding IsUsersMode}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="ui:UserRowViewModel">
+                  <Border Height="44" Background="Transparent" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,70,150" ui:TableColumns.Row="principals">
+                      <Border Grid.Column="0" Grid.ColumnSpan="3" Classes="selbar" Width="2" HorizontalAlignment="Left" />
+                      <DockPanel Grid.Column="0" Margin="10,0">
+                        <Border DockPanel.Dock="Left" Classes="avatar" Classes.root="{Binding IsRoot}" Width="24" Height="24" CornerRadius="12" Margin="0,0,8,0" VerticalAlignment="Center">
+                          <ui:Glyph Key="{Binding AvatarIcon}" Size="12" HorizontalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                          <TextBlock Classes="mono primary medium uname trim" Text="{Binding Name}" />
+                          <TextBlock Classes="ui small muted trim" Classes.warn="{Binding IsEditing}" Text="{Binding Subtitle}"
+                                     IsVisible="{Binding HasSubtitle}" />
+                        </StackPanel>
+                      </DockPanel>
+                      <TextBlock Grid.Column="1" Classes="mono small tertiary trim" Margin="10,0" Text="{Binding Db}" />
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="10,0" VerticalAlignment="Center">
+                        <ItemsControl ItemsSource="{Binding Tags}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="4" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="ui:RoleTag">
+                              <Border Classes="rtag">
+                                <TextBlock Text="{Binding Text}" Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                              </Border>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Classes="rtag" IsVisible="{Binding HasMore}">
+                          <TextBlock Foreground="{DynamicResource VelaTextTertiary}" Text="{Binding More}" />
+                        </Border>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <ListBox x:Name="RoleList" Classes="rows users" ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}"
+                     IsVisible="{Binding IsRolesMode}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="ui:RoleRowViewModel">
+                  <Border Height="44" Background="Transparent" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,70,150" ui:TableColumns.Row="principals">
+                      <Border Grid.Column="0" Grid.ColumnSpan="3" Classes="selbar" Width="2" HorizontalAlignment="Left" />
+                      <DockPanel Grid.Column="0" Margin="10,0">
+                        <Border DockPanel.Dock="Left" Classes="avatar" Width="24" Height="24" CornerRadius="12" Margin="0,0,8,0" VerticalAlignment="Center">
+                          <ui:Glyph Key="Mongo.shield-check" Size="12" HorizontalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                          <TextBlock Classes="mono primary medium uname trim" Text="{Binding Name}" />
+                          <TextBlock Classes="ui small muted trim" Classes.warn="{Binding IsEditing}" Text="{Binding Subtitle}" />
+                        </StackPanel>
+                      </DockPanel>
+                      <TextBlock Grid.Column="1" Classes="mono small tertiary trim" Margin="10,0" Text="{Binding Db}" />
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="10,0" VerticalAlignment="Center">
+                        <ItemsControl ItemsSource="{Binding Tags}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="4" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="ui:RoleTag">
+                              <Border Classes="rtag">
+                                <TextBlock Text="{Binding Text}" Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                              </Border>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Classes="rtag" IsVisible="{Binding HasMore}">
+                          <TextBlock Foreground="{DynamicResource VelaTextTertiary}" Text="{Binding More}" />
+                        </Border>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <TextBlock Classes="ui muted" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0"
+                       Text="{Binding EmptyText}" IsVisible="{Binding IsListEmpty}" />
+          </Panel>
+        </Grid>
+      </Border>
+
+      <!-- ══ 右侧:编辑器 ════════════════════════════════════════════════════ -->
+      <GridSplitter Grid.Column="1" Classes="vsplit" />
+      <Panel Grid.Column="2" Background="{DynamicResource VelaBgSidebar}">
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" IsVisible="{Binding ShowEmptyEditor}">
+          <ui:Glyph Key="Mongo.users" Size="28" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+          <TextBlock Classes="ui muted" HorizontalAlignment="Center" Text="{Binding EmptyEditorText}" />
+        </StackPanel>
+
+        <!-- ── 用户编辑器 ── -->
+        <Panel IsVisible="{Binding ShowUserEditor}">
+          <Grid x:DataType="ui:UserEditorViewModel" DataContext="{Binding $parent[UserControl].((ui:UsersTabViewModel)DataContext).UserEditor}"
+                RowDefinitions="48,*,48">
+
+            <Border Grid.Row="0" Padding="16,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                  <Border Classes="pwage" Classes.expired="{Binding PasswordExpired}" Height="24" Padding="8,0" CornerRadius="3"
+                          IsVisible="{Binding HasPasswordAge}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <ui:Glyph Key="Mongo.timer" Size="11" />
+                      <TextBlock Classes="ui small" Text="{Binding PasswordAgeText}" />
+                    </StackPanel>
+                  </Border>
+                  <Button Theme="{StaticResource MongoOutlineButton}" Height="26" Padding="10,0" Command="{Binding RotateCommand}"
+                          IsVisible="{Binding IsExisting}" ToolTip.Tip="{Binding Loc[Users_RotateTip]}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <ui:Glyph Key="Mongo.key-round" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                      <TextBlock Text="{Binding Loc[Users_Rotate]}" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <Border Classes="bigavatar" Classes.root="{Binding IsRoot}" Width="30" Height="30" CornerRadius="15" VerticalAlignment="Center">
+                    <ui:Glyph Key="{Binding AvatarIcon}" Size="15" HorizontalAlignment="Center" />
+                  </Border>
+                  <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Classes="mono primary semibold" FontSize="{DynamicResource VelaFontSize13}" Text="{Binding DisplayName}" />
+                    <TextBlock Classes="ui small tertiary" Text="{Binding Subtitle}" />
+                  </StackPanel>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="16,14" Spacing="16">
+
+                <!-- 新建用户:账号那一节 -->
+                <StackPanel Spacing="6" IsVisible="{Binding IsNew}">
+                  <TextBlock Classes="label" Text="{Binding Loc[Users_Account]}" />
+                  <Grid ColumnDefinitions="*,10,*" RowDefinitions="Auto,10,Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="5">
+                      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Users_UserName]}" />
+                      <TextBox x:Name="NewUserNameBox" Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding NewName}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2" Spacing="5">
+                      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Users_AuthDb]}" />
+                      <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch" ItemsSource="{Binding AuthDatabases}"
+                                SelectedItem="{Binding NewDb}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Spacing="5">
+                      <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                          <Button Theme="{StaticResource MongoToolButton}" Height="18" Padding="4,0" Command="{Binding GenerateCommand}"
+                                  ToolTip.Tip="{Binding Loc[Users_GenerateTip]}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                              <ui:Glyph Key="Mongo.wand-sparkles" Size="11" Brush="{DynamicResource VelaAccent}" />
+                              <TextBlock Classes="ui small accent" Text="{Binding Loc[Users_Generate]}" />
+                            </StackPanel>
+                          </Button>
+                          <ToggleButton Theme="{StaticResource MongoSwitch}" IsChecked="{Binding RevealPassword}"
+                                        ToolTip.Tip="{Binding Loc[Users_RevealPassword]}" />
+                        </StackPanel>
+                        <TextBlock Classes="ui small secondary" Text="{Binding Loc[Users_Password]}" />
+                      </DockPanel>
+                      <TextBox Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding Password}" PasswordChar="{Binding PasswordChar}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="2" Spacing="5">
+                      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Users_Mechanism]}" />
+                      <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch" ItemsSource="{Binding MechanismOptions}"
+                                SelectedItem="{Binding Mechanism}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="ui:MechanismOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </StackPanel>
+                  </Grid>
+                </StackPanel>
+
+                <!-- 内置角色矩阵 -->
+                <StackPanel Spacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="label" Text="{Binding Loc[Users_BuiltinRoles]}" />
+                    <TextBlock Classes="ui small muted" Text="{Binding Loc[Users_BuiltinHint]}" />
+                  </StackPanel>
+                  <Border BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" CornerRadius="4" ClipToBounds="True">
+                    <StackPanel>
+                      <Grid Height="26" Background="{DynamicResource VelaBgSurface}" ColumnDefinitions="150,*,*,*,*,*">
+                        <TextBlock Grid.Column="0" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Users_ColDatabase]}" />
+                        <TextBlock Grid.Column="1" Classes="mono small" HorizontalAlignment="Center" Text="read" />
+                        <TextBlock Grid.Column="2" Classes="mono small" HorizontalAlignment="Center" Text="readWrite" />
+                        <TextBlock Grid.Column="3" Classes="mono small" HorizontalAlignment="Center" Text="dbAdmin" />
+                        <TextBlock Grid.Column="4" Classes="mono small" HorizontalAlignment="Center" Text="userAdmin" />
+                        <TextBlock Grid.Column="5" Classes="mono small" HorizontalAlignment="Center" Text="dbOwner" />
+                      </Grid>
+                      <ItemsControl ItemsSource="{Binding Roles.Rows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:MatrixRowViewModel">
+                            <Border Height="30" Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                                    BorderThickness="0,1,0,0">
+                              <Grid ColumnDefinitions="150,*">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="10,0">
+                                  <ui:Glyph Key="Mongo.database" Size="12" Brush="{DynamicResource VelaWarning}" IsVisible="{Binding !IsAny}" />
+                                  <ui:Glyph Key="Mongo.globe" Size="12" Brush="{DynamicResource VelaError}" IsVisible="{Binding IsAny}" />
+                                  <TextBlock Classes="small primary trim" Classes.mono="{Binding !IsAny}" Classes.ui="{Binding IsAny}"
+                                             Text="{Binding Label}" />
+                                </StackPanel>
+                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Cells}">
+                                  <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                      <UniformGrid Rows="1" Columns="5" />
+                                    </ItemsPanelTemplate>
+                                  </ItemsControl.ItemsPanel>
+                                  <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="ui:MatrixCellViewModel">
+                                      <Border Classes="cell" Classes.pending="{Binding IsPending}" Height="29"
+                                              ToolTip.Tip="{Binding Tip}">
+                                        <Panel>
+                                          <CheckBox Theme="{StaticResource UsersMatrixCheck}" Classes.pending="{Binding IsPending}"
+                                                    IsChecked="{Binding IsChecked}" IsVisible="{Binding IsApplicable}"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                          <Rectangle Width="8" Height="1" Fill="{DynamicResource VelaTextMuted}" IsVisible="{Binding !IsApplicable}"
+                                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Panel>
+                                      </Border>
+                                    </DataTemplate>
+                                  </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+
+                <!-- 自定义角色(及其余内置角色)芯片 -->
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="label" Text="{Binding Loc[Users_CustomRoles]}" />
+                  <WrapPanel ItemSpacing="6" LineSpacing="6">
+                    <ItemsControl ItemsSource="{Binding Roles.Extras}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:RoleChipViewModel">
+                          <Border Classes="chip" Classes.pending="{Binding IsPending}" Classes.builtin="{Binding IsBuiltin}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                              <TextBlock Classes="mono small" Text="{Binding Text}" />
+                              <Button Theme="{StaticResource MongoIconButton}" Width="14" Height="14" Command="{Binding RemoveCommand}">
+                                <ui:Glyph Key="Mongo.x" Size="10" />
+                              </Button>
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="addchip" Click="OnAddRoleClick">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.plus" Size="10" Brush="{DynamicResource VelaAccent}" />
+                        <TextBlock Classes="ui small accent" Text="{Binding Loc[Users_AddRole]}" />
+                      </StackPanel>
+                    </Button>
+                  </WrapPanel>
+                </StackPanel>
+
+                <!-- 登录限制 -->
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="label" Text="{Binding Loc[Users_Restrictions]}" />
+                  <Grid ColumnDefinitions="*,10,*">
+                    <StackPanel Grid.Column="0" Spacing="5">
+                      <TextBlock Classes="mono small secondary" Text="{Binding Loc[Users_ClientSource]}" />
+                      <TextBox Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding ClientSource}"
+                               PlaceholderText="{Binding Loc[Users_Unrestricted]}"
+                               Classes.modified="{Binding ClientSourceModified}" Classes.invalid="{Binding ClientSourceInvalid}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="5">
+                      <TextBlock Classes="mono small secondary" Text="{Binding Loc[Users_ServerAddress]}" />
+                      <TextBox Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding ServerAddress}"
+                               PlaceholderText="{Binding Loc[Users_Unrestricted]}"
+                               Classes.modified="{Binding ServerAddressModified}" Classes.invalid="{Binding ServerAddressInvalid}" />
+                    </StackPanel>
+                  </Grid>
+                  <TextBlock Classes="ui small muted" Text="{Binding MoreRestrictionsText}" IsVisible="{Binding HasMoreRestrictions}" />
+                </StackPanel>
+
+                <!-- 有效权限预览 -->
+                <StackPanel Spacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="label" Text="{Binding Loc[Users_Effective]}" />
+                    <TextBlock Classes="ui small muted" Text="{Binding Loc[Users_Computing]}" IsVisible="{Binding Effective.IsBusy}" />
+                  </StackPanel>
+                  <Border Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
+                          CornerRadius="4" Padding="10,8">
+                    <StackPanel Spacing="4">
+                      <TextBlock Classes="mono small muted" Text="{Binding Effective.Message}" IsVisible="{Binding Effective.HasMessage}" />
+                      <ItemsControl ItemsSource="{Binding Effective.Lines}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Spacing="4" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:EffectiveLine">
+                            <Grid ColumnDefinitions="Auto,Auto,*" Background="Transparent" ToolTip.Tip="{Binding FullText}">
+                              <TextBlock Grid.Column="0" Classes="mono semibold" Classes.warn="{Binding IsAdded}" Classes.err="{Binding IsRemoved}"
+                                         Margin="0,0,8,0" VerticalAlignment="Top" Text="{Binding Prefix}" IsVisible="{Binding HasPrefix}" />
+                              <TextBlock Grid.Column="1" Classes="mono small info" MinWidth="90" Margin="0,1,8,0" VerticalAlignment="Top"
+                                         Text="{Binding Resource}" />
+                              <StackPanel Grid.Column="2" Spacing="2" Margin="0,1,0,0">
+                                <TextBlock Classes="mono small secondary" Classes.warn="{Binding IsAdded}" Classes.err="{Binding IsRemoved}"
+                                           TextWrapping="Wrap" Text="{Binding Actions}"
+                                           IsVisible="{Binding Actions, Converter={x:Static ui:Converters.NotEmpty}}" />
+                                <TextBlock Classes="mono small warn" TextWrapping="Wrap" Text="{Binding AddedActions}" IsVisible="{Binding HasAddedActions}" />
+                                <TextBlock Classes="mono small err" TextWrapping="Wrap" Text="{Binding RemovedActions}" IsVisible="{Binding HasRemovedActions}" />
+                              </StackPanel>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
+
+            <!-- 底栏:命令预览 + 放弃 / 保存 -->
+            <Border Grid.Row="2" Padding="16,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
+                  <TextBlock Classes="ui small err trim" MaxWidth="260" Text="{Binding ValidationError}" IsVisible="{Binding ShowValidation}" />
+                  <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Discard]}" Command="{Binding DiscardCommand}" />
+                  <Button Theme="{StaticResource MongoPillButton}" Command="{Binding SaveCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <ui:Glyph Key="Mongo.check" Size="12" Brush="{DynamicResource VelaAccent}" />
+                      <TextBlock Text="{Binding Loc[Common_Save]}" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+                <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Width="20" Height="20" Margin="6,0,0,0"
+                        Command="{Binding CopyCommandsCommand}" IsVisible="{Binding HasCommands}" ToolTip.Tip="{Binding Loc[Users_CopyCommands]}">
+                  <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                </Button>
+                <SelectableTextBlock FontFamily="{DynamicResource VelaUiMonoFont}"
+                                     FontSize="{DynamicResource VelaFontSize10}" Foreground="{DynamicResource VelaTextTertiary}"
+                                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding CommandPreview}"
+                                     ToolTip.Tip="{Binding CommandPreview}" />
+              </DockPanel>
+            </Border>
+          </Grid>
+        </Panel>
+
+        <!-- ── 角色编辑器 ── -->
+        <Panel IsVisible="{Binding ShowRoleEditor}">
+          <Grid x:DataType="ui:RoleEditorViewModel" DataContext="{Binding $parent[UserControl].((ui:UsersTabViewModel)DataContext).RoleEditor}"
+                RowDefinitions="48,*,48">
+
+            <Border Grid.Row="0" Padding="16,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Border Classes="bigavatar" Width="30" Height="30" CornerRadius="15" VerticalAlignment="Center">
+                  <ui:Glyph Key="Mongo.shield-check" Size="15" HorizontalAlignment="Center" />
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Classes="mono primary semibold" FontSize="{DynamicResource VelaFontSize13}" Text="{Binding DisplayName}" />
+                  <TextBlock Classes="ui small tertiary" Text="{Binding Subtitle}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="16,14" Spacing="16">
+
+                <StackPanel Spacing="6" IsVisible="{Binding IsNew}">
+                  <TextBlock Classes="label" Text="{Binding Loc[Users_RoleDefinition]}" />
+                  <Grid ColumnDefinitions="*,10,*">
+                    <StackPanel Grid.Column="0" Spacing="5">
+                      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Users_RoleName]}" />
+                      <TextBox Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding NewName}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="5">
+                      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Users_RoleDb]}" />
+                      <ComboBox Classes="compact" Height="28" HorizontalAlignment="Stretch" ItemsSource="{Binding AuthDatabases}"
+                                SelectedItem="{Binding NewDb}" />
+                    </StackPanel>
+                  </Grid>
+                </StackPanel>
+
+                <!-- 继承的内置角色 -->
+                <StackPanel Spacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="label" Text="{Binding Loc[Users_InheritedBuiltin]}" />
+                    <TextBlock Classes="ui small muted" Text="{Binding Loc[Users_BuiltinHint]}" />
+                  </StackPanel>
+                  <Border BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" CornerRadius="4" ClipToBounds="True">
+                    <StackPanel>
+                      <Grid Height="26" Background="{DynamicResource VelaBgSurface}" ColumnDefinitions="150,*,*,*,*,*">
+                        <TextBlock Grid.Column="0" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Users_ColDatabase]}" />
+                        <TextBlock Grid.Column="1" Classes="mono small" HorizontalAlignment="Center" Text="read" />
+                        <TextBlock Grid.Column="2" Classes="mono small" HorizontalAlignment="Center" Text="readWrite" />
+                        <TextBlock Grid.Column="3" Classes="mono small" HorizontalAlignment="Center" Text="dbAdmin" />
+                        <TextBlock Grid.Column="4" Classes="mono small" HorizontalAlignment="Center" Text="userAdmin" />
+                        <TextBlock Grid.Column="5" Classes="mono small" HorizontalAlignment="Center" Text="dbOwner" />
+                      </Grid>
+                      <ItemsControl ItemsSource="{Binding Inherits.Rows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:MatrixRowViewModel">
+                            <Border Height="30" Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                                    BorderThickness="0,1,0,0">
+                              <Grid ColumnDefinitions="150,*">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="10,0">
+                                  <ui:Glyph Key="Mongo.database" Size="12" Brush="{DynamicResource VelaWarning}" IsVisible="{Binding !IsAny}" />
+                                  <ui:Glyph Key="Mongo.globe" Size="12" Brush="{DynamicResource VelaError}" IsVisible="{Binding IsAny}" />
+                                  <TextBlock Classes="small primary trim" Classes.mono="{Binding !IsAny}" Classes.ui="{Binding IsAny}"
+                                             Text="{Binding Label}" />
+                                </StackPanel>
+                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Cells}">
+                                  <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                      <UniformGrid Rows="1" Columns="5" />
+                                    </ItemsPanelTemplate>
+                                  </ItemsControl.ItemsPanel>
+                                  <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="ui:MatrixCellViewModel">
+                                      <Border Classes="cell" Classes.pending="{Binding IsPending}" Height="29"
+                                              ToolTip.Tip="{Binding Tip}">
+                                        <Panel>
+                                          <CheckBox Theme="{StaticResource UsersMatrixCheck}" Classes.pending="{Binding IsPending}"
+                                                    IsChecked="{Binding IsChecked}" IsVisible="{Binding IsApplicable}"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                          <Rectangle Width="8" Height="1" Fill="{DynamicResource VelaTextMuted}" IsVisible="{Binding !IsApplicable}"
+                                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Panel>
+                                      </Border>
+                                    </DataTemplate>
+                                  </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+
+                <!-- 继承的其他角色 -->
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="label" Text="{Binding Loc[Users_InheritedOther]}" />
+                  <WrapPanel ItemSpacing="6" LineSpacing="6">
+                    <ItemsControl ItemsSource="{Binding Inherits.Extras}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:RoleChipViewModel">
+                          <Border Classes="chip" Classes.pending="{Binding IsPending}" Classes.builtin="{Binding IsBuiltin}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                              <TextBlock Classes="mono small" Text="{Binding Text}" />
+                              <Button Theme="{StaticResource MongoIconButton}" Width="14" Height="14" Command="{Binding RemoveCommand}">
+                                <ui:Glyph Key="Mongo.x" Size="10" />
+                              </Button>
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="addchip" Click="OnAddRoleClick">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.plus" Size="10" Brush="{DynamicResource VelaAccent}" />
+                        <TextBlock Classes="ui small accent" Text="{Binding Loc[Users_AddRole]}" />
+                      </StackPanel>
+                    </Button>
+                  </WrapPanel>
+                </StackPanel>
+
+                <!-- 自有权限 -->
+                <StackPanel Spacing="6">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Theme="{StaticResource MongoToolButton}" Classes="addchip" Command="{Binding AddPrivilegeCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.plus" Size="10" Brush="{DynamicResource VelaAccent}" />
+                        <TextBlock Classes="ui small accent" Text="{Binding Loc[Users_AddPrivilege]}" />
+                      </StackPanel>
+                    </Button>
+                    <TextBlock Classes="label" Text="{Binding Loc[Users_OwnPrivileges]}" />
+                  </DockPanel>
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Users_NoOwnPrivileges]}" IsVisible="{Binding !HasPrivileges}" />
+                  <ItemsControl ItemsSource="{Binding Privileges}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="8" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="ui:PrivilegeRowViewModel">
+                        <Border Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
+                                CornerRadius="4" Padding="10,8">
+                          <StackPanel Spacing="8">
+                            <DockPanel>
+                              <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Command="{Binding RemoveCommand}"
+                                      ToolTip.Tip="{Binding Loc[Users_RemovePrivilege]}">
+                                <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                              </Button>
+                              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsNamespace}">
+                                <TextBlock Classes="mono small secondary" Text="{Binding Loc[Users_ResourceDb]}" />
+                                <TextBox Theme="{StaticResource MongoTextBox}" Width="140" Height="24" Text="{Binding Db}"
+                                         PlaceholderText="{Binding Loc[Users_AllDatabases]}" />
+                                <TextBlock Classes="mono small secondary" Margin="6,0,0,0" Text="{Binding Loc[Users_ResourceCollection]}" />
+                                <TextBox Theme="{StaticResource MongoTextBox}" Width="180" Height="24" Text="{Binding Collection}"
+                                         PlaceholderText="{Binding Loc[Users_AllCollections]}" />
+                              </StackPanel>
+                              <TextBlock Classes="mono info" Text="{Binding ResourceLabel}" IsVisible="{Binding !IsNamespace}" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding Actions}">
+                              <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                  <WrapPanel ItemSpacing="14" LineSpacing="6" />
+                                </ItemsPanelTemplate>
+                              </ItemsControl.ItemsPanel>
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="ui:ActionCheckViewModel">
+                                  <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding IsChecked}">
+                                    <TextBlock Classes="mono small secondary" Classes.warn="{Binding IsPending}" Text="{Binding Name}" />
+                                  </CheckBox>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- 持有者 -->
+                <StackPanel Spacing="6" IsVisible="{Binding !IsNew}">
+                  <TextBlock Classes="label" Text="{Binding Loc[Users_HoldersTitle]}" />
+                  <TextBlock Classes="ui small muted" Text="{Binding Loc[Users_NoHolders]}" IsVisible="{Binding !HasHolders}" />
+                  <ItemsControl ItemsSource="{Binding Holders}" IsVisible="{Binding HasHolders}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="x:String">
+                        <Border Classes="rtag" Padding="6,2">
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <ui:Glyph Key="Mongo.user" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+                            <TextBlock Classes="mono small secondary" Text="{Binding}" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- 有效权限预览 -->
+                <StackPanel Spacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="label" Text="{Binding Loc[Users_Effective]}" />
+                    <TextBlock Classes="ui small muted" Text="{Binding Loc[Users_Computing]}" IsVisible="{Binding Effective.IsBusy}" />
+                  </StackPanel>
+                  <Border Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
+                          CornerRadius="4" Padding="10,8">
+                    <StackPanel Spacing="4">
+                      <TextBlock Classes="mono small muted" Text="{Binding Effective.Message}" IsVisible="{Binding Effective.HasMessage}" />
+                      <ItemsControl ItemsSource="{Binding Effective.Lines}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Spacing="4" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:EffectiveLine">
+                            <Grid ColumnDefinitions="Auto,Auto,*" Background="Transparent" ToolTip.Tip="{Binding FullText}">
+                              <TextBlock Grid.Column="0" Classes="mono semibold" Classes.warn="{Binding IsAdded}" Classes.err="{Binding IsRemoved}"
+                                         Margin="0,0,8,0" VerticalAlignment="Top" Text="{Binding Prefix}" IsVisible="{Binding HasPrefix}" />
+                              <TextBlock Grid.Column="1" Classes="mono small info" MinWidth="90" Margin="0,1,8,0" VerticalAlignment="Top"
+                                         Text="{Binding Resource}" />
+                              <StackPanel Grid.Column="2" Spacing="2" Margin="0,1,0,0">
+                                <TextBlock Classes="mono small secondary" Classes.warn="{Binding IsAdded}" Classes.err="{Binding IsRemoved}"
+                                           TextWrapping="Wrap" Text="{Binding Actions}"
+                                           IsVisible="{Binding Actions, Converter={x:Static ui:Converters.NotEmpty}}" />
+                                <TextBlock Classes="mono small warn" TextWrapping="Wrap" Text="{Binding AddedActions}" IsVisible="{Binding HasAddedActions}" />
+                                <TextBlock Classes="mono small err" TextWrapping="Wrap" Text="{Binding RemovedActions}" IsVisible="{Binding HasRemovedActions}" />
+                              </StackPanel>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" Padding="16,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
+                  <TextBlock Classes="ui small err trim" MaxWidth="260" Text="{Binding ValidationError}" IsVisible="{Binding ShowValidation}" />
+                  <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Discard]}" Command="{Binding DiscardCommand}" />
+                  <Button Theme="{StaticResource MongoPillButton}" Command="{Binding SaveCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <ui:Glyph Key="Mongo.check" Size="12" Brush="{DynamicResource VelaAccent}" />
+                      <TextBlock Text="{Binding Loc[Common_Save]}" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+                <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Width="20" Height="20" Margin="6,0,0,0"
+                        Command="{Binding CopyCommandsCommand}" IsVisible="{Binding HasCommands}" ToolTip.Tip="{Binding Loc[Users_CopyCommands]}">
+                  <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                </Button>
+                <SelectableTextBlock FontFamily="{DynamicResource VelaUiMonoFont}" FontSize="{DynamicResource VelaFontSize10}"
+                                     Foreground="{DynamicResource VelaTextTertiary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                     Text="{Binding CommandPreview}" ToolTip.Tip="{Binding CommandPreview}" />
+              </DockPanel>
+            </Border>
+          </Grid>
+        </Panel>
+      </Panel>
+    </Grid>
+  </Grid>
+</UserControl>

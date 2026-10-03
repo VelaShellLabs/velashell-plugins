@@ -1,0 +1,149 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DocInspectorView"
+             x:DataType="ui:DocInspectorViewModel">
+
+  <!--
+    文档检查器(设计稿 01 右侧 288px):36px 头(文档 #4 + 四个操作)→ 30px 下划线页签 → 字段树 / JSON / 集合信息 →
+    底部验证状态 + 放弃 / 应用修改(只作用于这一份文档)。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里是 AvaloniaEdit 的 TextEditor,模板在这份样式里(共享样式表不带它)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Collection/CollectionStyles.axaml" />
+  </UserControl.Styles>
+
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="ui:InlineValueEditor">
+      <Border Classes="fieldedit" Classes.bad="{Binding HasError}" ToolTip.Tip="{Binding Error}">
+        <ui:GridEditBox Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding Text}"
+                        Foreground="{DynamicResource VelaShellCyan}" />
+      </Border>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <Border Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+    <Grid RowDefinitions="36,30,*,Auto">
+      <!-- 头 -->
+      <Border Grid.Row="0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="12,0,6,0">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding HasRow}">
+            <Button Theme="{StaticResource MongoIconButton}" Command="{Binding ShowJsonCommand}" ToolTip.Tip="JSON">
+              <ui:Glyph Key="Mongo.braces" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+            </Button>
+            <Button Theme="{StaticResource MongoIconButton}" Command="{Binding CopyCommand}" ToolTip.Tip="{Binding Loc[Common_Copy]}">
+              <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+            </Button>
+            <Button Theme="{StaticResource MongoIconButton}" Command="{Binding CloneCommand}" ToolTip.Tip="{Binding Loc[Cw_Clone]}"
+                    IsEnabled="{Binding Owner.CanEdit}">
+              <ui:Glyph Key="Mongo.copy-plus" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+            </Button>
+            <Button Theme="{StaticResource MongoIconButton}" Command="{Binding DeleteCommand}" ToolTip.Tip="{Binding Loc[Common_Delete]}"
+                    IsEnabled="{Binding Owner.CanEdit}">
+              <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+            </Button>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <TextBlock Classes="h" Text="{Binding Loc[Cw_Document]}" />
+            <TextBlock Classes="mono small muted" Text="{Binding NumberText}" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- 页签 -->
+      <Border Grid.Row="1" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="12,0">
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <RadioButton Theme="{StaticResource MongoUnderlineTab}" GroupName="insp" IsChecked="{Binding IsFieldsPage}"
+                       Content="{Binding Loc[Cw_TabFields]}" />
+          <RadioButton Theme="{StaticResource MongoUnderlineTab}" GroupName="insp" IsChecked="{Binding IsJsonPage}" Content="JSON" />
+          <RadioButton Theme="{StaticResource MongoUnderlineTab}" GroupName="insp" IsChecked="{Binding IsInfoPage}"
+                       Content="{Binding Loc[Cw_TabInfo]}" />
+        </StackPanel>
+      </Border>
+
+      <!-- 内容 -->
+      <Panel Grid.Row="2">
+        <ScrollViewer IsVisible="{Binding IsFieldsPage}" HorizontalScrollBarVisibility="Disabled" Padding="0,6">
+          <StackPanel>
+            <ListBox x:Name="FieldList" Classes="rows flat" ItemsSource="{Binding Fields}" SelectedItem="{Binding SelectedField}"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="ui:InspectorField">
+                  <Grid Height="26" ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="6"
+                        Margin="{Binding Indent, Converter={x:Static ui:Converters.LeftPadding}}" Background="Transparent">
+                    <Panel Grid.Column="0" Width="11" Height="11">
+                      <ui:Glyph Key="{Binding Chevron}" Size="11" Brush="{DynamicResource VelaTextMuted}" IsVisible="{Binding IsExpandable}"
+                                Classes="chevron" Cursor="Hand" />
+                    </Panel>
+                    <TextBlock Grid.Column="1" Classes="mono secondary" Text="{Binding Key}" />
+                    <TextBlock Grid.Column="2" Classes="mono muted" Text=":" Margin="-6,0,0,0" />
+                    <Panel Grid.Column="3">
+                      <TextBlock Classes="mono trim" Classes.nil="{Binding IsMissing}" Text="{Binding ValueText}"
+                                 Foreground="{Binding ValueToken, Converter={x:Static ui:Converters.Token}}" IsVisible="{Binding !IsEditing}" />
+                      <ContentControl Content="{Binding Editor}" IsVisible="{Binding IsEditing}" />
+                    </Panel>
+                    <Border Grid.Column="4" Classes="typetag" Classes.on="{Binding IsEditing}" Cursor="Hand">
+                      <StackPanel Orientation="Horizontal" Spacing="3">
+                        <TextBlock Text="{Binding TypeText}" />
+                        <ui:Glyph Key="Mongo.chevron-down" Size="9" Brush="{DynamicResource VelaAccent}" IsVisible="{Binding IsEditing}" />
+                      </StackPanel>
+                    </Border>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Theme="{StaticResource MongoToolButton}" Height="28" Padding="35,0,10,0" CornerRadius="0"
+                    HorizontalAlignment="Stretch" Command="{Binding AddFieldCommand}" IsVisible="{Binding HasRow}"
+                    IsEnabled="{Binding Owner.CanEdit}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Classes="ui accent" Text="{Binding Loc[Cw_AddField]}" />
+                <TextBlock Classes="mono tiny muted" Text="Ctrl+Enter" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ui:CodeEditor IsVisible="{Binding IsJsonPage}" IsReadOnly="True" ShowLineNumbers="False" HighlightCurrentLine="False" WordWrap="True"
+                       FontSize="{DynamicResource VelaFontSize11}" Text="{Binding JsonText}" Language="{Binding JsonLanguage}" />
+
+        <ScrollViewer IsVisible="{Binding IsInfoPage}" Padding="12,10">
+          <ItemsControl ItemsSource="{Binding InfoLines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:CollectionInfoLine">
+                <DockPanel Height="24">
+                  <TextBlock DockPanel.Dock="Right" Classes="mono secondary trim" MaxWidth="160" Text="{Binding Value}" />
+                  <TextBlock Classes="ui small tertiary trim" Text="{Binding Label}" />
+                </DockPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Panel>
+
+      <!-- 底部:验证状态 + 放弃 / 应用修改 -->
+      <Border Grid.Row="3" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0" Padding="12,10"
+              IsVisible="{Binding HasRow}">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="{Binding ValidationIcon}" Size="12" Brush="{Binding ValidationToken, Converter={x:Static ui:Converters.Token}}" />
+            <TextBlock Classes="ui small tertiary trim" MaxWidth="240" Text="{Binding ValidationText}" ToolTip.Tip="{Binding ValidationText}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+            <Button Theme="{StaticResource MongoOutlineButton}" Height="26" Padding="12,0" Content="{Binding Loc[Common_Discard]}"
+                    Command="{Binding DiscardCommand}" IsEnabled="{Binding HasChanges}" />
+            <Button Theme="{StaticResource MongoPillButton}" Height="26" Padding="12,0" Command="{Binding ApplyCommand}"
+                    IsEnabled="{Binding HasChanges}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.check" Size="12" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Text="{Binding Loc[Cw_ApplyChanges]}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

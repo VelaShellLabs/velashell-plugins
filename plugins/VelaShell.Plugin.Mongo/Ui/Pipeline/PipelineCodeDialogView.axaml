@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.PipelineCodeDialogView"
+             x:DataType="ui:PipelineCodeDialogViewModel">
+
+  <!-- 导出为代码:上面一排语言分段 + allowDiskUse 勾选,中间只读编辑器,底栏说明 + 关闭 / 复制。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里的 AvaloniaEdit 需要它自己的控件模板;插件不该假定宿主的资源里有它(与 DockerPanel 同理)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="44,*,48">
+    <Border Grid.Row="0" Padding="14,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <DockPanel>
+        <CheckBox DockPanel.Dock="Right" Theme="{StaticResource MongoCheck}" VerticalAlignment="Center"
+                  IsChecked="{Binding AllowDiskUse}" Content="{Binding Loc[Pipe_CodeAllowDiskUse]}" />
+        <Border Classes="segments" HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="1">
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeCodeLanguage" IsChecked="{Binding IsMongosh}" Content="mongosh" />
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeCodeLanguage" IsChecked="{Binding IsCSharp}" Content="C#" />
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeCodeLanguage" IsChecked="{Binding IsPython}" Content="Python" />
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeCodeLanguage" IsChecked="{Binding IsNode}" Content="Node.js" />
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeCodeLanguage" IsChecked="{Binding IsJava}" Content="Java" />
+          </StackPanel>
+        </Border>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="1" Background="{DynamicResource VelaBgInput}">
+      <ui:CodeEditor Text="{Binding Code, Mode=OneWay}" Language="Shell" IsReadOnly="True"
+                     HighlightCurrentLine="False" FontSize="{DynamicResource VelaFontSize11}" />
+    </Border>
+
+    <Border Grid.Row="2" Classes="dialog-footer">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+          <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Close]}" Command="{Binding CloseCommand}" />
+          <Button Theme="{StaticResource MongoPillButton}" Command="{Binding CopyCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Pipe_Copy]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+        <TextBlock Classes="ui small muted" Text="{Binding Note}" />
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

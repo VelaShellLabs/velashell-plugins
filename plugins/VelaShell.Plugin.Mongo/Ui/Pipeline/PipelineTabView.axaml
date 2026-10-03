@@ -1,0 +1,468 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.PipelineTabView"
+             x:DataType="ui:PipelineTabViewModel">
+
+  <!--
+    聚合管道构建器(设计稿 04 NXboI):
+      36px 工具行(源集合芯片 · 阶段/文本 · 添加阶段 · 执行计划 · 自动预览 + 抽样 ‖ 保存 · 创建视图 · 导出为代码 · 运行)
+      阶段区(VelaBgPage 底):阶段卡片 → 「+ 添加阶段」虚线框 → 管道输出表
+      28px 底栏(阶段统计 · 预览依据 ‖ allowDiskUse)
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里的 AvaloniaEdit 需要它自己的控件模板;插件不该假定宿主的资源里有它(与 DockerPanel 同理)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+    <!-- 阶段卡片:圆角 4、VelaBgSidebar 底、VelaBorderPrimary 描边;停用整体变淡,出错描红。 -->
+    <Style Selector="Border.stage">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSidebar}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.stage.off">
+      <Setter Property="Background" Value="{DynamicResource VelaBgPage}" />
+      <Setter Property="Opacity" Value="0.7" />
+    </Style>
+    <Style Selector="Border.stage.error">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Border.stage.dragging">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="Border.stagehead">
+      <Setter Property="Height" Value="34" />
+      <Setter Property="Padding" Value="6,0,8,0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Border.stagehead.open">
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.grip">
+      <Setter Property="Cursor" Value="SizeAll" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- 阶段下拉:VelaBgInput 底 + 描边,高 22。 -->
+    <Style Selector="Button.opselect">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Padding" Value="8,0" />
+    </Style>
+    <Style Selector="Button.icon22">
+      <Setter Property="Width" Value="22" />
+      <Setter Property="Height" Value="22" />
+    </Style>
+
+    <!-- 输出表:24px 列头与行,单元格右侧 1px 竖线。 -->
+    <Style Selector="Border.rcell">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,0,1,0" />
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Height" Value="20" />
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+Enter" Command="{Binding RunCommand}" />
+  </UserControl.KeyBindings>
+
+  <Grid RowDefinitions="36,*,28" Background="{DynamicResource VelaBgTerminal}">
+
+    <!-- ══ 36px 工具行 ══ -->
+    <Border Grid.Row="0" Classes="toolrow">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding SaveCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.save" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Pipe_Save]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding CreateViewCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.eye" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Pipe_CreateView]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExportCodeCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.code-xml" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Pipe_ExportCode]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding RunCommand}"
+                  IsVisible="{Binding !IsRunning}" ToolTip.Tip="Ctrl+↵">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.play" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Pipe_Run]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoDangerButton}" Height="24" Padding="10,0" Command="{Binding StopCommand}"
+                  IsVisible="{Binding IsRunning}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.square" Size="11" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[Pipe_Stop]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Border Height="24" Padding="8,0" Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                  BorderThickness="1" CornerRadius="3" VerticalAlignment="Center" ToolTip.Tip="{Binding SourceLabel}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="{Binding SourceIcon}" Size="12" Brush="{DynamicResource VelaInfo}" />
+              <TextBlock Classes="mono primary" Text="{Binding SourceLabel}" />
+              <TextBlock Classes="mono small muted" Text="{Binding SourceCount}"
+                         IsVisible="{Binding SourceCount, Converter={x:Static ui:Converters.NotEmpty}}" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="segments">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <RadioButton x:Name="StagesSegment" Theme="{StaticResource MongoSegment}" GroupName="PipeMode" IsChecked="{Binding IsStagesMode}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ui:Glyph Key="Mongo.rows-3" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+                  <TextBlock Text="{Binding Loc[Pipe_ModeStages]}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Theme="{StaticResource MongoSegment}" GroupName="PipeMode" IsChecked="{Binding IsTextMode}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ui:Glyph Key="Mongo.code" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+                  <TextBlock Text="{Binding Loc[Pipe_ModeText]}" />
+                </StackPanel>
+              </RadioButton>
+            </StackPanel>
+          </Border>
+
+          <Button x:Name="AddStageTool" Theme="{StaticResource MongoToolButton}" Click="OnAddStageClick" IsEnabled="{Binding IsStagesMode}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Pipe_AddStage]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExplainCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaInfo}" />
+              <TextBlock Text="{Binding Loc[Pipe_Explain]}" />
+            </StackPanel>
+          </Button>
+
+          <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,0" VerticalAlignment="Center">
+            <TextBlock Classes="ui secondary" Text="{Binding Loc[Pipe_AutoPreview]}" />
+            <ToggleButton Theme="{StaticResource MongoSwitch}" IsChecked="{Binding AutoPreview}" />
+            <Button x:Name="SampleButton" Theme="{StaticResource MongoToolButton}" Padding="2,0" Height="20" Click="OnSampleClick"
+                    ToolTip.Tip="{Binding SampleTip}">
+              <TextBlock Classes="mono small muted" Text="{Binding SampleText}" />
+            </Button>
+          </StackPanel>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ 阶段区 / 文本区 ══ -->
+    <Panel Grid.Row="1" Background="{DynamicResource VelaBgPage}">
+      <ScrollViewer x:Name="StageScroller" IsVisible="{Binding IsStagesMode}" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+        <StackPanel x:Name="StageColumn" Margin="14,12" Spacing="8">
+          <ItemsControl x:Name="StageList" ItemsSource="{Binding Stages}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:PipelineStage">
+                <Border Classes="stage" Classes.off="{Binding !IsEnabled}" Classes.error="{Binding HasError}">
+                  <StackPanel>
+                    <!-- 卡片头 -->
+                    <Border Classes="stagehead" Classes.open="{Binding IsExpanded}" Background="Transparent">
+                      <Border.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="{Binding Loc[Pipe_MoveUp]}" Command="{Binding MoveUpCommand}" />
+                          <MenuItem Header="{Binding Loc[Pipe_MoveDown]}" Command="{Binding MoveDownCommand}" />
+                          <MenuItem Header="{Binding Loc[Pipe_Duplicate]}" Command="{Binding DuplicateCommand}" />
+                          <Separator />
+                          <MenuItem Header="{Binding Loc[Pipe_Delete]}" Command="{Binding RemoveCommand}" />
+                        </ContextMenu>
+                      </Border.ContextMenu>
+                      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <Border Grid.Column="0" Classes="grip" Width="16" Height="24" Margin="0,0,8,0" ToolTip.Tip="{Binding Loc[Pipe_DragTip]}">
+                          <ui:Glyph Key="Mongo.grip-vertical" Size="13" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+                        </Border>
+                        <Border Grid.Column="1" Width="18" Height="18" CornerRadius="9" Margin="0,0,8,0"
+                                Background="{Binding IndexBackgroundToken, Converter={x:Static ui:Converters.Token}}">
+                          <TextBlock Classes="mono small semibold" HorizontalAlignment="Center" Text="{Binding Index}"
+                                     Foreground="{Binding IndexToken, Converter={x:Static ui:Converters.Token}}" />
+                        </Border>
+                        <Button Grid.Column="2" Classes="opselect" Theme="{StaticResource MongoToolButton}" Margin="0,0,8,0"
+                                Click="OnOperatorClick" ToolTip.Tip="{Binding Tip}">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="mono medium" Text="{Binding Operator}"
+                                       Foreground="{Binding OperatorToken, Converter={x:Static ui:Converters.Token}}" />
+                            <ui:Glyph Key="Mongo.chevron-down" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+                          </StackPanel>
+                        </Button>
+                        <TextBlock Grid.Column="3" Classes="ui small muted" Margin="0,0,8,0" Text="{Binding Description}" />
+                        <ui:PipelineInlineCode Grid.Column="4" Classes="mono trim" Margin="6,0,8,0" Code="{Binding InlineBody}"
+                                            Muted="{Binding InlineMuted}" IsVisible="{Binding ShowInline}" />
+                        <Border Grid.Column="5" Classes="tag err" Margin="0,0,8,0" MaxWidth="260" IsVisible="{Binding HasError}"
+                                ToolTip.Tip="{Binding ErrorText}">
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <ui:Glyph Key="Mongo.circle-x" Size="10" Brush="{DynamicResource VelaError}" />
+                            <TextBlock Classes="trim" Text="{Binding ErrorBadge}" Foreground="{DynamicResource VelaError}"
+                                       FontSize="{DynamicResource VelaFontSize9}" />
+                          </StackPanel>
+                        </Border>
+                        <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0" Background="Transparent"
+                                    ToolTip.Tip="{Binding CountTip}">
+                          <ui:Glyph Key="Mongo.arrow-right" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+                          <TextBlock Classes="mono small secondary" Text="{Binding CountText}" />
+                          <TextBlock Classes="ui small muted" Text="{Binding Loc[Pipe_Docs]}" />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="7" Theme="{StaticResource MongoSwitch}" Margin="0,0,8,0" IsChecked="{Binding IsEnabled}"
+                                      ToolTip.Tip="{Binding Loc[Pipe_Enable]}" />
+                        <Button Grid.Column="8" Classes="icon22" Theme="{StaticResource MongoIconButton}" Margin="0,0,8,0"
+                                Command="{Binding ToggleExpandCommand}" ToolTip.Tip="{Binding Loc[Pipe_Expand]}">
+                          <ui:Glyph Key="{Binding ChevronKey}" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                        </Button>
+                        <Button Grid.Column="9" Classes="icon22" Theme="{StaticResource MongoIconButton}" Margin="0,0,8,0"
+                                Command="{Binding DuplicateCommand}" ToolTip.Tip="{Binding Loc[Pipe_Duplicate]}">
+                          <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                        </Button>
+                        <Button Grid.Column="10" Classes="icon22" Theme="{StaticResource MongoIconButton}"
+                                Command="{Binding RemoveCommand}" ToolTip.Tip="{Binding Loc[Pipe_Delete]}">
+                          <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+                        </Button>
+                      </Grid>
+                    </Border>
+
+                    <!-- 展开态:左编辑器,右输出预览 -->
+                    <Grid IsVisible="{Binding IsExpanded}" Background="{DynamicResource VelaBgInput}">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="240" />
+                        <ColumnDefinition Width="0" />
+                        <ColumnDefinition Width="470" MinWidth="200" MaxWidth="900" />
+                      </Grid.ColumnDefinitions>
+                      <ui:CodeEditor Grid.Column="0" Text="{Binding Body}" Language="Shell" Height="{Binding EditorHeight}"
+                                     VerticalAlignment="Top" Loaded="OnStageEditorLoaded"
+                                     FontSize="{DynamicResource VelaFontSize11}" HighlightCurrentLine="False"
+                                     Diagnostics="{Binding Diagnostics}" CompletionProvider="{Binding CompletionProvider}" />
+                      <GridSplitter Grid.Column="1" Classes="vsplit" />
+                      <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                              BorderThickness="1,0,0,0" Padding="10,8">
+                        <StackPanel Spacing="6">
+                          <DockPanel Height="14">
+                            <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Width="18" Height="18"
+                                    Command="{Binding ShowPreviewCommand}" IsEnabled="{Binding CanShowPreview}"
+                                    ToolTip.Tip="{Binding Loc[Pipe_ShowAll]}" VerticalAlignment="Center">
+                              <ui:Glyph Key="Mongo.maximize-2" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+                            </Button>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Pipe_OutputPreview]}" />
+                              <TextBlock Classes="mono small muted" Text="{Binding PreviewHeader}" />
+                            </StackPanel>
+                          </DockPanel>
+                          <ItemsControl ItemsSource="{Binding PreviewCards}" IsVisible="{Binding HasPreviewCards}" Margin="0,0,-8,0">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="ui:PipelineMiniDoc">
+                                <Border Margin="0,0,8,0" Padding="8,6" CornerRadius="3" Background="{DynamicResource VelaBgTerminal}"
+                                        BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" VerticalAlignment="Top">
+                                  <ItemsControl ItemsSource="{Binding Fields}">
+                                    <ItemsControl.ItemsPanel>
+                                      <ItemsPanelTemplate>
+                                        <StackPanel Spacing="2" />
+                                      </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                      <DataTemplate x:DataType="ui:PipelineMiniField">
+                                        <DockPanel>
+                                          <TextBlock DockPanel.Dock="Left" Classes="mono small tertiary" Margin="0,0,6,0" Text="{Binding Key}" />
+                                          <TextBlock Classes="mono small trim" Text="{Binding Value}"
+                                                     Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                                        </DockPanel>
+                                      </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                  </ItemsControl>
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <TextBlock Classes="ui small muted wrap" Text="{Binding PreviewNote}" Classes.err="{Binding PreviewNoteIsError}"
+                                     IsVisible="{Binding !HasPreviewCards}" />
+                        </StackPanel>
+                      </Border>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- 「+ 添加阶段 · 输入 $ 可搜索 30+ 个阶段」虚线框 -->
+          <Panel x:Name="AddStageBox" Height="34" Cursor="Hand" Background="Transparent" PointerReleased="OnAddStageBoxReleased">
+            <Rectangle RadiusX="4" RadiusY="4" Stroke="{DynamicResource VelaBorderSecondary}" StrokeThickness="1" StrokeDashArray="4,3" />
+            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+              <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Classes="ui accent" Text="{Binding Loc[Pipe_AddStage]}" />
+              <TextBlock Classes="ui small muted" Text="{Binding Loc[Pipe_AddStageHint]}" />
+            </StackPanel>
+          </Panel>
+
+          <!-- 管道输出 -->
+          <Border CornerRadius="4" Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                  BorderThickness="1" ClipToBounds="True" IsVisible="{Binding HasRun}">
+            <StackPanel>
+              <Border Height="30" Padding="10,0" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                      BorderThickness="0,0,0,1">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+                    <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding OpenResultsCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <ui:Glyph Key="Mongo.table-2" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Pipe_OpenInResults]}" />
+                      </StackPanel>
+                    </Button>
+                    <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding SaveAsCollectionCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <ui:Glyph Key="Mongo.save" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Pipe_SaveAs]}" />
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ui:Glyph Key="Mongo.flag" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+                    <TextBlock Classes="ui primary medium" Text="{Binding Loc[Pipe_Output]}" />
+                    <TextBlock Classes="mono small muted" Text="{Binding ResultSummary}" />
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <TextBlock Classes="mono small err wrap" Margin="10,8" Text="{Binding RunError}" IsVisible="{Binding HasRunError}" />
+              <TextBlock Classes="ui small muted" Margin="10,8" Text="{Binding Loc[Pipe_ResultEmpty]}" IsVisible="{Binding ShowEmptyResult}" />
+
+              <ScrollViewer x:Name="ResultScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                            IsVisible="{Binding HasRows}">
+                <StackPanel x:Name="ResultTable" HorizontalAlignment="Left">
+                  <Border Height="24" Background="{DynamicResource VelaBgSurface}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                          BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                      <Border Classes="rcell" Width="40" />
+                      <ItemsControl x:Name="ResultHeader" ItemsSource="{Binding ResultColumns}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:PipelineColumn">
+                            <Border Classes="rcell" Width="{Binding Width}" ToolTip.Tip="{Binding Tip}">
+                              <Panel>
+                                <TextBlock Classes="mono small medium secondary trim" Classes.muted="{Binding IsGhost}" Text="{Binding Name}"
+                                           HorizontalAlignment="Left" />
+                                <Thumb Theme="{StaticResource MongoColumnGrip}" Margin="0,0,-11,0" DragDelta="OnResultResizeDelta" />
+                              </Panel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                  <ListBox x:Name="ResultList" Classes="rows" ItemsSource="{Binding ResultRows}" Height="{Binding ResultListHeight}"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="ui:PipelineRow">
+                        <Border Height="24" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                          <StackPanel Orientation="Horizontal">
+                            <Border Classes="rcell" Width="40">
+                              <TextBlock Classes="mono small muted" HorizontalAlignment="Right" Text="{Binding Number}" />
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding Cells}">
+                              <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                  <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                              </ItemsControl.ItemsPanel>
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="ui:PipelineCell">
+                                  <Border Classes="rcell" Width="{Binding Column.Width}">
+                                    <Panel>
+                                      <TextBlock Classes="mono trim" Text="{Binding Text}" IsVisible="{Binding !IsGhost}"
+                                                 HorizontalAlignment="{Binding Alignment}"
+                                                 Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                                      <TextBlock Classes="ui small muted trim" FontStyle="Italic" Text="{Binding Text}" IsVisible="{Binding IsGhost}" />
+                                    </Panel>
+                                  </Border>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </StackPanel>
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- 文本模式:整条管道一个编辑器,与卡片双向同步;解析失败停在这里并标错。 -->
+      <Grid RowDefinitions="*,Auto" IsVisible="{Binding IsTextMode}" Margin="14,12">
+        <Border Grid.Row="0" Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                BorderThickness="1" CornerRadius="4" ClipToBounds="True">
+          <ui:CodeEditor Text="{Binding PipelineTextValue}" Language="Shell" FontSize="{DynamicResource VelaFontSize11}"
+                         Diagnostics="{Binding TextDiagnostics}" CompletionProvider="{Binding TextCompletionProvider}" />
+        </Border>
+        <Border Grid.Row="1" Classes="notice err" Margin="0,8,0,0" Padding="10,7" IsVisible="{Binding HasTextError}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.circle-x" Size="12" Brush="{DynamicResource VelaError}" />
+            <TextBlock Classes="ui small primary" Text="{Binding Loc[Pipe_TextInvalid]}" />
+            <TextBlock Classes="mono small err trim" Text="{Binding TextError}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Panel>
+
+    <!-- ══ 28px 底栏 ══ -->
+    <Border Grid.Row="2" Padding="12,0" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+            BorderThickness="0,1,0,0">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Theme="{StaticResource MongoToolButton}" Height="20" Padding="4,0"
+                Command="{Binding ToggleAllowDiskUseCommand}" ToolTip.Tip="{Binding Loc[Pipe_AllowDiskUseTip]}">
+          <TextBlock Classes="mono small tertiary" Text="{Binding AllowDiskUseText}" />
+        </Button>
+        <StackPanel Orientation="Horizontal" Spacing="14">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="{Binding SummaryIcon}" Size="12" Brush="{Binding SummaryToken, Converter={x:Static ui:Converters.Token}}" />
+            <TextBlock Classes="ui secondary" Text="{Binding StageSummary}" />
+          </StackPanel>
+          <Button Theme="{StaticResource MongoToolButton}" Height="20" Padding="0" Command="{Binding RefreshPreviewCommand}"
+                  IsHitTestVisible="{Binding CanRefreshPreview}">
+            <TextBlock Classes="mono small tertiary" Text="{Binding PreviewSummary}" />
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- 阶段搜索弹层(添加阶段、换运算符共用一张;位置在打开时挂到点的那个控件上) -->
+    <Popup x:Name="PickerPopup" Grid.Row="1" IsLightDismissEnabled="True" Placement="BottomEdgeAlignedLeft" />
+  </Grid>
+</UserControl>

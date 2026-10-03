@@ -1,0 +1,63 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- VelaShell 暗色主题 —— Dracula 调色板 -->
+
+    <!-- 强调色标记 -->
+    <SolidColorBrush x:Key="VelaAccentText" Color="#BD93F9" />
+
+    <!-- 全应用浮层卡片的外投影(#171 层级不清):自绘窗体、命令面板、隧道面板、传输浮层等
+         一律用这一个,浮层的投影语言只有一套。
+         两层的最大延展(offsetY + blur)= 16,与卡片外边距一致:透明窗体的投影只能画在
+         窗口矩形之内,超出外边距的部分会被窗口边缘直接裁掉,调这里就要连外边距一起调,
+         否则又变成截断的一块糊影。近处一层压出边缘、远处一层给出扩散。
+         【不透明度必须分主题】:同一个 50% 纯黑压在亮色卡片下面会变成一坨发脏的矩形
+         (命令面板/隧道面板此前硬编码 #80000000 就是这个毛病),亮色那套在 LightTheme。
+         【2026-08-31 调软】远处那层原来是 65% 纯黑、blur 只有 10 —— 又浓又紧,压在暗色
+         终端底上不像投影,像卡片下面糊了一道黑边(用户反馈)。改为 40% / blur 12 / y4:
+         延展仍然是 16(4+12,外边距不用动),但落差被拉开,边缘不再是一刀切的硬边。
+         口径与 DESIGN.md §4.5「小浮层」一致(那里写的 blur 16 是不含延展预算的理想值)。 -->
+    <BoxShadows x:Key="VelaShadowWindow">0 1 3 0 #40000000, 0 4 12 0 #66000000</BoxShadows>
+
+    <!-- 语义标记 -->
+    <SolidColorBrush x:Key="VelaWarning" Color="#FFB86C" />
+    <SolidColorBrush x:Key="VelaError"   Color="#FF5555" />
+    <SolidColorBrush x:Key="VelaInfo"    Color="#8BE9FD" />
+
+    <!-- 压在实心语义色上的字/图标。暗色主题的语义色本身是**亮**色,白字压上去只有 3:1
+         左右 —— 危险按钮上的"删除"两个字就是这么消失的。这里取 Dracula 的近黑,
+         与强调色实底上的字同一支。运行时由 ThemeTokenApplier 按各主题重算。 -->
+    <SolidColorBrush x:Key="VelaErrorForeground"   Color="#0A0E14" />
+    <SolidColorBrush x:Key="VelaWarningForeground" Color="#0A0E14" />
+    <SolidColorBrush x:Key="VelaSuccessForeground" Color="#0A0E14" />
+
+    <!-- 终端颜色标记 -->
+    <SolidColorBrush x:Key="VelaShellWhite"   Color="#F8F8F2" />
+    <SolidColorBrush x:Key="VelaShellGreen"   Color="#50FA7B" />
+    <SolidColorBrush x:Key="VelaShellCyan"    Color="#8BE9FD" />
+    <SolidColorBrush x:Key="VelaShellBlue"    Color="#BD93F9" />
+    <SolidColorBrush x:Key="VelaShellYellow"  Color="#F1FA8C" />
+    <SolidColorBrush x:Key="VelaShellRed"     Color="#FF5555" />
+    <SolidColorBrush x:Key="VelaShellMagenta" Color="#FF79C6" />
+    <SolidColorBrush x:Key="VelaShellSubtle"  Color="#6272A4" />
+
+    <!-- 资源监视图表:面积填充是同色 22% 透明,折线用上面的实色(设计规范"阈值与配色")。 -->
+    <SolidColorBrush x:Key="VelaShellGreenDim"   Color="#3850FA7B" />
+    <SolidColorBrush x:Key="VelaShellCyanDim"    Color="#388BE9FD" />
+    <SolidColorBrush x:Key="VelaShellBlueDim"    Color="#38BD93F9" />
+    <SolidColorBrush x:Key="VelaShellYellowDim"  Color="#38F1FA8C" />
+    <SolidColorBrush x:Key="VelaShellRedDim"     Color="#38FF5555" />
+    <SolidColorBrush x:Key="VelaShellMagentaDim" Color="#38FF79C6" />
+    <SolidColorBrush x:Key="VelaShellSubtleDim"  Color="#286272A4" />
+
+    <!-- 图表刻度文字的底片:曲线面积铺满时,直接写字会糊进填充里。 -->
+    <SolidColorBrush x:Key="VelaChartLabelBg" Color="#C0282A36" />
+
+    <!-- 逻辑处理器热力网格的五级色阶:空闲 → 低 → 中 → 高 → 满。 -->
+    <SolidColorBrush x:Key="VelaHeat1" Color="#506272A4" />
+    <SolidColorBrush x:Key="VelaHeat2" Color="#558BE9FD" />
+    <SolidColorBrush x:Key="VelaHeat3" Color="#55BD93F9" />
+    <SolidColorBrush x:Key="VelaHeat4" Color="#55F1FA8C" />
+    <SolidColorBrush x:Key="VelaHeat5" Color="#66FF5555" />
+
+</ResourceDictionary>

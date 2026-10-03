@@ -1,0 +1,249 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DesignSchemaView"
+             x:DataType="ui:DesignTabViewModel">
+
+  <!--
+    设计稿 08 · Schema 分析。左:工具行(重新分析 / $sample 数量 / 沿用的筛选 / 用时)→ 26px 列头 →
+    74px 一行的字段表(字段 + 灰字提示 / 类型与出现率 / 值分布);右:360px「由抽样生成验证规则」。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Design/DesignStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="320" />
+      <ColumnDefinition Width="0" />
+      <ColumnDefinition Width="360" MinWidth="240" MaxWidth="720" />
+    </Grid.ColumnDefinitions>
+    <Grid Grid.Column="0" RowDefinitions="36,26,*" Background="{DynamicResource VelaBgTerminal}">
+      <Border Grid.Row="0" Classes="toolrow">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding AnalyzeCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.refresh-cw" Size="12" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Text="{Binding Loc[Design_Reanalyze]}" />
+              </StackPanel>
+            </Button>
+            <Button x:Name="SamplePick" Classes="select" Theme="{StaticResource MongoToolButton}" Height="24">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="mono small muted" Text="$sample" />
+                <TextBlock Classes="mono t-num" Text="{Binding SampleSizeText}" />
+                <ui:Glyph Key="Mongo.chevron-down" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+              </StackPanel>
+            </Button>
+            <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+              <TextBlock Classes="mono small tertiary" Text="{Binding Loc[Design_FilterCarried]}" />
+              <TextBox Classes="bare" Theme="{StaticResource MongoTextBox}" MinWidth="120" MaxWidth="260"
+                       FontSize="{DynamicResource VelaFontSize10}" Foreground="{DynamicResource VelaTextTertiary}"
+                       Text="{Binding SchemaFilter}" PlaceholderText="{Binding Loc[Design_FilterNone]}">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding AnalyzeCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+            </StackPanel>
+          </StackPanel>
+          <TextBlock Grid.Column="2" Classes="ui small muted" Text="{Binding SchemaTiming}" />
+        </Grid>
+      </Border>
+
+      <Border Grid.Row="1" Classes="colheader">
+        <Grid ColumnDefinitions="220,200,*" ui:TableColumns.Header="schema">
+          <TextBlock Grid.Column="0" Classes="ui small muted" Margin="12,0" Text="{Binding Loc[Design_ColField]}" />
+          <TextBlock Grid.Column="1" Classes="ui small muted" Margin="12,0" Text="{Binding Loc[Design_ColTypes]}" />
+          <TextBlock Grid.Column="2" Classes="ui small muted" Margin="12,0" Text="{Binding Loc[Design_ColDistribution]}" />
+        </Grid>
+      </Border>
+
+      <Panel Grid.Row="2">
+        <ListBox Classes="rows" ItemsSource="{Binding SchemaFields}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="ui:SchemaFieldRow">
+              <Border Height="74" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Background="Transparent">
+                <Grid ColumnDefinitions="220,200,*" ui:TableColumns.Row="schema">
+                  <StackPanel Grid.Column="0" Margin="12,0" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Classes="mono primary medium trim" Text="{Binding Path}" />
+                    <TextBlock Classes="ui small muted trim" Classes.warn="{Binding HintWarn}" Text="{Binding Hint}" ToolTip.Tip="{Binding Hint}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Margin="12,0" Spacing="6" VerticalAlignment="Center">
+                    <ui:DesignBar Height="8" Radius="2" Segments="{Binding Pieces}" />
+                    <ItemsControl ItemsSource="{Binding Legend}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:LegendItem">
+                          <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,8,0">
+                            <Rectangle Width="6" Height="6" RadiusX="1" RadiusY="1" VerticalAlignment="Center"
+                                       Fill="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                            <TextBlock Classes="mono tiny tertiary" Text="{Binding Text}" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                  <Panel Grid.Column="2" Margin="12,8" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <TextBlock Classes="mono small tertiary trim" Text="{Binding VizText}" IsVisible="{Binding IsText}" />
+                    <ItemsControl Width="340" ItemsSource="{Binding Bars}" IsVisible="{Binding IsBars}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="3" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:ValueBar">
+                          <Grid ColumnDefinitions="72,*,36">
+                            <TextBlock Grid.Column="0" Classes="mono small secondary trim" Text="{Binding Label}" />
+                            <ui:DesignBar Grid.Column="1" Height="8" Radius="2" Segments="{Binding Pieces}" Margin="0,0,8,0" />
+                            <TextBlock Grid.Column="2" Classes="mono tiny muted" Text="{Binding Percent}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Width="360" Spacing="3" IsVisible="{Binding IsHistogram}">
+                      <ui:BarChart Height="40" ShowAxes="False" GapRatio="0.12" Series="{Binding Histogram}" Labels="{Binding HistogramLabels}" />
+                      <Grid ColumnDefinitions="*,*">
+                        <TextBlock Classes="mono tiny muted" Text="{Binding AxisMin}" />
+                        <TextBlock Grid.Column="1" Classes="mono tiny muted" HorizontalAlignment="Right" Text="{Binding AxisMax}" />
+                      </Grid>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding IsLengths}">
+                      <TextBlock Classes="ui small muted" Text="{Binding $parent[UserControl].((ui:DesignTabViewModel)DataContext).Loc[Design_LengthLabel]}" />
+                      <ItemsControl ItemsSource="{Binding Lengths}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="10" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:LengthBar">
+                            <StackPanel Spacing="3" ToolTip.Tip="{Binding Count}">
+                              <Panel Width="28" Height="36">
+                                <Border VerticalAlignment="Bottom" Height="{Binding Height}" CornerRadius="1,1,0,0"
+                                        Background="{DynamicResource VelaWarning}" />
+                              </Panel>
+                              <TextBlock Classes="mono tiny muted" HorizontalAlignment="Center" Text="{Binding Label}" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Panel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" IsVisible="{Binding IsAnalyzing}">
+          <ProgressBar Classes="thin" Width="160" IsIndeterminate="True" />
+          <TextBlock Classes="ui muted" HorizontalAlignment="Center" Text="{Binding Loc[Design_Analyzing]}" />
+        </StackPanel>
+        <TextBlock Classes="ui muted wrap" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360" TextAlignment="Center"
+                   Text="{Binding Loc[Design_SchemaEmpty]}" IsVisible="{Binding ShowSchemaEmpty}" />
+      </Panel>
+    </Grid>
+
+    <!-- ══ 右:由抽样生成验证规则 ══ -->
+    <GridSplitter Grid.Column="1" Classes="vsplit" />
+    <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+      <Grid RowDefinitions="36,*,Auto">
+        <Border Grid.Row="0" Classes="panelhead">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="Mongo.shield-check" Size="13" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Classes="h" Text="{Binding Loc[Design_GenTitle]}" />
+            </StackPanel>
+            <Button Grid.Column="2" Theme="{StaticResource MongoIconButton}" Width="22" Height="22" Command="{Binding CopyGeneratedCommand}"
+                    ToolTip.Tip="{Binding Loc[Common_Copy]}">
+              <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+            </Button>
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="12" Spacing="12">
+            <Border Classes="input" Padding="2,4" IsVisible="{Binding HasGenerated}">
+              <ui:CodeEditor Language="Shell" IsReadOnly="True" Text="{Binding GeneratedText}" ShowLineNumbers="False"
+                             HighlightCurrentLine="False" FontSize="{DynamicResource VelaFontSize10}" MinHeight="60" MaxHeight="340" />
+            </Border>
+            <TextBlock Classes="flabel" Text="{Binding Loc[Design_LevelLabel]}" />
+            <Border Classes="segments" Height="26">
+              <UniformGrid Rows="1">
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="GenLevel" Content="off" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             IsChecked="{Binding GenLevel, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=off}" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="GenLevel" Content="moderate" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             IsChecked="{Binding GenLevel, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=moderate}" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="GenLevel" Content="strict" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             IsChecked="{Binding GenLevel, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=strict}" />
+              </UniformGrid>
+            </Border>
+            <TextBlock Classes="flabel" Text="{Binding Loc[Design_ActionLabel]}" />
+            <Border Classes="segments" Height="26">
+              <UniformGrid Rows="1">
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="GenAction" Content="warn" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             IsChecked="{Binding GenAction, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=warn}" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="GenAction" Content="error" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}"
+                             IsChecked="{Binding GenAction, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=error}" />
+              </UniformGrid>
+            </Border>
+
+            <TextBlock Classes="ui small muted" Text="{Binding Loc[Design_GenChecking]}" IsVisible="{Binding IsGenChecking}" />
+            <Border Background="{ui:Dim VelaWarning, 0.12}" CornerRadius="3" Padding="10,8" IsVisible="{Binding GenHasFailures}">
+              <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Mongo.triangle-alert" Size="12" Brush="{DynamicResource VelaWarning}" />
+                  <TextBlock Classes="ui small warn medium" Text="{Binding GenCheckTitle}" />
+                </StackPanel>
+                <TextBlock Classes="ui small secondary" TextWrapping="Wrap" LineHeight="15" Text="{Binding GenCheckReasons}" />
+                <Button Classes="link" Theme="{StaticResource MongoToolButton}" HorizontalAlignment="Left" Command="{Binding ViewGeneratedFailuresCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Classes="ui small info" Text="{Binding GenFailLink}" />
+                    <ui:Glyph Key="Mongo.arrow-right" Size="10" Brush="{DynamicResource VelaInfo}" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </Border>
+            <Border Background="{ui:Dim VelaStatusConnected, 0.1}" CornerRadius="3" Padding="10,8" IsVisible="{Binding GenAllPass}">
+              <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Mongo.circle-check" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+                  <TextBlock Classes="ui small ok medium" Text="{Binding GenCheckTitle}" />
+                </StackPanel>
+                <TextBlock Classes="ui small secondary" TextWrapping="Wrap" LineHeight="15" Text="{Binding GenCheckReasons}" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Classes="panelfoot">
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Button Theme="{StaticResource MongoOutlineButton}" Padding="12,0" Command="{Binding EditGeneratedCommand}" IsEnabled="{Binding HasGenerated}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.pencil" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Text="{Binding Loc[Design_EditInEditor]}" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource MongoPillButton}" Padding="12,0" Command="{Binding ApplyGeneratedCommand}" IsEnabled="{Binding CanValidate}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.shield-check" Size="12" Brush="{DynamicResource VelaAccent}" />
+                <TextBlock Text="{Binding Loc[Design_ApplyAsRule]}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

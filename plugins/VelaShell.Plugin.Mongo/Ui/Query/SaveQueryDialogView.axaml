@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.SaveQueryDialogView"
+             x:DataType="ui:SaveQueryDialogViewModel">
+
+  <!-- 保存查询:一个名字输入框 + 底栏(取消 / 保存)。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,48">
+    <StackPanel Grid.Row="0" Margin="16,14" Spacing="8">
+      <TextBlock Classes="ui small secondary" Text="{Binding Loc[Query_SaveName]}" />
+      <TextBox x:Name="NameBox" Theme="{StaticResource MongoTextBox}" Height="30" Text="{Binding Name}" />
+      <TextBlock Classes="ui tiny muted wrap" Text="{Binding Loc[Query_SaveHint]}" />
+    </StackPanel>
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Content="{Binding Loc[Common_Save]}" Command="{Binding SaveCommand}" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

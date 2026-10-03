@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.GridPaneView"
+             x:DataType="ui:CollectionTabViewModel">
+
+  <!--
+    网格(设计稿 01):26px 列头(字段名 + 主导类型小字,可拖宽、双击分隔线按内容适配、点击排序)+ 28px 行(虚拟化,
+    5 万行照样只建可见的几十行),右侧文档检查器(默认 288px,分隔条可拖)。列头与行在两个滚动容器里,水平偏移由 code-behind 同步。
+    双击对象 / 数组单元格钻进去(Navicat 式):上面多出一条 28px 面包屑,Backspace 回上一层。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Collection/CollectionStyles.axaml" />
+
+    <!-- 面包屑:非末级可点(青色,同 GridFS 的目录面包屑),末级主色。 -->
+    <Style Selector="TextBlock.crumb">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaFileDirName}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.crumb.last">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.DataTemplates>
+    <!-- 单元格内联编辑器:无边框文本框 + 候选值下拉箭头(布尔、枚举列、日期的"现在")。 -->
+    <DataTemplate DataType="ui:InlineValueEditor">
+      <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding Error}">
+        <ui:GridEditBox Grid.Column="0" Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding Text}"
+                        Foreground="{DynamicResource VelaTextPrimary}" />
+        <Button Grid.Column="1" Theme="{StaticResource MongoIconButton}" Width="16" Height="20" Classes="choices"
+                IsVisible="{Binding HasChoices}" Focusable="False">
+          <ui:Glyph Key="Mongo.chevron-down" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+        </Button>
+      </Grid>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <!-- 右侧面板可收起(底栏右下角的按钮,Navicat 的习惯):收起时最后一列归零,分隔条与面板一起藏。 -->
+  <Grid ui:SidePanel.Collapsed="{Binding !IsSidePanelVisible}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="240" />
+      <ColumnDefinition Width="0" />
+      <ColumnDefinition Width="288" MinWidth="200" MaxWidth="720" />
+    </Grid.ColumnDefinitions>
+    <Grid Grid.Column="0" RowDefinitions="Auto,26,*" Background="{DynamicResource VelaBgTerminal}">
+      <!-- 钻入面包屑:‹ 文档 #3 › items › [2]                         数组 · 4 项 -->
+      <Border Grid.Row="0" Height="28" Background="{DynamicResource VelaBgSidebar}" Padding="4,0,10,0"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" IsVisible="{Binding IsDrilled}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Classes="mono small tertiary" Text="{Binding DrillSummary}" />
+          <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+            <Button x:Name="DrillBackButton" Theme="{StaticResource MongoIconButton}" Width="22" Height="22"
+                    Command="{Binding DrillBackCommand}" ToolTip.Tip="{Binding Loc[Cw_DrillBack]}">
+              <ui:Glyph Key="Mongo.chevron-left" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+            </Button>
+            <ItemsControl ItemsSource="{Binding DrillCrumbs}" VerticalAlignment="Center">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="2" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ui:DrillCrumb">
+                  <StackPanel Orientation="Horizontal" Spacing="2">
+                    <Button Theme="{StaticResource MongoToolButton}" Height="22" Padding="6,0" IsHitTestVisible="{Binding !IsLast}"
+                            Command="{Binding $parent[UserControl].((ui:CollectionTabViewModel)DataContext).DrillToCommand}"
+                            CommandParameter="{Binding}">
+                      <TextBlock Classes="crumb" Classes.last="{Binding IsLast}" Text="{Binding Label}" />
+                    </Button>
+                    <ui:Glyph Key="Mongo.chevron-right" Size="11" Brush="{DynamicResource VelaTextMuted}"
+                              IsVisible="{Binding HasSeparator}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- 列头 -->
+      <Border Grid.Row="1" Classes="colheader">
+        <ScrollViewer x:Name="HeaderScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+          <StackPanel Orientation="Horizontal" Margin="0,0,40,0">
+            <Border Classes="rownum hcell" Width="40" />
+            <ItemsControl x:Name="HeaderItems" ItemsSource="{Binding GridColumns}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ui:CollectionColumn">
+                  <Border Classes="hcell" Width="{Binding Width}">
+                    <Panel>
+                      <Button Theme="{StaticResource MongoToolButton}" Classes="hbtn" Click="OnHeaderClick">
+                        <DockPanel>
+                          <ui:Glyph DockPanel.Dock="Right" Key="{Binding SortIcon}" Size="11" Brush="{DynamicResource VelaAccent}"
+                                    IsVisible="{Binding IsSorted}" Margin="4,0,0,0" />
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="mono secondary medium" Text="{Binding Name}" />
+                            <TextBlock Classes="mono tiny muted" Text="{Binding KindLabel}" />
+                          </StackPanel>
+                        </DockPanel>
+                      </Button>
+                      <Thumb Theme="{StaticResource MongoColumnGrip}" DragDelta="OnResizeDelta" />
+                    </Panel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <!-- 行 -->
+      <ListBox x:Name="GridList" Grid.Row="2" Classes="rows" ItemsSource="{Binding GridRows}" SelectedItem="{Binding GridSelectedRow}"
+               SelectionMode="Multiple" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+               ScrollViewer.VerticalScrollBarVisibility="Auto">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="ui:CollectionRow">
+            <Border Classes="grow" Classes.del="{Binding IsDeleted}" Classes.new="{Binding IsAdded}">
+              <StackPanel Orientation="Horizontal">
+                <Border Classes="rownum">
+                  <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Ellipse Width="6" Height="6" Fill="{DynamicResource VelaWarning}" IsVisible="{Binding IsModified}" />
+                    <ui:Glyph Key="{Binding StateIcon}" Size="12" IsVisible="{Binding HasStateIcon}"
+                              Brush="{Binding StateIconToken, Converter={x:Static ui:Converters.Token}}" />
+                    <TextBlock Classes="mono small muted num" Text="{Binding NumberText}" />
+                  </StackPanel>
+                </Border>
+                <ItemsControl Classes="cells" ItemsSource="{Binding Cells}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:CollectionCell">
+                      <Border Classes="gcell" Classes.mod="{Binding IsModified}" Classes.current="{Binding IsCurrent}"
+                              Classes.editing="{Binding IsEditing}" Classes.bad="{Binding Editor.HasError, FallbackValue=False}"
+                              Width="{Binding Column.Width}">
+                        <Panel>
+                          <DockPanel IsVisible="{Binding !IsEditing}" VerticalAlignment="Center">
+                            <TextBlock DockPanel.Dock="Left" Classes="mono" Margin="0,0,5,0" Text="{Binding Prefix}"
+                                       IsVisible="{Binding HasPrefix}" Foreground="{DynamicResource VelaWarning}" />
+                            <TextBlock Classes="mono trim" Classes.uif="{Binding UseUiFont}" Classes.nil="{Binding IsNull}"
+                                       Text="{Binding Text}" TextAlignment="{Binding TextAlignment}"
+                                       Foreground="{Binding TextToken, Converter={x:Static ui:Converters.Token}}" />
+                          </DockPanel>
+                          <ContentControl Content="{Binding Editor}" IsVisible="{Binding IsEditing}" />
+                        </Panel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+
+    <GridSplitter Grid.Column="1" Classes="vsplit" />
+    <ui:DocInspectorView Grid.Column="2" DataContext="{Binding Inspector}" />
+  </Grid>
+</UserControl>

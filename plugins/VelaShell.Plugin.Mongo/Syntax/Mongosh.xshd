@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<!--
+  mongosh 语法高亮(查询编辑器、筛选栏、管道阶段、验证规则、文档编辑器的 JSON 页)。
+  这里只决定"哪一段算什么角色";颜色的唯一事实来源是宿主令牌,由 CodeEditor.Role 映射:
+    Comment → VelaTextTertiary(斜体)      Keyword(use / db)→ VelaAccent
+    Method(.find / .sort)→ VelaShellYellow   Operator($gte / $match)→ VelaShellMagenta
+    String → VelaShellCyan                    FieldPath("$customer.id")→ VelaWarning
+    Number → VelaShellGreen                   Constructor(ISODate / NumberDecimal)→ VelaInfo
+    ObjectIdCtor(ObjectId)→ VelaShellBlue     Bool(true / false)→ VelaShellYellow
+    Null → VelaTextTertiary
+  与设计稿 03 / 02 / 04 / 16 的着色逐条对应。
+-->
+<SyntaxDefinition name="Mongo.Mongosh" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" fontStyle="italic" />
+  <Color name="String" />
+  <Color name="FieldPath" />
+  <Color name="Number" />
+  <Color name="Keyword" />
+  <Color name="Method" />
+  <Color name="Operator" />
+  <Color name="Constructor" />
+  <Color name="ObjectIdCtor" />
+  <Color name="Bool" />
+  <Color name="Null" />
+
+  <RuleSet ignoreCase="false">
+    <Span color="Comment" begin="//" />
+    <Span color="Comment" multiline="true" begin="/\*" end="\*/" />
+
+    <!-- "$customer.id" 这种字段路径字符串:聚合表达式里它是"引用",不是字面量,单独一个颜色。 -->
+    <Rule color="FieldPath">"\$[A-Za-z_][\w.]*"</Rule>
+    <Rule color="FieldPath">'\$[A-Za-z_][\w.]*'</Rule>
+
+    <Span color="String">
+      <Begin>"</Begin>
+      <End>"</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+    <Span color="String">
+      <Begin>'</Begin>
+      <End>'</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <Keywords color="Keyword">
+      <Word>use</Word>
+      <Word>db</Word>
+      <Word>show</Word>
+      <Word>const</Word>
+      <Word>let</Word>
+      <Word>var</Word>
+      <Word>new</Word>
+      <Word>return</Word>
+      <Word>function</Word>
+    </Keywords>
+    <Keywords color="Bool">
+      <Word>true</Word>
+      <Word>false</Word>
+    </Keywords>
+    <Keywords color="Null">
+      <Word>null</Word>
+      <Word>undefined</Word>
+    </Keywords>
+
+    <Rule color="ObjectIdCtor">\bObjectId\b</Rule>
+    <Rule color="Constructor">\b(ISODate|Date|NumberDecimal|NumberLong|NumberInt|NumberDouble|Decimal128|Long|Int32|Double|BinData|UUID|Timestamp|MinKey|MaxKey|RegExp|HexData|MD5)\b</Rule>
+    <Rule color="Operator">\$[A-Za-z][\w]*</Rule>
+    <Rule color="Method">\.[A-Za-z_]\w*(?=\s*\()</Rule>
+    <Rule color="Number">\b-?(0x[0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

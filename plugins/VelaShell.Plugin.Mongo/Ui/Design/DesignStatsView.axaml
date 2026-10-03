@@ -1,0 +1,83 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DesignStatsView"
+             x:DataType="ui:DesignTabViewModel">
+
+  <!--
+    集合设计 · 统计:$collStats 的要点做成指标卡(与设计稿 11 的指标卡同一种写法),
+    下面是各索引大小条与原始 JSON(只读编辑器,可复制)。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Design/DesignStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="36,Auto,Auto,*" Background="{DynamicResource VelaBgTerminal}">
+    <Border Grid.Row="0" Classes="toolrow">
+      <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+        <Button Theme="{StaticResource MongoToolButton}" Command="{Binding RefreshStatsCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.refresh-cw" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+            <TextBlock Text="{Binding Loc[Common_Refresh]}" />
+          </StackPanel>
+        </Button>
+        <Button Theme="{StaticResource MongoToolButton}" Command="{Binding CopyStatsCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+            <TextBlock Text="{Binding Loc[Design_CopyRaw]}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <ItemsControl Grid.Row="1" Margin="14,14,14,0" ItemsSource="{Binding StatCards}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Rows="1" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="ui:StatCard">
+          <Border Classes="card" CornerRadius="4" Padding="12,10" Margin="0,0,10,0">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="ui small muted" Text="{Binding Label}" />
+              <TextBlock Classes="mono" FontSize="{DynamicResource VelaFontSize18}" FontWeight="SemiBold"
+                         Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" Text="{Binding Value}" />
+              <TextBlock Classes="ui small tertiary trim" Text="{Binding Sub}" />
+            </StackPanel>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <StackPanel Grid.Row="2" Margin="14,16,14,0" Spacing="8">
+      <TextBlock Classes="flabel" Text="{Binding Loc[Design_StatsIndexSizes]}" />
+      <ItemsControl ItemsSource="{Binding IndexSizeBars}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="6" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="ui:IndexSizeBar">
+            <Grid ColumnDefinitions="220,*,80,56">
+              <TextBlock Classes="mono primary trim" Text="{Binding Name}" />
+              <ui:DesignBar Grid.Column="1" Height="8" Radius="2" Segments="{Binding Pieces}" Margin="0,0,12,0" />
+              <TextBlock Grid.Column="2" Classes="mono small secondary" HorizontalAlignment="Right" Text="{Binding SizeText}" />
+              <TextBlock Grid.Column="3" Classes="mono small muted" HorizontalAlignment="Right" Text="{Binding Percent}" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+    <Grid Grid.Row="3" Margin="14,16,14,14" RowDefinitions="Auto,*">
+      <TextBlock Classes="flabel" Margin="0,0,0,8" Text="{Binding Loc[Design_StatsRaw]}" />
+      <Border Grid.Row="1" Classes="input">
+        <ui:CodeEditor Language="Shell" IsReadOnly="True" Text="{Binding StatsRaw}" FontSize="{DynamicResource VelaFontSize11}" />
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

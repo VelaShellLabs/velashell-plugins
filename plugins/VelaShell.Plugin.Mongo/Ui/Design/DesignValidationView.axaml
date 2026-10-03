@@ -1,0 +1,212 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DesignValidationView"
+             x:DataType="ui:DesignTabViewModel">
+
+  <!--
+    设计稿 16 · 验证规则。左:工具行(validationLevel / validationAction 下拉、从 Schema 分析生成、格式化、
+    历史版本、语法状态)+ 规则编辑器;右:380px「规则测试」(对现有文档预检、不通过原因、试写文档)
+    + 底部命令预览与 放弃修改 / 应用规则。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Design/DesignStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="320" />
+      <ColumnDefinition Width="0" />
+      <ColumnDefinition Width="380" MinWidth="240" MaxWidth="760" />
+    </Grid.ColumnDefinitions>
+    <Grid Grid.Column="0" RowDefinitions="36,*" Background="{DynamicResource VelaBgTerminal}">
+      <Border Grid.Row="0" Classes="toolrow">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button x:Name="LevelPick" Classes="select" Theme="{StaticResource MongoToolButton}" Height="24">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="mono small muted" Text="validationLevel" />
+                <TextBlock Classes="mono accent" Text="{Binding RuleLevel}" />
+                <ui:Glyph Key="Mongo.chevron-down" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+              </StackPanel>
+            </Button>
+            <Button x:Name="ActionPick" Classes="select" Theme="{StaticResource MongoToolButton}" Height="24">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="mono small muted" Text="validationAction" />
+                <TextBlock Classes="mono accent" Text="{Binding RuleAction}" />
+                <ui:Glyph Key="Mongo.chevron-down" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource MongoToolButton}" Command="{Binding GenerateRuleCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.chart-column" Size="12" Brush="{DynamicResource VelaInfo}" />
+                <TextBlock Text="{Binding Loc[Design_RuleGenerate]}" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource MongoToolButton}" Command="{Binding FormatRuleCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.wand-sparkles" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Text="{Binding Loc[Design_RuleFormat]}" />
+              </StackPanel>
+            </Button>
+            <Button x:Name="HistoryPick" Theme="{StaticResource MongoToolButton}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.history" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Text="{Binding Loc[Design_RuleHistory]}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding RuleSyntaxOk}">
+            <ui:Glyph Key="Mongo.circle-check" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+            <TextBlock Classes="ui small ok" Text="{Binding RuleSyntaxText}" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" MaxWidth="320" IsVisible="{Binding RuleSyntaxBad}">
+            <ui:Glyph Key="Mongo.circle-x" Size="12" Brush="{DynamicResource VelaError}" />
+            <TextBlock Classes="ui small err trim" Text="{Binding RuleSyntaxText}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Panel Grid.Row="1">
+        <ui:CodeEditor x:Name="RuleEditor" Margin="0,8,0,0" Language="Shell" Text="{Binding RuleText}"
+                       Diagnostics="{Binding RuleDiagnostics}" CompletionProvider="{Binding RuleCompletion}"
+                       IsVisible="{Binding CanValidate}" />
+        <!-- 关键字悬停卡(设计稿 16:minimum · 数值约束 + 释义 + 预检里违反它的份数与后果) -->
+        <Popup x:Name="HoverDoc" Placement="Pointer" IsLightDismissEnabled="False" PlacementTarget="{Binding #RuleEditor}">
+          <Border Width="300" Background="{DynamicResource VelaBgSurface}" BorderBrush="{DynamicResource VelaBorderSecondary}"
+                  BorderThickness="1" CornerRadius="6" Padding="10,8" BoxShadow="{DynamicResource VelaShadowWindow}">
+            <StackPanel Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock x:Name="HoverTitle" Classes="mono primary semibold" />
+                <TextBlock x:Name="HoverBadge" Classes="ui small muted" />
+              </StackPanel>
+              <TextBlock x:Name="HoverBody" Classes="ui small secondary" TextWrapping="Wrap" LineHeight="15" />
+            </StackPanel>
+          </Border>
+        </Popup>
+        <TextBlock Classes="ui muted wrap" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380" TextAlignment="Center"
+                   Text="{Binding Loc[Design_RuleUnsupported]}" IsVisible="{Binding !CanValidate}" />
+      </Panel>
+    </Grid>
+
+    <!-- ══ 右:规则测试 ══ -->
+    <GridSplitter Grid.Column="1" Classes="vsplit" />
+    <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+      <Grid RowDefinitions="36,Auto,Auto,*,Auto">
+        <Border Grid.Row="0" Classes="panelhead">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.flask-conical" Size="13" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Design_TestTitle]}" />
+          </StackPanel>
+        </Border>
+
+        <!-- 对现有文档预检 -->
+        <Border Grid.Row="1" Padding="12,10" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+              <TextBlock Classes="ui primary medium" Text="{Binding Loc[Design_PrecheckTitle]}" />
+              <TextBlock Grid.Column="1" Classes="mono small muted" Margin="6,0,0,0" Text="{Binding PrecheckSampleText}" />
+              <Button Grid.Column="3" Theme="{StaticResource MongoIconButton}" Width="20" Height="20" Command="{Binding RefreshPrecheckCommand}"
+                      ToolTip.Tip="{Binding Loc[Common_Refresh]}">
+                <ui:Glyph Key="Mongo.refresh-cw" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              </Button>
+            </Grid>
+            <ui:DesignBar Height="8" Radius="2" Gap="2" Segments="{Binding PassPieces}" />
+            <StackPanel Orientation="Horizontal" Spacing="14">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <Rectangle Width="8" Height="8" RadiusX="2" RadiusY="2" Fill="{DynamicResource VelaStatusConnected}" VerticalAlignment="Center" />
+                <TextBlock Classes="ui small secondary" Text="{Binding PassText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <Rectangle Width="8" Height="8" RadiusX="2" RadiusY="2" Fill="{DynamicResource VelaError}" VerticalAlignment="Center" />
+                <TextBlock Classes="ui small secondary" Text="{Binding FailText}" />
+              </StackPanel>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- 不通过原因 -->
+        <Border Grid.Row="2" Padding="0,6" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+          <StackPanel>
+            <TextBlock Classes="flabel" Margin="12,4,12,6" Text="{Binding Loc[Design_FailReasons]}" />
+            <ItemsControl ItemsSource="{Binding FailureReasons}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ui:FailureReasonRow">
+                  <StackPanel Height="44" Margin="12,0" Spacing="3" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,5,0,0">
+                      <ui:Glyph Grid.Column="0" Key="Mongo.circle-x" Size="11" Brush="{DynamicResource VelaError}" Margin="0,0,6,0" />
+                      <TextBlock Grid.Column="1" Classes="mono primary trim" MaxWidth="170" Text="{Binding Path}" />
+                      <TextBlock Grid.Column="2" Classes="mono small trim" MaxWidth="110" Margin="6,0,0,0"
+                                 Foreground="{DynamicResource VelaShellMagenta}" Text="{Binding Keyword}" />
+                      <TextBlock Grid.Column="4" Classes="mono small err" Text="{Binding CountText}" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="17,0,0,0">
+                      <TextBlock Classes="mono small muted" Text="{Binding Example}" />
+                      <Button Classes="link" Theme="{StaticResource MongoToolButton}"
+                              Command="{Binding $parent[UserControl].((ui:DesignTabViewModel)DataContext).OpenFailureCommand}"
+                              CommandParameter="{Binding}">
+                        <TextBlock Classes="ui small info" Text="{Binding $parent[UserControl].((ui:DesignTabViewModel)DataContext).Loc[Design_ViewInGrid]}" />
+                      </Button>
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="ui small muted" Margin="12,2,12,6" Text="{Binding Loc[Design_NoFailures]}" IsVisible="{Binding !HasFailureReasons}" />
+          </StackPanel>
+        </Border>
+
+        <!-- 试写文档 -->
+        <StackPanel Grid.Row="3" Margin="12,10" Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="ui primary medium" Text="{Binding Loc[Design_TryTitle]}" />
+            <TextBlock Classes="ui small muted" Text="{Binding Loc[Design_TryHint]}" />
+          </StackPanel>
+          <Border Classes="input" Height="104" Padding="0,2">
+            <ui:CodeEditor Language="Shell" Text="{Binding TryDocText}" ShowLineNumbers="False" HighlightCurrentLine="False" WordWrap="True"
+                           Diagnostics="{Binding TryDiagnostics}" LineMarks="{Binding TryMarks}" FontSize="{DynamicResource VelaFontSize10}" />
+          </Border>
+          <Border Background="{ui:Dim VelaError, 0.12}" CornerRadius="3" Padding="10,8" IsVisible="{Binding TryFailed}">
+            <StackPanel Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Mongo.circle-x" Size="12" Brush="{DynamicResource VelaError}" />
+                <TextBlock Classes="ui small err medium" TextWrapping="Wrap" MaxWidth="320" Text="{Binding TryTitle}" />
+              </StackPanel>
+              <TextBlock Classes="mono small secondary" TextWrapping="Wrap" Text="{Binding TryDetail}" IsVisible="{Binding HasTryDetail}" />
+            </StackPanel>
+          </Border>
+          <Border Background="{ui:Dim VelaStatusConnected, 0.1}" CornerRadius="3" Padding="10,8" IsVisible="{Binding TryOk}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.circle-check" Size="12" Brush="{DynamicResource VelaStatusConnected}" />
+              <TextBlock Classes="ui small ok medium" Text="{Binding TryTitle}" />
+            </StackPanel>
+          </Border>
+          <Border Background="{DynamicResource VelaBgActive}" CornerRadius="3" Padding="10,8" IsVisible="{Binding TryUnknown}">
+            <TextBlock Classes="ui small secondary wrap" Text="{Binding TryTitle}" />
+          </Border>
+        </StackPanel>
+
+        <!-- 底部 -->
+        <Border Grid.Row="4" Padding="12,10" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+          <StackPanel Spacing="8">
+            <Border Background="{DynamicResource VelaBgInput}" CornerRadius="3" Padding="8,5">
+              <TextBlock Classes="mono tiny tertiary" TextWrapping="Wrap" Text="{Binding RuleCommand}" />
+            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+              <Button Theme="{StaticResource MongoOutlineButton}" Padding="12,0" Content="{Binding Loc[Design_DiscardChanges]}"
+                      Command="{Binding DiscardRuleCommand}" IsEnabled="{Binding IsModified}" />
+              <Button Theme="{StaticResource MongoPillButton}" Padding="12,0" Command="{Binding ApplyRuleCommand}" IsEnabled="{Binding CanValidate}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ui:Glyph Key="Mongo.shield-check" Size="12" Brush="{DynamicResource VelaAccent}" />
+                  <TextBlock Text="{Binding Loc[Design_ApplyRule]}" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,0 +1,495 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.MongoWorkspaceView"
+             x:DataType="ui:MongoWorkspaceViewModel">
+
+  <!-- MongoDB 工作台(设计稿 01 起各画板的骨架):
+       56px Navicat 大图标工具栏 / 264px 对象树 | 32px 对象标签条 + 标签内容。
+       宿主自己的标题栏、会话标签条与 24px 状态栏不在这里 —— 那是宿主的,插件只画文档区。
+       对话框、确认框与提示都贴在本面板上而不是飘在屏幕中央:同时开着生产与开发两个工作台时,
+       一个说不清"是哪条连接"的弹窗是危险的。 -->
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+
+    <!-- 只读开关:开着时整颗变成设计稿 22 的橙色「只读模式」药丸。 -->
+    <Style Selector="Button#ReadOnlyToggle ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="Button.ro">
+      <Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Button.ro TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="Button.ro ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaWarning}" />
+    </Style>
+
+    <!-- 对象树:整行高亮 + 左侧 2px 强调条,选中行名字转 Accent Medium(设计稿 01 的 orders 行)。 -->
+    <Style Selector="ListBox.tree ListBoxItem:selected Border.selbar">
+      <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="ListBox.tree ListBoxItem:selected TextBlock.label">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+
+    <!-- 对象标签条:非活动 VelaTabInactiveBg + 三级字;活动 VelaBgTerminal + 主字 + 顶部 2px 强调条。 -->
+    <Style Selector="ListBox.objtabs">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,4,1,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="CornerRadius" Value="3,3,0,0" />
+      <Setter Property="Background" Value="{DynamicResource VelaTabInactiveBg}" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaTabInactiveBg}" />
+      <Setter Property="CornerRadius" Value="3,3,0,0" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaBgTerminal}" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem:selected Border.topbar">
+      <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="ListBox.objtabs ListBoxItem:selected TextBlock.tabtitle">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel>
+    <Grid RowDefinitions="56,*,24" Background="{DynamicResource VelaBgTerminal}">
+
+      <!-- ══ Navicat 大图标工具栏 ══════════════════════════════════════════════ -->
+      <Border Grid.Row="0" Background="{DynamicResource VelaBgSidebar}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="10,0">
+        <DockPanel>
+          <!-- 右侧:当前连接的只读开关 + 服务器徽章(还没连任何一条时不出现) -->
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                      IsVisible="{Binding HasSession}">
+            <Button x:Name="ReadOnlyToggle" Theme="{StaticResource MongoToolButton}" Height="26" Padding="10,0"
+                    BorderThickness="1" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                    Classes.ro="{Binding IsReadOnly}"
+                    Command="{Binding ToggleReadOnlyCommand}"
+                    ToolTip.Tip="{Binding Loc[Toolbar_ReadOnlyTip]}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph x:Name="LockGlyph" Key="Mongo.lock" Size="12" />
+                <TextBlock x:Name="ReadOnlyText" Classes="ui" Text="{Binding ReadOnlyLabel}" />
+                <ToggleButton Theme="{StaticResource MongoSwitch}" Classes="small" IsHitTestVisible="False"
+                              IsChecked="{Binding IsReadOnly, Mode=OneWay}" />
+              </StackPanel>
+            </Button>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                <Ellipse Classes="dot" Classes.ok="{Binding ServerDotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=ok}"
+                         Classes.warn="{Binding ServerDotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=warn}"
+                         Classes.err="{Binding ServerDotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=err}" />
+                <TextBlock Classes="mono primary" Text="{Binding ServerBadge}" />
+              </StackPanel>
+              <TextBlock Classes="mono small tertiary" Text="{Binding ServerDetail}" HorizontalAlignment="Right" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+            <!-- 连接由插件自己管(工作台从命令面板打开,不进宿主的会话树):「连接」新建一条(设计稿 10 的对话框),
+                 已保存的连接列在左边对象树的根上,双击连上。 -->
+            <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,4,0">
+              <Button x:Name="ConnectButton" Theme="{StaticResource MongoBigToolButton}" Command="{Binding NewConnectionCommand}"
+                      ToolTip.Tip="{Binding Loc[Conn_NewTip]}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.plug-zap" Size="18" Brush="{DynamicResource VelaStatusConnected}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Connect]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" MinWidth="62" Command="{Binding NewQueryCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=query}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.file-code" Size="18" Brush="{DynamicResource VelaAccent}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_NewQuery]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding AggregateCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=aggregate}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.workflow" Size="18" Brush="{DynamicResource VelaAccent}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Aggregate]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+            <Rectangle Width="1" Height="30" Fill="{DynamicResource VelaBorderPrimary}" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,0">
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding CollectionsCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=collections}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.table-2" Size="18" Brush="{DynamicResource VelaInfo}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Collections]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding ViewsCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=views}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.eye" Size="18" Brush="{DynamicResource VelaInfo}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Views]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding IndexesCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=indexes}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.key-round" Size="18" Brush="{DynamicResource VelaInfo}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Indexes]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" MinWidth="62" Command="{Binding GridFsCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=gridfs}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.hard-drive" Size="18" Brush="{DynamicResource VelaWarning}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_GridFs]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding UsersCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=users}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.users" Size="18" Brush="{DynamicResource VelaInfo}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Users]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding RolesCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=roles}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.shield-check" Size="18" Brush="{DynamicResource VelaInfo}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Roles]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+            <Rectangle Width="1" Height="30" Fill="{DynamicResource VelaBorderPrimary}" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,0">
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding ImportCommand}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.download" Size="18" Brush="{DynamicResource VelaTextSecondary}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Import]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding ExportCommand}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.upload" Size="18" Brush="{DynamicResource VelaTextSecondary}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Export]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" Command="{Binding DumpCommand}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.archive" Size="18" Brush="{DynamicResource VelaTextSecondary}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Dump]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" MinWidth="62" Command="{Binding TransferCommand}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.arrow-left-right" Size="18" Brush="{DynamicResource VelaTextSecondary}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Transfer]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+            <Rectangle Width="1" Height="30" Fill="{DynamicResource VelaBorderPrimary}" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,0">
+              <Button Theme="{StaticResource MongoBigToolButton}" MinWidth="62" Command="{Binding MonitorCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=monitor}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.activity" Size="18" Brush="{DynamicResource VelaTextSecondary}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_Monitor]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Theme="{StaticResource MongoBigToolButton}" MinWidth="62" Command="{Binding ProfilerCommand}"
+                      Classes.active="{Binding ActiveTool, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=profiler}">
+                <StackPanel Spacing="4">
+                  <ui:Glyph Key="Mongo.timer" Size="18" Brush="{DynamicResource VelaTextSecondary}" HorizontalAlignment="Center" />
+                  <TextBlock Text="{Binding Loc[Toolbar_SlowQueries]}" HorizontalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="264" MinWidth="180" MaxWidth="640" />
+          <ColumnDefinition Width="0" />
+          <ColumnDefinition Width="*" MinWidth="400" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ══ 对象树(Navigator) ══════════════════════════════════════════════ -->
+        <Border Grid.Column="0" Background="{DynamicResource VelaBgSidebar}"
+                BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,1,0">
+          <Grid RowDefinitions="36,42,*,Auto">
+            <Border Grid.Row="0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="12,0,8,0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                  <Button x:Name="TreeNewConnection" Theme="{StaticResource MongoIconButton}" Command="{Binding NewConnectionCommand}"
+                          ToolTip.Tip="{Binding Loc[Conn_New]}">
+                    <ui:Glyph Key="Mongo.plus" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+                  </Button>
+                  <Button x:Name="SystemDbToggle" Theme="{StaticResource MongoIconButton}" Command="{Binding ToggleSystemDatabasesCommand}"
+                          ToolTip.Tip="{Binding SystemDatabasesTip}">
+                    <Panel>
+                      <ui:Glyph Key="Mongo.eye-off" Size="13" Brush="{DynamicResource VelaTextTertiary}" IsVisible="{Binding !ShowSystemDatabases}" />
+                      <ui:Glyph Key="Mongo.eye" Size="13" Brush="{DynamicResource VelaAccent}" IsVisible="{Binding ShowSystemDatabases}" />
+                    </Panel>
+                  </Button>
+                  <Button Theme="{StaticResource MongoIconButton}" Command="{Binding RefreshTreeCommand}"
+                          ToolTip.Tip="{Binding Loc[Nav_Refresh]}">
+                    <ui:Glyph Key="Mongo.refresh-cw" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+                  </Button>
+                  <Button Theme="{StaticResource MongoIconButton}" Command="{Binding CollapseAllCommand}"
+                          ToolTip.Tip="{Binding Loc[Nav_CollapseAll]}">
+                    <ui:Glyph Key="Mongo.list-collapse" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+                  </Button>
+                </StackPanel>
+                <TextBlock Classes="ui h" Text="{Binding Loc[Nav_Objects]}" FontSize="{DynamicResource VelaFontSize12}" />
+              </DockPanel>
+            </Border>
+
+            <Border Grid.Row="1" Padding="8">
+              <Border Classes="input" Height="26" Padding="8,0">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <ui:Glyph Grid.Column="0" Key="Mongo.search" Size="12" Brush="{DynamicResource VelaTextMuted}" Margin="0,0,6,0" />
+                  <TextBox x:Name="TreeFilterBox" Grid.Column="1" Theme="{StaticResource MongoTextBox}" BorderThickness="0"
+                           Background="Transparent" Padding="0" MinHeight="0" FontFamily="{DynamicResource VelaUiFont}"
+                           PlaceholderText="{Binding Loc[Nav_Filter]}" Text="{Binding TreeFilter}" />
+                  <TextBlock Grid.Column="2" Classes="mono tiny muted" Text="Ctrl+F" />
+                </Grid>
+              </Border>
+            </Border>
+
+            <ListBox x:Name="TreeList" Grid.Row="2" Classes="rows tree" ItemsSource="{Binding VisibleNodes}"
+                     SelectedItem="{Binding SelectedNode}" SelectionMode="Single"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutoScrollToSelectedItem="False">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="ui:TreeNode">
+                  <Panel Height="{Binding RowHeight}" Background="Transparent">
+                    <Border Classes="selbar" Width="2" HorizontalAlignment="Left" Background="Transparent" />
+                    <Grid ColumnDefinitions="11,6,Auto,6,*,Auto,Auto" Margin="{Binding Indent, Converter={x:Static ui:Converters.LeftPadding}}">
+                      <Button Grid.Column="0" Theme="{StaticResource MongoIconButton}" Width="13" Height="13"
+                              IsVisible="{Binding IsExpandable}" Background="Transparent"
+                              Command="{Binding $parent[ListBox].((ui:MongoWorkspaceViewModel)DataContext).ToggleNodeCommand}"
+                              CommandParameter="{Binding}">
+                        <ui:Glyph Key="{Binding ChevronKey}" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+                      </Button>
+                      <Panel Grid.Column="2" Width="13" Height="13">
+                        <Ellipse Classes="dot" IsVisible="{Binding IsConnection}" HorizontalAlignment="Center"
+                                 Classes.ok="{Binding DotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=ok}"
+                                 Classes.err="{Binding DotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=err}"
+                                 Classes.off="{Binding DotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=off}"
+                                 Classes.connecting="{Binding DotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=connecting}" />
+                        <ui:Glyph Key="{Binding IconKey}" Size="13" IsVisible="{Binding !IsConnection}"
+                                  Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                      </Panel>
+                      <TextBlock Grid.Column="4" Classes="mono label trim"
+                                 Classes.primary="{Binding IsEmphasized}"
+                                 Classes.medium="{Binding IsConnection}"
+                                 Text="{Binding Name}" />
+                      <Border Grid.Column="5" Classes="tag" Margin="6,0,0,0" IsVisible="{Binding HasTag}"
+                              Classes.warn="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=warn}"
+                              Classes.info="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=info}"
+                              Classes.muted="{Binding TagClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=muted}">
+                        <TextBlock Text="{Binding Tag}" />
+                      </Border>
+                      <TextBlock Grid.Column="6" Classes="mono small muted" Margin="6,0,0,0" Text="{Binding Meta}" />
+                    </Grid>
+                  </Panel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 底部信息区(设计稿 01:orders · WiredTiger / 文档 / 存储·索引 / 索引) -->
+            <Border Grid.Row="3" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0" Padding="12,10"
+                    IsVisible="{Binding DetailTitle, Converter={x:Static ui:Converters.NotEmpty}}">
+              <StackPanel Spacing="6">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Classes="mono small tertiary" Text="{Binding DetailKind}" />
+                  <TextBlock Classes="mono primary medium trim" Text="{Binding DetailTitle}" />
+                </DockPanel>
+                <ItemsControl ItemsSource="{Binding DetailRows}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="6" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:DetailRow">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Classes="mono small secondary" Text="{Binding Value}" />
+                        <TextBlock Classes="ui small tertiary" Text="{Binding Label}" />
+                      </DockPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </Grid>
+        </Border>
+
+        <GridSplitter Grid.Column="1" Classes="vsplit" />
+
+        <!-- ══ 对象标签条 + 内容 ════════════════════════════════════════════════ -->
+        <Grid Grid.Column="2" RowDefinitions="32,Auto,*">
+          <Border Grid.Row="0" Background="{DynamicResource VelaBgPage}"
+                  BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="6,0">
+            <ListBox x:Name="TabStrip" Classes="objtabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="ui:WorkspaceTab">
+                  <Panel>
+                    <Border Classes="topbar" Height="2" VerticalAlignment="Top" CornerRadius="3,3,0,0" Background="Transparent" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="10,0" VerticalAlignment="Center">
+                      <ui:Glyph Key="{Binding IconKey}" Size="12" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                      <TextBlock Classes="mono tertiary tabtitle" Text="{Binding Header}" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                      <Panel Width="12" Height="12">
+                        <Ellipse Width="6" Height="6" Fill="{DynamicResource VelaWarning}" IsVisible="{Binding IsModified}" />
+                        <Button Theme="{StaticResource MongoIconButton}" Width="14" Height="14" Margin="-1"
+                                Command="{Binding CloseCommand}" IsVisible="{Binding !IsModified}"
+                                ToolTip.Tip="{Binding Loc[Tab_Close]}">
+                          <ui:Glyph Key="Mongo.x" Size="10" Brush="{DynamicResource VelaTextMuted}" />
+                        </Button>
+                      </Panel>
+                    </StackPanel>
+                  </Panel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+
+          <!-- 连接断开横幅 -->
+          <Border Grid.Row="1" Classes="notice warn" CornerRadius="0" BorderThickness="0,0,0,1" Padding="12,6"
+                  IsVisible="{Binding HasBanner}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="Mongo.triangle-alert" Size="13" Brush="{DynamicResource VelaWarning}" />
+              <TextBlock Classes="ui warn" Text="{Binding BannerMessage}" />
+            </StackPanel>
+          </Border>
+
+          <ui:TabContentHost Grid.Row="2" Tabs="{Binding Tabs}" Active="{Binding ActiveTab}" />
+
+          <!-- 一个标签都没开:一条连接都没有时给「新建连接」,有就提示双击左边的连接。 -->
+          <Panel Grid.Row="2" Background="{DynamicResource VelaBgTerminal}" IsVisible="{Binding !HasTabs}">
+            <StackPanel Classes="state" IsVisible="{Binding HasNoConnections}">
+              <ui:Glyph Key="Mongo.leaf" Size="28" Brush="{DynamicResource VelaStatusConnected}" HorizontalAlignment="Center" />
+              <TextBlock Classes="ui secondary medium" HorizontalAlignment="Center" Text="{Binding Loc[Conn_EmptyTitle]}" />
+              <TextBlock Classes="ui small muted wrap" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="420"
+                         Text="{Binding Loc[Conn_EmptyBody]}" />
+              <Button x:Name="EmptyNewConnection" Theme="{StaticResource MongoPillButton}" Padding="12,0" HorizontalAlignment="Center"
+                      Command="{Binding NewConnectionCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+                  <TextBlock Text="{Binding Loc[Conn_New]}" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+            <StackPanel Classes="state" IsVisible="{Binding !HasNoConnections}">
+              <ui:Glyph Key="Mongo.plug" Size="24" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+              <TextBlock Classes="ui secondary medium" HorizontalAlignment="Center" Text="{Binding Loc[Conn_PickTitle]}" />
+              <TextBlock Classes="ui small muted" HorizontalAlignment="Center" Text="{Binding Loc[Conn_PickHint]}" />
+            </StackPanel>
+          </Panel>
+        </Grid>
+      </Grid>
+
+      <!-- ══ 状态条(设计稿底部那一行:当前连接 · 范围 · 当前标签的状态)══════════════ -->
+      <Border Grid.Row="2" Background="{DynamicResource VelaBgSidebar}"
+              BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0" Padding="10,0">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasSession}">
+            <Ellipse Classes="dot" VerticalAlignment="Center"
+                     Classes.ok="{Binding StatusDotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=ok}"
+                     Classes.warn="{Binding StatusDotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=warn}"
+                     Classes.err="{Binding StatusDotClass, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=err}" />
+            <TextBlock Classes="mono small secondary" Text="{Binding StatusConnection}" />
+            <TextBlock Classes="mono small tertiary" Text="·" IsVisible="{Binding StatusDetail, Converter={x:Static ui:Converters.NotEmpty}}" />
+          </StackPanel>
+          <TextBlock Classes="mono small tertiary" Text="{Binding StatusDetail}" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- ══ 覆盖层:对话框 ═══════════════════════════════════════════════════════ -->
+    <Panel IsVisible="{Binding HasDialog}">
+      <Border Background="{DynamicResource VelaScrim}" PointerPressed="OnScrimPressed" />
+      <Border Classes="dialog" HorizontalAlignment="Center" VerticalAlignment="Center"
+              Width="{Binding Dialog.Width, FallbackValue=640}" Height="{Binding Dialog.Height, FallbackValue=NaN}"
+              MaxHeight="{Binding $parent[Panel].Bounds.Height}">
+        <Grid RowDefinitions="28,*">
+          <Border Grid.Row="0" Classes="dialog-titlebar">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Theme="{StaticResource MongoIconButton}" Classes="dialog-close"
+                      Command="{Binding Dialog.RequestCloseCommand}">
+                <ui:Glyph Key="Mongo.x" Size="13" Brush="{DynamicResource VelaTextSecondary}" />
+              </Button>
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <ui:Glyph Key="{Binding Dialog.IconKey}" Size="13"
+                          Brush="{Binding Dialog.IconToken, Converter={x:Static ui:Converters.Token}}" />
+                <TextBlock Classes="ui h" Text="{Binding Dialog.Title}" />
+                <TextBlock Classes="mono small tertiary" Text="{Binding Dialog.Subtitle}" />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <ContentControl Grid.Row="1" Content="{Binding Dialog}" ContentTemplate="{x:Static ui:ViewLocator.Instance}" />
+        </Grid>
+      </Border>
+    </Panel>
+
+    <!-- ══ 右下角提示(设计稿 22:已提交 3 处修改 · 撤销 (9)) ══════════════════ -->
+    <ItemsControl ItemsSource="{Binding Toasts}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,16">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Spacing="8" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="ui:ToastViewModel">
+          <Border Classes="dialog" CornerRadius="6" Background="{DynamicResource VelaBgSurface}" Padding="14,10" MinWidth="320" MaxWidth="460">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+              <ui:Glyph Grid.Column="0" Key="{Binding IconKey}" Size="15" Margin="0,0,10,0" VerticalAlignment="Top"
+                        Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+              <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                <TextBlock Classes="ui primary wrap" Text="{Binding Title}" />
+                <TextBlock Classes="mono small tertiary wrap" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
+              </StackPanel>
+              <Button Grid.Column="2" Theme="{StaticResource MongoOutlineButton}" Height="26" Padding="10,0" Margin="12,0,0,0"
+                      IsVisible="{Binding HasAction}" Command="{Binding ActionCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ui:Glyph Key="{Binding ActionIconKey}" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+                  <TextBlock Text="{Binding ActionText}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="3" Theme="{StaticResource MongoIconButton}" Width="20" Height="20" Margin="6,0,0,0"
+                      VerticalAlignment="Top" Command="{Binding DismissCommand}">
+                <ui:Glyph Key="Mongo.x" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+              </Button>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Panel>
+</UserControl>

@@ -62,7 +62,8 @@ dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=
 各插件的设计取证也在 velashell-docs:Redis 见
 [`zh/host/Redis客户端插件化调研与设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Redis客户端插件化调研与设计.md),
 S3 见 [`zh/host/S3协议插件化设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/S3协议插件化设计.md),
-Telnet / 串口见 [`zh/host/Telnet与串口可行性调研.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Telnet与串口可行性调研.md)。
+Telnet / 串口见 [`zh/host/Telnet与串口可行性调研.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Telnet与串口可行性调研.md),
+MongoDB 见 [`zh/host/MongoDB工作台插件设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/MongoDB工作台插件设计.md)。
 **改了这些插件的设计取舍,要回写对应那篇。**
 
 Docker 面板是个例外:它从独立仓库 `VelaShell.Plugin.DockerPanel` 并进来(2026-09-11),

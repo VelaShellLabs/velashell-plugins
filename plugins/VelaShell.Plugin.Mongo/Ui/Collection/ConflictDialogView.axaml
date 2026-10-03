@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.ConflictDialogView"
+             x:DataType="ui:ConflictDialogViewModel">
+
+  <!--
+    编辑冲突(设计稿 22):说明 → 逐字段「字段 · 我的 · 服务器」(两边都改了的行橙底;点哪一边就保留哪一边)→ 橙色提示 →
+    放弃我的修改 / 覆盖服务器版本(红色描边)/ 合并(逐字段选择)。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <Style Selector="Border.crow">
+      <Setter Property="Height" Value="28" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.crow.both">
+      <Setter Property="Background" Value="{ui:Dim VelaWarning, 0.12}" />
+    </Style>
+    <Style Selector="Border.crow.both TextBlock.key">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Button.side">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Margin" Value="2,0" />
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.side.picked">
+      <Setter Property="BorderBrush" Value="{ui:Dim VelaAccent, 0.6}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <StackPanel Grid.Row="0" Margin="16,14" Spacing="10">
+      <TextBlock Classes="ui primary wrap" Text="{Binding Message}" />
+
+      <Border BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1" CornerRadius="3" ClipToBounds="True">
+        <ItemsControl ItemsSource="{Binding Rows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ui:ConflictRow">
+              <Border Classes="crow" Classes.both="{Binding BothChanged}">
+                <Grid ColumnDefinitions="86,*,*">
+                  <TextBlock Grid.Column="0" Classes="mono small secondary key trim" Margin="8,0" Text="{Binding Path}" ToolTip.Tip="{Binding Path}" />
+                  <Button Grid.Column="1" Theme="{StaticResource MongoToolButton}" Classes="side" Classes.picked="{Binding UseMine}"
+                          Command="{Binding PickMineCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <TextBlock Classes="ui tiny muted" Text="{Binding $parent[UserControl].((ui:ConflictDialogViewModel)DataContext).Loc[State_ConflictMine]}" />
+                      <TextBlock Classes="mono small accent trim" MaxWidth="150" Text="{Binding Mine}" />
+                    </StackPanel>
+                  </Button>
+                  <Button Grid.Column="2" Theme="{StaticResource MongoToolButton}" Classes="side" Classes.picked="{Binding UseServer}"
+                          Command="{Binding PickServerCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <TextBlock Classes="ui tiny muted" Text="{Binding $parent[UserControl].((ui:ConflictDialogViewModel)DataContext).Loc[State_ConflictServer]}" />
+                      <TextBlock Classes="mono small info trim" MaxWidth="150" Text="{Binding Server}" />
+                    </StackPanel>
+                  </Button>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <TextBlock Classes="ui small warn wrap" Text="{Binding Hint}" />
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Padding="12,0" Content="{Binding Loc[State_ConflictDiscard]}"
+                Command="{Binding DiscardMineCommand}" />
+        <Button Theme="{StaticResource MongoDangerButton}" Padding="12,0" Content="{Binding Loc[State_ConflictOverwrite]}"
+                Command="{Binding OverwriteCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Padding="12,0" Command="{Binding MergeCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.git-merge" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding Loc[State_ConflictMerge]}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

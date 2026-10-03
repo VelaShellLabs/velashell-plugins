@@ -1,0 +1,224 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.JsonCardsView"
+             x:DataType="ui:CollectionTabViewModel">
+
+  <!--
+    JSON 视图(设计稿 02):一份文档一张卡片(只读排版 / 卡片内编辑),右侧 260px 大纲
+    (字段 + 类型、「显示」Shell / Relaxed / Canonical、行内类型提示与保存前格式化开关、编辑快捷键)。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里是 AvaloniaEdit 的 TextEditor,模板在这份样式里(共享样式表不带它)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Collection/CollectionStyles.axaml" />
+    <Style Selector="ListBox.cards ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+  </UserControl.Styles>
+
+  <!-- 右侧大纲可收起(与网格视图共用底栏右下角那颗按钮)。 -->
+  <Grid ui:SidePanel.Collapsed="{Binding !IsSidePanelVisible}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="320" />
+      <ColumnDefinition Width="0" />
+      <ColumnDefinition Width="260" MinWidth="180" MaxWidth="560" />
+    </Grid.ColumnDefinitions>
+    <ListBox x:Name="CardList" Grid.Column="0" Classes="cards" ItemsSource="{Binding Cards}" Background="{DynamicResource VelaBgTerminal}"
+             Padding="14,12" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="ui:JsonCardViewModel">
+          <Border Classes="jcard" Classes.editing="{Binding IsEditing}">
+            <DockPanel>
+              <!-- 头 -->
+              <Border DockPanel.Dock="Top" Classes="jhead">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding IsReadOnlyView}">
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="mini" Command="{Binding EditCommand}"
+                            IsEnabled="{Binding $parent[UserControl].((ui:CollectionTabViewModel)DataContext).CanEdit}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.pencil" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Cw_CardEdit]}" />
+                      </StackPanel>
+                    </Button>
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="mini" Command="{Binding CopyCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.copy" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Common_Copy]}" />
+                      </StackPanel>
+                    </Button>
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="mini" Command="{Binding CloneCommand}"
+                            IsEnabled="{Binding $parent[UserControl].((ui:CollectionTabViewModel)DataContext).CanEdit}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.copy-plus" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Cw_Clone]}" />
+                      </StackPanel>
+                    </Button>
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="mini" Command="{Binding DeleteCommand}"
+                            IsEnabled="{Binding $parent[UserControl].((ui:CollectionTabViewModel)DataContext).CanEdit}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.trash-2" Size="11" Brush="{DynamicResource VelaError}" />
+                        <TextBlock Text="{Binding Loc[Common_Delete]}" />
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding IsEditing}">
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="mini" Command="{Binding FormatCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.wand-sparkles" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Cw_CardFormat]}" />
+                      </StackPanel>
+                    </Button>
+                    <Button Theme="{StaticResource MongoToolButton}" Classes="mini" Command="{Binding RevertCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.undo-2" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+                        <TextBlock Text="{Binding Loc[Cw_CardRevert]}" />
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="mono small muted" Text="{Binding NumberText}" />
+                    <TextBlock Classes="mono trim" MaxWidth="360" Foreground="{DynamicResource VelaShellBlue}" Text="{Binding IdText}" />
+                    <TextBlock Classes="ui small tertiary" Text="{Binding MetaText}" />
+                    <Border Classes="tag warn" IsVisible="{Binding IsEditing}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Ellipse Width="6" Height="6" Fill="{DynamicResource VelaWarning}" VerticalAlignment="Center" />
+                        <TextBlock Classes="ui tiny warn medium" Text="{Binding EditBadge}" />
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <!-- 编辑底栏 -->
+              <Border DockPanel.Dock="Bottom" Height="36" Padding="12,0,10,0" Background="{DynamicResource VelaBgSidebar}"
+                      BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0" IsVisible="{Binding IsEditing}">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Theme="{StaticResource MongoOutlineButton}" Height="24" Padding="12,0" Content="{Binding Loc[Common_Cancel]}"
+                            Command="{Binding CancelCommand}" />
+                    <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="12,0" Command="{Binding UpdateCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <ui:Glyph Key="Mongo.check" Size="12" Brush="{DynamicResource VelaAccent}" />
+                        <TextBlock Text="{Binding Loc[Cw_CardUpdate]}" />
+                        <TextBlock Classes="mono tiny" Foreground="{DynamicResource VelaAccent}" Opacity="0.7" Text="Ctrl+S" />
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <ui:Glyph Key="{Binding ValidityIcon}" Size="12" Brush="{Binding ValidityToken, Converter={x:Static ui:Converters.Token}}" />
+                      <TextBlock Classes="ui small tertiary trim" MaxWidth="320" Text="{Binding ValidityText}" ToolTip.Tip="{Binding ValidityText}" />
+                    </StackPanel>
+                    <TextBlock Classes="mono small muted trim" Text="{Binding CaretText}" />
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <!-- 正文 -->
+              <Panel Margin="0,6">
+                <ui:CodeEditor Classes="card" FontSize="{DynamicResource VelaFontSize11}" HighlightCurrentLine="False" IsVisible="{Binding IsReadOnlyView}" IsReadOnly="True" Text="{Binding Text}"
+                               Language="{Binding Language}" LineMarks="{Binding Marks}" />
+                <ui:CodeEditor Classes="card edit" FontSize="{DynamicResource VelaFontSize11}" IsVisible="{Binding IsEditing}" Text="{Binding EditText}" Language="{Binding Language}"
+                               Diagnostics="{Binding Diagnostics}" LineMarks="{Binding EditMarks}" CompletionProvider="{Binding Completion}"
+                               CaretLine="{Binding CaretLine, Mode=OneWayToSource}" CaretColumn="{Binding CaretColumn, Mode=OneWayToSource}"
+                               CaretOffset="{Binding CaretOffset, Mode=OneWayToSource}" />
+              </Panel>
+            </DockPanel>
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- 大纲 -->
+    <GridSplitter Grid.Column="1" Classes="vsplit" />
+    <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+      <DockPanel>
+        <Border DockPanel.Dock="Top" Height="36" Padding="12,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Classes="mono small muted" Text="{Binding OutlineTitle}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Cw_Outline]}" />
+          </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Padding="12" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Cw_Shortcuts]}" />
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Classes="ui small tertiary" Text="{Binding Loc[Cw_KeyComplete]}" />
+              <Border Classes="kbd" HorizontalAlignment="Left">
+                <TextBlock Classes="mono small secondary" Text="Ctrl+Space" />
+              </Border>
+            </DockPanel>
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Classes="ui small tertiary" Text="{Binding Loc[Cw_CardUpdate]}" />
+              <Border Classes="kbd" HorizontalAlignment="Left">
+                <TextBlock Classes="mono small secondary" Text="Ctrl+S" />
+              </Border>
+            </DockPanel>
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Classes="ui small tertiary" Text="{Binding Loc[Cw_KeyMove]}" />
+              <Border Classes="kbd" HorizontalAlignment="Left">
+                <TextBlock Classes="mono small secondary" Text="Alt+↑ / ↓" />
+              </Border>
+            </DockPanel>
+          </StackPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Padding="12" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Cw_Display]}" />
+            <Border Classes="segments">
+              <UniformGrid Columns="3">
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="ejson" IsChecked="{Binding IsShellMode}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}" HorizontalAlignment="Stretch" Content="Shell" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="ejson" IsChecked="{Binding IsRelaxedMode}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}" HorizontalAlignment="Stretch" Content="Relaxed" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="ejson" IsChecked="{Binding IsCanonicalMode}" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             FontSize="{DynamicResource VelaFontSize10}" HorizontalAlignment="Stretch" Content="Canonical" />
+              </UniformGrid>
+            </Border>
+            <DockPanel>
+              <ToggleButton DockPanel.Dock="Right" Theme="{StaticResource MongoSwitch}" IsChecked="{Binding InlineTypeHints}" />
+              <TextBlock Classes="ui" Text="{Binding Loc[Cw_TypeHints]}" />
+            </DockPanel>
+            <DockPanel>
+              <ToggleButton DockPanel.Dock="Right" Theme="{StaticResource MongoSwitch}" IsChecked="{Binding FormatOnSave}" />
+              <TextBlock Classes="ui" Text="{Binding Loc[Cw_FormatOnSave]}" />
+            </DockPanel>
+          </StackPanel>
+        </Border>
+
+        <ScrollViewer Padding="0,6" HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl x:Name="OutlineList" ItemsSource="{Binding FocusedCard.Outline, FallbackValue={x:Null}}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:JsonOutlineItem">
+                <Border Classes="outline" Classes.cur="{Binding IsCurrent}" Height="22" Background="Transparent" Cursor="Hand"
+                        Padding="{Binding Indent, Converter={x:Static ui:Converters.LeftPadding}}">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Classes="ui tiny" Text="{Binding TypeText}"
+                               Foreground="{Binding TypeToken, Converter={x:Static ui:Converters.Token}}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <Rectangle Width="6" Height="6" RadiusX="1" RadiusY="1" VerticalAlignment="Center"
+                                 Fill="{Binding SwatchToken, Converter={x:Static ui:Converters.Token}}" />
+                      <TextBlock Classes="mono trim" Text="{Binding Name}" Foreground="{Binding NameToken, Converter={x:Static ui:Converters.Token}}" />
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

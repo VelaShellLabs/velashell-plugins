@@ -1,0 +1,381 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.NewCollectionDialogView"
+             x:DataType="ui:NewCollectionDialogViewModel">
+
+  <!--
+    新建集合(设计稿 17,940×560):左 640 填表(名称 → 类型卡片 → 类型专属选项 → 更多),
+    右 300 是「将执行的命令」与类型提示;底栏 48px 取消 / 创建集合。
+  -->
+  <UserControl.Resources>
+    <!-- 类型卡片:整块是一个单选,右上角画单选圆点;选中 = 强调色描边 + 淡底。 -->
+    <ControlTheme x:Key="KindCard" TargetType="RadioButton">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSidebar}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Card" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}"
+                  Padding="{TemplateBinding Padding}">
+            <Panel>
+              <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalContentAlignment="Stretch" />
+              <Ellipse Name="Dot" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,0,0"
+                       Fill="Transparent" Stroke="{DynamicResource VelaBorderSecondary}" StrokeThickness="1" />
+            </Panel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#Card">
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderSecondary}" />
+      </Style>
+      <Style Selector="^:checked /template/ Border#Card">
+        <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+      </Style>
+      <Style Selector="^:checked /template/ Ellipse#Dot">
+        <Setter Property="Fill" Value="{DynamicResource VelaAccent}" />
+        <Setter Property="Stroke" Value="{DynamicResource VelaAccent}" />
+        <Setter Property="StrokeThickness" Value="3" />
+      </Style>
+    </ControlTheme>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里的 AvaloniaEdit TextEditor 需要它自己的控件模板;共享样式表还没带上它(DockerPanel 同样在视图里自带)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+    <!-- 输入框外壳:28px、VelaBgInput、聚焦描强调色;里面放无边框的 TextBox 与前后缀。 -->
+    <Style Selector="Border.field">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="8,0" />
+    </Style>
+    <Style Selector="Border.field:focus-within">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="Border.field.bad">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="TextBox.bare">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.bare:focus /template/ Border#Frame">
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <!-- 字段标签(11px 次要色)与小节标题(10px 灰、中粗)。 -->
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+
+    <!-- 卡片里的图标与标题随选中变色。 -->
+    <Style Selector="RadioButton.kind ui|Glyph.kicon">
+      <Setter Property="Brush" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="RadioButton.kind:checked ui|Glyph.kicon">
+      <Setter Property="Brush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="RadioButton.kind TextBlock.ktitle">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+    <Style Selector="RadioButton.kind:checked TextBlock.ktitle">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+
+    <!-- 粒度分段:等宽字。 -->
+    <Style Selector="RadioButton.gran">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <Grid Grid.Row="0" ColumnDefinitions="*,300">
+
+      <!-- ══ 左:表单 ══════════════════════════════════════════════════════ -->
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="18,16" Spacing="16">
+
+          <!-- 名称 -->
+          <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{Binding Loc[NewColl_Name]}" />
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="8,0,0,0" VerticalAlignment="Center"
+                          IsVisible="{Binding NameMessage, Converter={x:Static ui:Converters.NotEmpty}}">
+                <ui:Glyph Key="Mongo.circle-check" Size="12" Brush="{DynamicResource VelaStatusConnected}" IsVisible="{Binding NameOk}" />
+                <ui:Glyph Key="Mongo.circle-x" Size="12" Brush="{DynamicResource VelaError}" IsVisible="{Binding NameBad}" />
+                <TextBlock Classes="mono small" Classes.ok="{Binding NameOk}" Classes.err="{Binding NameBad}" Text="{Binding NameMessage}" />
+              </StackPanel>
+              <Border Classes="field" Classes.bad="{Binding NameBad}">
+                <TextBox x:Name="NameBox" Theme="{StaticResource MongoTextBox}" Classes="bare" Text="{Binding Name}"
+                         PlaceholderText="{Binding Loc[NewColl_NamePlaceholder]}" />
+              </Border>
+            </DockPanel>
+          </StackPanel>
+
+          <!-- 类型卡片 -->
+          <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{Binding Loc[NewColl_Kind]}" />
+            <Grid ColumnDefinitions="*,8,*,8,*,8,*,8,*">
+              <RadioButton Grid.Column="0" Theme="{StaticResource KindCard}" Classes="kind" IsChecked="{Binding IsPlain}">
+                <StackPanel Spacing="6">
+                  <ui:Glyph Classes="kicon" Key="Mongo.table-2" Size="14" HorizontalAlignment="Left" />
+                  <TextBlock Classes="ktitle" Text="{Binding Loc[NewColl_KindPlain]}" />
+                  <TextBlock Classes="ui small muted trim" Text="{Binding Loc[NewColl_KindPlainDesc]}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Grid.Column="2" Theme="{StaticResource KindCard}" Classes="kind" IsChecked="{Binding IsTimeSeries}">
+                <StackPanel Spacing="6">
+                  <ui:Glyph Classes="kicon" Key="Mongo.chart-no-axes-column" Size="14" HorizontalAlignment="Left" />
+                  <TextBlock Classes="ktitle" Text="{Binding Loc[Obj_KindTimeSeries]}" />
+                  <TextBlock Classes="ui small muted trim" Text="{Binding Loc[NewColl_KindTimeSeriesDesc]}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Grid.Column="4" Theme="{StaticResource KindCard}" Classes="kind" IsChecked="{Binding IsCapped}">
+                <StackPanel Spacing="6">
+                  <ui:Glyph Classes="kicon" Key="Mongo.circle-dashed" Size="14" HorizontalAlignment="Left" />
+                  <TextBlock Classes="ktitle" Text="{Binding Loc[Obj_KindCapped]}" />
+                  <TextBlock Classes="ui small muted trim" Text="{Binding Loc[NewColl_KindCappedDesc]}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Grid.Column="6" Theme="{StaticResource KindCard}" Classes="kind" IsChecked="{Binding IsClustered}">
+                <StackPanel Spacing="6">
+                  <ui:Glyph Classes="kicon" Key="Mongo.layers" Size="14" HorizontalAlignment="Left" />
+                  <TextBlock Classes="ktitle" Text="{Binding Loc[Obj_KindClustered]}" />
+                  <TextBlock Classes="ui small muted trim" Text="{Binding Loc[NewColl_KindClusteredDesc]}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Grid.Column="8" Theme="{StaticResource KindCard}" Classes="kind" IsChecked="{Binding IsView}">
+                <StackPanel Spacing="6">
+                  <ui:Glyph Classes="kicon" Key="Mongo.eye" Size="14" HorizontalAlignment="Left" />
+                  <TextBlock Classes="ktitle" Text="{Binding Loc[Obj_KindView]}" />
+                  <TextBlock Classes="ui small muted trim" Text="{Binding Loc[NewColl_KindViewDesc]}" />
+                </StackPanel>
+              </RadioButton>
+            </Grid>
+          </StackPanel>
+
+          <!-- 类型专属选项 -->
+          <Border Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
+                  CornerRadius="4" Padding="12">
+            <StackPanel Spacing="10">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="caption" Text="{Binding OptionsTitle}" />
+                <TextBlock Classes="ui small muted" Text="{Binding OptionsNote}" />
+              </StackPanel>
+
+              <!-- 时序 -->
+              <StackPanel Spacing="10" IsVisible="{Binding IsTimeSeries}">
+                <Grid ColumnDefinitions="*,12,*,12,220">
+                  <StackPanel Grid.Column="0" Spacing="5">
+                    <TextBlock Classes="label" Text="timeField *" />
+                    <Border Classes="field">
+                      <DockPanel>
+                        <Rectangle DockPanel.Dock="Left" Width="7" Height="7" RadiusX="2" RadiusY="2" Margin="0,0,6,0"
+                                   Fill="{DynamicResource VelaShellMagenta}" />
+                        <TextBlock DockPanel.Dock="Right" Classes="ui small muted" Text="Date" Margin="6,0,0,0" />
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare" Text="{Binding TimeField}" />
+                      </DockPanel>
+                    </Border>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Spacing="5">
+                    <TextBlock Classes="label" Text="metaField" />
+                    <Border Classes="field">
+                      <DockPanel>
+                        <Rectangle DockPanel.Dock="Left" Width="7" Height="7" RadiusX="2" RadiusY="2" Margin="0,0,6,0"
+                                   Fill="{DynamicResource VelaWarning}" />
+                        <TextBlock DockPanel.Dock="Right" Classes="ui small muted" Text="Object" Margin="6,0,0,0" />
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare" Text="{Binding MetaField}"
+                                 PlaceholderText="{Binding Loc[NewColl_Optional]}" />
+                      </DockPanel>
+                    </Border>
+                  </StackPanel>
+                  <StackPanel Grid.Column="4" Spacing="5">
+                    <TextBlock Classes="label" Text="{Binding Loc[NewColl_Granularity]}" />
+                    <Border Classes="segments" Height="28">
+                      <Grid ColumnDefinitions="*,1,*,1,*">
+                        <RadioButton Grid.Column="0" Theme="{StaticResource MongoSegment}" Classes="gran" Content="seconds" IsChecked="{Binding IsSeconds}" />
+                        <RadioButton Grid.Column="2" Theme="{StaticResource MongoSegment}" Classes="gran" Content="minutes" IsChecked="{Binding IsMinutes}" />
+                        <RadioButton Grid.Column="4" Theme="{StaticResource MongoSegment}" Classes="gran" Content="hours" IsChecked="{Binding IsHours}" />
+                      </Grid>
+                    </Border>
+                  </StackPanel>
+                </Grid>
+                <Grid ColumnDefinitions="284,12,*">
+                  <StackPanel Grid.Column="0" Spacing="5">
+                    <TextBlock Classes="label" Text="{Binding Loc[NewColl_Expire]}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <Border Classes="field" Width="80">
+                        <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare" Foreground="{DynamicResource VelaShellGreen}"
+                                 Text="{Binding ExpireValue}" PlaceholderText="—" />
+                      </Border>
+                      <ComboBox Classes="compact" Width="70" Height="28" ItemsSource="{Binding ExpireUnits}" SelectedItem="{Binding ExpireUnit}" />
+                      <TextBlock Classes="mono small muted" Text="{Binding ExpireSecondsText}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Spacing="5">
+                    <TextBlock Classes="label" Text="{Binding Loc[NewColl_Sample]}" />
+                    <Border Background="{DynamicResource VelaBgInput}" CornerRadius="3" Height="28" Padding="8,0">
+                      <TextBlock Classes="mono small tertiary trim" Text="{Binding SampleDocument}" />
+                    </Border>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+
+              <!-- 固定 -->
+              <Grid ColumnDefinitions="*,12,*" IsVisible="{Binding IsCapped}">
+                <StackPanel Grid.Column="0" Spacing="5">
+                  <TextBlock Classes="label" Text="{Binding Loc[NewColl_CappedSize]}" />
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Classes="field" Width="120">
+                      <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare" Foreground="{DynamicResource VelaShellGreen}"
+                               Text="{Binding CappedSize}" />
+                    </Border>
+                    <ComboBox Classes="compact" Width="70" Height="28" ItemsSource="{Binding SizeUnits}" SelectedItem="{Binding CappedUnit}" />
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="5">
+                  <TextBlock Classes="label" Text="{Binding Loc[NewColl_CappedMax]}" />
+                  <Border Classes="field">
+                    <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare" Foreground="{DynamicResource VelaShellGreen}"
+                             Text="{Binding CappedMax}" PlaceholderText="{Binding Loc[NewColl_Unlimited]}" />
+                  </Border>
+                </StackPanel>
+              </Grid>
+
+              <!-- 聚簇 -->
+              <StackPanel Spacing="8" IsVisible="{Binding IsClustered}">
+                <Border Classes="code" Padding="10,6">
+                  <TextBlock Text="clusteredIndex: { key: { _id: 1 }, unique: true }" Foreground="{DynamicResource VelaTextPrimary}" />
+                </Border>
+                <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[NewColl_ClusteredHint]}" />
+              </StackPanel>
+
+              <!-- 视图 -->
+              <StackPanel Spacing="8" IsVisible="{Binding IsView}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Classes="label" Text="{Binding Loc[NewColl_ViewSource]}" VerticalAlignment="Center" />
+                  <ComboBox Classes="compact" Width="220" Height="28" ItemsSource="{Binding ViewSources}" SelectedItem="{Binding ViewSource}" />
+                </StackPanel>
+                <TextBlock Classes="label" Text="pipeline" />
+                <Border Classes="field" Height="104" Padding="0">
+                  <ui:CodeEditor Text="{Binding PipelineText}" Language="Shell" ShowLineNumbers="False" HighlightCurrentLine="False"
+                                 FontSize="{DynamicResource VelaFontSize11}" />
+                </Border>
+              </StackPanel>
+
+              <!-- 普通 -->
+              <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[NewColl_PlainHint]}" IsVisible="{Binding IsPlain}" />
+            </StackPanel>
+          </Border>
+
+          <!-- 更多 -->
+          <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{Binding Loc[NewColl_More]}" />
+            <StackPanel Orientation="Horizontal" Spacing="10" MinHeight="18">
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding UseCollation}">
+                <TextBlock Classes="ui primary" Text="{Binding Loc[NewColl_Collation]}" />
+              </CheckBox>
+              <TextBlock Classes="mono small muted" Text="{Binding CollationSummary}" IsVisible="{Binding !UseCollation}" VerticalAlignment="Center" />
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding UseCollation}">
+                <TextBlock Classes="mono small tertiary" Text="locale" VerticalAlignment="Center" />
+                <Border Classes="field" Width="72" Height="22" Padding="6,0">
+                  <TextBox Theme="{StaticResource MongoTextBox}" Classes="bare" Text="{Binding CollationLocale}" />
+                </Border>
+                <TextBlock Classes="mono small tertiary" Text="strength" VerticalAlignment="Center" />
+                <ComboBox Classes="compact" Width="56" Height="22" MinHeight="22" ItemsSource="{Binding Strengths}"
+                          SelectedItem="{Binding CollationStrength}" />
+              </StackPanel>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10" MinHeight="18" IsEnabled="{Binding CanCopyIndexes}">
+              <CheckBox Theme="{StaticResource MongoCheck}" IsChecked="{Binding CopyIndexes}">
+                <TextBlock Classes="ui primary" Text="{Binding Loc[NewColl_CopyIndexes]}" />
+              </CheckBox>
+              <TextBlock Classes="mono small muted" Text="{Binding Loc[NewColl_NoCopy]}" IsVisible="{Binding !CopyIndexes}" VerticalAlignment="Center" />
+              <ComboBox Classes="compact" Width="180" Height="22" MinHeight="22" ItemsSource="{Binding IndexSources}"
+                        SelectedItem="{Binding CopyIndexesFrom}" IsVisible="{Binding CopyIndexes}" />
+            </StackPanel>
+            <CheckBox Theme="{StaticResource MongoCheck}" Height="18" IsChecked="{Binding EditValidationAfter}" IsEnabled="{Binding CanEditValidation}">
+              <TextBlock Classes="ui primary" Text="{Binding Loc[NewColl_EditValidation]}" />
+            </CheckBox>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ══ 右:将执行的命令 + 提示 ═════════════════════════════════════════ -->
+      <Border Grid.Column="1" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+              BorderThickness="1,0,0,0" Padding="14">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.terminal" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Classes="ui primary semibold" Text="{Binding Loc[NewColl_Preview]}" />
+          </StackPanel>
+          <Border Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
+                  CornerRadius="3" Padding="2,2">
+            <ui:CodeEditor x:Name="PreviewEditor" Text="{Binding Preview, Mode=OneWay}" Language="Shell" IsReadOnly="True"
+                           ShowLineNumbers="False" HighlightCurrentLine="False" WordWrap="True" Height="160"
+                           FontSize="{DynamicResource VelaFontSize10}" />
+          </Border>
+          <Border Background="{ui:Dim VelaInfo, 0.1}" CornerRadius="3" Padding="10,8">
+            <StackPanel Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Mongo.info" Size="12" Brush="{DynamicResource VelaInfo}" />
+                <TextBlock Classes="ui small info medium" Text="{Binding TipTitle}" />
+              </StackPanel>
+              <TextBlock Classes="ui small secondary wrap" Text="{Binding TipBody}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- ══ 底栏 ══════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}"
+                  IsEnabled="{Binding !IsCreating}" />
+          <Button Theme="{StaticResource MongoPillButton}" Command="{Binding CreateCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[NewColl_Create]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" IsVisible="{Binding HasError}">
+          <ui:Glyph Key="Mongo.triangle-alert" Size="12" Brush="{DynamicResource VelaWarning}" />
+          <TextBlock Classes="ui small warn trim" Text="{Binding Error}" MaxWidth="600" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

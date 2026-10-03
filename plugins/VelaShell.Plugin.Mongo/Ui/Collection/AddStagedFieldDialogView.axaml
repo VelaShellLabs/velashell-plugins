@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.AddStagedFieldDialogView"
+             x:DataType="ui:AddStagedFieldDialogViewModel">
+
+  <!-- 添加字段:名字 / 类型(色块下拉)/ 值 → 写入暂存区。 -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <Grid Grid.Row="0" Margin="16,14" ColumnDefinitions="64,*" RowDefinitions="30,30,30,Auto" RowSpacing="8">
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="ui small tertiary" Text="{Binding Loc[Cw_AddFieldName]}" />
+      <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding Name}" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="ui small tertiary" Text="{Binding Loc[Cw_AddFieldType]}" />
+      <ComboBox Grid.Row="1" Grid.Column="1" Classes="compact" Height="28" HorizontalAlignment="Stretch"
+                ItemsSource="{Binding Kinds}" SelectedItem="{Binding Kind}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="ui:ValueKindChoice">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Rectangle Width="8" Height="8" RadiusX="2" RadiusY="2" VerticalAlignment="Center"
+                         Fill="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+              <TextBlock Classes="mono primary" Text="{Binding Name}" />
+            </StackPanel>
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Classes="ui small tertiary" Text="{Binding Loc[Cw_AddFieldValue]}" />
+      <TextBox Grid.Row="2" Grid.Column="1" Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding ValueText}"
+               PlaceholderText="{Binding ValueHint}" />
+
+      <TextBlock Grid.Row="3" Grid.Column="1" Classes="ui small err wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+    </Grid>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+        <Button Theme="{StaticResource MongoPillButton}" Command="{Binding ConfirmCommand}" IsDefault="True">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+            <TextBlock Text="{Binding Loc[Cw_AddFieldConfirm]}" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

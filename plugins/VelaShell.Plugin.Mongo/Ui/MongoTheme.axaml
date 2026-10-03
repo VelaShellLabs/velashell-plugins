@@ -1,0 +1,189 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    MongoDB 工作台的私有资源:图标几何与四支图表色。
+
+    配色原则(AGENTS.md「视觉对齐宿主」):一律走宿主的 Vela* 令牌,不发明新令牌。
+    BSON 类型色在设计稿 09 里是一套独立色板(bsonOid / bsonStr / …),但它逐色等于宿主
+    终端十六色那一族在 VelaDark 下的值,所以这里**没有**为它们建画刷 —— 视图直接引
+    VelaShellBlue / Cyan / Green / Yellow / Magenta / VelaWarning / VelaTextTertiary,
+    换主题时跟着走(映射见 Bson/BsonKind.cs 的 ColorToken)。
+
+    唯一的偏离是下面四支图表色(设计稿的 chart1–4):服务器监控的堆叠柱(query / insert /
+    update / delete)要四个**彼此可区分、色盲友好**的分类色,而宿主的语义色里 Info / Accent /
+    Warning 已经各有含义(延迟告警是 Warning)—— 拿它们当分类色,读图的人会把"insert"读成"告警"。
+    这四个值取自设计稿,深浅两种底色上都过 3:1;按明暗分两格是为了在奶白底上压得住。
+    偏离理由同时记在 README 的「与设计稿 / DESIGN.md 的偏离」一节。
+  -->
+
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="MongoChart1" Color="#3987E5" />
+      <SolidColorBrush x:Key="MongoChart2" Color="#D95926" />
+      <SolidColorBrush x:Key="MongoChart3" Color="#199E70" />
+      <SolidColorBrush x:Key="MongoChart4" Color="#C98500" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="MongoChart1" Color="#2B6FC2" />
+      <SolidColorBrush x:Key="MongoChart2" Color="#B84418" />
+      <SolidColorBrush x:Key="MongoChart3" Color="#11805A" />
+      <SolidColorBrush x:Key="MongoChart4" Color="#9C6700" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- ── 图标几何(lucide,ISC 许可;24×24 视框,描边风格)────────────────────
+       全部自带,不依赖宿主的 Icon.* 恰好收录了哪几个:宿主的图标表随它自己的界面增减,
+       插件引一个它某天删掉的键,就是一个静默消失的按钮。键名 Mongo.<lucide 名>,
+       与设计稿 .pen 里 icon 节点的名字一一对应,照着稿子找图标不用翻译。 -->
+  <StreamGeometry x:Key="Mongo.activity">M22 12 h-2.48 a2 2 0 0 0 -1.93 1.46 l-2.35 8.36 a.25 .25 0 0 1 -.48 0 L9.24 2.18 a.25 .25 0 0 0 -.48 0 l-2.35 8.36 A2 2 0 0 1 4.49 12 H2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.archive">M3 3 h18 a1 1 0 0 1 1 1 v3 a1 1 0 0 1 -1 1 h-18 a1 1 0 0 1 -1 -1 v-3 a1 1 0 0 1 1 -1 z M4 8 v11 a2 2 0 0 0 2 2 h12 a2 2 0 0 0 2 -2 V8 M10 12 h4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.archive-x">M3 3 h18 a1 1 0 0 1 1 1 v3 a1 1 0 0 1 -1 1 h-18 a1 1 0 0 1 -1 -1 v-3 a1 1 0 0 1 1 -1 z M4 8 v11 a2 2 0 0 0 2 2 h12 a2 2 0 0 0 2 -2 V8 M9.5 17 l5 -5 M9.5 12 l5 5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.arrow-down">M12 5 v14 M19 12 l-7 7 l-7 -7</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.arrow-down-up">M3 16 l4 4 l4 -4 M7 20 V4 M21 8 l-4 -4 l-4 4 M17 4 v16</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.arrow-left-right">M8 3 L4 7 l4 4 M4 7 h16 M16 21 l4 -4 l-4 -4 M20 17 H4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.arrow-right">M5 12 h14 M12 5 l7 7 l-7 7</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.arrow-up">M5 12 l7 -7 l7 7 M12 19 V5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.arrow-up-from-line">M18 9 l-6 -6 l-6 6 M12 3 v14 M5 21 h14</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.bookmark">M17 3 a2 2 0 0 1 2 2 v15 a1 1 0 0 1 -1.496 .868 l-4.512 -2.578 a2 2 0 0 0 -1.984 0 l-4.512 2.578 A1 1 0 0 1 5 20 V5 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.braces">M8 3 H7 a2 2 0 0 0 -2 2 v5 a2 2 0 0 1 -2 2 a2 2 0 0 1 2 2 v5 c0 1.1 .9 2 2 2 h1 M16 21 h1 a2 2 0 0 0 2 -2 v-5 c0 -1.1 .9 -2 2 -2 a2 2 0 0 1 -2 -2 V5 a2 2 0 0 0 -2 -2 h-1</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.brackets">M16 3 h3 a1 1 0 0 1 1 1 v16 a1 1 0 0 1 -1 1 h-3 M8 21 H5 a1 1 0 0 1 -1 -1 V4 a1 1 0 0 1 1 -1 h3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.calendar">M8 2 v3 M16 2 v3 M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M3 9 h18</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.camera">M13.997 4 a2 2 0 0 1 1.76 1.05 l.486 .9 A2 2 0 0 0 18.003 7 H20 a2 2 0 0 1 2 2 v9 a2 2 0 0 1 -2 2 H4 a2 2 0 0 1 -2 -2 V9 a2 2 0 0 1 2 -2 h1.997 a2 2 0 0 0 1.759 -1.048 l.489 -.904 A2 2 0 0 1 10.004 4 z M9 13 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chart-column">M3 3 v16 a2 2 0 0 0 2 2 h16 M18 17 V9 M13 17 V5 M8 17 v-3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chart-no-axes-column">M5 21 v-6 M12 21 V3 M19 21 V9</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.check">M20 6 L9 17 l-5 -5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chevron-down">M6 9 l6 6 l6 -6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chevron-left">M15 18 l-6 -6 l6 -6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chevron-right">M9 18 l6 -6 l-6 -6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chevron-up">M18 15 l-6 -6 l-6 6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chevrons-left">M11 17 l-5 -5 l5 -5 M18 17 l-5 -5 l5 -5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.chevrons-right">M6 17 l5 -5 l-5 -5 M13 17 l5 -5 l-5 -5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.circle-check">M2 12 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 z M16 9 l-5.5 5.5 L8 12</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.circle-dashed">M10.1 2.182 a10 10 0 0 1 3.8 0 M13.9 21.818 a10 10 0 0 1 -3.8 0 M17.609 3.721 a10 10 0 0 1 2.69 2.7 M2.182 13.9 a10 10 0 0 1 0 -3.8 M20.279 17.609 a10 10 0 0 1 -2.7 2.69 M21.818 10.1 a10 10 0 0 1 0 3.8 M3.721 6.391 a10 10 0 0 1 2.7 -2.69 M6.391 20.279 a10 10 0 0 1 -2.69 -2.7</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.circle-minus">M2 12 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 z M8 12 h8</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.circle-x">M2 12 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 z M15 9 l-6 6 M9 9 l6 6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.clipboard-paste">M11 14 h10 M16 4 h2 a2 2 0 0 1 2 2 v1.344 M17 18 l4 -4 l-4 -4 M8 4 H6 a2 2 0 0 0 -2 2 v14 a2 2 0 0 0 2 2 h12 a2 2 0 0 0 1.793 -1.113 M9 2 h6 a1 1 0 0 1 1 1 v2 a1 1 0 0 1 -1 1 h-6 a1 1 0 0 1 -1 -1 v-2 a1 1 0 0 1 1 -1 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.cloud-upload">M12 13 v8 M4 14.899 A7 7 0 1 1 15.71 8 h1.79 a4.5 4.5 0 0 1 2.5 8.242 M8 17 l4 -4 l4 4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.code">M16 18 l6 -6 l-6 -6 M8 6 l-6 6 l6 6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.code-xml">M18 16 l4 -4 l-4 -4 M6 8 l-4 4 l4 4 M14.5 4 l-5 16</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.columns-3">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M9 3 v18 M15 3 v18</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.copy">M10 8 h10 a2 2 0 0 1 2 2 v10 a2 2 0 0 1 -2 2 h-10 a2 2 0 0 1 -2 -2 v-10 a2 2 0 0 1 2 -2 z M4 16 c-1.1 0 -2 -.9 -2 -2 V4 c0 -1.1 .9 -2 2 -2 h10 c1.1 0 2 .9 2 2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.copy-minus">M12 15 L18 15 M10 8 h10 a2 2 0 0 1 2 2 v10 a2 2 0 0 1 -2 2 h-10 a2 2 0 0 1 -2 -2 v-10 a2 2 0 0 1 2 -2 z M4 16 c-1.1 0 -2 -.9 -2 -2 V4 c0 -1.1 .9 -2 2 -2 h10 c1.1 0 2 .9 2 2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.copy-plus">M15 12 L15 18 M12 15 L18 15 M10 8 h10 a2 2 0 0 1 2 2 v10 a2 2 0 0 1 -2 2 h-10 a2 2 0 0 1 -2 -2 v-10 a2 2 0 0 1 2 -2 z M4 16 c-1.1 0 -2 -.9 -2 -2 V4 c0 -1.1 .9 -2 2 -2 h10 c1.1 0 2 .9 2 2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.corner-left-up">M14 9 L9 4 L4 9 M20 20 h-7 a4 4 0 0 1 -4 -4 V4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.database">M3 5 a9 3 0 1 0 18 0 a9 3 0 1 0 -18 0 z M3 5 V19 A9 3 0 0 0 21 19 V5 M3 12 A9 3 0 0 0 21 12</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.download">M12 15 V3 M21 15 v4 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 v-4 M7 10 l5 5 l5 -5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.eraser">M21 21 H8 a2 2 0 0 1 -1.42 -.587 l-3.994 -3.999 a2 2 0 0 1 0 -2.828 l10 -10 a2 2 0 0 1 2.829 0 l5.999 6 a2 2 0 0 1 0 2.828 L12.834 21 M5.082 11.09 l8.828 8.828</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.external-link">M15 3 h6 v6 M10 14 L21 3 M18 13 v6 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 V8 a2 2 0 0 1 2 -2 h6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.eye">M2.062 12.348 a1 1 0 0 1 0 -.696 a10.75 10.75 0 0 1 19.876 0 a1 1 0 0 1 0 .696 a10.75 10.75 0 0 1 -19.876 0 M9 12 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.eye-off">M10.733 5.076 a10.744 10.744 0 0 1 11.205 6.575 a1 1 0 0 1 0 .696 a10.747 10.747 0 0 1 -1.444 2.49 M14.084 14.158 a3 3 0 0 1 -4.242 -4.242 M17.479 17.499 a10.75 10.75 0 0 1 -15.417 -5.151 a1 1 0 0 1 0 -.696 a10.75 10.75 0 0 1 4.446 -5.143 M2 2 l20 20</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-code">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M10 12.5 L8 15 l2 2.5 M14 12.5 l2 2.5 l-2 2.5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-image">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M8 12 a2 2 0 1 0 4 0 a2 2 0 1 0 -4 0 z M20 17 l-1.296 -1.296 a2.41 2.41 0 0 0 -3.408 0 L9 22</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-pen-line">M14.364 13.634 a2 2 0 0 0 -.506 .854 l-.837 2.87 a.5 .5 0 0 0 .62 .62 l2.87 -.837 a2 2 0 0 0 .854 -.506 l4.013 -4.009 a1 1 0 0 0 -3.004 -3.004 z M14.487 7.858 A1 1 0 0 1 14 7 V2 M20 19.645 V20 a2 2 0 0 1 -2 2 H6 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l2.516 2.516 M8 18 h1</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-search">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M9 14.5 a2.5 2.5 0 1 0 5 0 a2.5 2.5 0 1 0 -5 0 z M13.3 16.3 L15 18</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-spreadsheet">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M8 13 h2 M14 13 h2 M8 17 h2 M14 17 h2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-text">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M10 9 H8 M16 13 H8 M16 17 H8</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-up">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M12 12 v6 M15 15 l-3 -3 l-3 3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.film">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M7 3 v18 M3 7.5 h4 M3 12 h18 M3 16.5 h4 M17 3 v18 M17 7.5 h4 M17 16.5 h4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.flag">M4 22 V4 a1 1 0 0 1 .4 -.8 A6 6 0 0 1 8 2 c3 0 5 2 7.333 2 q2 0 3.067 -.8 A1 1 0 0 1 20 4 v10 a1 1 0 0 1 -.4 .8 A6 6 0 0 1 16 16 c-3 0 -5 -2 -8 -2 a6 6 0 0 0 -4 1.528</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.flask-conical">M14 2 v6 a2 2 0 0 0 .245 .96 l5.51 10.08 A2 2 0 0 1 18 22 H6 a2 2 0 0 1 -1.755 -2.96 l5.51 -10.08 A2 2 0 0 0 10 8 V2 M6.453 15 h11.094 M8.5 2 h7</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.folder">M20 20 a2 2 0 0 0 2 -2 V8 a2 2 0 0 0 -2 -2 h-7.9 a2 2 0 0 1 -1.69 -.9 L9.6 3.9 A2 2 0 0 0 7.93 3 H4 a2 2 0 0 0 -2 2 v13 a2 2 0 0 0 2 2 Z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.folder-open">M6 14 l1.5 -2.9 A2 2 0 0 1 9.24 10 H20 a2 2 0 0 1 1.94 2.5 l-1.54 6 a2 2 0 0 1 -1.95 1.5 H4 a2 2 0 0 1 -2 -2 V5 a2 2 0 0 1 2 -2 h3.9 a2 2 0 0 1 1.69 .9 l.81 1.2 a2 2 0 0 0 1.67 .9 H18 a2 2 0 0 1 2 2 v2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.folder-plus">M12 10 v6 M9 13 h6 M20 20 a2 2 0 0 0 2 -2 V8 a2 2 0 0 0 -2 -2 h-7.9 a2 2 0 0 1 -1.69 -.9 L9.6 3.9 A2 2 0 0 0 7.93 3 H4 a2 2 0 0 0 -2 2 v13 a2 2 0 0 0 2 2 Z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.folder-up">M20 20 a2 2 0 0 0 2 -2 V8 a2 2 0 0 0 -2 -2 h-7.9 a2 2 0 0 1 -1.69 -.9 L9.6 3.9 A2 2 0 0 0 7.93 3 H4 a2 2 0 0 0 -2 2 v13 a2 2 0 0 0 2 2 Z M12 10 v6 M9 13 l3 -3 l3 3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.funnel">M10 20 a1 1 0 0 0 .553 .895 l2 1 A1 1 0 0 0 14 21 v-7 a2 2 0 0 1 .517 -1.341 L21.74 4.67 A1 1 0 0 0 21 3 H3 a1 1 0 0 0 -.742 1.67 l7.225 7.989 A2 2 0 0 1 10 14 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.gauge">M12 14 l4 -4 M3.34 19 a10 10 0 1 1 17.32 0</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.git-compare">M15 18 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M3 6 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M13 6 h3 a2 2 0 0 1 2 2 v7 M11 18 H8 a2 2 0 0 1 -2 -2 V9</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.git-merge">M15 18 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M3 6 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M6 21 V9 a9 9 0 0 0 9 9</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.git-pull-request-draft">M15 18 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M3 6 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M18 6 V5 M18 11 v-1 M6 9 L6 21</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.globe">M2 12 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 z M12 2 a14.5 14.5 0 0 0 0 20 a14.5 14.5 0 0 0 0 -20 M2 12 h20</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.grip-vertical">M8 12 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 z M8 5 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 z M8 19 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 z M14 12 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 z M14 5 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 z M14 19 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.hard-drive">M10 16 h.01 M2.212 11.577 a2 2 0 0 0 -.212 .896 V18 a2 2 0 0 0 2 2 h16 a2 2 0 0 0 2 -2 v-5.527 a2 2 0 0 0 -.212 -.896 L18.55 5.11 A2 2 0 0 0 16.76 4 H7.24 a2 2 0 0 0 -1.79 1.11 z M21.946 12.013 H2.054 M6 16 h.01</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.history">M3 12 a9 9 0 1 0 9 -9 a9.75 9.75 0 0 0 -6.74 2.74 L3 8 M3 3 v5 h5 M12 7 v5 l4 2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.inbox">M22 12 L16 12 L14 15 L10 15 L8 12 L2 12 M5.45 5.11 L2 12 v6 a2 2 0 0 0 2 2 h16 a2 2 0 0 0 2 -2 v-6 l-3.45 -6.89 A2 2 0 0 0 16.76 4 H7.24 a2 2 0 0 0 -1.79 1.11 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.info">M2 12 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 z M12 16 v-4 M12 8 h.01</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.key-round">M2.586 17.414 A2 2 0 0 0 2 18.828 V21 a1 1 0 0 0 1 1 h3 a1 1 0 0 0 1 -1 v-1 a1 1 0 0 1 1 -1 h1 a1 1 0 0 0 1 -1 v-1 a1 1 0 0 1 1 -1 h.172 a2 2 0 0 0 1.414 -.586 l.814 -.814 a6.5 6.5 0 1 0 -4 -4 z M16 7.5 a0.5 0.5 0 1 0 1 0 a0.5 0.5 0 1 0 -1 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.layers">M12.83 2.18 a2 2 0 0 0 -1.66 0 L2.6 6.08 a1 1 0 0 0 0 1.83 l8.58 3.91 a2 2 0 0 0 1.66 0 l8.58 -3.9 a1 1 0 0 0 0 -1.83 z M2 12 a1 1 0 0 0 .58 .91 l8.6 3.91 a2 2 0 0 0 1.65 0 l8.58 -3.9 A1 1 0 0 0 22 12 M2 17 a1 1 0 0 0 .58 .91 l8.6 3.91 a2 2 0 0 0 1.65 0 l8.58 -3.9 A1 1 0 0 0 22 17</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.layout-grid">M4 3 h5 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-5 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z M15 3 h5 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-5 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z M15 14 h5 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-5 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z M4 14 h5 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-5 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.layout-template">M4 3 h16 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-16 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z M4 14 h7 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-7 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z M17 14 h3 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-3 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.leaf">M11 20 a10 10 0 0 0 10 -10 a25.9 25.9 0 0 0 -1.04 -7.281 a1 1 0 0 0 -1.755 -.325 C15.833 5.5 13 5.5 9.8 6.1 A7 7 0 0 0 11 20 M2 21 a5 5 0 0 1 2.911 -4.544 C7.613 15.212 8.351 15.24 11 13</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.lightbulb">M15 14 c.2 -1 .7 -1.7 1.5 -2.5 c1 -.9 1.5 -2.2 1.5 -3.5 A6 6 0 0 0 6 8 c0 1 .2 2.2 1.5 3.5 c.7 .7 1.3 1.5 1.5 2.5 M9 18 h6 M10 22 h4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.link">M10 13 a5 5 0 0 0 7.54 .54 l3 -3 a5 5 0 0 0 -7.07 -7.07 l-1.72 1.71 M14 11 a5 5 0 0 0 -7.54 -.54 l-3 3 a5 5 0 0 0 7.07 7.07 l1.71 -1.71</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.list">M3 5 h.01 M3 12 h.01 M3 19 h.01 M8 5 h13 M8 12 h13 M8 19 h13</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.list-checks">M13 5 h8 M13 12 h8 M13 19 h8 M3 17 l2 2 l4 -4 M3 7 l2 2 l4 -4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.list-collapse">M10 5 h11 M10 12 h11 M10 19 h11 M3 10 l3 -3 l-3 -3 M3 20 l3 -3 l-3 -3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.list-end">M16 5 H3 M16 12 H3 M9 19 H3 M16 16 l-3 3 l3 3 M21 5 v12 a2 2 0 0 1 -2 2 h-6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.list-plus">M16 5 H3 M11 12 H3 M16 19 H3 M18 9 v6 M21 12 h-6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.list-tree">M8 5 h13 M13 12 h8 M13 19 h8 M3 10 a2 2 0 0 0 2 2 h3 M3 5 v12 a2 2 0 0 0 2 2 h3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.loader-circle">M21 12 a9 9 0 1 1 -6.219 -8.56</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.lock">M5 11 h14 a2 2 0 0 1 2 2 v7 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-7 a2 2 0 0 1 2 -2 z M7 11 V7 a5 5 0 0 1 10 0 v4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.lock-open">M5 11 h14 a2 2 0 0 1 2 2 v7 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-7 a2 2 0 0 1 2 -2 z M7 11 V7 a5 5 0 0 1 9.9 -1</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.maximize-2">M15 3 h6 v6 M21 3 l-7 7 M3 21 l7 -7 M9 21 H3 v-6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.memory-stick">M12 12 v-2 M12 18 v-2 M16 12 v-2 M16 18 v-2 M2 11 h1.5 M20 18 v-2 M20.5 11 H22 M4 18 v-2 M8 12 v-2 M8 18 v-2 M4 6 h16 a2 2 0 0 1 2 2 v6 a2 2 0 0 1 -2 2 h-16 a2 2 0 0 1 -2 -2 v-6 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.message-square-text">M22 17 a2 2 0 0 1 -2 2 H6.828 a2 2 0 0 0 -1.414 .586 l-2.202 2.202 A.71 .71 0 0 1 2 21.286 V5 a2 2 0 0 1 2 -2 h16 a2 2 0 0 1 2 2 z M7 11 h10 M7 15 h6 M7 7 h8</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.minimize-2">M14 10 l7 -7 M20 10 h-6 V4 M3 21 l7 -7 M4 14 h6 v6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.minus">M5 12 h14</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.mouse-pointer-click">M14 4.1 L12 6 M5.1 8 l-2.9 -.8 M6 12 l-1.9 2 M7.2 2.2 L8 5.1 M9.037 9.69 a.498 .498 0 0 1 .653 -.653 l11 4.5 a.5 .5 0 0 1 -.074 .949 l-4.349 1.041 a1 1 0 0 0 -.74 .739 l-1.04 4.35 a.5 .5 0 0 1 -.95 .074 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.network">M17 16 h4 a1 1 0 0 1 1 1 v4 a1 1 0 0 1 -1 1 h-4 a1 1 0 0 1 -1 -1 v-4 a1 1 0 0 1 1 -1 z M3 16 h4 a1 1 0 0 1 1 1 v4 a1 1 0 0 1 -1 1 h-4 a1 1 0 0 1 -1 -1 v-4 a1 1 0 0 1 1 -1 z M10 2 h4 a1 1 0 0 1 1 1 v4 a1 1 0 0 1 -1 1 h-4 a1 1 0 0 1 -1 -1 v-4 a1 1 0 0 1 1 -1 z M5 16 v-3 a1 1 0 0 1 1 -1 h12 a1 1 0 0 1 1 1 v3 M12 12 V8</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.octagon-x">M15 9 l-6 6 M2.586 16.726 A2 2 0 0 1 2 15.312 V8.688 a2 2 0 0 1 .586 -1.414 l4.688 -4.688 A2 2 0 0 1 8.688 2 h6.624 a2 2 0 0 1 1.414 .586 l4.688 4.688 A2 2 0 0 1 22 8.688 v6.624 a2 2 0 0 1 -.586 1.414 l-4.688 4.688 a2 2 0 0 1 -1.414 .586 H8.688 a2 2 0 0 1 -1.414 -.586 z M9 9 l6 6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.panel-right">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M15 3 v18</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.panel-right-close">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M15 3 v18 M8 9 l3 3 l-3 3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.panel-right-open">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M15 3 v18 M10 15 l-3 -3 l3 -3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.parentheses">M8 21 s-4 -3 -4 -9 s4 -9 4 -9 M16 3 s4 3 4 9 s-4 9 -4 9</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.pause">M15 3 h3 a1 1 0 0 1 1 1 v16 a1 1 0 0 1 -1 1 h-3 a1 1 0 0 1 -1 -1 v-16 a1 1 0 0 1 1 -1 z M6 3 h3 a1 1 0 0 1 1 1 v16 a1 1 0 0 1 -1 1 h-3 a1 1 0 0 1 -1 -1 v-16 a1 1 0 0 1 1 -1 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.pencil">M21.174 6.812 a1 1 0 0 0 -3.986 -3.987 L3.842 16.174 a2 2 0 0 0 -.5 .83 l-1.321 4.352 a.5 .5 0 0 0 .623 .622 l4.353 -1.32 a2 2 0 0 0 .83 -.497 z M15 5 l4 4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.pencil-line">M13 21 h8 M15 5 l4 4 M21.174 6.812 a1 1 0 0 0 -3.986 -3.987 L3.842 16.174 a2 2 0 0 0 -.5 .83 l-1.321 4.352 a.5 .5 0 0 0 .623 .622 l4.353 -1.32 a2 2 0 0 0 .83 -.497 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.pencil-ruler">M13 7 L8.7 2.7 a2.41 2.41 0 0 0 -3.4 0 L2.7 5.3 a2.41 2.41 0 0 0 0 3.4 L7 13 M8 6 l2 -2 M18 16 l2 -2 M17 11 l4.3 4.3 c.94 .94 .94 2.46 0 3.4 l-2.6 2.6 c-.94 .94 -2.46 .94 -3.4 0 L11 17 M21.174 6.812 a1 1 0 0 0 -3.986 -3.987 L3.842 16.174 a2 2 0 0 0 -.5 .83 l-1.321 4.352 a.5 .5 0 0 0 .623 .622 l4.353 -1.32 a2 2 0 0 0 .83 -.497 z M15 5 l4 4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.pin">M12 17 v5 M9 10.76 a2 2 0 0 1 -1.11 1.79 l-1.78 .9 A2 2 0 0 0 5 15.24 V16 a1 1 0 0 0 1 1 h12 a1 1 0 0 0 1 -1 v-.76 a2 2 0 0 0 -1.11 -1.79 l-1.78 -.9 A2 2 0 0 1 15 10.76 V7 a1 1 0 0 1 1 -1 a2 2 0 0 0 0 -4 H8 a2 2 0 0 0 0 4 a1 1 0 0 1 1 1 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.play">M5 5 a2 2 0 0 1 3.008 -1.728 l11.997 6.998 a2 2 0 0 1 .003 3.458 l-12 7 A2 2 0 0 1 5 19 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.plug">M12 22 v-5 M15 8 V2 M17 8 a1 1 0 0 1 1 1 v4 a4 4 0 0 1 -4 4 h-4 a4 4 0 0 1 -4 -4 V9 a1 1 0 0 1 1 -1 z M9 8 V2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.plug-zap">M6.3 20.3 a2.4 2.4 0 0 0 3.4 0 L12 18 l-6 -6 l-2.3 2.3 a2.4 2.4 0 0 0 0 3.4 Z M2 22 l3 -3 M7.5 13.5 L10 11 M10.5 16.5 L13 14 M18 3 l-4 4 h6 l-4 4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.plus">M5 12 h14 M12 5 v14</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.refresh-cw">M3 12 a9 9 0 0 1 9 -9 a9.75 9.75 0 0 1 6.74 2.74 L21 8 M21 3 v5 h-5 M21 12 a9 9 0 0 1 -9 9 a9.75 9.75 0 0 1 -6.74 -2.74 L3 16 M8 16 H3 v5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.rotate-cw">M21 12 a9 9 0 1 1 -9 -9 c2.52 0 4.93 1 6.74 2.74 L21 8 M21 3 v5 h-5</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.route">M3 19 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M9 19 h8.5 a3.5 3.5 0 0 0 0 -7 h-11 a3.5 3.5 0 0 1 0 -7 H15 M15 5 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.rows-3">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M21 9 H3 M21 15 H3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.save">M15.2 3 a2 2 0 0 1 1.4 .6 l3.8 3.8 a2 2 0 0 1 .6 1.4 V19 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 V5 a2 2 0 0 1 2 -2 z M17 21 v-7 a1 1 0 0 0 -1 -1 H8 a1 1 0 0 0 -1 1 v7 M7 3 v4 a1 1 0 0 0 1 1 h7</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.scroll-text">M15 12 h-5 M15 8 h-5 M19 17 V5 a2 2 0 0 0 -2 -2 H4 M8 21 h12 a2 2 0 0 0 2 -2 v-1 a1 1 0 0 0 -1 -1 H11 a1 1 0 0 0 -1 1 v1 a2 2 0 1 1 -4 0 V5 a2 2 0 1 0 -4 0 v2 a1 1 0 0 0 1 1 h3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.search">M21 21 l-4.34 -4.34 M3 11 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.search-x">M13.5 8.5 l-5 5 M8.5 8.5 l5 5 M3 11 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z M21 21 l-4.3 -4.3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.server">M4 2 h16 a2 2 0 0 1 2 2 v4 a2 2 0 0 1 -2 2 h-16 a2 2 0 0 1 -2 -2 v-4 a2 2 0 0 1 2 -2 z M4 14 h16 a2 2 0 0 1 2 2 v4 a2 2 0 0 1 -2 2 h-16 a2 2 0 0 1 -2 -2 v-4 a2 2 0 0 1 2 -2 z M6 6 L6.01 6 M6 18 L6.01 18</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.settings-2">M14 17 H5 M19 7 h-9 M14 17 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z M4 7 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.shapes">M8.3 10 a.7 .7 0 0 1 -.626 -1.079 L11.4 3 a.7 .7 0 0 1 1.198 -.043 L16.3 8.9 a.7 .7 0 0 1 -.572 1.1 Z M4 14 h5 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-5 a1 1 0 0 1 -1 -1 v-5 a1 1 0 0 1 1 -1 z M14 17.5 a3.5 3.5 0 1 0 7 0 a3.5 3.5 0 1 0 -7 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.sheet">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M3 9 L21 9 M3 15 L21 15 M9 9 L9 21 M15 9 L15 21</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.shield">M20 13 c0 5 -3.5 7.5 -7.66 8.95 a1 1 0 0 1 -.67 -.01 C7.5 20.5 4 18 4 13 V6 a1 1 0 0 1 1 -1 c2 0 4.5 -1.2 6.24 -2.72 a1.17 1.17 0 0 1 1.52 0 C14.51 3.81 17 5 19 5 a1 1 0 0 1 1 1 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.shield-alert">M20 13 c0 5 -3.5 7.5 -7.66 8.95 a1 1 0 0 1 -.67 -.01 C7.5 20.5 4 18 4 13 V6 a1 1 0 0 1 1 -1 c2 0 4.5 -1.2 6.24 -2.72 a1.17 1.17 0 0 1 1.52 0 C14.51 3.81 17 5 19 5 a1 1 0 0 1 1 1 z M12 8 v4 M12 16 h.01</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.shield-check">M20 13 c0 5 -3.5 7.5 -7.66 8.95 a1 1 0 0 1 -.67 -.01 C7.5 20.5 4 18 4 13 V6 a1 1 0 0 1 1 -1 c2 0 4.5 -1.2 6.24 -2.72 a1.17 1.17 0 0 1 1.52 0 C14.51 3.81 17 5 19 5 a1 1 0 0 1 1 1 z M9 12 l2 2 l4 -4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.shield-plus">M20 13 c0 5 -3.5 7.5 -7.66 8.95 a1 1 0 0 1 -.67 -.01 C7.5 20.5 4 18 4 13 V6 a1 1 0 0 1 1 -1 c2 0 4.5 -1.2 6.24 -2.72 a1.17 1.17 0 0 1 1.52 0 C14.51 3.81 17 5 19 5 a1 1 0 0 1 1 1 z M9 12 h6 M12 9 v6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.sigma">M18 7 V5 a1 1 0 0 0 -1 -1 H6.5 a.5 .5 0 0 0 -.4 .8 l4.5 6 a2 2 0 0 1 0 2.4 l-4.5 6 a.5 .5 0 0 0 .4 .8 H17 a1 1 0 0 0 1 -1 v-2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.sparkles">M11.017 2.814 a1 1 0 0 1 1.966 0 l1.051 5.558 a2 2 0 0 0 1.594 1.594 l5.558 1.051 a1 1 0 0 1 0 1.966 l-5.558 1.051 a2 2 0 0 0 -1.594 1.594 l-1.051 5.558 a1 1 0 0 1 -1.966 0 l-1.051 -5.558 a2 2 0 0 0 -1.594 -1.594 l-5.558 -1.051 a1 1 0 0 1 0 -1.966 l5.558 -1.051 a2 2 0 0 0 1.594 -1.594 z M20 2 v4 M22 4 h-4 M2 20 a2 2 0 1 0 4 0 a2 2 0 1 0 -4 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.square">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.square-code">M10 9 l-3 3 l3 3 M14 15 l3 -3 l-3 -3 M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.square-terminal">M7 11 l2 -2 l-2 -2 M11 13 h4 M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.star">M11.525 2.295 a.53 .53 0 0 1 .95 0 l2.31 4.679 a2.123 2.123 0 0 0 1.595 1.16 l5.166 .756 a.53 .53 0 0 1 .294 .904 l-3.736 3.638 a2.123 2.123 0 0 0 -.611 1.878 l.882 5.14 a.53 .53 0 0 1 -.771 .56 l-4.618 -2.428 a2.122 2.122 0 0 0 -1.973 0 L6.396 21.01 a.53 .53 0 0 1 -.77 -.56 l.881 -5.139 a2.122 2.122 0 0 0 -.611 -1.879 L2.16 9.795 a.53 .53 0 0 1 .294 -.906 l5.165 -.755 a2.122 2.122 0 0 0 1.597 -1.16 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.table">M12 3 v18 M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M3 9 h18 M3 15 h18</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.table-2">M3 9 h18 M9 3 v18 M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.table-properties">M15 3 v18 M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M21 9 H3 M21 15 H3</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.terminal">M12 19 h8 M4 17 l6 -6 l-6 -6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.text-cursor-input">M12 20 h-1 a2 2 0 0 1 -2 -2 a2 2 0 0 1 -2 2 H6 M13 8 h7 a2 2 0 0 1 2 2 v4 a2 2 0 0 1 -2 2 h-7 M5 16 H4 a2 2 0 0 1 -2 -2 v-4 a2 2 0 0 1 2 -2 h1 M6 4 h1 a2 2 0 0 1 2 2 a2 2 0 0 1 2 -2 h1 M9 6 v12</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.timer">M10 2 L14 2 M12 14 L15 11 M4 14 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.trash-2">M10 11 v6 M14 11 v6 M19 6 v14 a2 2 0 0 1 -2 2 H7 a2 2 0 0 1 -2 -2 V6 M3 6 h18 M8 6 V4 a2 2 0 0 1 2 -2 h4 a2 2 0 0 1 2 2 v2</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.triangle-alert">M21.73 18 l-8 -14 a2 2 0 0 0 -3.48 0 l-8 14 A2 2 0 0 0 4 21 h16 a2 2 0 0 0 1.73 -3 M12 9 v4 M12 17 h.01</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.type">M12 4 v16 M4 7 V5 a1 1 0 0 1 1 -1 h14 a1 1 0 0 1 1 1 v2 M9 20 h6</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.undo-2">M9 14 L4 9 l5 -5 M4 9 h10.5 a5.5 5.5 0 0 1 5.5 5.5 a5.5 5.5 0 0 1 -5.5 5.5 H11</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.unplug">M19 5 l3 -3 M2 22 l3 -3 M6.3 20.3 a2.4 2.4 0 0 0 3.4 0 L12 18 l-6 -6 l-2.3 2.3 a2.4 2.4 0 0 0 0 3.4 Z M7.5 13.5 L10 11 M10.5 16.5 L13 14 M12 6 l6 6 l2.3 -2.3 a2.4 2.4 0 0 0 0 -3.4 l-2.6 -2.6 a2.4 2.4 0 0 0 -3.4 0 Z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.upload">M12 3 v12 M17 8 l-5 -5 l-5 5 M21 15 v4 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 v-4</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.user">M19 21 v-2 a4 4 0 0 0 -4 -4 H9 a4 4 0 0 0 -4 4 v2 M8 7 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.user-check">M16 11 l2 2 l4 -4 M16 21 v-2 a4 4 0 0 0 -4 -4 H6 a4 4 0 0 0 -4 4 v2 M5 7 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.user-plus">M16 21 v-2 a4 4 0 0 0 -4 -4 H6 a4 4 0 0 0 -4 4 v2 M5 7 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 z M19 8 L19 14 M22 11 L16 11</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.user-x">M16 21 v-2 a4 4 0 0 0 -4 -4 H6 a4 4 0 0 0 -4 4 v2 M5 7 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 z M17 8 L22 13 M22 8 L17 13</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.users">M16 21 v-2 a4 4 0 0 0 -4 -4 H6 a4 4 0 0 0 -4 4 v2 M16 3.128 a4 4 0 0 1 0 7.744 M22 21 v-2 a4 4 0 0 0 -3 -3.87 M5 7 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.variable">M8 21 s-4 -3 -4 -9 s4 -9 4 -9 M16 3 s4 3 4 9 s-4 9 -4 9 M15 9 L9 15 M9 9 L15 15</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.wand-sparkles">M21.64 3.64 l-1.28 -1.28 a1.21 1.21 0 0 0 -1.72 0 L2.36 18.64 a1.21 1.21 0 0 0 0 1.72 l1.28 1.28 a1.2 1.2 0 0 0 1.72 0 L21.64 5.36 a1.2 1.2 0 0 0 0 -1.72 M14 7 l3 3 M5 6 v4 M19 14 v4 M10 2 v2 M7 8 H3 M21 16 h-4 M11 3 H9</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.workflow">M5 3 h4 a2 2 0 0 1 2 2 v4 a2 2 0 0 1 -2 2 h-4 a2 2 0 0 1 -2 -2 v-4 a2 2 0 0 1 2 -2 z M7 11 v4 a2 2 0 0 0 2 2 h4 M15 13 h4 a2 2 0 0 1 2 2 v4 a2 2 0 0 1 -2 2 h-4 a2 2 0 0 1 -2 -2 v-4 a2 2 0 0 1 2 -2 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.x">M18 6 L6 18 M6 6 l12 12</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.zap">M15.914 4 a1.5 1.5 0 0 0 -2.474 -1.561 l-9 9 A1.5 1.5 0 0 0 5.5 14 h4.002 a.5 .5 0 0 1 .471 .666 L8.086 20 a1.5 1.5 0 0 0 2.475 1.56 l9 -9 A1.5 1.5 0 0 0 18.5 10 h-3.997 a.5 .5 0 0 1 -.472 -.667 z</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.square-check">M5 3 h14 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 h-14 a2 2 0 0 1 -2 -2 v-14 a2 2 0 0 1 2 -2 z M16 9 l-5.5 5.5 L8 12</StreamGeometry>
+  <StreamGeometry x:Key="Mongo.file-json">M6 22 a2 2 0 0 1 -2 -2 V4 a2 2 0 0 1 2 -2 h8 a2.4 2.4 0 0 1 1.704 .706 l3.588 3.588 A2.4 2.4 0 0 1 20 8 v12 a2 2 0 0 1 -2 2 z M14 2 v5 a1 1 0 0 0 1 1 h5 M10 12 a1 1 0 0 0 -1 1 v1 a1 1 0 0 1 -1 1 a1 1 0 0 1 1 1 v1 a1 1 0 0 0 1 1 M14 18 a1 1 0 0 0 1 -1 v-1 a1 1 0 0 1 1 -1 a1 1 0 0 1 -1 -1 v-1 a1 1 0 0 0 -1 -1</StreamGeometry>
+</ResourceDictionary>

@@ -1,0 +1,183 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DesignOptionsView"
+             x:DataType="ui:DesignTabViewModel">
+
+  <!--
+    集合设计 · 选项(设计稿没有单独画板,版式沿用 07 / 16 的卡片与表单)。
+    每一节一张卡片:标题 + 一句"能不能改、改了会怎样",能用 collMod 改的给输入框与「应用」。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Design/DesignStyles.axaml" />
+    <Style Selector="Border.section">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSidebar}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="14,12" />
+    </Style>
+  </UserControl.Styles>
+
+  <ScrollViewer Background="{DynamicResource VelaBgTerminal}" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="14" Spacing="12" MaxWidth="860" HorizontalAlignment="Left">
+      <!-- TTL -->
+      <Border Classes="section" IsVisible="{Binding !IsView}">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.timer" Size="13" Brush="{DynamicResource VelaWarning}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Design_OptTtlSection]}" />
+          </StackPanel>
+          <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Design_OptTtlHint]}" />
+          <ItemsControl ItemsSource="{Binding TtlRows}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:TtlRow">
+                <Grid ColumnDefinitions="200,140,120,*,Auto" Height="28">
+                  <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <ui:Glyph Key="Mongo.key-round" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                    <TextBlock Classes="mono primary trim" Text="{Binding Index}" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Classes="mono small t-date" Text="{Binding Field}" />
+                  <TextBox Grid.Column="2" Theme="{StaticResource MongoTextBox}" Height="24" Text="{Binding Seconds}" Classes.modified="{Binding IsDirty}" />
+                  <TextBlock Grid.Column="3" Classes="mono small tertiary" Margin="8,0" Text="{Binding Human}" />
+                  <Button Grid.Column="4" Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Content="{Binding $parent[UserControl].((ui:DesignTabViewModel)DataContext).Loc[Common_Apply]}"
+                          IsEnabled="{Binding IsDirty}"
+                          Command="{Binding $parent[UserControl].((ui:DesignTabViewModel)DataContext).ApplyTtlCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="ui small muted wrap" Text="{Binding Loc[Design_OptTtlNone]}" IsVisible="{Binding !HasTtl}" />
+        </StackPanel>
+      </Border>
+
+      <!-- 排序规则 -->
+      <Border Classes="section">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.arrow-down-up" Size="13" Brush="{DynamicResource VelaInfo}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Design_OptCollation]}" />
+            <Border Classes="tag muted"><TextBlock Text="{Binding Loc[Design_ReadOnly]}" /></Border>
+          </StackPanel>
+          <Border Classes="code" IsVisible="{Binding HasCollation}">
+            <TextBlock Classes="primary" TextWrapping="Wrap" Text="{Binding CollationText}" />
+          </Border>
+          <TextBlock Classes="mono small secondary" Text="{Binding Loc[Design_OptCollationNone]}" IsVisible="{Binding !HasCollation}" />
+          <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Design_OptCollationHint]}" />
+        </StackPanel>
+      </Border>
+
+      <!-- 固定集合 -->
+      <Border Classes="section" IsVisible="{Binding IsCapped}">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.archive" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Design_OptCappedSection]}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="160,200,*" RowDefinitions="28,28">
+            <TextBlock Classes="ui secondary" Text="{Binding Loc[Design_OptCappedSize]}" />
+            <TextBox Grid.Column="1" Theme="{StaticResource MongoTextBox}" Height="24" Text="{Binding CappedSize}" />
+            <TextBlock Grid.Column="2" Classes="mono small tertiary" Margin="8,0" Text="{Binding CappedSizeHuman}" />
+            <TextBlock Grid.Row="1" Classes="ui secondary" Text="{Binding Loc[Design_OptCappedMax]}" />
+            <TextBox Grid.Row="1" Grid.Column="1" Theme="{StaticResource MongoTextBox}" Height="24" Text="{Binding CappedMax}"
+                     PlaceholderText="{Binding Loc[Design_Unlimited]}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Design_OptCappedHint]}" />
+            <Button Grid.Column="1" Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Content="{Binding Loc[Common_Apply]}"
+                    Command="{Binding ApplyCappedCommand}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- 时序集合 -->
+      <Border Classes="section" IsVisible="{Binding IsTimeSeries}">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.chart-no-axes-column" Size="13" Brush="{DynamicResource VelaShellCyan}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Design_OptTsSection]}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="160,200,*" RowDefinitions="28,28,28,28">
+            <TextBlock Classes="ui secondary" Text="timeField" />
+            <TextBlock Grid.Column="1" Classes="mono t-date" Text="{Binding TsTimeField}" />
+            <TextBlock Grid.Row="1" Classes="ui secondary" Text="metaField" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Classes="mono primary" Text="{Binding TsMetaField}" />
+            <TextBlock Grid.Row="2" Classes="ui secondary" Text="{Binding Loc[Design_OptGranularity]}" />
+            <Border Grid.Row="2" Grid.Column="1" Classes="segments">
+              <StackPanel Orientation="Horizontal" Spacing="1">
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="Granularity" Content="seconds" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             IsChecked="{Binding TsGranularity, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=seconds}" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="Granularity" Content="minutes" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             IsChecked="{Binding TsGranularity, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=minutes}" />
+                <RadioButton Theme="{StaticResource MongoSegment}" GroupName="Granularity" Content="hours" FontFamily="{DynamicResource VelaUiMonoFont}"
+                             IsChecked="{Binding TsGranularity, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=hours}" />
+              </StackPanel>
+            </Border>
+            <TextBlock Grid.Row="3" Classes="ui secondary" Text="expireAfterSeconds" />
+            <TextBox Grid.Row="3" Grid.Column="1" Theme="{StaticResource MongoTextBox}" Height="24" Text="{Binding TsExpire}"
+                     PlaceholderText="{Binding Loc[Design_NeverExpire]}" />
+            <TextBlock Grid.Row="3" Grid.Column="2" Classes="mono small tertiary" Margin="8,0" Text="{Binding TsExpireHuman}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Design_OptTsHint]}" />
+            <Button Grid.Column="1" Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Content="{Binding Loc[Common_Apply]}"
+                    Command="{Binding ApplyTimeSeriesCommand}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- 视图 -->
+      <Border Classes="section" IsVisible="{Binding IsView}">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ui:Glyph Key="Mongo.eye" Size="13" Brush="{DynamicResource VelaInfo}" />
+            <TextBlock Classes="h" Text="{Binding Loc[Design_OptViewSection]}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="160,240">
+            <TextBlock Classes="ui secondary" Text="{Binding Loc[Design_OptViewOn]}" />
+            <TextBox Grid.Column="1" Theme="{StaticResource MongoTextBox}" Height="24" Text="{Binding ViewOn}" />
+          </Grid>
+          <TextBlock Classes="ui secondary" Text="{Binding Loc[Design_OptViewPipeline]}" />
+          <Border Classes="input" Height="200">
+            <ui:CodeEditor Language="Shell" Text="{Binding ViewPipeline}" />
+          </Border>
+          <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" HorizontalAlignment="Right" Content="{Binding Loc[Common_Apply]}"
+                  Command="{Binding ApplyViewCommand}" />
+        </StackPanel>
+      </Border>
+
+      <!-- 前后镜像 -->
+      <Border Classes="section" IsVisible="{Binding !IsView}">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="Mongo.git-compare" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="h" Text="{Binding Loc[Design_OptPrePostSection]}" />
+            </StackPanel>
+            <ToggleButton Grid.Column="2" Theme="{StaticResource MongoSwitch}" IsChecked="{Binding PrePostImages}" Margin="0,0,10,0" />
+            <Button Grid.Column="3" Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Content="{Binding Loc[Common_Apply]}"
+                    IsEnabled="{Binding PrePostDirty}" Command="{Binding ApplyPrePostCommand}" />
+          </Grid>
+          <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Design_OptPrePostHint]}" />
+        </StackPanel>
+      </Border>
+
+      <!-- 原文 -->
+      <Border Classes="section">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="flabel" Text="{Binding Loc[Design_OptRaw]}" />
+          <Border Classes="input" Height="180">
+            <ui:CodeEditor Language="Shell" IsReadOnly="True" Text="{Binding OptionsJson}" FontSize="{DynamicResource VelaFontSize11}" />
+          </Border>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
