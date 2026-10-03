@@ -136,7 +136,7 @@ jobs:
           dotnet build build/PluginBundle.proj -c Release -t:Bundle -p:BundleDir="$PWD/artifacts/plugins-bundle" --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
           # -p:VelaSigningKey 会经 MSBuild 的全局属性继承传到每个插件工程的 PackVpx 目标,
-          # 由随 SDK 包分发的 vela-plugin 在打包时签名(见 PluginBundle.proj 的 PackAllVpx)。
+          # 由随 SDK 包分发的打包器(VelaShell.PluginSdk.Packer)在打包时签名(见 PluginBundle.proj 的 PackAllVpx)。
           dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VpxDir="$PWD/artifacts/vpx" -p:VelaSigningKey="$PWD/velashell-signing.pem" --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item artifacts/vpx/*.vpx artifacts/release/
@@ -156,7 +156,7 @@ jobs:
 
       # 签名核对。不是形式,是有具体失败模式要拦:
       #
-      # 密钥**路径**写错会响亮失败(vela-plugin 报 "Key file not found",MSBuild 跟着红),
+      # 密钥**路径**写错会响亮失败(打包器报 "Key file not found",MSBuild 跟着红),
       # 那条不需要这一步。真正危险的是**属性名**对不上 —— 比如哪天有人把
       # -p:VelaSigningKey 敲成别的名字,或者 PluginBundle.proj 的 PackAllVpx 不再把它
       # 转发下去:MSBuild 会把不认识的全局属性照单全收,构建 0 错误通过,
@@ -168,23 +168,24 @@ jobs:
       - name: Verify every .vpx is signed
         shell: pwsh
         run: |
-          # 版本号读的是 Directory.Packages.props,不是 Directory.Build.props ——
-          # 本仓库启用了 CPM,NuGet 依赖的版本一律写在 PackageVersion 上。
-          # (旧写法从 Directory.Build.props 读 <VelaSdkVersion>,那个属性在改用 CPM 时
-          #  已经删掉了,于是这一步在发版当天才炸 "Could not read VelaSdkVersion"。)
-          $packagesProps = Get-Content -Raw Directory.Packages.props
-          $build = [regex]::Match($packagesProps, '<PackageVersion[^>]*Include="VelaShell\.PluginSdk\.Build"[^>]*Version="([^"]+)"').Groups[1].Value
-          if ([string]::IsNullOrWhiteSpace($build)) { throw "Could not read the VelaShell.PluginSdk.Build PackageVersion from Directory.Packages.props" }
-          # 打包器随 VelaShell.PluginSdk.Build 包分发,上一步刚还原过,直接从包缓存里取,
-          # 免得为了读一次包再装一个全局工具(版本还可能与打包用的那份不一致)。
-          $cli = Join-Path $env:USERPROFILE ".nuget/packages/velashell.pluginsdk.build/$build/tools/net11.0/VelaShell.Plugin.Cli.dll"
-          if (-not (Test-Path $cli)) { throw "vela-plugin not found at $cli (VelaShell.PluginSdk.Build $build)" }
+          # 打包器的路径问 MSBuild 要,不在这里拼:它由 VelaShell.PluginSdk.Build 的 .targets
+          # 定义成 $(VelaPluginPacker),上一步打包用的正是这一份 —— 核对与打包不会是两个版本。
+          # (旧写法在这里硬拼包缓存里的 tools/net11.0/VelaShell.Plugin.Cli.dll;SDK 2.0.5 起
+          #  包里换成了 VelaShell.PluginSdk.Packer.dll,于是 2.0.4 发版当天这一步才炸 "vela-plugin not found"。)
+          # 拿任一插件工程求值即可,各插件引的是同一个 .Build 包(CPM 统一版本)。
+          $project = Get-ChildItem plugins/*/*.csproj | Select-Object -First 1
+          $packer = (dotnet msbuild $project.FullName -getProperty:VelaPluginPacker -p:Configuration=Release -nologo | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($packer) -or -not (Test-Path $packer)) {
+            throw "The .vpx packer was not found at '$packer' (VelaPluginPacker of $($project.Name))."
+          }
+          $packer = [IO.Path]::GetFullPath($packer)
+          Write-Host "Packer: $packer"
 
           $packages = @(Get-ChildItem artifacts/release/*.vpx)
           if ($packages.Count -eq 0) { throw "No .vpx found in artifacts/release." }
           foreach ($package in $packages) {
-            $info = dotnet $cli info $package.FullName 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) { throw "vela-plugin info failed for $($package.Name):`n$info" }
+            $info = dotnet exec $packer info $package.FullName 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "Packer info failed for $($package.Name):`n$info" }
             if ($info -notmatch 'flags\s+.*Signed') { throw "$($package.Name) is NOT signed:`n$info" }
             if ($info -notmatch 'signature\s+Valid') { throw "$($package.Name) has an invalid signature:`n$info" }
             $fingerprint = [regex]::Match($info, 'signature\s+Valid \((SHA256:[0-9a-f]+)\)').Groups[1].Value
