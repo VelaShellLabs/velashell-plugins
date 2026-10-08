@@ -14,29 +14,18 @@ public sealed class RedisCommandLineTests
     }
 
     [TestMethod]
-    public void Whitespace_SeparatesArguments()
-    {
-        Assert.AreSequenceEqual(["SET", "a", "1"], [.. Split("SET a 1")]);
-    }
+    public void Whitespace_SeparatesArguments() => Assert.AreSequenceEqual(["SET", "a", "1"], [.. Split("SET a 1")]);
 
     [TestMethod]
-    public void RepeatedWhitespace_DoesNotProduceEmptyArguments()
-    {
-        Assert.AreSequenceEqual(["SET", "a", "1"], [.. Split("  SET   a \t 1  ")]);
-    }
+    public void RepeatedWhitespace_DoesNotProduceEmptyArguments() => Assert.AreSequenceEqual(["SET", "a", "1"], [.. Split("  SET   a \t 1  ")]);
 
     [TestMethod]
-    public void DoubleQuotes_KeepSpacesTogether()
-    {
-        Assert.AreSequenceEqual(["SET", "my key", "hello world"], [.. Split("SET \"my key\" \"hello world\"")]);
-    }
+    public void DoubleQuotes_KeepSpacesTogether() => Assert.AreSequenceEqual(["SET", "my key", "hello world"], [.. Split("SET \"my key\" \"hello world\"")]);
 
     [TestMethod]
-    public void SingleQuotes_AreLiteral()
-    {
+    public void SingleQuotes_AreLiteral() =>
         // 单引号内不认转义 —— 与 redis-cli 一致。
         Assert.AreSequenceEqual(["SET", "a", @"a\nb"], [.. Split(@"SET a 'a\nb'")]);
-    }
 
     [TestMethod]
     public void DoubleQuotes_HonorEscapes()

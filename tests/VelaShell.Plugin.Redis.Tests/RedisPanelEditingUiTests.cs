@@ -59,7 +59,7 @@ public sealed class RedisPanelEditingUiTests
         IServer server = mux.GetServer(Host, Port);
         await foreach (RedisKey key in server.KeysAsync(Database, $"{_prefix}*", pageSize: 100))
         {
-            await db.KeyDeleteAsync(key);
+            _ = await db.KeyDeleteAsync(key);
         }
         await mux.CloseAsync();
     }
@@ -731,5 +731,4 @@ public sealed class RedisPanelEditingUiTests
         await mux.CloseAsync();
         return (byte[]?)value ?? [];
     }
-
 }

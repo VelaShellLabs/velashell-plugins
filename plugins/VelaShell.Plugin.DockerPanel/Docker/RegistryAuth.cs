@@ -54,14 +54,14 @@ public sealed class RegistryAuthProvider(IRemoteFsApi remoteFs, DockerEndpoint e
     /// </remarks>
     public static string ResolveRegistry(string imageReference)
     {
-        var reference = imageReference.Trim();
-        var slash = reference.IndexOf('/');
+        string reference = imageReference.Trim();
+        int slash = reference.IndexOf('/');
         if (slash <= 0)
         {
             return DockerHub;
         }
-        var first = reference[..slash];
-        var isHost = first.Contains('.', StringComparison.Ordinal)
+        string first = reference[..slash];
+        bool isHost = first.Contains('.', StringComparison.Ordinal)
                       || first.Contains(':', StringComparison.Ordinal)
                       || first == "localhost";
         return isHost ? first : DockerHub;
@@ -70,8 +70,8 @@ public sealed class RegistryAuthProvider(IRemoteFsApi remoteFs, DockerEndpoint e
     /// <summary>查这个镜像所属仓库的登录状态(给表单显示用,不返回凭据本身)。</summary>
     public async Task<RegistryAuthStatus> GetStatusAsync(string imageReference, CancellationToken cancellationToken = default)
     {
-        var registry = ResolveRegistry(imageReference);
-        var config = await ReadConfigAsync(cancellationToken).ConfigureAwait(false);
+        string registry = ResolveRegistry(imageReference);
+        DockerConfigFile? config = await ReadConfigAsync(cancellationToken).ConfigureAwait(false);
         if (config is null)
         {
             return new(registry, registry == DockerHub ? RegistryAuthState.NotRequired : RegistryAuthState.Missing,
@@ -84,7 +84,7 @@ public sealed class RegistryAuthProvider(IRemoteFsApi remoteFs, DockerEndpoint e
             return new(registry, RegistryAuthState.HelperOnly,
                 "凭据由 credential helper 保管,面板读不到。私有镜像请在终端里 docker pull。");
         }
-        if (config.Auths?.TryGetValue(registry, out var entry) == true && !string.IsNullOrEmpty(entry.Auth))
+        if (config.Auths?.TryGetValue(registry, out DockerAuthEntry? entry) == true && !string.IsNullOrEmpty(entry.Auth))
         {
             return new(registry, RegistryAuthState.Available, "凭据来自远端 ~/.docker/config.json");
         }
@@ -98,20 +98,20 @@ public sealed class RegistryAuthProvider(IRemoteFsApi remoteFs, DockerEndpoint e
     /// </summary>
     public async Task<string?> GetAuthHeaderAsync(string imageReference, CancellationToken cancellationToken = default)
     {
-        var registry = ResolveRegistry(imageReference);
-        var config = await ReadConfigAsync(cancellationToken).ConfigureAwait(false);
-        if (config?.Auths is null || !config.Auths.TryGetValue(registry, out var entry))
+        string registry = ResolveRegistry(imageReference);
+        DockerConfigFile? config = await ReadConfigAsync(cancellationToken).ConfigureAwait(false);
+        if (config?.Auths is null || !config.Auths.TryGetValue(registry, out DockerAuthEntry? entry))
         {
             return null;
         }
-        var username = entry.Username;
-        var password = entry.Password;
+        string? username = entry.Username;
+        string? password = entry.Password;
         if (!string.IsNullOrEmpty(entry.Auth))
         {
             try
             {
-                var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(entry.Auth));
-                var colon = decoded.IndexOf(':');
+                string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(entry.Auth));
+                int colon = decoded.IndexOf(':');
                 if (colon > 0)
                 {
                     username = decoded[..colon];
@@ -127,7 +127,7 @@ public sealed class RegistryAuthProvider(IRemoteFsApi remoteFs, DockerEndpoint e
         {
             return null;
         }
-        var json = JsonSerializer.Serialize(new
+        string json = JsonSerializer.Serialize(new
         {
             username,
             password,
@@ -146,19 +146,19 @@ public sealed class RegistryAuthProvider(IRemoteFsApi remoteFs, DockerEndpoint e
         {
             if (endpoint.Kind == DockerEndpointKind.Local)
             {
-                var path = Path.Combine(
+                string path = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".docker", "config.json");
                 return File.Exists(path)
                     ? DockerJson.TryDeserialize<DockerConfigFile>(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false))
                     : null;
             }
-            var home = await remoteFs.GetWorkingDirectoryAsync(endpoint.SessionId, cancellationToken).ConfigureAwait(false);
-            var remotePath = $"{home.TrimEnd('/')}/.docker/config.json";
+            string home = await remoteFs.GetWorkingDirectoryAsync(endpoint.SessionId, cancellationToken).ConfigureAwait(false);
+            string remotePath = $"{home.TrimEnd('/')}/.docker/config.json";
             if (!await remoteFs.ExistsAsync(endpoint.SessionId, remotePath, cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }
-            var bytes = await remoteFs.ReadAllBytesAsync(endpoint.SessionId, remotePath, 1 << 20, cancellationToken)
+            byte[] bytes = await remoteFs.ReadAllBytesAsync(endpoint.SessionId, remotePath, 1 << 20, cancellationToken)
                                          .ConfigureAwait(false);
             return DockerJson.TryDeserialize<DockerConfigFile>(Encoding.UTF8.GetString(bytes));
         }

@@ -30,11 +30,9 @@ public class SubnetCapacityTests
     }
 
     [TestMethod]
-    public void SkipsIpv6BecauseTheNumberWouldBeMeaningless()
-    {
+    public void SkipsIpv6BecauseTheNumberWouldBeMeaningless() =>
         // 一个 /64 是 1.8×10^19 个地址。显示出来除了占地方没有任何信息。
         Assert.IsNull(NetworksPageViewModel.SubnetCapacity("fd00::/64"));
-    }
 
     [TestMethod]
     public void UnparseableInputIsSilentlySkipped()
@@ -66,18 +64,16 @@ public class DfParsingTests
             /dev/sda1    100931731456 41231731456 54700000000      43% /var/lib/docker
             """;
 
-        (var total, var used) = SystemPageViewModel.ParseDf(output)!.Value;
+        (long total, long used) = SystemPageViewModel.ParseDf(output)!.Value;
 
         Assert.AreEqual(100931731456L, total);
         Assert.AreEqual(41231731456L, used);
     }
 
     [TestMethod]
-    public void SkipsTheHeaderRow()
-    {
+    public void SkipsTheHeaderRow() =>
         // 表头里的 "1-blocks" 不是数字,不能被当成总量。
         Assert.IsNull(SystemPageViewModel.ParseDf("Filesystem 1-blocks Used Available Capacity Mounted on"));
-    }
 
     [TestMethod]
     public void ReturnsNullOnGarbage()

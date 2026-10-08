@@ -144,7 +144,7 @@ internal sealed class SerialSession : IProtocolTerminalSession
             if (_config.LocalEcho)
             {
                 // 先回显再上线:设备的响应总是晚于我们自己的键入,顺序天然正确。
-                _inbound.Writer.TryWrite(SerialLineDiscipline.BuildEcho(payload).ToArray());
+                _ = _inbound.Writer.TryWrite(SerialLineDiscipline.BuildEcho(payload).ToArray());
             }
             if (_config.IsPaced)
             {
@@ -173,7 +173,7 @@ internal sealed class SerialSession : IProtocolTerminalSession
         }
         finally
         {
-            _writeGate.Release();
+            _ = _writeGate.Release();
         }
     }
 
@@ -304,7 +304,7 @@ internal sealed class SerialSession : IProtocolTerminalSession
                 }
                 ReadOnlyMemory<byte> processed = _discipline.Receive(new(buffer, 0, read));
                 // 必须拷贝:buffer 下一轮还要用,而 Receive 在不改写时返回的正是它的切片。
-                _inbound.Writer.TryWrite(processed.ToArray());
+                _ = _inbound.Writer.TryWrite(processed.ToArray());
             }
         }
         catch (Exception ex)
@@ -328,8 +328,8 @@ internal sealed class SerialSession : IProtocolTerminalSession
             {
                 _log.Warn($"Serial {_port.PortName}: closing the port failed — {ex.Message}");
             }
-            _inbound.Writer.TryComplete();
-            _readerFinished.TrySetResult();
+            _ = _inbound.Writer.TryComplete();
+            _ = _readerFinished.TrySetResult();
         }
     }
 
@@ -398,7 +398,7 @@ internal sealed class SerialSession : IProtocolTerminalSession
         }
         finally
         {
-            _writeGate.Release();
+            _ = _writeGate.Release();
         }
     }
 

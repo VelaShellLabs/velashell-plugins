@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.DesignTabView"
+             x:DataType="ui:DesignTabViewModel">
+
+  <!--
+    集合设计(设计稿 07 / 08 / 16):36px 子页条 + 当前子页。
+    子页条是下划线页签(选中 = 主文字 + 强调色图标 + 2px 强调色下划线),每格右侧一行等宽小字
+    (索引个数、$jsonSchema、TTL · 排序规则)。五个子页的视图一次建好、按子页切可见性 ——
+    它们共用同一个视图模型,切来切去不该丢编辑器里的光标与滚动位置。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Design/DesignStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="36,*" Background="{DynamicResource VelaBgTerminal}">
+    <Border Grid.Row="0" Padding="14,0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1"
+            Background="{DynamicResource VelaBgTerminal}">
+      <StackPanel Orientation="Horizontal" Spacing="18">
+        <RadioButton Classes="subtab" Theme="{StaticResource MongoUnderlineTab}" GroupName="DesignPages"
+                     IsChecked="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Indexes}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.key-round" Size="12" />
+            <TextBlock Classes="label" Text="{Binding Loc[Design_TabIndexes]}" />
+            <TextBlock Classes="mono small muted" Text="{Binding ReadyIndexCount}" IsVisible="{Binding !IsView}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Classes="subtab" Theme="{StaticResource MongoUnderlineTab}" GroupName="DesignPages"
+                     IsChecked="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Schema}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.chart-column" Size="12" />
+            <TextBlock Classes="label" Text="{Binding Loc[Design_TabSchema]}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Classes="subtab" Theme="{StaticResource MongoUnderlineTab}" GroupName="DesignPages"
+                     IsChecked="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Validation}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.shield-check" Size="12" />
+            <TextBlock Classes="label" Text="{Binding Loc[Design_TabValidation]}" />
+            <TextBlock Classes="mono small muted" Text="{Binding ValidationTabHint}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Classes="subtab" Theme="{StaticResource MongoUnderlineTab}" GroupName="DesignPages"
+                     IsChecked="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Options}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.settings-2" Size="12" />
+            <TextBlock Classes="label" Text="{Binding Loc[Design_TabOptions]}" />
+            <TextBlock Classes="mono small muted" Text="{Binding Loc[Design_TabOptionsHint]}" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Classes="subtab" Theme="{StaticResource MongoUnderlineTab}" GroupName="DesignPages"
+                     IsChecked="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Stats}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ui:Glyph Key="Mongo.gauge" Size="12" />
+            <TextBlock Classes="label" Text="{Binding Loc[Design_TabStats]}" />
+          </StackPanel>
+        </RadioButton>
+      </StackPanel>
+    </Border>
+
+    <Panel Grid.Row="1">
+      <ui:DesignIndexesView IsVisible="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Indexes}" />
+      <ui:DesignSchemaView IsVisible="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Schema}" />
+      <ui:DesignValidationView IsVisible="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Validation}" />
+      <ui:DesignOptionsView IsVisible="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Options}" />
+      <ui:DesignStatsView IsVisible="{Binding PageName, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Stats}" />
+    </Panel>
+  </Grid>
+</UserControl>

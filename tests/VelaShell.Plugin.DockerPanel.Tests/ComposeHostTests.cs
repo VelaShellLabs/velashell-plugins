@@ -25,7 +25,7 @@ public sealed class ComposeHostTests
         var exec = new RecordingExec();
         var cli = new ComposeCli(new RemoteComposeHost(exec, RemoteFs, "session-1"));
 
-        await cli.ConfigAsync(Project("shop", "/srv/app"), TestContext.CancellationToken);
+        _ = await cli.ConfigAsync(Project("shop", "/srv/app"), TestContext.CancellationToken);
 
         // 开头的 docker 是远端这条通道自己补的 —— 本机那条由进程名承担,argv 里没有它。
         Assert.AreEqual("docker compose -p shop -f /srv/app/compose.yaml --project-directory /srv/app config",
@@ -38,7 +38,7 @@ public sealed class ComposeHostTests
         var exec = new RecordingExec();
         var cli = new ComposeCli(new RemoteComposeHost(exec, RemoteFs, "session-1"));
 
-        await cli.ConfigAsync(Project("my shop", "/srv/my app"), TestContext.CancellationToken);
+        _ = await cli.ConfigAsync(Project("my shop", "/srv/my app"), TestContext.CancellationToken);
 
         Assert.Contains("-p 'my shop'", exec.LastCommand);
         Assert.Contains("-f '/srv/my app/compose.yaml'", exec.LastCommand);
@@ -127,7 +127,7 @@ public sealed class LocalComposeHostSmokeTests
         }
         Assert.AreEqual(0, result.ExitCode, result.Error);
         // compose v2 的版本号形如 2.29.7 / 5.4.0 —— 只断言"有内容且以数字打头"。
-        var version = result.Output.Trim();
+        string version = result.Output.Trim();
         Assert.IsTrue(version.Length > 0 && char.IsAsciiDigit(version[0]), $"版本号不像话:{version}");
     }
 
@@ -146,7 +146,7 @@ public sealed class LocalComposeHostSmokeTests
             Assert.Inconclusive($"这台机器上起不了 docker:{ex.Message}");
             return;
         }
-        var output = string.Join('\n', lines.Select(l => l.Line));
+        string output = string.Join('\n', lines.Select(l => l.Line));
         if (exit != 0 && LooksLikeNoDaemon(output))
         {
             Assert.Inconclusive($"这台机器上 docker 守护进程没起:{output}");
@@ -154,7 +154,7 @@ public sealed class LocalComposeHostSmokeTests
         }
         Assert.AreEqual(0, exit, output);
         // --format json 至少给一个 JSON 数组,哪怕是空的。
-        var joined = string.Concat(lines.Where(l => l.Stream == ExecStream.StandardOutput).Select(l => l.Line));
+        string joined = string.Concat(lines.Where(l => l.Stream == ExecStream.StandardOutput).Select(l => l.Line));
         Assert.StartsWith("[", joined.TrimStart());
     }
 

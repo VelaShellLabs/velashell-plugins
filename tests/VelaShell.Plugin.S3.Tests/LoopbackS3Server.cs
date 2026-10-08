@@ -285,7 +285,7 @@ internal sealed class LoopbackS3Server : IDisposable
             byte[] chunk = new byte[size];
             await stream.ReadExactlyAsync(chunk).ConfigureAwait(false);
             body.Write(chunk);
-            await ReadLineAsync(stream).ConfigureAwait(false); // 块尾的 CRLF
+            _ = await ReadLineAsync(stream).ConfigureAwait(false); // 块尾的 CRLF
         }
         return body.ToArray();
     }
@@ -361,14 +361,14 @@ internal sealed class LoopbackS3Server : IDisposable
     private static async Task WriteResponseAsync(NetworkStream stream, HttpResponse response, bool headOnly)
     {
         var builder = new StringBuilder();
-        builder.Append(CultureInfo.InvariantCulture, $"HTTP/1.1 {(int)response.Status} {response.Status}\r\n");
-        builder.Append(CultureInfo.InvariantCulture, $"Content-Length: {response.Body.Length}\r\n");
+        _ = builder.Append(CultureInfo.InvariantCulture, $"HTTP/1.1 {(int)response.Status} {response.Status}\r\n");
+        _ = builder.Append(CultureInfo.InvariantCulture, $"Content-Length: {response.Body.Length}\r\n");
         foreach ((string name, string value) in response.Headers)
         {
-            builder.Append(CultureInfo.InvariantCulture, $"{name}: {value}\r\n");
+            _ = builder.Append(CultureInfo.InvariantCulture, $"{name}: {value}\r\n");
         }
         // 每个响应关连接:测试里不需要复用,也省掉一套 keep-alive 状态机。
-        builder.Append("Connection: close\r\n\r\n");
+        _ = builder.Append("Connection: close\r\n\r\n");
         await stream.WriteAsync(Encoding.UTF8.GetBytes(builder.ToString())).ConfigureAwait(false);
         // HEAD 要如实报 Content-Length 但不能带体 —— 客户端正是靠这个头拿对象大小的。
         if (!headOnly && response.Body.Length > 0)
@@ -403,7 +403,7 @@ internal sealed class LoopbackS3Server : IDisposable
         string[] credentialParts = credential.Split('/');
         if (credentialParts.Length != 5 || !string.Equals(credentialParts[0], AccessKey, StringComparison.Ordinal))
         {
-            Interlocked.Increment(ref SignatureFailures);
+            _ = Interlocked.Increment(ref SignatureFailures);
             Rejections.Enqueue($"presigned credential unusable on {request.Method} {request.Target}: '{credential}'");
             return false;
         }
@@ -427,7 +427,7 @@ internal sealed class LoopbackS3Server : IDisposable
             SigV4Verifier.CreateStringToSign(amzDate, string.Join('/', credentialParts.Skip(1)), canonicalRequest));
         if (!string.Equals(expected, signature, StringComparison.Ordinal))
         {
-            Interlocked.Increment(ref SignatureFailures);
+            _ = Interlocked.Increment(ref SignatureFailures);
             Rejections.Enqueue(
                 $"presigned signature mismatch on {request.Method} {request.Target}\n" +
                 $"  expected={expected}\n  actual  ={signature}\n  canonical=<<{canonicalRequest}>>");
@@ -448,7 +448,7 @@ internal sealed class LoopbackS3Server : IDisposable
         if (!request.Headers.TryGetValue("Authorization", out string? authorization) ||
             !authorization.StartsWith(SigV4Verifier.Algorithm, StringComparison.Ordinal))
         {
-            Interlocked.Increment(ref SignatureFailures);
+            _ = Interlocked.Increment(ref SignatureFailures);
             return false;
         }
 
@@ -457,7 +457,7 @@ internal sealed class LoopbackS3Server : IDisposable
         string? signature = Part(authorization, "Signature=");
         if (credential is null || signedHeaders is null || signature is null)
         {
-            Interlocked.Increment(ref SignatureFailures);
+            _ = Interlocked.Increment(ref SignatureFailures);
             return false;
         }
 
@@ -465,7 +465,7 @@ internal sealed class LoopbackS3Server : IDisposable
         string[] credentialParts = credential.Split('/');
         if (credentialParts.Length != 5 || !string.Equals(credentialParts[0], AccessKey, StringComparison.Ordinal))
         {
-            Interlocked.Increment(ref SignatureFailures);
+            _ = Interlocked.Increment(ref SignatureFailures);
             return false;
         }
         string scope = string.Join('/', credentialParts.Skip(1));
@@ -505,7 +505,7 @@ internal sealed class LoopbackS3Server : IDisposable
                          string.Equals(payloadHash, SigV4Verifier.HashHex(request.Body), StringComparison.Ordinal);
         if (!string.Equals(expected, signature, StringComparison.Ordinal) || !payloadOk)
         {
-            Interlocked.Increment(ref SignatureFailures);
+            _ = Interlocked.Increment(ref SignatureFailures);
             return false;
         }
         return true;
@@ -586,9 +586,9 @@ internal sealed class LoopbackS3Server : IDisposable
         var xml = new StringBuilder("<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>test</ID><DisplayName>test</DisplayName></Owner><Buckets>");
         foreach (string name in _buckets.Keys.Order(StringComparer.Ordinal))
         {
-            xml.Append(CultureInfo.InvariantCulture, $"<Bucket><Name>{name}</Name><CreationDate>2026-01-01T00:00:00.000Z</CreationDate></Bucket>");
+            _ = xml.Append(CultureInfo.InvariantCulture, $"<Bucket><Name>{name}</Name><CreationDate>2026-01-01T00:00:00.000Z</CreationDate></Bucket>");
         }
-        xml.Append("</Buckets></ListAllMyBucketsResult>");
+        _ = xml.Append("</Buckets></ListAllMyBucketsResult>");
         return Xml(xml.ToString());
     }
 
@@ -655,29 +655,29 @@ internal sealed class LoopbackS3Server : IDisposable
         bool truncated = nextToken is not null && matching.Count > matching.IndexOf(nextToken) + 1;
 
         var xml = new StringBuilder("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">");
-        xml.Append(CultureInfo.InvariantCulture, $"<Name>{bucket}</Name>");
+        _ = xml.Append(CultureInfo.InvariantCulture, $"<Name>{bucket}</Name>");
         if (encodeKeys)
         {
-            xml.Append("<EncodingType>url</EncodingType>");
+            _ = xml.Append("<EncodingType>url</EncodingType>");
         }
-        xml.Append(CultureInfo.InvariantCulture, $"<IsTruncated>{(truncated ? "true" : "false")}</IsTruncated>");
+        _ = xml.Append(CultureInfo.InvariantCulture, $"<IsTruncated>{(truncated ? "true" : "false")}</IsTruncated>");
         if (truncated)
         {
-            xml.Append(CultureInfo.InvariantCulture, $"<NextContinuationToken>{MaybeEncode(nextToken, encodeKeys)}</NextContinuationToken>");
+            _ = xml.Append(CultureInfo.InvariantCulture, $"<NextContinuationToken>{MaybeEncode(nextToken, encodeKeys)}</NextContinuationToken>");
         }
         foreach (string k in contents)
         {
             StoredObject stored = objects[k];
             // 刻意写成一整条内插串:用 `+` 把几段内插串拼起来会先求值成 string,
             // 于是 Append(IFormatProvider, ...) 那个重载选不中。
-            xml.Append(CultureInfo.InvariantCulture,
+            _ = xml.Append(CultureInfo.InvariantCulture,
                 $"<Contents><Key>{MaybeEncode(k, encodeKeys)}</Key><LastModified>{stored.LastModified:yyyy-MM-ddTHH:mm:ss.fffZ}</LastModified><ETag>&quot;{ETagOf(stored.Content)}&quot;</ETag><Size>{stored.Content.Length}</Size><StorageClass>STANDARD</StorageClass><Owner><ID>test</ID><DisplayName>tester</DisplayName></Owner></Contents>");
         }
         foreach (string common in commonPrefixes)
         {
-            xml.Append(CultureInfo.InvariantCulture, $"<CommonPrefixes><Prefix>{MaybeEncode(common, encodeKeys)}</Prefix></CommonPrefixes>");
+            _ = xml.Append(CultureInfo.InvariantCulture, $"<CommonPrefixes><Prefix>{MaybeEncode(common, encodeKeys)}</Prefix></CommonPrefixes>");
         }
-        xml.Append("</ListBucketResult>");
+        _ = xml.Append("</ListBucketResult>");
         return Xml(xml.ToString());
     }
 
@@ -696,7 +696,7 @@ internal sealed class LoopbackS3Server : IDisposable
         {
             return Error(HttpStatusCode.Conflict, "BucketNotEmpty", "The bucket you tried to delete is not empty.");
         }
-        _buckets.TryRemove(bucket, out _);
+        _ = _buckets.TryRemove(bucket, out _);
         return new() { Status = HttpStatusCode.NoContent, Body = [] };
     }
 
@@ -709,10 +709,10 @@ internal sealed class LoopbackS3Server : IDisposable
         var xml = new StringBuilder("<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">");
         foreach (string key in ExtractKeys(Encoding.UTF8.GetString(body)))
         {
-            objects.TryRemove(key, out _);
-            xml.Append(CultureInfo.InvariantCulture, $"<Deleted><Key>{key}</Key></Deleted>");
+            _ = objects.TryRemove(key, out _);
+            _ = xml.Append(CultureInfo.InvariantCulture, $"<Deleted><Key>{key}</Key></Deleted>");
         }
-        xml.Append("</DeleteResult>");
+        _ = xml.Append("</DeleteResult>");
         return Xml(xml.ToString());
     }
 
@@ -792,7 +792,7 @@ internal sealed class LoopbackS3Server : IDisposable
 
     private static HttpResponse DeleteObject(ConcurrentDictionary<string, StoredObject> objects, string key)
     {
-        objects.TryRemove(key, out _);
+        _ = objects.TryRemove(key, out _);
         return new() { Status = HttpStatusCode.NoContent, Body = [] };
     }
 
@@ -847,7 +847,7 @@ internal sealed class LoopbackS3Server : IDisposable
 
     private HttpResponse AbortMultipartUpload(string uploadId)
     {
-        _uploads.TryRemove(uploadId, out _);
+        _ = _uploads.TryRemove(uploadId, out _);
         return new() { Status = HttpStatusCode.NoContent, Body = [] };
     }
 

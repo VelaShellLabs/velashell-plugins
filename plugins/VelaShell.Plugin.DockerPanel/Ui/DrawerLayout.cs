@@ -1,5 +1,5 @@
-using Avalonia.Controls;
 using System.ComponentModel;
+using Avalonia.Controls;
 
 namespace VelaShell.Plugin.DockerPanel.Ui;
 
@@ -75,9 +75,9 @@ public sealed class DrawerLayout
         {
             return;
         }
-        var list = _root.ColumnDefinitions[0];
-        var splitter = _root.ColumnDefinitions[1];
-        var panel = _root.ColumnDefinitions[2];
+        ColumnDefinition list = _root.ColumnDefinitions[0];
+        ColumnDefinition splitter = _root.ColumnDefinitions[1];
+        ColumnDefinition panel = _root.ColumnDefinitions[2];
 
         if (!drawer.IsOpen)
         {
@@ -96,7 +96,7 @@ public sealed class DrawerLayout
             panel.Width = Fill;
             return;
         }
-        var max = Math.Max(DrawerState.MinWidth, _hostWidth - _listReserve);
+        double max = Math.Max(DrawerState.MinWidth, _hostWidth - _listReserve);
         list.Width = Fill;
         splitter.Width = Track;
         panel.MinWidth = DrawerState.MinWidth;

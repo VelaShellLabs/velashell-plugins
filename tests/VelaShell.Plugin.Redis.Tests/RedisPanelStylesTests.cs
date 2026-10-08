@@ -1,11 +1,11 @@
 using Avalonia.Controls;
-using Avalonia.Threading;
-using Shapes = Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Shapes = Avalonia.Controls.Shapes;
 
 namespace VelaShell.Plugin.Redis.Tests;
 

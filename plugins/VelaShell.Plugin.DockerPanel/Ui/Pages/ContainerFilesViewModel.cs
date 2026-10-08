@@ -1,6 +1,6 @@
-using Avalonia.Platform.Storage;
 using System.Collections.ObjectModel;
 using System.Text;
+using Avalonia.Platform.Storage;
 using VelaShell.Plugin.DockerPanel.Docker;
 
 namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
@@ -219,7 +219,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             {
                 return "未修改";
             }
-            var changed = LineDiff.CountChanged(LineDiff.Compute(_originalText, EditorText));
+            int changed = LineDiff.CountChanged(LineDiff.Compute(_originalText, EditorText));
             return $"已修改 {changed} 行";
         }
     }
@@ -250,8 +250,8 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
 
     private static string GuessLanguage(string name)
     {
-        var dot = name.LastIndexOf('.');
-        var ext = dot > 0 ? name[(dot + 1)..].ToLowerInvariant() : "";
+        int dot = name.LastIndexOf('.');
+        string ext = dot > 0 ? name[(dot + 1)..].ToLowerInvariant() : "";
         return ext switch
         {
             "conf" or "cnf" or "ini" => name.Contains("nginx", StringComparison.OrdinalIgnoreCase) ? "nginx" : "ini",
@@ -362,9 +362,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             {
                 return "未修改";
             }
-            var before = _originalText.Split('\n').Length;
-            var after = EditorText.Split('\n').Length;
-            var delta = after - before;
+            int before = _originalText.Split('\n').Length;
+            int after = EditorText.Split('\n').Length;
+            int delta = after - before;
             return delta switch
             {
                 > 0 => $"未保存 · +{delta} 行",
@@ -421,8 +421,8 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         {
             return;
         }
-        var suggested = item.IsDirectory ? $"{item.Name}.tar" : item.Name;
-        var target = await FilePicker
+        string suggested = item.IsDirectory ? $"{item.Name}.tar" : item.Name;
+        IStorageFile? target = await FilePicker
             .PickSaveAsync(item.IsDirectory ? $"把 {item.Name}/ 存成 tar" : $"保存 {item.Name}",
                 suggested, item.IsDirectory ? "tar" : null)
             .ConfigureAwait(true);
@@ -434,9 +434,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         Error = "";
         try
         {
-            await using var archive = await client.DownloadArchiveAsync(containerId, item.FullPath, shell.Lifetime)
+            await using Stream archive = await client.DownloadArchiveAsync(containerId, item.FullPath, shell.Lifetime)
                                                      .ConfigureAwait(true);
-            await using var output = await target.OpenWriteAsync().ConfigureAwait(true);
+            await using Stream output = await target.OpenWriteAsync().ConfigureAwait(true);
             long written;
             if (item.IsDirectory)
             {
@@ -448,7 +448,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
                 // 单文件走流式解 tar:整份读进内存的话,一个 2 GB 的日志会把宿主拖垮。
                 written = await TarUtil.ExtractFirstFileAsync(archive, output, shell.Lifetime).ConfigureAwait(true);
             }
-            shell.Feedback.Notify(FeedbackKind.Success, "已取到本地",
+            _ = shell.Feedback.Notify(FeedbackKind.Success, "已取到本地",
                 $"{target.Name}{(written > 0 ? $" · {Humanize.Bytes(written)}" : "")}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -487,9 +487,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         {
             return;
         }
-        foreach (var line in LineDiff.Compute(_originalText, EditorText))
+        foreach (DiffLine line in LineDiff.Compute(_originalText, EditorText))
         {
-            (var marker, var tone) = line.Marker switch
+            (string? marker, RowTone tone) = line.Marker switch
             {
                 DiffMarker.Added => ("+", RowTone.Ok),
                 DiffMarker.Removed => ("−", RowTone.Danger),
@@ -497,7 +497,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
                 _ => (" ", RowTone.Idle)
             };
             // 删除的行在新文里没有行号,显示原文的那个 —— 空着会让人对不上原文件。
-            var number = line.Marker == DiffMarker.Removed ? line.OldNumber : line.NewNumber;
+            int number = line.Marker == DiffMarker.Removed ? line.OldNumber : line.NewNumber;
             DiffLines.Add(new(number > 0 ? number.ToString() : "", marker, line.Text, tone));
         }
     }
@@ -513,7 +513,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         FileProperties.Add(new("权限", entry.Mode));
         FileProperties.Add(new("属主", entry.Owner));
         FileProperties.Add(new("修改时间", entry.Modified));
-        var marker = _changes.GetValueOrDefault(entry.FullPath, "");
+        string marker = _changes.GetValueOrDefault(entry.FullPath, "");
         FileProperties.Add(marker switch
         {
             "A" => new("相对镜像", "新增 (A)", RowTone.Ok),
@@ -533,7 +533,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             _history.RemoveAt(_history.Count - 1);
         }
         History.Clear();
-        foreach (var record in _history)
+        foreach (FileWriteRecord record in _history)
         {
             History.Add(record);
         }
@@ -543,9 +543,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     /// <summary>这次改动的摘要,进写入历史(<c>+2 −1</c> 这种)。</summary>
     private string DescribeEdit()
     {
-        var diff = LineDiff.Compute(_originalText, EditorText);
-        var added = diff.Count(l => l.Marker is DiffMarker.Added or DiffMarker.Changed);
-        var removed = diff.Count(l => l.Marker is DiffMarker.Removed or DiffMarker.Changed);
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute(_originalText, EditorText);
+        int added = diff.Count(l => l.Marker is DiffMarker.Added or DiffMarker.Changed);
+        int removed = diff.Count(l => l.Marker is DiffMarker.Removed or DiffMarker.Changed);
         return _originalText.Length == 0 ? "新建"
             : added == 0 && removed == 0 ? "无改动"
             : $"+{added} −{removed}";
@@ -560,23 +560,23 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     /// </summary>
     private async Task RunReloadAsync(DockerClient client)
     {
-        var command = ReloadCommand;
+        string command = ReloadCommand;
         try
         {
-            var result = await client
+            ExecCapture result = await client
                 .ExecCaptureAsync(containerId, ["/bin/sh", "-c", command], cancellationToken: shell.Lifetime)
                 .ConfigureAwait(true);
             if (result.ExitCode == 0)
             {
-                shell.Feedback.Notify(FeedbackKind.Success, "已重载配置", $"{containerName}:{command}");
+                _ = shell.Feedback.Notify(FeedbackKind.Success, "已重载配置", $"{containerName}:{command}");
                 return;
             }
-            shell.Feedback.Notify(FeedbackKind.Warning, "文件已写回,但重载失败",
+            _ = shell.Feedback.Notify(FeedbackKind.Warning, "文件已写回,但重载失败",
                 $"{command} 退出码 {result.ExitCode}\n{result.StandardError.Trim()}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            shell.Feedback.Notify(FeedbackKind.Warning, "文件已写回,但重载没跑成", $"{command}:{ex.Message}");
+            _ = shell.Feedback.Notify(FeedbackKind.Warning, "文件已写回,但重载没跑成", $"{command}:{ex.Message}");
         }
     }
 
@@ -631,12 +631,12 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         Error = "";
         try
         {
-            var entries = await client
+            ContainerFileEntry[] entries = await client
                 .ListDirectoryAsync(containerId, item.FullPath, shell.Lifetime).ConfigureAwait(true);
             item.Children.Clear();
             // 目录在前、再按名字排:树里最常做的动作是"往下钻",
             // 目录混在文件中间会让每一层都要重新找一遍。
-            foreach (var entry in entries
+            foreach (ContainerFileEntry entry in entries
                          .OrderByDescending(e => e.IsDirectory)
                          .ThenBy(e => e.Name, StringComparer.Ordinal))
             {
@@ -680,7 +680,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             {
                 return;
             }
-            foreach (var child in node.Children)
+            foreach (FileEntryItem child in node.Children)
             {
                 Append(child);
             }
@@ -698,7 +698,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     /// <summary>把树里指向某个路径的那一行标成"正在编辑"。</summary>
     private void MarkCurrentFile(string? path)
     {
-        foreach (var node in Tree)
+        foreach (FileEntryItem node in Tree)
         {
             node.Current = node.FullPath == path;
         }
@@ -711,8 +711,8 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         {
             return null;
         }
-        var node = _root;
-        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        FileEntryItem node = _root;
+        foreach (string segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             if (node.Children.FirstOrDefault(c => c.Name == segment) is not { } child)
             {
@@ -733,9 +733,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         {
             return;
         }
-        var node = _root;
+        FileEntryItem node = _root;
         await ExpandAsync(node).ConfigureAwait(true);
-        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             if (node.Children.FirstOrDefault(c => c.Name == segment) is not { } child)
             {
@@ -758,7 +758,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     private async Task ReloadTreeAsync()
     {
         await LoadChangesAsync().ConfigureAwait(true);
-        var previous = Path;
+        string previous = Path;
         _root = null;
         await BuildTreeAsync().ConfigureAwait(true);
         if (previous != "/")
@@ -773,7 +773,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
 
     private async Task UploadAsync()
     {
-        var source = await FilePicker.PickOpenAsync($"上传到 {Path}").ConfigureAwait(true);
+        IStorageFile? source = await FilePicker.PickOpenAsync($"上传到 {Path}").ConfigureAwait(true);
         if (source is not null)
         {
             await UploadFileAsync(source).ConfigureAwait(true);
@@ -787,7 +787,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             return;
         }
         byte[] content;
-        await using (var input = await source.OpenReadAsync().ConfigureAwait(true))
+        await using (Stream input = await source.OpenReadAsync().ConfigureAwait(true))
         {
             if (input.CanSeek && input.Length > DockerClient.MaxUploadFileBytes)
             {
@@ -799,9 +799,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             await input.CopyToAsync(buffer, shell.Lifetime).ConfigureAwait(true);
             content = buffer.ToArray();
         }
-        var target = Path.TrimEnd('/') + "/" + source.Name;
-        var exists = FindNode(target) is not null;
-        var confirmed = await shell.Confirm.AskAsync(shell.BuildConfirm(new()
+        string target = Path.TrimEnd('/') + "/" + source.Name;
+        bool exists = FindNode(target) is not null;
+        bool confirmed = await shell.Confirm.AskAsync(shell.BuildConfirm(new()
         {
             Title = exists ? $"覆盖容器内的 {source.Name}?" : $"上传 {source.Name} 到 {containerName}?",
             Icon = exists ? "Docker.shield-alert" : "Icon.upload",
@@ -831,7 +831,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         try
         {
             await client.WriteFileAsync(containerId, target, content, shell.Lifetime).ConfigureAwait(true);
-            shell.Feedback.Notify(FeedbackKind.Success, "已上传", $"{target} · {Humanize.Bytes(content.Length)}");
+            _ = shell.Feedback.Notify(FeedbackKind.Success, "已上传", $"{target} · {Humanize.Bytes(content.Length)}");
             await ReloadTreeAsync().ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -875,9 +875,9 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         }
         try
         {
-            var changes = await client.ChangesAsync(containerId, shell.Lifetime).ConfigureAwait(true);
+            FilesystemChange[] changes = await client.ChangesAsync(containerId, shell.Lifetime).ConfigureAwait(true);
             _changes.Clear();
-            foreach (var change in changes)
+            foreach (FilesystemChange change in changes)
             {
                 _changes[change.Path] = change.Marker;
             }
@@ -904,7 +904,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         Error = "";
         try
         {
-            var bytes = await client.ReadFileAsync(containerId, path, DockerClient.MaxEditableFileBytes, shell.Lifetime)
+            byte[] bytes = await client.ReadFileAsync(containerId, path, DockerClient.MaxEditableFileBytes, shell.Lifetime)
                                        .ConfigureAwait(true);
             if (LooksBinary(bytes))
             {
@@ -945,8 +945,8 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     /// </summary>
     private static bool LooksBinary(ReadOnlySpan<byte> bytes)
     {
-        var limit = Math.Min(bytes.Length, 8192);
-        for (var i = 0; i < limit; i++)
+        int limit = Math.Min(bytes.Length, 8192);
+        for (int i = 0; i < limit; i++)
         {
             if (bytes[i] == 0)
             {
@@ -962,7 +962,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
         {
             return;
         }
-        var confirmed = await shell.Confirm.AskAsync(shell.BuildConfirm(new()
+        bool confirmed = await shell.Confirm.AskAsync(shell.BuildConfirm(new()
         {
             Title = $"覆盖容器内的 {OpenFileName}?",
             Icon = "Docker.shield-alert",
@@ -994,7 +994,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
             _originalText = EditorText;
             OnPropertiesChanged(nameof(IsModified), nameof(ModifiedText), nameof(ModifiedLinesText));
             RebuildEditorLines();
-            shell.Feedback.Notify(FeedbackKind.Success, "已写回容器", $"{path} · {Humanize.Bytes(Encoding.UTF8.GetByteCount(EditorText))}");
+            _ = shell.Feedback.Notify(FeedbackKind.Success, "已写回容器", $"{path} · {Humanize.Bytes(Encoding.UTF8.GetByteCount(EditorText))}");
             await LoadChangesAsync().ConfigureAwait(true);
             if (ReloadAfterSave && HasReloadCommand)
             {

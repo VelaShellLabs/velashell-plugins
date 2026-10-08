@@ -241,7 +241,7 @@ public sealed class ConfirmGate : ObservableObject
             {
                 return "";
             }
-            var typed = TypedWord.Trim();
+            string typed = TypedWord.Trim();
             return typed == request.ConfirmWord
                 ? "可以确认了"
                 : request.ConfirmWord.StartsWith(typed, StringComparison.Ordinal)
@@ -272,22 +272,22 @@ public sealed class ConfirmGate : ObservableObject
             TypedWord = "";
             Precaution = request.PrecautionDefault;
             Commands.Clear();
-            foreach (var command in request.Commands)
+            foreach (string command in request.Commands)
             {
                 Commands.Add(command);
             }
             Targets.Clear();
-            foreach (var target in request.Targets)
+            foreach (ConfirmTarget target in request.Targets)
             {
                 Targets.Add(target);
             }
             Consequences.Clear();
-            foreach (var consequence in request.Consequences)
+            foreach (ConfirmConsequence consequence in request.Consequences)
             {
                 Consequences.Add(consequence);
             }
             DataLossPoints.Clear();
-            foreach (var point in request.DataLossPoints)
+            foreach (string point in request.DataLossPoints)
             {
                 DataLossPoints.Add(point);
             }
@@ -301,13 +301,13 @@ public sealed class ConfirmGate : ObservableObject
 
     private void Complete(bool confirmed)
     {
-        var pending = _pending;
+        TaskCompletionSource<bool>? pending = _pending;
         _pending = null;
         Ui.Post(() =>
         {
             Request = null;
             TypedWord = "";
         });
-        pending?.TrySetResult(confirmed);
+        _ = (pending?.TrySetResult(confirmed));
     }
 }

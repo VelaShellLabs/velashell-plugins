@@ -42,13 +42,13 @@ public static class LineDiff
     /// <summary>比出差异。</summary>
     public static IReadOnlyList<DiffLine> Compute(string oldText, string newText)
     {
-        var a = Split(oldText);
-        var b = Split(newText);
-        var lcs = BuildLcs(a, b);
+        string[] a = Split(oldText);
+        string[] b = Split(newText);
+        int[,] lcs = BuildLcs(a, b);
 
         List<DiffLine> result = [];
-        var i = 0;
-        var j = 0;
+        int i = 0;
+        int j = 0;
         while (i < a.Length && j < b.Length)
         {
             if (a[i] == b[j])
@@ -95,15 +95,15 @@ public static class LineDiff
     private static List<DiffLine> Pair(List<DiffLine> lines)
     {
         List<DiffLine> paired = [with(lines.Count)];
-        for (var k = 0; k < lines.Count; k++)
+        for (int k = 0; k < lines.Count; k++)
         {
-            var current = lines[k];
+            DiffLine current = lines[k];
             if (current.Marker == DiffMarker.Removed
                 && k + 1 < lines.Count
                 && lines[k + 1].Marker == DiffMarker.Added
                 && lines.Count <= MaxPairedChange * 4)
             {
-                var next = lines[k + 1];
+                DiffLine next = lines[k + 1];
                 paired.Add(new(DiffMarker.Changed, current.OldNumber, next.NewNumber, next.Text));
                 k++;
                 continue;
@@ -119,10 +119,10 @@ public static class LineDiff
     private static int[,] BuildLcs(string[] a, string[] b)
     {
         // lcs[i, j] = a[i..] 与 b[j..] 的最长公共子序列长度。倒着填,回溯时正着走。
-        var lcs = new int[a.Length + 1, b.Length + 1];
-        for (var i = a.Length - 1; i >= 0; i--)
+        int[,] lcs = new int[a.Length + 1, b.Length + 1];
+        for (int i = a.Length - 1; i >= 0; i--)
         {
-            for (var j = b.Length - 1; j >= 0; j--)
+            for (int j = b.Length - 1; j >= 0; j--)
             {
                 lcs[i, j] = a[i] == b[j]
                     ? lcs[i + 1, j + 1] + 1

@@ -19,8 +19,8 @@ public class DockerProtocolTests
 
     private static byte[] Frame(DockerStreamKind kind, string text)
     {
-        var payload = Encoding.UTF8.GetBytes(text);
-        var frame = new byte[8 + payload.Length];
+        byte[] payload = Encoding.UTF8.GetBytes(text);
+        byte[] frame = new byte[8 + payload.Length];
         frame[0] = (byte)kind;
         BinaryPrimitives.WriteInt32BigEndian(frame.AsSpan(4, 4), payload.Length);
         payload.CopyTo(frame, 8);
@@ -48,7 +48,7 @@ public class DockerProtocolTests
     {
         // 帧长度字段里出现 0x0A 是常态 —— 按行切分会把一帧劈成两半,这正是不能用
         // 文本行模型承载这条流的原因。
-        var data = Frame(DockerStreamKind.StdOut, "a\nb\nc\n");
+        byte[] data = Frame(DockerStreamKind.StdOut, "a\nb\nc\n");
         List<DockerLogLine> lines = [];
         await new DockerFrameDecoder(tty: false, timestamps: false)
             .ReadAsync(new MemoryStream(data), lines.Add, CancellationToken.None);
@@ -72,7 +72,7 @@ public class DockerProtocolTests
     [TestMethod]
     public async Task Decoder_FlushesTheLastLineWithoutTrailingNewline()
     {
-        var data = Frame(DockerStreamKind.StdOut, "no newline at eof");
+        byte[] data = Frame(DockerStreamKind.StdOut, "no newline at eof");
         List<DockerLogLine> lines = [];
         await new DockerFrameDecoder(tty: false, timestamps: false)
             .ReadAsync(new MemoryStream(data), lines.Add, CancellationToken.None);
@@ -85,10 +85,10 @@ public class DockerProtocolTests
     public async Task Decoder_SurvivesUtf8CharactersSplitAcrossFrames()
     {
         // "容" 是三个字节;把它劈在两帧之间,天真的实现会吐出两个 U+FFFD。
-        var full = Encoding.UTF8.GetBytes("容器\n");
-        var first = Frame(DockerStreamKind.StdOut, "");
-        var head = BuildFrame(DockerStreamKind.StdOut, full.AsSpan()[..2]);
-        var tail = BuildFrame(DockerStreamKind.StdOut, full.AsSpan()[2..]);
+        byte[] full = Encoding.UTF8.GetBytes("容器\n");
+        byte[] first = Frame(DockerStreamKind.StdOut, "");
+        byte[] head = BuildFrame(DockerStreamKind.StdOut, full.AsSpan()[..2]);
+        byte[] tail = BuildFrame(DockerStreamKind.StdOut, full.AsSpan()[2..]);
         List<DockerLogLine> lines = [];
         await new DockerFrameDecoder(tty: false, timestamps: false)
             .ReadAsync(new MemoryStream([.. head, .. tail]), lines.Add, CancellationToken.None);
@@ -101,7 +101,7 @@ public class DockerProtocolTests
 
     private static byte[] BuildFrame(DockerStreamKind kind, ReadOnlySpan<byte> payload)
     {
-        var frame = new byte[8 + payload.Length];
+        byte[] frame = new byte[8 + payload.Length];
         frame[0] = (byte)kind;
         BinaryPrimitives.WriteInt32BigEndian(frame.AsSpan(4, 4), payload.Length);
         payload.CopyTo(frame.AsSpan(8));
@@ -112,7 +112,7 @@ public class DockerProtocolTests
     public async Task Decoder_InTtyModeTreatsEverythingAsRawStdout()
     {
         // 有 TTY 时没有帧头 —— 按 8 字节头去解会把前八个字符吃掉。
-        var data = Encoding.UTF8.GetBytes("raw tty line\n");
+        byte[] data = Encoding.UTF8.GetBytes("raw tty line\n");
         List<DockerLogLine> lines = [];
         await new DockerFrameDecoder(tty: true, timestamps: false)
             .ReadAsync(new MemoryStream(data), lines.Add, CancellationToken.None);
@@ -124,7 +124,7 @@ public class DockerProtocolTests
     [TestMethod]
     public void TrySplitTimestamp_PullsTheRfc3339PrefixOutOfTheLine()
     {
-        Assert.IsTrue(DockerFrameDecoder.TrySplitTimestamp("2026-08-21T09:41:22.118000000Z hello world", out var stamp, out var rest));
+        Assert.IsTrue(DockerFrameDecoder.TrySplitTimestamp("2026-08-21T09:41:22.118000000Z hello world", out DateTimeOffset stamp, out string? rest));
         Assert.AreEqual("hello world", rest);
         Assert.AreEqual(2026, stamp.Year);
     }
@@ -133,7 +133,7 @@ public class DockerProtocolTests
     public void TrySplitTimestamp_LeavesOrdinaryLinesAlone()
     {
         // 正文里恰好有空格的普通行不能被当成带时间戳的行切掉一段。
-        Assert.IsFalse(DockerFrameDecoder.TrySplitTimestamp("GET /health 200", out _, out var rest));
+        Assert.IsFalse(DockerFrameDecoder.TrySplitTimestamp("GET /health 200", out _, out string? rest));
         Assert.AreEqual("GET /health 200", rest);
     }
 
@@ -142,9 +142,9 @@ public class DockerProtocolTests
     [TestMethod]
     public async Task Tar_RoundTripsASingleFile()
     {
-        var content = Encoding.UTF8.GetBytes("server {\n  listen 80;\n}\n");
-        var archive = TarUtil.CreateSingleFile("default.conf", content);
-        var entry =
+        byte[] content = Encoding.UTF8.GetBytes("server {\n  listen 80;\n}\n");
+        byte[] archive = TarUtil.CreateSingleFile("default.conf", content);
+        (string Name, byte[] Content)? entry =
             await TarUtil.ReadFirstFileAsync(new MemoryStream(archive), 1 << 20, CancellationToken.None);
 
         Assert.IsNotNull(entry);
@@ -155,7 +155,7 @@ public class DockerProtocolTests
     [TestMethod]
     public void Tar_HeaderIsBlockAlignedAndEndsWithTwoZeroBlocks()
     {
-        var archive = TarUtil.CreateSingleFile("a.txt", "x"u8);
+        byte[] archive = TarUtil.CreateSingleFile("a.txt", "x"u8);
         // 512 头 + 512 补齐的内容 + 两个全零块。长度不对的话 daemon 会说归档被截断。
         Assert.HasCount(512 * 4, archive);
         Assert.IsTrue(archive[^1024..].All(b => b == 0));
@@ -164,15 +164,15 @@ public class DockerProtocolTests
     [TestMethod]
     public void Tar_ChecksumIsComputedOverSpacesInTheChecksumField()
     {
-        var archive = TarUtil.CreateSingleFile("a.txt", "x"u8);
+        byte[] archive = TarUtil.CreateSingleFile("a.txt", "x"u8);
         uint expected = 0;
-        for (var i = 0; i < 512; i++)
+        for (int i = 0; i < 512; i++)
         {
             // 求和时校验和字段要按 8 个空格计 —— 顺序反了 tar 会说文件损坏。
             expected += i is >= 148 and < 156 ? (byte)' ' : archive[i];
         }
         uint stored = 0;
-        for (var i = 148; i < 155; i++)
+        for (int i = 148; i < 155; i++)
         {
             if (archive[i] is >= (byte)'0' and <= (byte)'7')
             {
@@ -185,8 +185,8 @@ public class DockerProtocolTests
     [TestMethod]
     public async Task Tar_RefusesFilesLargerThanTheEditingCap()
     {
-        var archive = TarUtil.CreateSingleFile("big.bin", new byte[4096]);
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+        byte[] archive = TarUtil.CreateSingleFile("big.bin", new byte[4096]);
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
             TarUtil.ReadFirstFileAsync(new MemoryStream(archive), 1024, CancellationToken.None));
     }
 
@@ -195,15 +195,15 @@ public class DockerProtocolTests
     {
         // "另存为"这条路不该受在线编辑那个 2 MB 上限管 ——
         // 几百兆的日志正是用户最想取下来的东西。
-        var payload = new byte[300_000];
-        for (var i = 0; i < payload.Length; i++)
+        byte[] payload = new byte[300_000];
+        for (int i = 0; i < payload.Length; i++)
         {
             payload[i] = (byte)(i % 251);
         }
-        var archive = TarUtil.CreateSingleFile("app.log", payload);
+        byte[] archive = TarUtil.CreateSingleFile("app.log", payload);
         var output = new MemoryStream();
 
-        var written = await TarUtil.ExtractFirstFileAsync(new MemoryStream(archive), output, CancellationToken.None);
+        long written = await TarUtil.ExtractFirstFileAsync(new MemoryStream(archive), output, CancellationToken.None);
 
         Assert.AreEqual(payload.Length, written);
         Assert.AreSequenceEqual(payload, output.ToArray());
@@ -213,7 +213,7 @@ public class DockerProtocolTests
     public async Task Tar_ExtractReportsZeroWhenTheArchiveHoldsNoRegularFile()
     {
         // 目录条目走的是另一条路(整包存成 tar),这里返回 0 而不是抛。
-        var empty = new byte[1024];
+        byte[] empty = new byte[1024];
         Assert.AreEqual(0, await TarUtil.ExtractFirstFileAsync(new MemoryStream(empty), new MemoryStream(),
             CancellationToken.None));
     }
@@ -221,11 +221,11 @@ public class DockerProtocolTests
     [TestMethod]
     public async Task Tar_ExtractRefusesToSilentlyTruncateATruncatedStream()
     {
-        var archive = TarUtil.CreateSingleFile("a.txt", new byte[2048]);
+        byte[] archive = TarUtil.CreateSingleFile("a.txt", new byte[2048]);
         // 砍掉后半段:一个静默截断的文件比一句"下载失败"危险得多。
-        var truncated = archive[..(512 + 600)];
+        byte[] truncated = archive[..(512 + 600)];
 
-        await Assert.ThrowsExactlyAsync<EndOfStreamException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<EndOfStreamException>(() =>
             TarUtil.ExtractFirstFileAsync(new MemoryStream(truncated), new MemoryStream(), CancellationToken.None));
     }
 
@@ -234,14 +234,14 @@ public class DockerProtocolTests
     [TestMethod]
     public void Query_SkipsNullsAndEscapesValues()
     {
-        var query = DockerClient.Query(("a", "1"), ("skip", null), ("path", "/etc/nginx/conf.d"));
+        string query = DockerClient.Query(("a", "1"), ("skip", null), ("path", "/etc/nginx/conf.d"));
         Assert.AreEqual("?a=1&path=%2Fetc%2Fnginx%2Fconf.d", query);
     }
 
     [TestMethod]
     public void Filters_GroupsRepeatedKeysIntoOneArray()
     {
-        var filters = DockerClient.Filters(("label", "a=1"), ("label", "b=2"));
+        string? filters = DockerClient.Filters(("label", "a=1"), ("label", "b=2"));
         Assert.IsNotNull(filters);
         Assert.Contains("\"label\"", filters);
         Assert.Contains("a=1", filters);
@@ -253,7 +253,7 @@ public class DockerProtocolTests
     [TestMethod]
     public void ParseLsLine_ReadsAnOrdinaryFile()
     {
-        var entry = DockerClient.ParseLsLine(
+        ContainerFileEntry? entry = DockerClient.ParseLsLine(
             "-rw-r--r-- 1 root root 1842 2026-08-21 09:12 default.conf", "/etc/nginx/conf.d");
 
         Assert.IsNotNull(entry);
@@ -266,7 +266,7 @@ public class DockerProtocolTests
     [TestMethod]
     public void ParseLsLine_KeepsSpacesInsideFileNames()
     {
-        var entry = DockerClient.ParseLsLine(
+        ContainerFileEntry? entry = DockerClient.ParseLsLine(
             "-rw-r--r-- 1 root root 10 2026-08-21 09:12 my file.txt", "/tmp");
 
         Assert.IsNotNull(entry);
@@ -277,7 +277,7 @@ public class DockerProtocolTests
     [TestMethod]
     public void ParseLsLine_SplitsSymlinkTargets()
     {
-        var entry = DockerClient.ParseLsLine(
+        ContainerFileEntry? entry = DockerClient.ParseLsLine(
             "lrwxrwxrwx 1 root root 7 2026-08-21 09:12 sh -> busybox", "/bin");
 
         Assert.IsNotNull(entry);
@@ -295,11 +295,9 @@ public class DockerProtocolTests
     }
 
     [TestMethod]
-    public void ShellQuote_NeutralisesEmbeddedSingleQuotes()
-    {
+    public void ShellQuote_NeutralisesEmbeddedSingleQuotes() =>
         // 列目录是这一层唯一一处把用户输入拼进 shell 的地方,引用错了就是命令注入。
         Assert.AreEqual("'/tmp/it'\\''s here'", Sh.Quote("/tmp/it's here"));
-    }
 
     // ── 连不上的分类 ──────────────────────────────────────────
 
@@ -324,7 +322,7 @@ public class DockerProtocolTests
     {
         // SDK 报的是 ConnectFailed —— 中间没有空格。只匹配 "connect failed" 会漏掉它,
         // 于是最常见的一种失败反而落进 Unknown,界面上只剩一个"重试",没有任何出路。
-        var ex = await PingFailureAsync(
+        DockerUnreachableException ex = await PingFailureAsync(
             "Failed to open channel - ConnectFailed - open failed. (docker:80)");
 
         Assert.AreEqual(DockerUnreachableReason.SocketMissing, ex.Reason);
@@ -334,7 +332,7 @@ public class DockerProtocolTests
     public async Task Unreachable_PrefersPermissionDeniedOverChannelFailure()
     {
         // 两者同时出现时按"没权限"报:它是明说的,而"通道开不起来"是笼统的。
-        var ex = await PingFailureAsync(
+        DockerUnreachableException ex = await PingFailureAsync(
             "open failed: connect /var/run/docker.sock: permission denied");
 
         Assert.AreEqual(DockerUnreachableReason.PermissionDenied, ex.Reason);

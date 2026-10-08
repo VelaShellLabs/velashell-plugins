@@ -1,0 +1,701 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.GridFsTabView"
+             x:DataType="ui:GridFsTabViewModel">
+
+  <!-- GridFS 文件管理(设计稿 06 FMpkf):
+       36px 工具行 / 32px 路径行(桶 › 面包屑 | 虚拟目录开关 + 类型芯片)/
+       文件表(26px 列头 + 28px 行)+ 拖放区 | 320px 详情 / 32px 传输底栏。 -->
+
+  <UserControl.Resources>
+    <!-- lucide「file」:主题图标表里没有通用文件图标,未归类的文件用它。 -->
+    <StreamGeometry x:Key="Fs.file">M15 2 H6 a2 2 0 0 0 -2 2 v16 a2 2 0 0 0 2 2 h12 a2 2 0 0 0 2 -2 V7 Z M14 2 v4 a2 2 0 0 0 2 2 h4</StreamGeometry>
+
+    <!-- 文件表的 12px 复选框(设计稿:勾上是实心 Accent + AccentForeground 的勾,与 MongoCheck 的淡底不同)。
+         外面包一圈 20px 的透明命中区:12px 的方块太难点中。 -->
+    <ControlTheme x:Key="FsCheck" TargetType="CheckBox">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel Width="20" Height="20" Background="Transparent">
+            <Border Name="Box" Width="12" Height="12" CornerRadius="2" BorderThickness="1"
+                    BorderBrush="{DynamicResource VelaBorderSecondary}" Background="Transparent">
+              <Panel>
+                <ui:Glyph Name="Tick" Key="Mongo.check" Size="9" Brush="{DynamicResource VelaAccentForeground}" IsVisible="False" />
+                <Border Name="Dash" Width="6" Height="2" CornerRadius="1" Background="{DynamicResource VelaAccentForeground}" IsVisible="False" />
+              </Panel>
+            </Border>
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#Box">
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+      </Style>
+      <Style Selector="^:checked /template/ Border#Box">
+        <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+      </Style>
+      <Style Selector="^:checked /template/ ui|Glyph#Tick">
+        <Setter Property="IsVisible" Value="True" />
+      </Style>
+      <Style Selector="^:indeterminate /template/ Border#Box">
+        <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+      </Style>
+      <Style Selector="^:indeterminate /template/ Border#Dash">
+        <Setter Property="IsVisible" Value="True" />
+      </Style>
+      <Style Selector="^:disabled">
+        <Setter Property="Opacity" Value="0.4" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Style>
+    </ControlTheme>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- metadata 框里的 CodeEditor 是 AvaloniaEdit 的 TextEditor:它的控件模板在这份样式里,共享样式表没带。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+    <!-- 选中行:文件名转 Accent Medium(设计稿 main.jpg 行)。 -->
+    <!-- 顺序有讲究:同一元素命中多条样式时,后写的赢 —— 通用的 cell 在前,文件名次之,选中态最后。 -->
+    <Style Selector="TextBlock.cell">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.fname">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+    <Style Selector="ListBox.files ListBoxItem:selected TextBlock.fname">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="ListBox.tiles ListBoxItem:selected TextBlock.fname">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 缩略图视图:卡片选中描 Accent 边。 -->
+    <Style Selector="ListBox.tiles ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.tiles ListBoxItem:selected Border.tile">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 面包屑:非末级是目录名青(宿主资源管理器同一支),末级主色。 -->
+    <Style Selector="TextBlock.crumb">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaFileDirName}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.crumb.last">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+
+    <!-- 列头按钮:整格可点,26px 高、无圆角。 -->
+    <Style Selector="Button.colbtn">
+      <Setter Property="Height" Value="26" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- 详情里的蓝色文字链接(缩放预览 / 编辑 metadata / 恢复 / 下载)。 -->
+    <Style Selector="Button.link">
+      <Setter Property="Height" Value="16" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="2" />
+    </Style>
+    <Style Selector="Button.link:pointerover TextBlock">
+      <Setter Property="TextDecorations" Value="Underline" />
+    </Style>
+
+    <!-- 拖放区:悬停描边变亮、铺一层很淡的底(看得出能点);拖进来时描 Accent、底再深一点。 -->
+    <Style Selector="Panel#DropZone:pointerover Rectangle#DropFrame">
+      <Setter Property="Stroke" Value="{DynamicResource VelaTextMuted}" />
+      <Setter Property="Fill" Value="{ui:Dim VelaAccent, 0.03}" />
+    </Style>
+    <Style Selector="Panel#DropZone:pointerover Border#DropIcon">
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+    </Style>
+    <Style Selector="Rectangle#DropFrame.over">
+      <Setter Property="Stroke" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="Fill" Value="{ui:Dim VelaAccent, 0.06}" />
+    </Style>
+
+    <!-- 详情小节:上边一条分隔线、内边距 [10,12]。 -->
+    <Style Selector="Border.sec">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+      <Setter Property="Padding" Value="12,10" />
+    </Style>
+    <Style Selector="Border.sec TextBlock.sectitle">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+    <Style Selector="TextBlock.k">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+      <Setter Property="Width" Value="74" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.v">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="36,32,*,32" Background="{DynamicResource VelaBgTerminal}">
+
+    <!-- ══ 工具行 ══════════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="0" Classes="toolrow">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Panel Width="220" Height="24">
+            <TextBox x:Name="SearchBox" Theme="{StaticResource MongoTextBox}" Height="24" Padding="26,0,8,0"
+                     FontFamily="{DynamicResource VelaUiFont}"
+                     Text="{Binding SearchText}" PlaceholderText="{Binding Loc[Fs_SearchPlaceholder]}" />
+            <ui:Glyph Key="Mongo.search" Size="12" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Left"
+                      Margin="8,0,0,0" IsHitTestVisible="False" />
+          </Panel>
+          <Border Classes="segments">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <RadioButton Theme="{StaticResource MongoSegment}" GroupName="fsview" Width="28" Padding="0"
+                           IsChecked="{Binding IsListView}" ToolTip.Tip="{Binding Loc[Fs_ListView]}">
+                <ui:Glyph Key="Mongo.list" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+              </RadioButton>
+              <RadioButton Theme="{StaticResource MongoSegment}" GroupName="fsview" Width="28" Padding="0"
+                           IsChecked="{Binding IsGridView}" ToolTip.Tip="{Binding Loc[Fs_GridView]}">
+                <ui:Glyph Key="Mongo.layout-grid" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+              </RadioButton>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Button x:Name="UploadButton" Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding UploadFilesCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.upload" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Fs_Upload]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding UploadFolderCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.folder-up" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Fs_UploadFolder]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding DownloadCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Fs_Download]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding RenameCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.pencil-line" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Fs_Rename]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding DeleteCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[Fs_Delete]}" />
+            </StackPanel>
+          </Button>
+          <Rectangle Classes="vsep" Margin="0" />
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding NewBucketCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.folder-plus" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Fs_NewBucket]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding CheckOrphansCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.layers" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Fs_CheckOrphans]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ 路径行 ══════════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="1" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+            BorderThickness="0,0,0,1" Padding="10,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Fs_VirtualDirs]}" />
+          <ToggleButton Theme="{StaticResource MongoSwitch}" Width="24" Height="14" IsChecked="{Binding VirtualDirs}" />
+          <Panel Width="0" />
+          <RadioButton Theme="{StaticResource MongoChip}" Height="20" GroupName="fstype" Content="{Binding Loc[Fs_TypeAll]}" IsChecked="{Binding IsAllTypes}" />
+          <RadioButton Theme="{StaticResource MongoChip}" Height="20" GroupName="fstype" Content="{Binding Loc[Fs_TypeImages]}" IsChecked="{Binding IsImages}" />
+          <RadioButton Theme="{StaticResource MongoChip}" Height="20" GroupName="fstype" Content="{Binding Loc[Fs_TypeDocs]}" IsChecked="{Binding IsDocuments}" />
+          <RadioButton Theme="{StaticResource MongoChip}" Height="20" GroupName="fstype" Content="{Binding Loc[Fs_TypeVideos]}" IsChecked="{Binding IsVideos}" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Button x:Name="BucketButton" Theme="{StaticResource MongoToolButton}" Height="22" Padding="8,0"
+                  Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1"
+                  ToolTip.Tip="{Binding Loc[Fs_SwitchBucket]}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.hard-drive" Size="12" Brush="{DynamicResource VelaWarning}" />
+              <TextBlock Classes="mono primary medium" Text="{Binding Bucket.Name}" />
+              <ui:Glyph Key="Mongo.chevron-down" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+            </StackPanel>
+          </Button>
+          <ItemsControl ItemsSource="{Binding Crumbs}" IsVisible="{Binding ShowCrumbs}" VerticalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:GridFsCrumb">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="Mongo.chevron-right" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+                  <Button Theme="{StaticResource MongoToolButton}" Height="22" Padding="6,0"
+                          Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).NavigateCommand}"
+                          CommandParameter="{Binding Prefix}">
+                    <TextBlock Classes="crumb" Classes.last="{Binding IsLast}" Text="{Binding Name}" />
+                  </Button>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_Flat]}" IsVisible="{Binding !ShowCrumbs}" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ 主体:文件表 + 拖放区 | 详情 ══════════════════════════════════════════ -->
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="360" />
+        <ColumnDefinition Width="0" />
+        <ColumnDefinition Width="320" MinWidth="220" MaxWidth="640" />
+      </Grid.ColumnDefinitions>
+
+      <Grid x:Name="ListArea" Grid.Column="0" RowDefinitions="Auto,*" Background="{DynamicResource VelaBgTerminal}"
+            DragDrop.AllowDrop="True">
+        <!-- 列头 -->
+        <Border Grid.Row="0" Classes="colheader" IsVisible="{Binding IsListView}">
+          <Grid ColumnDefinitions="32,*,86,130,140,96,60,62" ui:TableColumns.Header="files" ui:TableColumns.Fixed="0">
+            <CheckBox Grid.Column="0" Theme="{StaticResource FsCheck}" IsThreeState="True" IsChecked="{Binding AllChecked}" />
+            <Button Grid.Column="1" Classes="colbtn" Theme="{StaticResource MongoToolButton}" Command="{Binding SortCommand}" CommandParameter="Name">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_ColName]}" />
+                <ui:Glyph Key="{Binding SortIcon}" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding Sort, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Name}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="2" Classes="colbtn" Theme="{StaticResource MongoToolButton}" HorizontalContentAlignment="Right"
+                    Command="{Binding SortCommand}" CommandParameter="Size">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <ui:Glyph Key="{Binding SortIcon}" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding Sort, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Size}" />
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_ColSize]}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="3" Classes="colbtn" Theme="{StaticResource MongoToolButton}" Command="{Binding SortCommand}" CommandParameter="Type">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_ColType]}" />
+                <ui:Glyph Key="{Binding SortIcon}" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding Sort, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Type}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="4" Classes="colbtn" Theme="{StaticResource MongoToolButton}" Command="{Binding SortCommand}" CommandParameter="Uploaded">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_ColUploaded]}" />
+                <ui:Glyph Key="{Binding SortIcon}" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding Sort, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Uploaded}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="5" Classes="colbtn" Theme="{StaticResource MongoToolButton}" HorizontalContentAlignment="Right"
+                    Command="{Binding SortCommand}" CommandParameter="Chunks">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <ui:Glyph Key="{Binding SortIcon}" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding Sort, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=Chunks}" />
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_ColChunks]}" />
+              </StackPanel>
+            </Button>
+            <TextBlock Grid.Column="6" Classes="ui small muted" Margin="8,0" Text="{Binding Loc[Fs_ColVersion]}" />
+          </Grid>
+        </Border>
+
+        <ui:GridFsSplitPanel Grid.Row="1" MinRest="110">
+          <!-- 上:文件表 / 缩略图 + 空态 -->
+          <DockPanel LastChildFill="True">
+            <TextBlock DockPanel.Dock="Bottom" Classes="ui small muted" Margin="40,10,12,0" Text="{Binding EmptyText}"
+                       IsVisible="{Binding HasEmptyText}" />
+            <Panel>
+              <ListBox x:Name="FileList" Classes="rows files" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+                       SelectionMode="Single" IsVisible="{Binding IsListView}"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                  </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="ui:GridFsEntry">
+                    <Border Height="28" Background="Transparent" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                      <Grid ColumnDefinitions="32,*,86,130,140,96,60,62" ui:TableColumns.Row="files">
+                        <CheckBox Grid.Column="0" Theme="{StaticResource FsCheck}" IsChecked="{Binding IsChecked}"
+                                  IsVisible="{Binding !IsParent}" IsEnabled="{Binding CanCheck}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="8,0">
+                          <ui:Glyph Key="{Binding IconKey}" Size="13" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                          <TextBlock Classes="cell fname" Text="{Binding Name}" />
+                          <TextBlock Classes="mono small muted" Text="{Binding CountText}" IsVisible="{Binding IsFolder}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Classes="cell" Margin="8,0" HorizontalAlignment="Right" Text="{Binding SizeText}" />
+                        <TextBlock Grid.Column="3" Classes="cell" Margin="8,0" Text="{Binding ContentTypeText}" />
+                        <TextBlock Grid.Column="4" Classes="cell" Margin="8,0" Text="{Binding UploadedText}" IsVisible="{Binding !IsUpload}" />
+                        <ui:GridFsBar Grid.Column="4" Height="4" Margin="8,0" VerticalAlignment="Center" Value="{Binding Progress}"
+                                      Track="{DynamicResource VelaBorderPrimary}" Fill="{DynamicResource VelaAccent}" IsVisible="{Binding IsUpload}" />
+                        <TextBlock Grid.Column="5" Classes="cell" Margin="8,0" HorizontalAlignment="Right" Text="{Binding ChunksText}"
+                                   IsVisible="{Binding !IsUpload}" />
+                        <TextBlock Grid.Column="5" Classes="cell" Margin="8,0" HorizontalAlignment="Right" Foreground="{DynamicResource VelaAccent}"
+                                   Text="{Binding ProgressText}" IsVisible="{Binding IsUpload}" />
+                        <Border Grid.Column="6" Classes="tag mono" Margin="8,0" HorizontalAlignment="Left" IsVisible="{Binding HasVersionBadge}">
+                          <TextBlock Text="{Binding VersionText}" />
+                        </Border>
+                        <TextBlock Grid.Column="6" Classes="mono small muted" Margin="8,0" Text="{Binding VersionText}"
+                                   IsVisible="{Binding HasPlainVersion}" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+
+              <ListBox x:Name="TileList" Classes="rows tiles" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+                       SelectionMode="Single" IsVisible="{Binding IsGridView}" Padding="8"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="ui:GridFsEntry">
+                    <Border Classes="tile" Width="132" Height="132" Margin="4" CornerRadius="4" BorderThickness="1"
+                            BorderBrush="Transparent" Background="Transparent">
+                      <Grid RowDefinitions="*,Auto" Margin="6">
+                        <Border Grid.Row="0" CornerRadius="3" Background="{DynamicResource VelaBgInput}" ClipToBounds="True">
+                          <Panel>
+                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" IsVisible="{Binding HasThumbnail}" />
+                            <ui:Glyph Key="{Binding IconKey}" Size="28" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}"
+                                      HorizontalAlignment="Center" IsVisible="{Binding !HasThumbnail}" />
+                          </Panel>
+                        </Border>
+                        <CheckBox Grid.Row="0" Theme="{StaticResource FsCheck}" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                  Margin="2" IsChecked="{Binding IsChecked}" IsVisible="{Binding CanCheck}" />
+                        <StackPanel Grid.Row="1" Margin="0,6,0,0" Spacing="1">
+                          <TextBlock Classes="mono small fname trim" HorizontalAlignment="Center" Text="{Binding Name}" />
+                          <TextBlock Classes="mono tiny muted" HorizontalAlignment="Center" Text="{Binding SizeText}" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Panel>
+          </DockPanel>
+
+          <!--
+            下:拖放区(虚线框)。整块可点:点空白处弹「选择要上传的文件」,与工具行的「上传文件」同一条路;
+            框里两个链接分别选文件 / 选文件夹。悬停描边变亮、铺一层淡底,让人看得出它能点。
+          -->
+          <Panel x:Name="DropZone" Margin="14" Background="Transparent" Cursor="Hand" ToolTip.Tip="{Binding Loc[Fs_DropClickTip]}">
+            <Rectangle x:Name="DropFrame" RadiusX="4" RadiusY="4" Stroke="{DynamicResource VelaBorderSecondary}" StrokeThickness="1"
+                       StrokeDashArray="4,3" Fill="Transparent" />
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="12">
+              <Border x:Name="DropIcon" Width="36" Height="36" CornerRadius="18" HorizontalAlignment="Center" Background="{DynamicResource VelaBgHover}">
+                <ui:Glyph Key="Mongo.cloud-upload" Size="18" Brush="{DynamicResource VelaTextTertiary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <TextBlock Classes="ui secondary" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                         Text="{Binding DropText}" />
+              <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding UploadFilesCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <ui:Glyph Key="Mongo.file-up" Size="11" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="ui small accent" Text="{Binding Loc[Fs_DropPickFiles]}" />
+                  </StackPanel>
+                </Button>
+                <TextBlock Classes="ui small muted" VerticalAlignment="Center" Text="·" />
+                <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding UploadFolderCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <ui:Glyph Key="Mongo.folder-up" Size="11" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="ui small accent" Text="{Binding Loc[Fs_DropPickFolder]}" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+              <TextBlock Classes="ui small muted" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                         Text="{Binding Loc[Fs_DropHint]}" />
+              <TextBlock Classes="ui small warn" HorizontalAlignment="Center" Text="{Binding TruncatedText}" IsVisible="{Binding IsTruncated}" />
+            </StackPanel>
+          </Panel>
+        </ui:GridFsSplitPanel>
+      </Grid>
+
+      <!-- ══ 详情 ══════════════════════════════════════════════════════════════ -->
+      <GridSplitter Grid.Column="1" Classes="vsplit" />
+      <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+              BorderThickness="1,0,0,0">
+        <Panel>
+          <!-- 没选 -->
+          <StackPanel IsVisible="{Binding Details.IsEmpty}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+            <ui:Glyph Key="Mongo.file-search" Size="20" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+            <TextBlock Classes="ui small muted" Text="{Binding Loc[Fs_SelectHint]}" />
+          </StackPanel>
+
+          <!-- 目录 -->
+          <Grid RowDefinitions="36,*" IsVisible="{Binding Details.IsFolder}">
+            <Border Grid.Row="0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="12,0,6,0">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ui:Glyph Key="Mongo.folder" Size="13" Brush="{DynamicResource VelaFileFolderIcon}" />
+                <TextBlock Classes="mono primary medium trim" MaxWidth="260" Text="{Binding Details.Name}" />
+              </StackPanel>
+            </Border>
+            <StackPanel Grid.Row="1" Margin="12,12" Spacing="8">
+              <TextBlock Classes="ui secondary" Text="{Binding Details.FolderSummary}" />
+              <TextBlock Classes="ui small tertiary" Text="{Binding Details.FolderLastUpload}" />
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                <Button Theme="{StaticResource MongoOutlineButton}" Height="24" Padding="10,0"
+                        Command="{Binding OpenEntryCommand}" CommandParameter="{Binding Details.Entry}">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaFileFolderIcon}" />
+                    <TextBlock Text="{Binding Loc[Fs_OpenFolder]}" />
+                  </StackPanel>
+                </Button>
+                <Button Theme="{StaticResource MongoOutlineButton}" Height="24" Padding="10,0" Command="{Binding DownloadCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                    <TextBlock Text="{Binding Loc[Fs_Download]}" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </StackPanel>
+          </Grid>
+
+          <!-- 文件 -->
+          <Grid RowDefinitions="36,*" IsVisible="{Binding Details.IsFile}">
+            <Border Grid.Row="0" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="12,0,6,0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                  <Button Theme="{StaticResource MongoIconButton}" Command="{Binding Details.DownloadCommand}" ToolTip.Tip="{Binding Loc[Fs_Download]}">
+                    <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                  </Button>
+                  <Button Theme="{StaticResource MongoIconButton}" Command="{Binding Details.OpenExternalCommand}" ToolTip.Tip="{Binding Loc[Fs_OpenExternal]}">
+                    <ui:Glyph Key="Mongo.external-link" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                  </Button>
+                  <Button Theme="{StaticResource MongoIconButton}" Command="{Binding Details.DeleteCommand}" ToolTip.Tip="{Binding Loc[Fs_DeleteVersionTitle]}">
+                    <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+                  </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ui:Glyph Key="{Binding Details.IconKey}" Size="13" Brush="{Binding Details.IconToken, Converter={x:Static ui:Converters.Token}}" />
+                  <TextBlock Classes="mono primary medium trim" MaxWidth="140" Text="{Binding Details.Name}" />
+                  <Border Classes="tag" Classes.warn="{Binding !Details.IsShowingLatest}"
+                          IsVisible="{Binding Details.BadgeText, Converter={x:Static ui:Converters.NotEmpty}}">
+                    <TextBlock Text="{Binding Details.BadgeText}" />
+                  </Border>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+              <StackPanel>
+                <!-- 预览 -->
+                <Border Margin="12,10,12,10" Height="150" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                        Background="{DynamicResource VelaBgInput}" ClipToBounds="True">
+                  <Panel>
+                    <Image Source="{Binding Details.Image}" Stretch="UniformToFill" IsVisible="{Binding Details.HasImage}" />
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" IsVisible="{Binding !Details.HasImage}">
+                      <ui:Glyph Key="{Binding Details.IconKey}" Size="24" HorizontalAlignment="Center"
+                                Brush="{Binding Details.IconToken, Converter={x:Static ui:Converters.Token}}" />
+                      <TextBlock Classes="ui small muted" HorizontalAlignment="Center" Text="{Binding Details.PreviewMessage}" />
+                    </StackPanel>
+                  </Panel>
+                </Border>
+                <DockPanel Margin="12,0,12,8" Height="14">
+                  <Button DockPanel.Dock="Right" Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding Details.ZoomCommand}"
+                          IsVisible="{Binding Details.HasImage}">
+                    <TextBlock Classes="ui small info" Text="{Binding Loc[Fs_Zoom]}" />
+                  </Button>
+                  <TextBlock Classes="mono small muted trim" Text="{Binding Details.ImageInfo}" />
+                </DockPanel>
+
+                <!-- fs.files -->
+                <Border Classes="sec">
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="sectitle" Text="{Binding Details.FilesTitle}" />
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Classes="k" Text="_id" />
+                      <TextBlock Classes="v" Foreground="{DynamicResource VelaShellBlue}" Text="{Binding Details.IdText}" />
+                    </StackPanel>
+                    <DockPanel>
+                      <TextBlock Classes="k" Text="filename" />
+                      <TextBlock Classes="v" Foreground="{DynamicResource VelaShellCyan}" Text="{Binding Details.FilenameText}"
+                                 ToolTip.Tip="{Binding Details.FilenameText}" />
+                    </DockPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Classes="k" Text="length" />
+                      <TextBlock Classes="v" Foreground="{DynamicResource VelaShellGreen}" Text="{Binding Details.LengthText}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Classes="k" Text="chunkSize" />
+                      <TextBlock Classes="v" Foreground="{DynamicResource VelaShellGreen}" Text="{Binding Details.ChunkText}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Classes="k" Text="uploadDate" />
+                      <TextBlock Classes="v" Foreground="{DynamicResource VelaShellMagenta}" Text="{Binding Details.UploadText}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+
+                <!-- metadata -->
+                <Border Classes="sec">
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="sectitle" Text="metadata" />
+                    <Border Classes="input" Height="{Binding Details.MetadataHeight}" IsVisible="{Binding Details.IsViewing}">
+                      <ui:CodeEditor x:Name="MetaView" Text="{Binding Details.MetadataText, Mode=OneWay}" Language="Shell" IsReadOnly="True"
+                                     ShowLineNumbers="False" HighlightCurrentLine="False" FontSize="{DynamicResource VelaFontSize10}" />
+                    </Border>
+                    <Button Classes="link" Theme="{StaticResource MongoToolButton}" Command="{Binding Details.EditMetadataCommand}"
+                            IsVisible="{Binding Details.IsViewing}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.pencil" Size="11" Brush="{DynamicResource VelaInfo}" />
+                        <TextBlock Classes="ui small info" Text="{Binding Loc[Fs_EditMetadata]}" />
+                      </StackPanel>
+                    </Button>
+
+                    <Border Classes="input" Height="150" IsVisible="{Binding Details.IsEditing}"
+                            BorderBrush="{DynamicResource VelaAccent}">
+                      <ui:CodeEditor Text="{Binding Details.MetadataDraft}" Language="Shell" ShowLineNumbers="False"
+                                     HighlightCurrentLine="False" FontSize="{DynamicResource VelaFontSize10}" />
+                    </Border>
+                    <TextBlock Classes="ui small err wrap" Text="{Binding Details.MetadataError}" IsVisible="{Binding Details.HasMetadataError}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Details.IsEditing}">
+                      <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Content="{Binding Loc[Common_Save]}"
+                              Command="{Binding Details.SaveMetadataCommand}" />
+                      <Button Theme="{StaticResource MongoOutlineButton}" Height="24" Padding="10,0" Content="{Binding Loc[Common_Cancel]}"
+                              Command="{Binding Details.CancelMetadataCommand}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+
+                <!-- 版本(同名文件):旧版本可勾选几个一起删、单独删、恢复、下载;最新那份不给勾,删它走头部的删除按钮。 -->
+                <Border Classes="sec">
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="sectitle" Text="{Binding Loc[Fs_Versions]}" />
+                    <ItemsControl ItemsSource="{Binding Details.Versions}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:GridFsVersionRow">
+                          <DockPanel Height="22">
+                            <TextBlock DockPanel.Dock="Right" Classes="ui small muted" Text="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_Current]}"
+                                       IsVisible="{Binding IsCurrent}" />
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanRestore}">
+                              <Button Classes="link" Theme="{StaticResource MongoToolButton}"
+                                      Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Details.RestoreCommand}"
+                                      CommandParameter="{Binding}">
+                                <TextBlock Classes="ui small info" Text="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_Restore]}" />
+                              </Button>
+                              <Button Classes="link" Theme="{StaticResource MongoToolButton}"
+                                      Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Details.DownloadVersionCommand}"
+                                      CommandParameter="{Binding}">
+                                <TextBlock Classes="ui small info" Text="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_Download]}" />
+                              </Button>
+                              <Button Theme="{StaticResource MongoIconButton}" Width="18" Height="18" Classes="delversion"
+                                      Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Details.DeleteVersionCommand}"
+                                      CommandParameter="{Binding}"
+                                      ToolTip.Tip="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_DeleteVersionTitle]}">
+                                <ui:Glyph Key="Mongo.trash-2" Size="11" Brush="{DynamicResource VelaError}" />
+                              </Button>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <!-- 勾选框占位 20px:最新那一行没有勾,版本号照样与其余行对齐。 -->
+                              <Panel Width="20">
+                                <CheckBox Theme="{StaticResource FsCheck}" IsChecked="{Binding IsChecked}" IsVisible="{Binding CanRestore}" />
+                              </Panel>
+                              <Ellipse Classes="dot" Classes.accent="{Binding IsCurrent}" />
+                              <Button Classes="link" Theme="{StaticResource MongoToolButton}" Height="18"
+                                      Command="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Details.ShowVersionCommand}"
+                                      CommandParameter="{Binding}">
+                                <TextBlock Classes="mono" Classes.accent="{Binding IsCurrent}" Classes.medium="{Binding IsCurrent}"
+                                           Classes.primary="{Binding IsShown}" Text="{Binding Label}" />
+                              </Button>
+                              <TextBlock Classes="mono small tertiary" Text="{Binding SizeText}" />
+                              <TextBlock Classes="mono small tertiary" Text="{Binding DateText}" />
+                            </StackPanel>
+                          </DockPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- 有旧版本时:删勾选的几个(没勾时是一句提示)/ 只保留最新版本。占用随版本一份份涨,这是腾地方的入口。 -->
+                    <StackPanel Spacing="2" Margin="26,2,0,0" IsVisible="{Binding Details.HasOldVersions}">
+                      <TextBlock Classes="ui small muted" Text="{Binding Details.DeleteCheckedText}" IsVisible="{Binding !Details.HasCheckedVersions}" />
+                      <Button Classes="link" Theme="{StaticResource MongoToolButton}" HorizontalAlignment="Left"
+                              Command="{Binding Details.DeleteCheckedVersionsCommand}" IsVisible="{Binding Details.HasCheckedVersions}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ui:Glyph Key="Mongo.trash-2" Size="11" Brush="{DynamicResource VelaError}" />
+                          <TextBlock Classes="ui small err" Text="{Binding Details.DeleteCheckedText}" />
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="link" Theme="{StaticResource MongoToolButton}" HorizontalAlignment="Left"
+                              Command="{Binding Details.KeepLatestOnlyCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ui:Glyph Key="Mongo.eraser" Size="11" Brush="{DynamicResource VelaError}" />
+                          <TextBlock Classes="ui small err" Text="{Binding Details.KeepLatestText}" />
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Panel>
+      </Border>
+    </Grid>
+
+    <!-- ══ 传输底栏 ══════════════════════════════════════════════════════════════ -->
+    <Border Grid.Row="3" Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+            BorderThickness="0,1,0,0" Padding="12,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <TextBlock Classes="ui small secondary" Text="{Binding SelectionSummary}"
+                     IsVisible="{Binding SelectionSummary, Converter={x:Static ui:Converters.NotEmpty}}" />
+          <TextBlock Classes="mono small tertiary" Text="{Binding ListingSummary}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ui:Glyph Key="{Binding TransferIcon}" Size="12" Brush="{Binding TransferIconToken, Converter={x:Static ui:Converters.Token}}" />
+          <TextBlock Classes="ui secondary" Text="{Binding TransferTitle}" />
+          <ui:GridFsBar Width="180" Height="6" Value="{Binding TransferProgress}" IsVisible="{Binding IsTransferring}"
+                        Track="{DynamicResource VelaBorderPrimary}" Fill="{DynamicResource VelaAccent}" />
+          <TextBlock Classes="mono small tertiary" Text="{Binding TransferStats}" IsVisible="{Binding IsTransferring}" />
+          <TextBlock Classes="ui small muted" Text="{Binding QueueText}" IsVisible="{Binding HasQueue}" />
+          <Button Theme="{StaticResource MongoIconButton}" Width="20" Height="20" Command="{Binding CancelTransfersCommand}"
+                  IsVisible="{Binding IsTransferring}" ToolTip.Tip="{Binding Loc[Fs_CancelTransfers]}">
+            <ui:Glyph Key="Mongo.x" Size="11" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

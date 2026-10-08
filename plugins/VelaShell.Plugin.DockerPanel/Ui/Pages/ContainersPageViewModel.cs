@@ -1,5 +1,5 @@
-using Avalonia.Controls;
 using System.Collections.ObjectModel;
+using Avalonia.Controls;
 using VelaShell.Plugin.DockerPanel.Docker;
 
 namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
@@ -185,14 +185,14 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     private void BuildProjectFilters()
     {
         ProjectFilters.Clear();
-        foreach (var group in _all
+        foreach (IGrouping<string, ContainerRow>? group in _all
                      .GroupBy(r => r.Project)
                      .Where(g => g.Key.Length > 0)
                      .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
         {
             ProjectFilters.Add(new(group.Key, group.Key, group.Count()));
         }
-        var loose = _all.Count(r => r.Project.Length == 0);
+        int loose = _all.Count(r => r.Project.Length == 0);
         if (loose > 0)
         {
             ProjectFilters.Add(new("", "(不属于任何项目)", loose));
@@ -237,13 +237,13 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             {
                 return false;
             }
-            var picked = View.Count(r => r.Selected);
+            int picked = View.Count(r => r.Selected);
             return picked == 0 ? false : picked == View.Count ? true : null;
         }
         set
         {
-            var select = value is true;
-            foreach (var row in View)
+            bool select = value is true;
+            foreach (ContainerRow row in View)
             {
                 row.Selected = select;
             }
@@ -411,7 +411,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         Busy = true;
         try
         {
-            var summaries = await client.ListContainersAsync(true, cancellationToken).ConfigureAwait(true);
+            ContainerSummary[] summaries = await client.ListContainersAsync(true, cancellationToken).ConfigureAwait(true);
             // 在跑的排前面,同组内按名字 —— 运维找的十有八九是正在跑的那几个。
             List<ContainerRow> incoming =
             [
@@ -422,9 +422,9 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             ];
             var previous = _all.ToDictionary(r => r.Id);
             _all.Clear();
-            foreach (var row in incoming)
+            foreach (ContainerRow row in incoming)
             {
-                if (previous.TryGetValue(row.Id, out var existing))
+                if (previous.TryGetValue(row.Id, out ContainerRow? existing))
                 {
                     existing.Update(row);
                     _all.Add(existing);
@@ -472,8 +472,8 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
 
     private void ApplyView()
     {
-        var needle = Search.Trim();
-        var filtered = _all.Where(row => Filter switch
+        string needle = Search.Trim();
+        IEnumerable<ContainerRow> filtered = _all.Where(row => Filter switch
         {
             ContainerFilter.Running => row.IsRunning,
             ContainerFilter.Stopped => !row.IsRunning && !row.IsPaused,
@@ -504,7 +504,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
 
     private void ClearSelection()
     {
-        foreach (var row in _all.Where(r => r.Selected))
+        foreach (ContainerRow? row in _all.Where(r => r.Selected))
         {
             row.Selected = false;
         }
@@ -529,16 +529,16 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         {
             return;
         }
-        foreach (var row in targets)
+        foreach (ContainerRow row in targets)
         {
             row.Busy = true;
         }
-        var task = Shell.Tasks.Start("Docker.box", $"{verb} {targets.Count} 个容器", indeterminate: targets.Count == 1);
+        PanelTask task = Shell.Tasks.Start("Docker.box", $"{verb} {targets.Count} 个容器", indeterminate: targets.Count == 1);
         // 选中条原地变进度条:不弹窗、不遮列表,选中也不丢。
         BatchProgress = new(verb, targets.Count, task);
         try
         {
-            var result = await BatchRunner.RunAsync(
+            BatchResult result = await BatchRunner.RunAsync(
                 [.. targets.Select(r => (Target: r, r.Name))],
                 (row, ct) => action(client, row.Id, ct),
                 (done, total, current) =>
@@ -568,7 +568,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         finally
         {
             BatchProgress = null;
-            foreach (var row in targets)
+            foreach (ContainerRow row in targets)
             {
                 row.Busy = false;
             }
@@ -641,7 +641,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         {
             return;
         }
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = targets.Count == 1 ? $"强制杀死 {targets[0].Name}?" : $"强制杀死 {targets.Count} 个容器?",
             Icon = "Icon.zap",
@@ -669,7 +669,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         {
             return;
         }
-        var anyRunning = targets.Any(t => t.IsRunning);
+        bool anyRunning = targets.Any(t => t.IsRunning);
         string[] projects = [.. targets.Select(t => t.Project).Where(p => p.Length > 0).Distinct()];
         List<ConfirmConsequence> consequences =
         [
@@ -685,7 +685,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             consequences.Add(new(0,
                 $"它们属于 compose 项目 {string.Join('、', projects)},下次 up -d 会按 compose.yaml 重建。"));
         }
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = targets.Count == 1 ? $"删除容器 {targets[0].Name}?" : $"删除 {targets.Count} 个容器?",
             Icon = "Icon.trash-2",
@@ -789,8 +789,8 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     /// <summary>来源全选 / 全不选。</summary>
     public RelayCommand ToggleAllSourcesCommand => field ??= new(_ =>
     {
-        var select = LogSources.Any(s => !s.Selected);
-        foreach (var item in LogSources)
+        bool select = LogSources.Any(s => !s.Selected);
+        foreach (LogSourceItem item in LogSources)
         {
             item.Selected = select;
         }
@@ -820,7 +820,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             MergedLogs = null;
             await logs.DisposeAsync().ConfigureAwait(true);
         }
-        foreach (var item in LogSources)
+        foreach (LogSourceItem item in LogSources)
         {
             item.SelectionChanged -= OnLogSourceToggled;
         }
@@ -829,7 +829,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
 
     private void BuildLogSources(IReadOnlyList<ContainerRow> seed)
     {
-        foreach (var existing in LogSources)
+        foreach (LogSourceItem existing in LogSources)
         {
             existing.SelectionChanged -= OnLogSourceToggled;
         }
@@ -837,8 +837,8 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         HashSet<string> seeded = [.. seed.Select(r => r.Id)];
         // 全部容器都列出来(含已停止的)—— 已停止容器的日志依然读得到,
         // 而"为什么它退出了"恰恰是最常要看的一份日志。
-        var index = 0;
-        foreach (var row in _all)
+        int index = 0;
+        foreach (ContainerRow row in _all)
         {
             var item = new LogSourceItem(
                 new(row.Id, row.Name, row.Summary.State == "running"),
@@ -867,7 +867,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         // 颜色序号按**选中顺序里的位置**重新编号,而不是用列表里的下标:
         // 否则只选两个相邻容器时会拿到两个几乎一样的颜色。
         List<LogSourceItem> selected = [.. LogSources.Where(s => s.Selected)];
-        for (var i = 0; i < selected.Count; i++)
+        for (int i = 0; i < selected.Count; i++)
         {
             selected[i].Index = i;
         }
@@ -876,8 +876,8 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
 
     private void ApplyLogSourceView()
     {
-        var needle = LogSourceSearch.Trim();
-        foreach (var item in LogSources)
+        string needle = LogSourceSearch.Trim();
+        foreach (LogSourceItem item in LogSources)
         {
             item.Visible = needle.Length == 0
                            || item.Name.Contains(needle, StringComparison.OrdinalIgnoreCase);
@@ -958,13 +958,13 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         }
         try
         {
-            var inspect = await client.InspectContainerAsync(row.Id, Shell.Lifetime).ConfigureAwait(true);
+            ContainerInspect inspect = await client.InspectContainerAsync(row.Id, Shell.Lifetime).ConfigureAwait(true);
             string[]? imageEnv = null;
             if (inspect.Config?.Image is { Length: > 0 } image)
             {
                 try
                 {
-                    var imageInspect = await client.InspectImageAsync(image, Shell.Lifetime).ConfigureAwait(true);
+                    ImageInspect imageInspect = await client.InspectImageAsync(image, Shell.Lifetime).ConfigureAwait(true);
                     imageEnv = imageInspect.Config?.Env;
                 }
                 catch (Exception)
@@ -972,10 +972,10 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
                     // 镜像已经被删了(容器还在跑)也很常见 —— 那就不减,多几条环境变量而已。
                 }
             }
-            var command = RunCommandBuilder.Build(inspect, imageEnv);
+            string command = RunCommandBuilder.Build(inspect, imageEnv);
             await Shell.Context.Clipboard
                 .SetTextAsync($"{command}\n{RunCommandBuilder.Caveat}", Shell.Lifetime).ConfigureAwait(true);
-            Shell.Feedback.Notify(FeedbackKind.Success, "已复制 docker run 命令",
+            _ = Shell.Feedback.Notify(FeedbackKind.Success, "已复制 docker run 命令",
                 "由 inspect 反推,是近似值 —— 执行前请核对(提醒已一并复制)。");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1025,7 +1025,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     /// </summary>
     private void MarkCurrent(string? id)
     {
-        foreach (var row in _all)
+        foreach (ContainerRow row in _all)
         {
             row.Current = row.Id == id;
         }

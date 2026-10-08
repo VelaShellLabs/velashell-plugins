@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.ConfirmDialogView"
+             x:DataType="ui:ConfirmDialogViewModel">
+
+  <!-- 确认框(设计稿 22「删除集合」):写清后果 → 列出事实 → 生产连接手打名称 → 红色描边按钮。 -->
+  <Grid RowDefinitions="*,48">
+    <StackPanel Grid.Row="0" Margin="16,14,16,14" Spacing="12">
+      <TextBlock Classes="ui primary wrap" Text="{Binding Request.Message}" />
+
+      <ItemsControl ItemsSource="{Binding Request.Facts}" IsVisible="{Binding Request.Facts.Count, Converter={x:Static ui:Converters.Positive}}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="8" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="ui:ConfirmFact">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Classes="mono secondary" Text="{Binding Value}" />
+              <TextBlock Classes="ui small tertiary" Text="{Binding Label}" />
+            </DockPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <StackPanel Spacing="6" IsVisible="{Binding RequiresTyping}">
+        <TextBlock Classes="ui small secondary" Text="{Binding Loc[Confirm_TypeName]}" />
+        <TextBox x:Name="TypedBox" Theme="{StaticResource MongoTextBox}" Height="30" Classes="invalid"
+                 Classes.invalid="{Binding !CanConfirm}" PlaceholderText="{Binding Request.TypeToConfirm}"
+                 Text="{Binding Typed}" />
+      </StackPanel>
+
+      <Button Theme="{StaticResource MongoToolButton}" Padding="0" HorizontalAlignment="Left"
+              Command="{Binding AsideCommand}" IsVisible="{Binding Request.AsideLabel, Converter={x:Static ui:Converters.NotEmpty}}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <ui:Glyph Key="Mongo.archive" Size="12" Brush="{DynamicResource VelaInfo}" />
+          <TextBlock Classes="ui small info" Text="{Binding Request.AsideLabel}" />
+        </StackPanel>
+      </Button>
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+        <Button x:Name="ConfirmButton" Theme="{StaticResource MongoDangerButton}" Command="{Binding ConfirmCommand}"
+                IsVisible="{Binding Request.Danger}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+            <TextBlock Text="{Binding Request.ConfirmLabel}" />
+          </StackPanel>
+        </Button>
+        <Button Theme="{StaticResource MongoPillButton}" Command="{Binding ConfirmCommand}" Content="{Binding Request.ConfirmLabel}"
+                IsVisible="{Binding !Request.Danger}" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

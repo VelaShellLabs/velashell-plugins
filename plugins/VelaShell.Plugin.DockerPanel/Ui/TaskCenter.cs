@@ -181,7 +181,7 @@ public sealed class TaskCenter : ObservableObject
     {
         get
         {
-            var progress = OverallProgress;
+            double progress = OverallProgress;
             return progress <= 0 ? "" : $"{progress * 100:0}%";
         }
     }
@@ -205,9 +205,9 @@ public sealed class TaskCenter : ObservableObject
     {
         Ui.Post(() =>
         {
-            foreach (var task in Tasks.Where(t => t.IsFinished).ToArray())
+            foreach (PanelTask? task in Tasks.Where(t => t.IsFinished).ToArray())
             {
-                Tasks.Remove(task);
+                _ = Tasks.Remove(task);
                 task.Dispose();
             }
             RaiseSummary();
@@ -217,7 +217,7 @@ public sealed class TaskCenter : ObservableObject
     /// <summary>取消全部进行中的任务(面板关闭时)。</summary>
     public void CancelAll()
     {
-        foreach (var task in Tasks.Where(t => t.IsRunning).ToArray())
+        foreach (PanelTask? task in Tasks.Where(t => t.IsRunning).ToArray())
         {
             task.Cancel();
         }
@@ -226,9 +226,9 @@ public sealed class TaskCenter : ObservableObject
     private void Trim()
     {
         PanelTask[] finished = [.. Tasks.Where(t => t.IsFinished)];
-        for (var i = MaxFinished; i < finished.Length; i++)
+        for (int i = MaxFinished; i < finished.Length; i++)
         {
-            Tasks.Remove(finished[i]);
+            _ = Tasks.Remove(finished[i]);
             finished[i].Dispose();
         }
     }
@@ -260,12 +260,12 @@ public sealed class PullAggregator
             // 没有 id 的帧是总览行("Pulling from library/nginx"、最终摘要),不计进层里。
             return;
         }
-        var current = frame.ProgressDetail?.Current ?? 0;
-        var total = frame.ProgressDetail?.Total ?? 0;
-        var status = frame.Status ?? "";
+        long current = frame.ProgressDetail?.Current ?? 0;
+        long total = frame.ProgressDetail?.Total ?? 0;
+        string status = frame.Status ?? "";
         // "Pull complete" / "Already exists" 之后不再有字节明细,
         // 但它们已经算 100% —— 沿用上一次拿到的 total,免得进度条在最后一刻回退。
-        if (_layers.TryGetValue(frame.Id, out var previous))
+        if (_layers.TryGetValue(frame.Id, out LayerState? previous))
         {
             if (total == 0)
             {

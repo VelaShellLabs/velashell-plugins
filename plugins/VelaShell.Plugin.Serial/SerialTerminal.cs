@@ -27,7 +27,7 @@ internal sealed class SerialTerminal(
     {
         ArgumentNullException.ThrowIfNull(request);
         var loc = new Loc(context.Host.Locale);
-        SerialConfig config = SerialConfig.Parse(request);
+        var config = SerialConfig.Parse(request);
         if (config.PortName.Length == 0)
         {
             // 唯一一条"连都不用试"的判据。宿主对声明了 NoEndpoint 的协议不再校验主机非空,
@@ -37,7 +37,7 @@ internal sealed class SerialTerminal(
         }
         try
         {
-            SerialSession session = SerialSession.Connect(config, context.Log, open);
+            var session = SerialSession.Connect(config, context.Log, open);
             sessions.Add(session);
             return Task.FromResult<IProtocolTerminalSession>(session);
         }

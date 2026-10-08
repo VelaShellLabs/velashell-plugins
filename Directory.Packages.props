@@ -1,7 +1,7 @@
 <Project>
   <!--
     中央包版本管理(CPM)。本仓库所有工程的 NuGet 版本号只在这一处出现 ——
-    五个插件 + 五个测试工程,谁也不许在 csproj 里写 Version=。
+    六个插件 + 六个测试工程,谁也不许在 csproj 里写 Version=。
 
     为什么值得:插件之间会共用同一个包(AWSSDK.S3 在 S3 插件与它的测试里各一份、
     Avalonia 在测试工程里五处),版本散在各 csproj 时"改了一处忘了另一处"没有任何
@@ -17,9 +17,9 @@
     <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
          plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
          所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.0.6" />
+    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.0.8" />
     <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.0.6" />
+    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.0.8" />
   </ItemGroup>
   <ItemGroup Label="Avalonia(仅测试工程用:测试宿主扮演装载方,要提供运行时那份)">
     <!-- ⚠️ 必须与 VelaShell.PluginSdk.Build 锁给插件工程的那一版**完全相同** ——
@@ -30,24 +30,34 @@
     <PackageVersion Include="Avalonia.Headless" Version="12.1.3" />
     <!-- 菜单等控件的模板由主题提供:没有它 MenuItem 无模板、不可命中,真实点击测不了。 -->
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+    <!-- 真渲染(Skia)的 headless 截图:MongoDB 插件的界面回归要拿像素和设计稿比,
+         UseHeadlessDrawing 那条假绘制路径给不出位图。同样只服务于测试工程,版本随上面三个一起走。 -->
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.3" />
   </ItemGroup>
-  <ItemGroup Label="Docker 面板插件">
+  <ItemGroup Label="Docker 面板与 MongoDB 插件">
     <!-- MIT。**只在编译期** —— 程序集名 AvaloniaEdit 命中装载器的 "Avalonia" 前缀,
          运行时一律回落到宿主那份,因此版本必须与宿主一致。权威值同样来自 SDK 包
          (VelaSdkPinnedAvaloniaEditVersion),由 Directory.Build.targets 的
          VerifyAvaloniaEditMatchesSdk 在构建期核对(VELAP1001)。
-         漂了**在本仓库一个测试都不会红**:要等用户装上插件、打开一个 compose.yaml 才炸。 -->
+         漂了**在本仓库一个测试都不会红**:要等用户装上插件、打开一个 compose.yaml 才炸。
+         MongoDB 插件的查询编辑器 / JSON 视图同样只在编译期引它;它的测试工程要自己带运行时那份(测试宿主扮演装载方)。 -->
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
   </ItemGroup>
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
     <PackageVersion Include="StackExchange.Redis" Version="3.3.1" />
   </ItemGroup>
+  <ItemGroup Label="MongoDB 插件">
+    <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发(连同它带的
+         MongoDB.Bson / DnsClient / SharpCompress / Snappier / ZstdSharp)。
+         测试工程也引它:种数据与清理走同一个驱动,版本集中管才不会两边各说各话。 -->
+    <PackageVersion Include="MongoDB.Driver" Version="3.12.0" />
+  </ItemGroup>
   <ItemGroup Label="S3 插件">
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
          测试工程也要引它(环回服务器要按收到的原始请求行重算 SigV4),
          集中管版本正是为了这两处永远一致。 -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.103.4" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.1" />
   </ItemGroup>
   <ItemGroup Label="串口插件">
     <!-- MIT,微软自家维护,Windows / Linux / macOS 的 RID 原生包齐全。

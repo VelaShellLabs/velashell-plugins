@@ -35,7 +35,7 @@ public sealed class RedisDiscoveryTests
     public async Task Probe_ParsesSsOutput()
     {
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected(host: "prod-1");
+        _ = context.FakeSessions.AddConnected(host: "prod-1");
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\",pid=1204,fd=6))\n",
@@ -55,7 +55,7 @@ public sealed class RedisDiscoveryTests
     public async Task Probe_ParsesNetstatOutputOnOlderSystems()
     {
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "tcp 0 0 127.0.0.1:6379 0.0.0.0:* LISTEN 1204/redis-server\n",
@@ -74,7 +74,7 @@ public sealed class RedisDiscoveryTests
     {
         // 一台机器上跑两个实例是常态。
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6380 0.0.0.0:* users:((\"redis-server\"))\n"
@@ -93,7 +93,7 @@ public sealed class RedisDiscoveryTests
     {
         // ss/netstat 都拿不到(容器里常见),但进程命令行还在。
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             string.Empty,
@@ -111,7 +111,7 @@ public sealed class RedisDiscoveryTests
     public async Task Probe_ReadsPortPasswordAndTlsFromTheConfigFile()
     {
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n"
@@ -145,7 +145,7 @@ public sealed class RedisDiscoveryTests
         // 配置常常只有 root 可读。读不到不该表现成"探测失败" ——
         // 只意味着用户要自己填一次密码。
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n",
@@ -165,7 +165,7 @@ public sealed class RedisDiscoveryTests
     public async Task Probe_NothingListening_ReturnsEmpty()
     {
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(string.Empty, string.Empty, string.Empty, string.Empty);
 
@@ -177,7 +177,7 @@ public sealed class RedisDiscoveryTests
     {
         // 远端连不上/命令被禁:探测无果,不是异常 —— 命令面板里的命令不该把宿主吓一跳。
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => throw new InvalidOperationException("no exec channel");
 
@@ -188,8 +188,8 @@ public sealed class RedisDiscoveryTests
     public async Task ConnectedSessions_SkipsSessionsThatAreNotConnected()
     {
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected(host: "up-1");
-        context.FakeSessions.AddConnected(host: "up-2");
+        _ = context.FakeSessions.AddConnected(host: "up-1");
+        _ = context.FakeSessions.AddConnected(host: "up-2");
 
         IReadOnlyList<PluginSdk.Sessions.SessionInfo> sessions =
             await new RedisDiscovery(context).ConnectedSessionsAsync();
@@ -206,7 +206,7 @@ public sealed class RedisDiscoveryTests
     public async Task DiscoverCommand_ProposesOneConnectionPerInstance()
     {
         using TestPluginContext context = NewContext("zh-Hans");
-        context.FakeSessions.AddConnected(host: "prod-1");
+        _ = context.FakeSessions.AddConnected(host: "prod-1");
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n"
             + "LISTEN 0 511 127.0.0.1:6380 0.0.0.0:* users:((\"redis-server\"))\n",
@@ -234,7 +234,7 @@ public sealed class RedisDiscoveryTests
     {
         // 取消一条就是"够了"的信号,继续弹下一个只会烦人。
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n"
             + "LISTEN 0 511 127.0.0.1:6380 0.0.0.0:* users:((\"redis-server\"))\n",
@@ -251,7 +251,7 @@ public sealed class RedisDiscoveryTests
     public async Task DiscoverCommand_CarriesTheDiscoveredPasswordButNeverLogsIt()
     {
         using TestPluginContext context = NewContext();
-        context.FakeSessions.AddConnected();
+        _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
         context.FakeRemoteExec.Handler = (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n",
@@ -288,7 +288,7 @@ public sealed class RedisDiscoveryTests
         // 借宿主的对话框去替别家建配置 —— 能力面必须挡住。
         using TestPluginContext context = NewContext();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
             context.Workspaces.ProposeConnectionAsync(new()
             {
                 WorkspaceId = "other.vendor",
@@ -303,7 +303,7 @@ public sealed class RedisDiscoveryTests
     {
         using TestPluginContext context = NewContext();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
             context.Workspaces.ProposeConnectionAsync(new()
             {
                 WorkspaceId = PluginId,

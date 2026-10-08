@@ -39,7 +39,7 @@ public sealed class StatsSampler(Func<DockerClient?> clientAccessor) : IAsyncDis
         _targets = targets;
         _onRound = onRound;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
-        var token = _cts.Token;
+        CancellationToken token = _cts.Token;
         _loop = Task.Run(() => LoopAsync(token), token);
     }
 
@@ -56,8 +56,8 @@ public sealed class StatsSampler(Func<DockerClient?> clientAccessor) : IAsyncDis
     {
         while (!token.IsCancellationRequested)
         {
-            var client = clientAccessor();
-            var rows = _targets?.Invoke() ?? [];
+            DockerClient? client = clientAccessor();
+            IReadOnlyList<ContainerRow> rows = _targets?.Invoke() ?? [];
             if (client is not null && rows.Count > 0)
             {
                 await Task.WhenAll(rows.Select(row => SampleAsync(client, row, token))).ConfigureAwait(false);
@@ -89,7 +89,7 @@ public sealed class StatsSampler(Func<DockerClient?> clientAccessor) : IAsyncDis
         }
         try
         {
-            var stats = await client.StatsSnapshotAsync(row.Id, token).ConfigureAwait(false);
+            ContainerStats? stats = await client.StatsSnapshotAsync(row.Id, token).ConfigureAwait(false);
             if (stats is not null)
             {
                 Ui.Post(() => row.ApplyStats(stats));
@@ -101,7 +101,7 @@ public sealed class StatsSampler(Func<DockerClient?> clientAccessor) : IAsyncDis
         }
         finally
         {
-            _gate.Release();
+            _ = _gate.Release();
         }
     }
 

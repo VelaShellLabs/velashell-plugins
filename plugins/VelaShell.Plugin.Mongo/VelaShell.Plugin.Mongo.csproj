@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>VelaShell MongoDB 插件:Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Schema 分析、索引建议与 GridFS;网格 / 树 / JSON 三视图共用一份数据,所有编辑先进暂存区。</Description>
+    <!-- 与 plugin.json 的 id 一致;驱动构建后复制到应用输出的 plugins/<目录名>/
+         (目录名 = id 把点换成短横,原因见 plugins/Directory.Build.targets)。 -->
+    <VelaPluginId>velashell.mongo</VelaPluginId>
+    <!-- AVLN3001:面板与对话框视图刻意只有带视图模型的构造(由文档工厂创建),
+         不走运行时 XAML 装载器的无参构造路径。 -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 契约程序集 + Avalonia + AXAML 编译器 + 清单校验 + PackVpx,一个包全到位。 -->
+    <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- 官方驱动(Apache-2.0)。**随插件目录分发**,由插件 ALC 按 deps.json 隔离解析 ——
+         不用 MongoDB 的用户,安装包里不必带它。驱动的异常类型不得越过插件边界,
+         出口一律翻成 SDK 的 Protocol* 四类(见 MongoWorkspaceProvider)。 -->
+    <PackageReference Include="MongoDB.Driver" />
+    <!--
+         查询编辑器、JSON 视图、管道阶段与验证规则都要语法高亮、行号与补全弹层 ——
+         TextBox 一样也给不了。与 DockerPanel 同一条路:**只在编译期**引 AvaloniaEdit,
+         程序集名命中装载器的 "Avalonia" 共享前缀,运行时一律回落到宿主那份
+         (版本由根 Directory.Build.targets 的 VELAP1001 核对)。
+
+         ⚠️ ExcludeAssets="runtime" 必须显式写:SDK 包的 VelaExcludeSharedRuntimeAssets
+         排不掉 AvaloniaEdit 带进来的传递依赖 MicroCom.Runtime.dll(理由见 plugins/README.md)。 -->
+    <PackageReference Include="Avalonia.AvaloniaEdit" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 语法高亮定义:HighlightingLoader 要普通 Stream,所以是 EmbeddedResource。 -->
+    <EmbeddedResource Include="Syntax/*.xshd" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单测直接驱动内部实现(设置解析、shell 解析器、暂存区、Schema 分析、导入导出)。 -->
+    <InternalsVisibleTo Include="VelaShell.Plugin.Mongo.Tests" />
+  </ItemGroup>
+
+</Project>

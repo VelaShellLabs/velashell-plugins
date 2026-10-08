@@ -82,18 +82,18 @@ public static class RedisValueText
         var builder = new StringBuilder(raw.Length);
         foreach (byte b in raw)
         {
-            switch (b)
+            _ = b switch
             {
-                case (byte)'\\': builder.Append("\\\\"); break;
-                case (byte)'"': builder.Append("\\\""); break;
-                case (byte)'\n': builder.Append("\\n"); break;
-                case (byte)'\r': builder.Append("\\r"); break;
-                case (byte)'\t': builder.Append("\\t"); break;
-                case (byte)'\a': builder.Append("\\a"); break;
-                case (byte)'\b': builder.Append("\\b"); break;
-                case >= 0x20 and < 0x7F: builder.Append((char)b); break;
-                default: builder.Append("\\x").Append(b.ToString("x2", CultureInfo.InvariantCulture)); break;
-            }
+                (byte)'\\' => builder.Append("\\\\"),
+                (byte)'"' => builder.Append("\\\""),
+                (byte)'\n' => builder.Append("\\n"),
+                (byte)'\r' => builder.Append("\\r"),
+                (byte)'\t' => builder.Append("\\t"),
+                (byte)'\a' => builder.Append("\\a"),
+                (byte)'\b' => builder.Append("\\b"),
+                >= 0x20 and < 0x7F => builder.Append((char)b),
+                _ => builder.Append("\\x").Append(b.ToString("x2", CultureInfo.InvariantCulture)),
+            };
         }
         return builder.ToString();
     }
@@ -174,21 +174,21 @@ public static class RedisValueText
         var builder = new StringBuilder(raw.Length / PerLine * 78 + 16);
         for (int offset = 0; offset < raw.Length; offset += PerLine)
         {
-            builder.Append(offset.ToString("x8", CultureInfo.InvariantCulture)).Append("  ");
+            _ = builder.Append(offset.ToString("x8", CultureInfo.InvariantCulture)).Append("  ");
             for (int i = 0; i < PerLine; i++)
             {
-                builder.Append(offset + i < raw.Length
+                _ = builder.Append(offset + i < raw.Length
                     ? raw[offset + i].ToString("x2", CultureInfo.InvariantCulture)
                     : "  ");
-                builder.Append(i == PerLine / 2 - 1 ? "  " : " ");
+                _ = builder.Append(i == PerLine / 2 - 1 ? "  " : " ");
             }
-            builder.Append(" |");
+            _ = builder.Append(" |");
             for (int i = 0; i < PerLine && offset + i < raw.Length; i++)
             {
                 byte b = raw[offset + i];
-                builder.Append(b is >= 0x20 and < 0x7F ? (char)b : '.');
+                _ = builder.Append(b is >= 0x20 and < 0x7F ? (char)b : '.');
             }
-            builder.Append("|\n");
+            _ = builder.Append("|\n");
         }
         return builder.ToString();
     }

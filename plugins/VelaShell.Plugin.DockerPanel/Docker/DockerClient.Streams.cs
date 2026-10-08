@@ -17,9 +17,9 @@ public sealed partial class DockerClient
     public async Task StreamEventsAsync(DateTimeOffset? since, Action<DockerEvent> onEvent,
         CancellationToken cancellationToken)
     {
-        var path = "/events" + Query(("since", since?.ToUnixTimeSeconds().ToString()));
-        using var response = await OpenStreamAsync(HttpMethod.Get, path, cancellationToken).ConfigureAwait(false);
-        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        string path = "/events" + Query(("since", since?.ToUnixTimeSeconds().ToString()));
+        using HttpResponseMessage response = await OpenStreamAsync(HttpMethod.Get, path, cancellationToken).ConfigureAwait(false);
+        await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var reader = new StreamReader(body);
         while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
@@ -58,15 +58,15 @@ public sealed partial class DockerClient
     public async Task StreamLogsAsync(string id, bool tty, bool follow, string tail, bool timestamps,
         DateTimeOffset? since, Action<DockerLogLine> onLine, CancellationToken cancellationToken)
     {
-        var path = $"/containers/{Uri.EscapeDataString(id)}/logs" + Query(
+        string path = $"/containers/{Uri.EscapeDataString(id)}/logs" + Query(
             ("stdout", "1"),
             ("stderr", "1"),
             ("follow", follow ? "1" : "0"),
             ("tail", string.IsNullOrWhiteSpace(tail) ? "500" : tail),
             ("timestamps", timestamps ? "1" : "0"),
             ("since", since?.ToUnixTimeSeconds().ToString()));
-        using var response = await OpenStreamAsync(HttpMethod.Get, path, cancellationToken).ConfigureAwait(false);
-        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await OpenStreamAsync(HttpMethod.Get, path, cancellationToken).ConfigureAwait(false);
+        await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         var decoder = new DockerFrameDecoder(tty, timestamps);
         await decoder.ReadAsync(body, onLine, cancellationToken).ConfigureAwait(false);
     }
@@ -77,9 +77,9 @@ public sealed partial class DockerClient
     /// </summary>
     public async Task StreamStatsAsync(string id, Action<ContainerStats> onSample, CancellationToken cancellationToken)
     {
-        var path = $"/containers/{Uri.EscapeDataString(id)}/stats" + Query(("stream", "1"), ("one-shot", "0"));
-        using var response = await OpenStreamAsync(HttpMethod.Get, path, cancellationToken).ConfigureAwait(false);
-        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        string path = $"/containers/{Uri.EscapeDataString(id)}/stats" + Query(("stream", "1"), ("one-shot", "0"));
+        using HttpResponseMessage response = await OpenStreamAsync(HttpMethod.Get, path, cancellationToken).ConfigureAwait(false);
+        await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var reader = new StreamReader(body);
         while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
@@ -109,8 +109,8 @@ public sealed partial class DockerClient
     /// </summary>
     public async Task<ContainerStats?> StatsSnapshotAsync(string id, CancellationToken cancellationToken = default)
     {
-        var path = $"/containers/{Uri.EscapeDataString(id)}/stats" + Query(("stream", "0"), ("one-shot", "0"));
-        var body = await GetStringAsync(path, cancellationToken).ConfigureAwait(false);
+        string path = $"/containers/{Uri.EscapeDataString(id)}/stats" + Query(("stream", "0"), ("one-shot", "0"));
+        string body = await GetStringAsync(path, cancellationToken).ConfigureAwait(false);
         return DockerJson.TryDeserialize<ContainerStats>(body);
     }
 }

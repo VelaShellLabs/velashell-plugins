@@ -1,0 +1,447 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.ProfilerTabView"
+             x:DataType="ui:ProfilerTabViewModel">
+
+  <!-- 慢查询与当前操作(设计稿 15):36px 工具行 / $currentOp 表(32 + 24 + 28×n)/
+       慢查询按形状聚合(40px 两行)| 340px 详情。 -->
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+
+    <!-- slowms / sampleRate:标签 + 无边框输入,外框是一枚 Border.input。 -->
+    <Style Selector="Border.setting">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.setting.invalid">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="TextBox.bare">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaShellGreen}" />
+    </Style>
+
+    <!-- 段头(当前操作 / 慢查询):32px、VelaBgSidebar 底。 -->
+    <Style Selector="Border.sechead">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Background" Value="{DynamicResource VelaBgSidebar}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <!-- 当前操作:运行超过 10 秒的整行淡红,终止按钮转红描边。 -->
+    <Style Selector="Border.oprow.long">
+      <Setter Property="Background" Value="{ui:Dim VelaError, 0.12}" />
+    </Style>
+    <Style Selector="Button.kill">
+      <Setter Property="Height" Value="20" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+    </Style>
+    <Style Selector="Button.kill TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+    </Style>
+    <Style Selector="Button.kill ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="Button.kill.long">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Button.kill.long TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaError}" />
+    </Style>
+    <Style Selector="Button.kill.long ui|Glyph">
+      <Setter Property="Brush" Value="{DynamicResource VelaError}" />
+    </Style>
+
+    <!-- 慢查询选中行:VelaBgActive 底 + 左侧 2px 强调条 + 首行转 Accent(设计稿 15 的 orders.find 行)。 -->
+    <Style Selector="ListBox.slow ListBoxItem:selected Border.selbar">
+      <Setter Property="Background" Value="{DynamicResource VelaAccent}" />
+    </Style>
+    <Style Selector="ListBox.slow ListBoxItem:selected TextBlock.title">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+    </Style>
+
+    <!-- 列头里的排序按钮:与列头文字同款,当前排序列带一个 Accent 的 ↓。 -->
+    <Style Selector="Button.sorthead">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Right" />
+    </Style>
+
+    <!-- 详情右侧的键值行。 -->
+    <Style Selector="DockPanel.kv > TextBlock.value">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize10}" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextSecondary}" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="DockPanel.kv > TextBlock.value.warn">
+      <Setter Property="Foreground" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="Border.section">
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Button.wide">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="10,0" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.Resources>
+    <!-- 共享主题里的 Mongo.timer 只有表盘那个圆,少了顶上的按钮与指针(lucide timer),在本视图里补全。 -->
+    <StreamGeometry x:Key="Mongo.timer">M10 2 h4 M12 14 l3 -3 M4 14 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z</StreamGeometry>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="36,Auto,*">
+
+    <!-- ══ 工具行 ══ -->
+    <Border Grid.Row="0" Classes="toolrow">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="5" Margin="12,0,0,0">
+          <ui:Glyph Key="Mongo.info" Size="12" Brush="{DynamicResource VelaTextMuted}" />
+          <TextBlock Classes="ui small muted trim" Text="{Binding Loc[Prof_Level2Warn]}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Classes="ui tertiary" Text="{Binding Loc[Prof_Profiler]}" />
+          <Border Classes="segments">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Prof_Level0]}"
+                           IsChecked="{Binding LevelKey, Mode=OneWay, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=0}"
+                           Command="{Binding SetLevelCommand}" CommandParameter="0" />
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Prof_Level1]}"
+                           IsChecked="{Binding LevelKey, Mode=OneWay, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=1}"
+                           Command="{Binding SetLevelCommand}" CommandParameter="1" />
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Prof_Level2]}"
+                           IsChecked="{Binding LevelKey, Mode=OneWay, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=2}"
+                           Command="{Binding SetLevelCommand}" CommandParameter="2" />
+            </StackPanel>
+          </Border>
+          <Border Classes="input setting" Classes.invalid="{Binding SlowMsInvalid}" ToolTip.Tip="{Binding Loc[Prof_SettingsTip]}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="ui small muted" Text="{Binding Loc[Prof_SlowMs]}" />
+              <TextBox x:Name="SlowMsBox" Theme="{StaticResource MongoTextBox}" Classes="bare" Width="44" Text="{Binding SlowMsText}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="input setting" Classes.invalid="{Binding SampleRateInvalid}" ToolTip.Tip="{Binding Loc[Prof_SettingsTip]}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="ui small muted" Text="{Binding Loc[Prof_SampleRate]}" />
+              <TextBox x:Name="SampleRateBox" Theme="{StaticResource MongoTextBox}" Classes="bare" Width="32" Text="{Binding SampleRateText}" />
+            </StackPanel>
+          </Border>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding RefreshCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.refresh-cw" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="ui secondary" Text="{Binding Loc[Common_Refresh]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ClearCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.eraser" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Classes="ui secondary" Text="{Binding Loc[Prof_Clear]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ 当前操作 ══ -->
+    <Border Grid.Row="1" Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+      <StackPanel>
+        <Border Classes="sechead">
+          <DockPanel>
+            <CheckBox DockPanel.Dock="Right" Theme="{StaticResource MongoCheck}" IsChecked="{Binding OnlyLong}" VerticalAlignment="Center">
+              <TextBlock Classes="ui small secondary" Text="{Binding Loc[Prof_OnlyLong]}" />
+            </CheckBox>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Ellipse Classes="dot ok" />
+              <TextBlock Classes="h" Text="{Binding Loc[Prof_CurrentOps]}" />
+              <TextBlock Classes="mono small muted" Text="{Binding OpsHeader}" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+        <Border Classes="colheader" Height="24">
+          <Grid ColumnDefinitions="80,70,130,*,120,130,70" ui:TableColumns.Header="slow">
+            <TextBlock Grid.Column="0" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColOpId]}" />
+            <TextBlock Grid.Column="1" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColType]}" />
+            <TextBlock Grid.Column="2" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColNs]}" />
+            <TextBlock Grid.Column="3" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColCommand]}" />
+            <TextBlock Grid.Column="4" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColClient]}" />
+            <TextBlock Grid.Column="5" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColElapsed]}" />
+          </Grid>
+        </Border>
+        <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasOps}">
+          <ItemsControl ItemsSource="{Binding Ops}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:ProfilerOpRow">
+                <Border Classes="row oprow" Classes.long="{Binding IsLong}">
+                  <Grid ColumnDefinitions="80,70,130,*,120,130,70" ui:TableColumns.Row="slow">
+                    <TextBlock Grid.Column="0" Classes="mono small tertiary trim" Margin="10,0" Text="{Binding OpIdText}" />
+                    <TextBlock Grid.Column="1" Classes="mono small secondary trim" Margin="10,0" Text="{Binding Type}" />
+                    <TextBlock Grid.Column="2" Classes="mono small info trim" Margin="10,0" Text="{Binding Namespace}" />
+                    <TextBlock Grid.Column="3" Classes="mono small primary trim" Margin="10,0" Text="{Binding Summary}" ToolTip.Tip="{Binding Summary}" />
+                    <TextBlock Grid.Column="4" Classes="mono small tertiary trim" Margin="10,0" Text="{Binding Client}" />
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" Margin="10,0">
+                      <ui:MonitorBar Width="60" Height="4" VerticalAlignment="Center" Ratio="{Binding Ratio}" Token="{Binding BarToken}" />
+                      <TextBlock Classes="mono small secondary" Classes.err="{Binding IsLong}" Classes.medium="{Binding IsLong}" Text="{Binding ElapsedText}" />
+                    </StackPanel>
+                    <Button Grid.Column="6" Theme="{StaticResource MongoToolButton}" Classes="kill" Classes.long="{Binding IsLong}"
+                            Margin="10,0,0,0" HorizontalAlignment="Left"
+                            Command="{Binding $parent[UserControl].((ui:ProfilerTabViewModel)DataContext).KillCommand}"
+                            CommandParameter="{Binding}">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ui:Glyph Key="Mongo.octagon-x" Size="11" />
+                        <TextBlock Classes="ui small" Text="{Binding $parent[UserControl].((ui:ProfilerTabViewModel)DataContext).Loc[Prof_Kill]}" />
+                      </StackPanel>
+                    </Button>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <Border Classes="row" IsVisible="{Binding !HasOps}">
+          <TextBlock Classes="ui small muted" Margin="12,0" Text="{Binding Loc[Prof_NoOps]}" />
+        </Border>
+      </StackPanel>
+    </Border>
+
+    <!-- ══ 慢查询 | 详情 ══ -->
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="360" />
+        <ColumnDefinition Width="0" />
+        <ColumnDefinition Width="340" MinWidth="220" MaxWidth="680" />
+      </Grid.ColumnDefinitions>
+      <DockPanel Grid.Column="0" Background="{DynamicResource VelaBgTerminal}">
+        <Border DockPanel.Dock="Top" Classes="sechead">
+          <DockPanel>
+            <Border DockPanel.Dock="Right" Classes="segments" Height="22">
+              <StackPanel Orientation="Horizontal" Spacing="1">
+                <RadioButton Theme="{StaticResource MongoSegment}" Padding="8,0" FontSize="{DynamicResource VelaFontSize10}"
+                             Content="{Binding Loc[Prof_ByShape]}"
+                             IsChecked="{Binding Mode, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=shape}" />
+                <RadioButton Theme="{StaticResource MongoSegment}" Padding="8,0" FontSize="{DynamicResource VelaFontSize10}"
+                             Content="{Binding Loc[Prof_ByEntry]}"
+                             IsChecked="{Binding Mode, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=entry}" />
+              </StackPanel>
+            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="Mongo.timer" Size="13" Brush="{DynamicResource VelaWarning}" />
+              <TextBlock Classes="h" Text="{Binding Loc[Prof_SlowTitle]}" />
+              <TextBlock Classes="ui small muted" Text="{Binding Loc[Prof_SlowSubtitle]}" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <!-- 按形状的列头(次数 / 平均 / 最大 可点排序) -->
+        <Border DockPanel.Dock="Top" Classes="colheader" Height="24" IsVisible="{Binding ShapeMode}">
+          <Grid ColumnDefinitions="*,60,70,70,96,84">
+            <TextBlock Grid.Column="0" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColShape]}" />
+            <Button Grid.Column="1" Theme="{StaticResource MongoToolButton}" Classes="sorthead" Command="{Binding SortCommand}" CommandParameter="count">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Prof_ColCount]}" />
+                <ui:Glyph Key="Mongo.arrow-down" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding SortKey, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=count}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="2" Theme="{StaticResource MongoToolButton}" Classes="sorthead" Command="{Binding SortCommand}" CommandParameter="avg">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Prof_ColAvg]}" />
+                <ui:Glyph Key="Mongo.arrow-down" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding SortKey, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=avg}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="3" Theme="{StaticResource MongoToolButton}" Classes="sorthead" Command="{Binding SortCommand}" CommandParameter="max">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Prof_ColMax]}" />
+                <ui:Glyph Key="Mongo.arrow-down" Size="10" Brush="{DynamicResource VelaAccent}"
+                          IsVisible="{Binding SortKey, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=max}" />
+              </StackPanel>
+            </Button>
+            <TextBlock Grid.Column="4" Classes="ui small muted" HorizontalAlignment="Right" Margin="10,0" Text="{Binding Loc[Prof_ColRatio]}" />
+            <TextBlock Grid.Column="5" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColPlan]}" />
+          </Grid>
+        </Border>
+
+        <!-- 逐条的列头 -->
+        <Border DockPanel.Dock="Top" Classes="colheader" Height="24" IsVisible="{Binding EntryMode}">
+          <Grid ColumnDefinitions="*,70,70,96,84">
+            <TextBlock Grid.Column="0" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColQuery]}" />
+            <TextBlock Grid.Column="1" Classes="ui small muted" HorizontalAlignment="Right" Margin="10,0" Text="{Binding Loc[Prof_ColTime]}" />
+            <TextBlock Grid.Column="2" Classes="ui small muted" HorizontalAlignment="Right" Margin="10,0" Text="{Binding Loc[Prof_ColMillis]}" />
+            <TextBlock Grid.Column="3" Classes="ui small muted" HorizontalAlignment="Right" Margin="10,0" Text="{Binding Loc[Prof_ColRatio]}" />
+            <TextBlock Grid.Column="4" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Prof_ColPlan]}" />
+          </Grid>
+        </Border>
+
+        <Panel>
+          <ListBox Classes="rows slow" ItemsSource="{Binding Shapes}" SelectedItem="{Binding SelectedShape}" IsVisible="{Binding ShapeMode}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="ui:ProfilerShapeRow">
+                <Border Height="40" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                  <Grid ColumnDefinitions="*,60,70,70,96,84">
+                    <Border Classes="selbar" Width="2" HorizontalAlignment="Left" />
+                    <StackPanel Grid.Column="0" Margin="10,0" Spacing="3" VerticalAlignment="Center">
+                      <TextBlock Classes="mono small info medium title trim" Text="{Binding Title}" />
+                      <TextBlock Classes="mono small primary trim" Text="{Binding Summary}" ToolTip.Tip="{Binding Summary}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Classes="mono small secondary" HorizontalAlignment="Right" Margin="0,0,10,0" Text="{Binding CountText}" />
+                    <TextBlock Grid.Column="2" Classes="mono small primary medium" Classes.warn="{Binding AvgWarn}" HorizontalAlignment="Right"
+                               Margin="0,0,10,0" Text="{Binding AvgText}" />
+                    <TextBlock Grid.Column="3" Classes="mono small tertiary" HorizontalAlignment="Right" Margin="0,0,10,0" Text="{Binding MaxText}" />
+                    <TextBlock Grid.Column="4" Classes="mono small secondary" Classes.warn="{Binding RatioWarn}" HorizontalAlignment="Right"
+                               Margin="0,0,10,0" Text="{Binding RatioText}" />
+                    <Border Grid.Column="5" Classes="tag mono" Classes.err="{Binding PlanErr}" Classes.warn="{Binding PlanWarn}"
+                            Classes.ok="{Binding PlanOk}" Classes.muted="{Binding PlanOther}" Margin="10,0" HorizontalAlignment="Left">
+                      <TextBlock Text="{Binding PlanText}" />
+                    </Border>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <ListBox Classes="rows slow" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}" IsVisible="{Binding EntryMode}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="ui:ProfilerEntryRow">
+                <Border Height="40" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
+                  <Grid ColumnDefinitions="*,70,70,96,84">
+                    <Border Classes="selbar" Width="2" HorizontalAlignment="Left" />
+                    <StackPanel Grid.Column="0" Margin="10,0" Spacing="3" VerticalAlignment="Center">
+                      <TextBlock Classes="mono small info medium title trim" Text="{Binding Title}" />
+                      <TextBlock Classes="mono small primary trim" Text="{Binding Summary}" ToolTip.Tip="{Binding Summary}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Classes="mono small secondary" HorizontalAlignment="Right" Margin="0,0,10,0" Text="{Binding TimeText}" />
+                    <TextBlock Grid.Column="2" Classes="mono small primary medium" Classes.warn="{Binding MillisWarn}" HorizontalAlignment="Right"
+                               Margin="0,0,10,0" Text="{Binding MillisText}" />
+                    <TextBlock Grid.Column="3" Classes="mono small secondary" Classes.warn="{Binding RatioWarn}" HorizontalAlignment="Right"
+                               Margin="0,0,10,0" Text="{Binding RatioText}" />
+                    <Border Grid.Column="4" Classes="tag mono" Classes.err="{Binding PlanErr}" Classes.warn="{Binding PlanWarn}"
+                            Classes.ok="{Binding PlanOk}" Classes.muted="{Binding PlanOther}" Margin="10,0" HorizontalAlignment="Left">
+                      <TextBlock Text="{Binding PlanText}" />
+                    </Border>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <StackPanel IsVisible="{Binding SlowEmpty}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" MaxWidth="360">
+            <ui:Glyph Key="Mongo.timer" Size="22" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+            <TextBlock Classes="ui small muted wrap" TextAlignment="Center" Text="{Binding SlowEmptyText}" />
+          </StackPanel>
+        </Panel>
+      </DockPanel>
+
+      <!-- ══ 详情 ══ -->
+      <GridSplitter Grid.Column="1" Classes="vsplit" />
+      <Border Grid.Column="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="1,0,0,0">
+        <Panel>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasDetail}">
+            <ContentControl Content="{Binding Detail}">
+              <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="ui:ProfilerDetail">
+                  <StackPanel>
+                    <Border Classes="section">
+                      <StackPanel Spacing="4">
+                        <TextBlock Classes="mono primary semibold trim" Text="{Binding Title}" />
+                        <TextBlock Classes="ui small warn" Text="{Binding Subtitle}" />
+                      </StackPanel>
+                    </Border>
+
+                    <Border Classes="section">
+                      <StackPanel Spacing="6">
+                        <TextBlock Classes="ui small muted medium" Text="{Binding SampleHeader}" />
+                        <Border Background="{DynamicResource VelaBgInput}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                                BorderThickness="1" CornerRadius="3" ClipToBounds="True">
+                          <ui:CodeEditor Text="{Binding Statement, Mode=OneWay}" Language="Shell" IsReadOnly="True"
+                                         ShowLineNumbers="False" HighlightCurrentLine="False" WordWrap="False"
+                                         Height="{Binding StatementHeight}"
+                                         AttachedToVisualTree="OnSampleEditorAttached" />
+                        </Border>
+                        <DockPanel Classes="kv" Margin="0,2,0,0">
+                          <TextBlock DockPanel.Dock="Left" Classes="ui small tertiary" Text="{Binding Loc[Prof_DetailClient]}" />
+                          <TextBlock Classes="value" Margin="12,0,0,0" Text="{Binding Client}" ToolTip.Tip="{Binding Client}" />
+                        </DockPanel>
+                        <DockPanel Classes="kv">
+                          <TextBlock DockPanel.Dock="Left" Classes="ui small tertiary" Text="{Binding Loc[Prof_FieldDocs]}" />
+                          <TextBlock Classes="value" Classes.warn="{Binding DocsWarn}" Text="{Binding DocsExamined}" />
+                        </DockPanel>
+                        <DockPanel Classes="kv">
+                          <TextBlock DockPanel.Dock="Left" Classes="ui small tertiary" Text="{Binding Loc[Prof_FieldReturned]}" />
+                          <TextBlock Classes="value" Text="{Binding Returned}" />
+                        </DockPanel>
+                        <DockPanel Classes="kv">
+                          <TextBlock DockPanel.Dock="Left" Classes="ui small tertiary" Text="{Binding Loc[Prof_FieldPlan]}" />
+                          <TextBlock Classes="value" Margin="12,0,0,0" Text="{Binding PlanSummary}" ToolTip.Tip="{Binding PlanSummary}"
+                                     Foreground="{Binding PlanToken, Converter={x:Static ui:Converters.Token}}" />
+                        </DockPanel>
+                        <DockPanel Classes="kv">
+                          <TextBlock DockPanel.Dock="Left" Classes="ui small tertiary" Text="{Binding Loc[Prof_DetailSort]}" />
+                          <TextBlock Classes="value" Classes.warn="{Binding SortWarn}" Text="{Binding InMemorySort}" />
+                        </DockPanel>
+                      </StackPanel>
+                    </Border>
+
+                    <Border Classes="section">
+                      <StackPanel Spacing="6">
+                        <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Prof_Advice]}" />
+                        <TextBlock Classes="ui small secondary wrap" Text="{Binding AdviceText}" />
+                        <Border Background="{DynamicResource VelaBgInput}" CornerRadius="3" Padding="8,5" IsVisible="{Binding HasAdviceKeys}">
+                          <TextBlock Classes="mono small primary" TextWrapping="Wrap" Text="{Binding AdviceKeys}" />
+                        </Border>
+                      </StackPanel>
+                    </Border>
+
+                    <StackPanel Margin="14,12" Spacing="6">
+                      <Button Theme="{StaticResource MongoPillButton}" Classes="wide"
+                              Command="{Binding $parent[UserControl].((ui:ProfilerTabViewModel)DataContext).CreateIndexCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <ui:Glyph Key="Mongo.key-round" Size="12" Brush="{DynamicResource VelaAccent}" />
+                          <TextBlock Text="{Binding Loc[Prof_CreateIndex]}" />
+                        </StackPanel>
+                      </Button>
+                      <Button Theme="{StaticResource MongoOutlineButton}" Classes="wide"
+                              Command="{Binding $parent[UserControl].((ui:ProfilerTabViewModel)DataContext).OpenInEditorCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <ui:Glyph Key="Mongo.file-code" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                          <TextBlock Text="{Binding Loc[Prof_OpenInEditor]}" />
+                        </StackPanel>
+                      </Button>
+                      <Button Theme="{StaticResource MongoOutlineButton}" Classes="wide"
+                              Command="{Binding $parent[UserControl].((ui:ProfilerTabViewModel)DataContext).ExplainCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                          <TextBlock Text="{Binding Loc[Prof_Explain]}" />
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+              </ContentControl.ContentTemplate>
+            </ContentControl>
+          </ScrollViewer>
+          <TextBlock IsVisible="{Binding !HasDetail}" Classes="ui small muted wrap" Margin="24,0" TextAlignment="Center"
+                     HorizontalAlignment="Center" Text="{Binding Loc[Prof_NoSelection]}" />
+        </Panel>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -56,7 +56,7 @@ internal sealed class SerialSessionRegistry
     {
         lock (_gate)
         {
-            _sessions.RemoveAll(session => !session.IsOpen);
+            _ = _sessions.RemoveAll(session => !session.IsOpen);
             if (_lastActive is { IsOpen: true } active && _sessions.Contains(active))
             {
                 return active;

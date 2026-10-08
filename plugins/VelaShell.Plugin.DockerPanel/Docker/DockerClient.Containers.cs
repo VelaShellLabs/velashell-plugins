@@ -79,7 +79,7 @@ public sealed partial class DockerClient
     public async Task<FilesystemChange[]> ChangesAsync(string id, CancellationToken cancellationToken = default)
     {
         // 没有任何变更时 daemon 返回 JSON null,不是空数组。
-        var body = await GetStringAsync($"/containers/{Uri.EscapeDataString(id)}/changes", cancellationToken).ConfigureAwait(false);
+        string body = await GetStringAsync($"/containers/{Uri.EscapeDataString(id)}/changes", cancellationToken).ConfigureAwait(false);
         return DockerJson.TryDeserialize<FilesystemChange[]>(body) ?? [];
     }
 

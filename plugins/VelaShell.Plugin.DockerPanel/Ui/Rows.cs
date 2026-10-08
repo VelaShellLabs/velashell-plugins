@@ -139,7 +139,7 @@ public sealed class ContainerRow(ContainerSummary summary) : RowBase(summary.Id)
     {
         get
         {
-            var status = Status;
+            string status = Status;
             if (status.Length == 0)
             {
                 return "—";
@@ -150,8 +150,8 @@ public sealed class ContainerRow(ContainerSummary summary) : RowBase(summary.Id)
                 return "退出 " + status[7..];
             }
             // 运行中的容器:括号里是健康状态,它已经由左侧色条与圆点表达了,这一列只要时长。
-            var paren = status.IndexOf(" (", StringComparison.Ordinal);
-            var text = paren > 0 ? status[..paren] : status;
+            int paren = status.IndexOf(" (", StringComparison.Ordinal);
+            string text = paren > 0 ? status[..paren] : status;
             return text.StartsWith("Up ", StringComparison.Ordinal) ? text[3..] : text;
         }
     }
@@ -267,10 +267,10 @@ public sealed class ImageRow(ImageSummary summary) : RowBase(summary.Id)
 
     private (string Repository, string Tag) SplitTag()
     {
-        var first = Summary.RepoTags is { Length: > 0 } tags ? tags[0] : "<none>:<none>";
-        var colon = first.LastIndexOf(':');
+        string first = Summary.RepoTags is { Length: > 0 } tags ? tags[0] : "<none>:<none>";
+        int colon = first.LastIndexOf(':');
         // 冒号可能属于端口(registry:5000/foo),所以只有它出现在最后一个斜杠之后才是标签分隔。
-        var slash = first.LastIndexOf('/');
+        int slash = first.LastIndexOf('/');
         return colon > slash && colon > 0 ? (first[..colon], first[(colon + 1)..]) : (first, "latest");
     }
 }

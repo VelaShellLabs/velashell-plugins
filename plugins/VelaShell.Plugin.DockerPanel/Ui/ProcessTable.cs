@@ -24,23 +24,23 @@ public static class ProcessTable
     /// <summary>把一份 <c>top</c> 结果拍平成四列。</summary>
     public static IReadOnlyList<ProcessRow> Normalize(ContainerTopResult? result)
     {
-        var titles = result?.Titles ?? [];
-        var rows = result?.Processes ?? [];
+        string[] titles = result?.Titles ?? [];
+        string[][] rows = result?.Processes ?? [];
         if (rows.Length == 0)
         {
             return [];
         }
-        var pid = IndexOf(titles, "PID");
-        var user = IndexOf(titles, "USER", "UID", "RUSER");
-        var cpu = IndexOf(titles, "%CPU", "TIME", "PCPU");
-        var command = IndexOf(titles, "COMMAND", "CMD", "ARGS");
+        int pid = IndexOf(titles, "PID");
+        int user = IndexOf(titles, "USER", "UID", "RUSER");
+        int cpu = IndexOf(titles, "%CPU", "TIME", "PCPU");
+        int command = IndexOf(titles, "COMMAND", "CMD", "ARGS");
 
         List<ProcessRow> normalized = [with(rows.Length)];
-        foreach (var row in rows)
+        foreach (string[] row in rows)
         {
             // 命令列认不出来时退回"最后一列":ps 的输出里命令永远排在末尾,
             // 因为只有它能带空格。
-            var commandText = command >= 0 ? Cell(row, command)
+            string commandText = command >= 0 ? Cell(row, command)
                 : row.Length > 0 ? row[^1]
                 : "";
             normalized.Add(new(
@@ -55,8 +55,8 @@ public static class ProcessTable
     /// <summary>这一列在 <c>top</c> 结果里叫什么(空表示这台机器的 ps 没给这一列)。</summary>
     public static string CpuColumnTitle(ContainerTopResult? result)
     {
-        var titles = result?.Titles ?? [];
-        var index = IndexOf(titles, "%CPU", "TIME", "PCPU");
+        string[] titles = result?.Titles ?? [];
+        int index = IndexOf(titles, "%CPU", "TIME", "PCPU");
         return index >= 0 ? titles[index] : "CPU";
     }
 
@@ -65,9 +65,9 @@ public static class ProcessTable
 
     private static int IndexOf(string[] titles, params string[] candidates)
     {
-        foreach (var candidate in candidates)
+        foreach (string candidate in candidates)
         {
-            for (var i = 0; i < titles.Length; i++)
+            for (int i = 0; i < titles.Length; i++)
             {
                 if (string.Equals(titles[i], candidate, StringComparison.OrdinalIgnoreCase))
                 {

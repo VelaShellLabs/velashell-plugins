@@ -25,7 +25,7 @@ public class LineDiffTests
     public void InsertingALineAtTheTopDoesNotMarkEverythingElse()
     {
         // 逐行对齐会把之后的每一行都标成改过 —— 那正是不能逐行对齐的理由。
-        var diff = LineDiff.Compute("a\nb\nc", "new\na\nb\nc");
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute("a\nb\nc", "new\na\nb\nc");
 
         Assert.AreEqual("+new\n a\n b\n c", Render(diff));
         Assert.AreEqual(1, LineDiff.CountChanged(diff));
@@ -34,7 +34,7 @@ public class LineDiffTests
     [TestMethod]
     public void ReplacingALineShowsOneChangeNotTwo()
     {
-        var diff = LineDiff.Compute("listen 80;", "listen 8080;");
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute("listen 80;", "listen 8080;");
 
         // 人看到的是"一行改了",不是"删一行加一行"。
         Assert.AreEqual("~listen 8080;", Render(diff));
@@ -44,12 +44,12 @@ public class LineDiffTests
     [TestMethod]
     public void KeepsOldAndNewLineNumbers()
     {
-        var diff = LineDiff.Compute("a\nb", "a\nx\nb");
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute("a\nb", "a\nx\nb");
 
-        var added = diff.Single(l => l.Marker == DiffMarker.Added);
+        DiffLine added = diff.Single(l => l.Marker == DiffMarker.Added);
         Assert.AreEqual(0, added.OldNumber);
         Assert.AreEqual(2, added.NewNumber);
-        var last = diff[^1];
+        DiffLine last = diff[^1];
         // 原文第 2 行在新文里是第 3 行 —— 两侧行号都要留着,差异视图才对得上原文件。
         Assert.AreEqual(2, last.OldNumber);
         Assert.AreEqual(3, last.NewNumber);
@@ -58,7 +58,7 @@ public class LineDiffTests
     [TestMethod]
     public void DeletionsAreMarkedAndCounted()
     {
-        var diff = LineDiff.Compute("a\ngone\nb", "a\nb");
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute("a\ngone\nb", "a\nb");
 
         Assert.AreEqual(" a\n-gone\n b", Render(diff));
         Assert.AreEqual(1, LineDiff.CountChanged(diff));
@@ -67,7 +67,7 @@ public class LineDiffTests
     [TestMethod]
     public void IdenticalTextHasNoChanges()
     {
-        var diff = LineDiff.Compute("a\nb\nc", "a\nb\nc");
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute("a\nb\nc", "a\nb\nc");
 
         Assert.AreEqual(0, LineDiff.CountChanged(diff));
         Assert.HasCount(3, diff);
@@ -77,7 +77,7 @@ public class LineDiffTests
     public void NormalisesLineEndingsSoCrlfIsNotAWholeFileChange()
     {
         // 编辑器保存成 LF、原文件是 CRLF 时,不做归一化会把整个文件报成改过。
-        var diff = LineDiff.Compute("a\r\nb\r\nc", "a\nb\nc");
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute("a\r\nb\r\nc", "a\nb\nc");
 
         Assert.AreEqual(0, LineDiff.CountChanged(diff));
     }
@@ -113,7 +113,7 @@ public class LineDiffTests
             }
             """;
 
-        var diff = LineDiff.Compute(before, after);
+        IReadOnlyList<DiffLine> diff = LineDiff.Compute(before, after);
 
         Assert.AreEqual(1, LineDiff.CountChanged(diff));
         Assert.AreEqual(DiffMarker.Added, diff.Single(l => l.Marker != DiffMarker.None).Marker);

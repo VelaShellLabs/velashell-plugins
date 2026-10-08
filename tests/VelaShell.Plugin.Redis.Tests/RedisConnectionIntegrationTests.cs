@@ -35,8 +35,9 @@ public sealed class RedisConnectionIntegrationTests
             }
         });
 
+    // 参数不叫 _:方法体里的 `_ = await …` 弃元会被当成给它赋值(单个 _ 形参是具名参数)。
     [ClassInitialize]
-    public static async Task SeedAsync(TestContext _)
+    public static async Task SeedAsync(TestContext context)
     {
         _prefix = $"velashell-it-{Guid.NewGuid():N}";
         try
@@ -51,15 +52,15 @@ public sealed class RedisConnectionIntegrationTests
         using ConnectionMultiplexer mux = await ConnectionMultiplexer.ConnectAsync(
             new ConfigurationOptions { EndPoints = { { Host, Port } }, AllowAdmin = true, AbortOnConnectFail = true });
         IDatabase db = mux.GetDatabase(Database);
-        await db.StringSetAsync($"{_prefix}:user:1:name", "张三");
-        await db.StringSetAsync($"{_prefix}:user:2:name", "李四", TimeSpan.FromMinutes(30));
+        _ = await db.StringSetAsync($"{_prefix}:user:1:name", "张三");
+        _ = await db.StringSetAsync($"{_prefix}:user:2:name", "李四", TimeSpan.FromMinutes(30));
         await db.HashSetAsync($"{_prefix}:user:1:profile",
             [new HashEntry("name", "张三"), new HashEntry("age", "32")]);
-        await db.ListRightPushAsync($"{_prefix}:queue", ["a", "b", "c"]);
-        await db.SetAddAsync($"{_prefix}:tags", ["vip", "beta"]);
-        await db.SortedSetAddAsync($"{_prefix}:board", [new SortedSetEntry("alice", 128), new SortedSetEntry("bob", 64)]);
+        _ = await db.ListRightPushAsync($"{_prefix}:queue", ["a", "b", "c"]);
+        _ = await db.SetAddAsync($"{_prefix}:tags", ["vip", "beta"]);
+        _ = await db.SortedSetAddAsync($"{_prefix}:board", [new SortedSetEntry("alice", 128), new SortedSetEntry("bob", 64)]);
         // 二进制键:非法 UTF-8,用来证明扫描与显示这一路不会把它改坏。
-        await db.StringSetAsync((RedisKey)System.Text.Encoding.UTF8.GetBytes($"{_prefix}:bin:").Concat(new byte[] { 0xC3, 0x28 }).ToArray(), "raw");
+        _ = await db.StringSetAsync((RedisKey)System.Text.Encoding.UTF8.GetBytes($"{_prefix}:bin:").Concat(new byte[] { 0xC3, 0x28 }).ToArray(), "raw");
         await mux.CloseAsync();
     }
 
@@ -79,7 +80,7 @@ public sealed class RedisConnectionIntegrationTests
             // 只删自己造的键。用 SCAN 找它们 —— 连清理脚本也不许用 KEYS。
             await foreach (RedisKey key in server.KeysAsync(Database, $"{_prefix}*", pageSize: 100))
             {
-                await db.KeyDeleteAsync(key);
+                _ = await db.KeyDeleteAsync(key);
             }
             await mux.CloseAsync();
         }
@@ -142,7 +143,7 @@ public sealed class RedisConnectionIntegrationTests
             cursor = page.Cursor;
             foreach (RedisKeyName key in page.Keys)
             {
-                found.Add(key);
+                _ = found.Add(key);
             }
             rounds++;
             Assert.IsLessThan(500, rounds, "游标没有收敛,扫描逻辑有问题。");
@@ -415,8 +416,8 @@ public sealed class RedisConnectionIntegrationTests
         long before = await ClusterNodesCallsAsync(meter);
         RedisClusterView view = await connection.ReadClusterAsync();
         // 抽屉会反复刷新,所以多叫几次:探测结果要记住,而不是每次都重新撞一遍墙。
-        await connection.ReadClusterAsync();
-        await connection.ReadClusterAsync();
+        _ = await connection.ReadClusterAsync();
+        _ = await connection.ReadClusterAsync();
         long after = await ClusterNodesCallsAsync(meter);
 
         Assert.IsFalse(view.Available, "单机实例上,不是集群是空状态,不是错误。");

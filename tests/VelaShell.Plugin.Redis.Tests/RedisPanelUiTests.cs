@@ -31,8 +31,9 @@ public sealed class RedisPanelUiTests
     private static bool _serverAvailable;
     private static readonly string[] stringArray = ["DatabaseBox", "TypeFilterBox"];
 
+    // 参数不叫 _:方法体里的 `_ = await …` 弃元会被当成给它赋值(单个 _ 形参是具名参数)。
     [ClassInitialize]
-    public static async Task InitAsync(TestContext _)
+    public static async Task InitAsync(TestContext context)
     {
         _session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(RedisPanelUiTests).Assembly);
         _prefix = $"velashell-ui-{Guid.NewGuid():N}";
@@ -41,12 +42,12 @@ public sealed class RedisPanelUiTests
             using ConnectionMultiplexer mux = await ConnectionMultiplexer.ConnectAsync(
                 new ConfigurationOptions { EndPoints = { { Host, Port } }, AllowAdmin = true, AbortOnConnectFail = true });
             IDatabase db = mux.GetDatabase(Database);
-            await db.StringSetAsync($"{_prefix}:user:1:name", "张三");
+            _ = await db.StringSetAsync($"{_prefix}:user:1:name", "张三");
             await db.HashSetAsync($"{_prefix}:user:1:profile", [new HashEntry("name", "张三")]);
             // 一批"只有末段不同"的键:这正是键列表要折起来的那种噪音(默认阈值 8)。
             for (int i = 0; i < 10; i++)
             {
-                await db.StringSetAsync($"{_prefix}:order:2026:{i:0000}", "paid", TimeSpan.FromMinutes(30));
+                _ = await db.StringSetAsync($"{_prefix}:order:2026:{i:0000}", "paid", TimeSpan.FromMinutes(30));
             }
             await mux.CloseAsync();
             _serverAvailable = true;
@@ -71,7 +72,7 @@ public sealed class RedisPanelUiTests
         // 只删自己造的键(连清理脚本也不用 KEYS)。
         await foreach (RedisKey key in server.KeysAsync(Database, $"{_prefix}*", pageSize: 100))
         {
-            await db.KeyDeleteAsync(key);
+            _ = await db.KeyDeleteAsync(key);
         }
         await mux.CloseAsync();
     }

@@ -87,7 +87,7 @@ internal static partial class WindowsSerialPortNames
         }
         finally
         {
-            SetupDiDestroyDeviceInfoList(set);
+            _ = SetupDiDestroyDeviceInfoList(set);
         }
         return result;
     }

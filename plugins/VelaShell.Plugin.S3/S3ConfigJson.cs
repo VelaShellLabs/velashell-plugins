@@ -146,7 +146,7 @@ internal static class S3ConfigJson
                 if (reader.TokenType == JsonTokenType.PropertyName &&
                     string.Equals(reader.GetString(), "Value", StringComparison.OrdinalIgnoreCase))
                 {
-                    reader.Read();
+                    _ = reader.Read();
                     found = reader.GetString();
                 }
             }

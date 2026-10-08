@@ -40,7 +40,7 @@ public class PanelLogicTests
     [TestMethod]
     public async Task Batch_JudgesEachTargetSeparatelyAndKeepsGoing()
     {
-        var result = await BatchRunner.RunAsync(
+        BatchResult result = await BatchRunner.RunAsync(
             [("a", "worker-1"), ("b", "postgres-main"), ("c", "worker-2")],
             (target, _) => target == "b"
                 ? throw new DockerApiException(System.Net.HttpStatusCode.Conflict,
@@ -58,8 +58,8 @@ public class PanelLogicTests
     [TestMethod]
     public async Task Batch_StopsAfterTheConnectionDies()
     {
-        var attempts = 0;
-        var result = await BatchRunner.RunAsync(
+        int attempts = 0;
+        BatchResult result = await BatchRunner.RunAsync(
             [("a", "one"), ("b", "two"), ("c", "three")],
             (_, _) =>
             {
@@ -77,7 +77,7 @@ public class PanelLogicTests
     public async Task Batch_ReportsProgressForEveryTarget()
     {
         List<(int Done, int Total)> progress = [];
-        await BatchRunner.RunAsync(
+        _ = await BatchRunner.RunAsync(
             [("a", "one"), ("b", "two")],
             (_, _) => Task.CompletedTask,
             (done, total, _) => progress.Add((done, total)), TestContext.CancellationToken);
@@ -150,7 +150,7 @@ public class PanelLogicTests
         var a = new Item("a");
         var b = new Item("b");
         collection.Merge([a, b], (_, _) => { });
-        var keptA = collection[0];
+        Item keptA = collection[0];
 
         collection.Merge([new Item("a"), new Item("b")], (current, incoming) => current.Version++);
 
@@ -221,12 +221,12 @@ public class PanelLogicTests
     public void Gate_ConfirmAndCancelResolveTheWaiter() => OnUi(async () =>
     {
         var gate = new ConfirmGate();
-        var pending = gate.AskAsync(DataLossRequest());
+        Task<bool> pending = gate.AskAsync(DataLossRequest());
         gate.TypedWord = "delete";
         gate.ConfirmCommand.Execute(null);
         Assert.IsTrue(await pending);
 
-        var second = gate.AskAsync(DataLossRequest());
+        Task<bool> second = gate.AskAsync(DataLossRequest());
         gate.CancelCommand.Execute(null);
         Assert.IsFalse(await second);
     });
@@ -235,7 +235,7 @@ public class PanelLogicTests
     public void Gate_RefusesASecondRequestWhileOneIsOpen() => OnUi(async () =>
     {
         var gate = new ConfirmGate();
-        var first = gate.AskAsync(DataLossRequest());
+        Task<bool> first = gate.AskAsync(DataLossRequest());
 
         // 两层确认框叠在一起,用户不可能说清自己在确认哪一个。
         Assert.IsFalse(await gate.AskAsync(DataLossRequest()));
@@ -295,7 +295,7 @@ public class PanelLogicTests
         form.Volumes.Rows.Add(new("/srv/conf", "/etc/nginx/conf.d"));
         form.Env.Rows.Add(new("KEY", "value"));
 
-        var request = form.ToRequest();
+        ContainerCreateRequest request = form.ToRequest();
 
         Assert.AreEqual("nginx:1.27-alpine", request.Image);
         Assert.AreEqual("8081", request.HostConfig!.PortBindings!["80/tcp"][0].HostPort);
@@ -305,10 +305,7 @@ public class PanelLogicTests
     }
 
     [TestMethod]
-    public void SplitArguments_RespectsQuotes()
-    {
-        Assert.AreSequenceEqual(["nginx", "-g", "daemon off;"], RunContainerForm.SplitArguments("nginx -g 'daemon off;'"));
-    }
+    public void SplitArguments_RespectsQuotes() => Assert.AreSequenceEqual(["nginx", "-g", "daemon off;"], RunContainerForm.SplitArguments("nginx -g 'daemon off;'"));
 
     [TestMethod]
     public void CreateNetworkForm_RequiresASubnetWhenAGatewayIsGiven()
@@ -328,8 +325,8 @@ public class PanelLogicTests
     public void CreateNetworkForm_DisablesOverlayWhenSwarmIsInactive()
     {
         var form = new CreateNetworkForm(swarmActive: false);
-        var driver = form.Fields.OfType<ChoiceField>().Single(f => f.Label == "驱动");
-        var overlay = driver.Options.Single(o => o.Value == "overlay");
+        ChoiceField driver = form.Fields.OfType<ChoiceField>().Single(f => f.Label == "驱动");
+        ChoiceOption overlay = driver.Options.Single(o => o.Value == "overlay");
 
         // 直接置灰而不是让用户去撞一条 daemon 的错误。
         Assert.IsFalse(overlay.Enabled);
@@ -344,7 +341,7 @@ public class PanelLogicTests
             ("a", "one", "运行中", true, ""),
             ("b", "two", "运行中", true, "")
         ]);
-        foreach (var item in form.Containers.Items)
+        foreach (SelectItem item in form.Containers.Items)
         {
             item.Selected = true;
         }

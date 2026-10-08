@@ -1,5 +1,6 @@
-using Avalonia.Controls;
 using System.Collections.ObjectModel;
+using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using VelaShell.Plugin.DockerPanel.Docker;
 
 namespace VelaShell.Plugin.DockerPanel.Ui.Pages;
@@ -76,7 +77,7 @@ public sealed class VolumesPageViewModel : PageViewModel
     {
         get
         {
-            var total = _all.Sum(r => r.Summary.UsageData is { Size: > 0 } u ? u.Size : 0);
+            long total = _all.Sum(r => r.Summary.UsageData is { Size: > 0 } u ? u.Size : 0);
             return total > 0 ? Humanize.Bytes(total) : "未统计";
         }
     }
@@ -130,7 +131,7 @@ public sealed class VolumesPageViewModel : PageViewModel
 
     /// <summary>选中卷的使用者。</summary>
     public IReadOnlyList<string> SelectedUsers =>
-        Selected is { } row && _users.TryGetValue(row.Name, out var users) ? users : [];
+        Selected is { } row && _users.TryGetValue(row.Name, out List<string>? users) ? users : [];
 
     /// <summary>
     /// 能不能浏览卷内文件。
@@ -191,20 +192,20 @@ public sealed class VolumesPageViewModel : PageViewModel
         Busy = true;
         try
         {
-            var volumes = await client.ListVolumesAsync(cancellationToken).ConfigureAwait(true);
+            VolumeSummary[] volumes = await client.ListVolumesAsync(cancellationToken).ConfigureAwait(true);
             // 引用计数得自己算:/volumes 不带 UsageData,只有 /system/df 才带,
             // 而后者在镜像多的机器上要几秒 —— 不值得为一列数字每次都付这个钱。
-            var containers = await client.ListContainersAsync(true, cancellationToken).ConfigureAwait(true);
+            ContainerSummary[] containers = await client.ListContainersAsync(true, cancellationToken).ConfigureAwait(true);
             _users.Clear();
-            foreach (var container in containers)
+            foreach (ContainerSummary container in containers)
             {
-                foreach (var mount in container.Mounts ?? [])
+                foreach (DockerMount mount in container.Mounts ?? [])
                 {
                     if (mount.Type != "volume" || mount.Name is not { Length: > 0 } name)
                     {
                         continue;
                     }
-                    if (!_users.TryGetValue(name, out var list))
+                    if (!_users.TryGetValue(name, out List<string>? list))
                     {
                         _users[name] = list = [];
                     }
@@ -215,13 +216,13 @@ public sealed class VolumesPageViewModel : PageViewModel
             [
                 .. volumes
                     .OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(v => new VolumeRow(v, _users.TryGetValue(v.Name, out var u) ? u.Count : 0))
+                    .Select(v => new VolumeRow(v, _users.TryGetValue(v.Name, out List<string>? u) ? u.Count : 0))
             ];
             var previous = _all.ToDictionary(r => r.Id);
             _all.Clear();
-            foreach (var row in incoming)
+            foreach (VolumeRow row in incoming)
             {
-                if (previous.TryGetValue(row.Id, out var existing))
+                if (previous.TryGetValue(row.Id, out VolumeRow? existing))
                 {
                     existing.Update(row);
                     _all.Add(existing);
@@ -266,7 +267,7 @@ public sealed class VolumesPageViewModel : PageViewModel
 
     private void ApplyView()
     {
-        var needle = Search.Trim();
+        string needle = Search.Trim();
         IEnumerable<VolumeRow> filtered = _all;
         if (UnusedOnly)
         {
@@ -295,7 +296,7 @@ public sealed class VolumesPageViewModel : PageViewModel
         }
         try
         {
-            await client.CreateVolumeAsync(form.Name, form.Driver, form.DriverOptions, form.LabelMap, Shell.Lifetime)
+            _ = await client.CreateVolumeAsync(form.Name, form.Driver, form.DriverOptions, form.LabelMap, Shell.Lifetime)
                         .ConfigureAwait(true);
             Shell.Feedback.Status(FeedbackKind.Success, $"已新建卷 {form.Name}");
             await RefreshAsync(Shell.Lifetime).ConfigureAwait(true);
@@ -312,8 +313,8 @@ public sealed class VolumesPageViewModel : PageViewModel
         {
             return;
         }
-        var users = _users.TryGetValue(row.Name, out var list) ? list : [];
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        List<string> users = _users.TryGetValue(row.Name, out List<string>? list) ? list : [];
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = $"删除卷 {row.Name}?",
             Icon = "Docker.shield-alert",
@@ -347,21 +348,21 @@ public sealed class VolumesPageViewModel : PageViewModel
             // 备份失败就**不删** —— 用户勾这个框的意思正是"没有备份就别删"。
             if (!await BackupAsync(row).ConfigureAwait(true))
             {
-                Shell.Feedback.Notify(FeedbackKind.Warning, "没有删除", "备份没成功,卷保留原样。");
+                _ = Shell.Feedback.Notify(FeedbackKind.Warning, "没有删除", "备份没成功,卷保留原样。");
                 return;
             }
         }
         try
         {
             await client.RemoveVolumeAsync(row.Name, false, Shell.Lifetime).ConfigureAwait(true);
-            Shell.Feedback.Notify(FeedbackKind.Success, "卷已删除", row.Name);
+            _ = Shell.Feedback.Notify(FeedbackKind.Success, "卷已删除", row.Name);
             await RefreshAsync(Shell.Lifetime).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // 409 的真实含义是"还有容器挂着它",而挂着它的是谁,这一页早就知道 ——
             // 把这句话直接说出来,并给一条过去看的路。
-            ToastAction[] actions = ex is DockerApiException { IsConflict: true } && _users.TryGetValue(row.Name, out var holders) && holders.Count > 0
+            ToastAction[] actions = ex is DockerApiException { IsConflict: true } && _users.TryGetValue(row.Name, out List<string>? holders) && holders.Count > 0
                 ? [new($"看看是谁在占({holders.Count} 个容器)", () => Selected = row)]
                 : [];
             Shell.Feedback.ReportError("删除卷", ex, actions);
@@ -374,7 +375,7 @@ public sealed class VolumesPageViewModel : PageViewModel
         {
             return;
         }
-        var confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
+        bool confirmed = await Shell.Confirm.AskAsync(Shell.BuildConfirm(new()
         {
             Title = "清理全部未使用的卷?",
             Icon = "Docker.shield-alert",
@@ -398,8 +399,8 @@ public sealed class VolumesPageViewModel : PageViewModel
         }
         try
         {
-            var report = await client.PruneVolumesAsync(Shell.Lifetime).ConfigureAwait(true);
-            Shell.Feedback.Notify(FeedbackKind.Success, "清理完成",
+            PruneReport report = await client.PruneVolumesAsync(Shell.Lifetime).ConfigureAwait(true);
+            _ = Shell.Feedback.Notify(FeedbackKind.Success, "清理完成",
                 $"删除 {report.DeletedCount} 个卷 · 回收 {Humanize.Bytes(report.SpaceReclaimed)}");
             await RefreshAsync(Shell.Lifetime).ConfigureAwait(true);
         }
@@ -413,12 +414,12 @@ public sealed class VolumesPageViewModel : PageViewModel
     {
         if (await FindMountAsync(row.Name).ConfigureAwait(true) is not { } mount)
         {
-            Shell.Feedback.Notify(FeedbackKind.Warning, "没法浏览这个卷", BrowseHint);
+            _ = Shell.Feedback.Notify(FeedbackKind.Warning, "没法浏览这个卷", BrowseHint);
             return;
         }
-        (var container, var destination) = mount;
+        (ContainerSummary? container, string? destination) = mount;
         await Shell.GoToAsync(PanelPage.Containers).ConfigureAwait(true);
-        var target = Shell.Containers.View.FirstOrDefault(r => r.Id == container.Id);
+        ContainerRow? target = Shell.Containers.View.FirstOrDefault(r => r.Id == container.Id);
         if (target is null)
         {
             return;
@@ -440,7 +441,7 @@ public sealed class VolumesPageViewModel : PageViewModel
     /// </summary>
     /// <summary>这一行能不能备份(有运行中的容器挂着它,且能弹文件对话框)。</summary>
     private bool CanBackupRow(VolumeRow row) =>
-        FilePicker.IsAvailable && _users.TryGetValue(row.Name, out var users) && users.Count > 0;
+        FilePicker.IsAvailable && _users.TryGetValue(row.Name, out List<string>? users) && users.Count > 0;
 
     /// <summary>备份;返回是否真的存下来了(删卷前的那个勾选靠它决定要不要继续)。</summary>
     private async Task<bool> BackupAsync(VolumeRow row)
@@ -451,12 +452,12 @@ public sealed class VolumesPageViewModel : PageViewModel
         }
         if (await FindMountAsync(row.Name).ConfigureAwait(true) is not { } mount)
         {
-            Shell.Feedback.Notify(FeedbackKind.Warning, "没法备份这个卷",
+            _ = Shell.Feedback.Notify(FeedbackKind.Warning, "没法备份这个卷",
                 "没有运行中的容器挂着它 —— 先起一个挂载了这个卷的容器再来备份。");
             return false;
         }
-        (var container, var destination) = mount;
-        var target = await FilePicker
+        (ContainerSummary? container, string? destination) = mount;
+        IStorageFile? target = await FilePicker
             .PickSaveAsync($"把卷 {row.Name} 存成 tar", $"{row.Name}.tar", "tar")
             .ConfigureAwait(true);
         if (target is null)
@@ -466,11 +467,11 @@ public sealed class VolumesPageViewModel : PageViewModel
         Busy = true;
         try
         {
-            await using var archive = await client
+            await using Stream archive = await client
                 .DownloadArchiveAsync(container.Id, destination, Shell.Lifetime).ConfigureAwait(true);
-            await using var output = await target.OpenWriteAsync().ConfigureAwait(true);
+            await using Stream output = await target.OpenWriteAsync().ConfigureAwait(true);
             await archive.CopyToAsync(output, Shell.Lifetime).ConfigureAwait(true);
-            Shell.Feedback.Notify(FeedbackKind.Success, "卷已备份",
+            _ = Shell.Feedback.Notify(FeedbackKind.Success, "卷已备份",
                 $"{target.Name} · 经容器 {container.Name} 的 {destination}");
             return true;
         }
@@ -500,11 +501,11 @@ public sealed class VolumesPageViewModel : PageViewModel
         {
             return;
         }
-        foreach ((var key, var value) in row.Summary.Labels ?? [])
+        foreach ((string? key, string? value) in row.Summary.Labels ?? [])
         {
             SelectedLabels.Add(new(key, value));
         }
-        foreach ((var key, var value) in row.Summary.Options ?? [])
+        foreach ((string? key, string? value) in row.Summary.Options ?? [])
         {
             SelectedOptions.Add(new(key, value));
         }
@@ -517,10 +518,10 @@ public sealed class VolumesPageViewModel : PageViewModel
         {
             return null;
         }
-        var containers = await client.ListContainersAsync(false, Shell.Lifetime).ConfigureAwait(true);
-        foreach (var container in containers)
+        ContainerSummary[] containers = await client.ListContainersAsync(false, Shell.Lifetime).ConfigureAwait(true);
+        foreach (ContainerSummary container in containers)
         {
-            var mount = (container.Mounts ?? [])
+            DockerMount? mount = (container.Mounts ?? [])
                 .FirstOrDefault(m => m.Type == "volume" && m.Name == volumeName);
             if (mount?.Destination is { Length: > 0 } destination)
             {

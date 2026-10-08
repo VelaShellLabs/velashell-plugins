@@ -1,0 +1,346 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.CollectionTabView"
+             x:DataType="ui:CollectionTabViewModel"
+             Background="{DynamicResource VelaBgTerminal}">
+
+  <!--
+    集合工作台(设计稿 01 / 02 / 13 的 Main 区,56px 工具栏与对象标签条由外壳画):
+    只读横幅 → 36px 工具行 → 查询栏(VelaBgSidebar)→ 数据区(网格 / 树 / JSON + 空态卡片)→ 32px 底栏。
+  -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <!-- CodeEditor 里是 AvaloniaEdit 的 TextEditor,模板在这份样式里(共享样式表不带它)。 -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Collection/CollectionStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,36,Auto,*,32">
+
+    <!-- ══ 只读横幅(设计稿 22:网格工具栏上方) ══ -->
+    <StackPanel Grid.Row="0">
+      <Border Classes="notice warn" Height="34" Padding="12,0" Margin="10,8,10,0" CornerRadius="4"
+              BorderBrush="{DynamicResource VelaWarning}" IsVisible="{Binding ShowReadOnlyBanner}">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Theme="{StaticResource MongoOutlineButton}" Height="26" Padding="12,0"
+                  Command="{Binding UnlockCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.lock-open" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[State_UnlockButton]}" />
+            </StackPanel>
+          </Button>
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <ui:Glyph Key="Mongo.lock" Size="13" Brush="{DynamicResource VelaWarning}" />
+            <TextBlock Classes="ui warn medium" Text="{Binding ReadOnlyTitle}" />
+            <TextBlock Classes="ui small secondary" Text="{Binding Loc[State_ReadOnlyDetail]}" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <Border Classes="notice" Height="30" Padding="12,0" Margin="10,8,10,0" CornerRadius="4" IsVisible="{Binding ShowViewBanner}">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <ui:Glyph Key="Mongo.eye" Size="13" Brush="{DynamicResource VelaInfo}" />
+          <TextBlock Classes="ui info medium" Text="{Binding Loc[Cw_ViewBannerTitle]}" />
+          <TextBlock Classes="ui small secondary" Text="{Binding ViewBannerText}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <!-- ══ 36px 工具行 ══ -->
+    <Border Grid.Row="1" Classes="toolrow">
+      <DockPanel>
+        <Border DockPanel.Dock="Right" Classes="segments">
+          <StackPanel Orientation="Horizontal" Spacing="1">
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="cwview" IsChecked="{Binding IsGridMode}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.table" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+                <TextBlock Text="{Binding Loc[Cw_ViewGrid]}" />
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="cwview" IsChecked="{Binding IsTreeMode}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.list-tree" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+                <TextBlock Text="{Binding Loc[Cw_ViewTree]}" />
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Theme="{StaticResource MongoSegment}" GroupName="cwview" IsChecked="{Binding IsJsonMode}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.braces" Size="12" Brush="{Binding $parent[RadioButton].Foreground}" />
+                <TextBlock Text="JSON" />
+              </StackPanel>
+            </RadioButton>
+          </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Button Theme="{StaticResource MongoPillButton}" Height="24" Padding="10,0" Command="{Binding AddDocumentCommand}"
+                  IsEnabled="{Binding CanEdit}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Cw_AddDocument]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding CloneCommand}" IsEnabled="{Binding CanEdit}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.copy-plus" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Cw_Clone]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanEdit}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.trash-2" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[Common_Delete]}" />
+            </StackPanel>
+          </Button>
+          <Rectangle Classes="vsep" />
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ImportCommand}" IsEnabled="{Binding CanEdit}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Cw_Import]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExportCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.upload" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Cw_Export]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding CopyJsonCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.braces" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Cw_CopyJson]}" />
+            </StackPanel>
+          </Button>
+          <Rectangle Classes="vsep" />
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding RefreshCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.refresh-cw" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Common_Refresh]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ 查询栏(VelaBgSidebar,74px:28 筛选行 + 6 + 24 选项行 + 上下 8) ══ -->
+    <Border Grid.Row="2" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+            BorderThickness="0,0,0,1" Padding="10,8">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" Height="28">
+          <Border x:Name="FilterBox" Grid.Column="0" Classes="input" Classes.invalid="{Binding HasFilterError}" Padding="8,0">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+              <Border Grid.Column="0" Background="{DynamicResource VelaBgActive}" CornerRadius="2" Padding="6,1" VerticalAlignment="Center">
+                <TextBlock Classes="ui small secondary medium" Text="{Binding Loc[Cw_Filter]}" />
+              </Border>
+              <ui:CodeEditor x:Name="FilterEditor" Grid.Column="1" Language="Shell" ShowLineNumbers="False" HighlightCurrentLine="False"
+                             FontSize="{DynamicResource VelaFontSize11}" Margin="-8,0,0,0" VerticalAlignment="Center" Height="26"
+                             Text="{Binding FilterText}" Diagnostics="{Binding FilterDiagnostics}" />
+              <TextBlock Grid.Column="2" Classes="ui small err trim" MaxWidth="260" Text="{Binding FilterError}"
+                         IsVisible="{Binding HasFilterError}" ToolTip.Tip="{Binding FilterError}" />
+              <Button x:Name="HistoryButton" Grid.Column="3" Theme="{StaticResource MongoIconButton}" Width="20" Height="20"
+                      ToolTip.Tip="{Binding Loc[Cw_History]}" Click="OnHistoryClick">
+                <ui:Glyph Key="Mongo.history" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+              </Button>
+              <Button Grid.Column="4" Theme="{StaticResource MongoIconButton}" Width="20" Height="20"
+                      Command="{Binding ToggleFavoriteCommand}" ToolTip.Tip="{Binding Loc[Cw_Favorite]}">
+                <Panel>
+                  <ui:Glyph Key="Mongo.star" Size="13" Brush="{DynamicResource VelaTextTertiary}" IsVisible="{Binding !IsFavorite}" />
+                  <ui:Glyph Key="Mongo.star" Size="13" Brush="{DynamicResource VelaShellYellow}" IsVisible="{Binding IsFavorite}" />
+                </Panel>
+              </Button>
+            </Grid>
+          </Border>
+          <Button Grid.Column="1" Theme="{StaticResource MongoPillButton}" Height="28" Padding="14,0" Command="{Binding FindCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.play" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Cw_Find]}" />
+              <TextBlock Classes="mono tiny" Foreground="{DynamicResource VelaAccent}" Opacity="0.7" Text="Ctrl+↵" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="2" Theme="{StaticResource MongoOutlineButton}" Height="28" Padding="12,0"
+                  Content="{Binding Loc[Cw_Reset]}" Command="{Binding ResetCommand}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="*,*,90,90,130,Auto" ColumnSpacing="6" Height="24">
+          <Border Grid.Column="0" Classes="input" Classes.invalid="{Binding ProjectionInvalid}" Padding="8,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Classes="ui small muted" Margin="0,0,8,0" Text="{Binding Loc[Cw_Projection]}" />
+              <TextBox Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding ProjectionText}"
+                       Foreground="{DynamicResource VelaTextSecondary}" KeyDown="OnOptionKeyDown" />
+            </DockPanel>
+          </Border>
+          <Border Grid.Column="1" Classes="input" Classes.invalid="{Binding SortInvalid}" Padding="8,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Classes="ui small muted" Margin="0,0,8,0" Text="{Binding Loc[Cw_Sort]}" />
+              <TextBox Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding SortText}"
+                       Foreground="{DynamicResource VelaTextSecondary}" KeyDown="OnOptionKeyDown" />
+            </DockPanel>
+          </Border>
+          <Border Grid.Column="2" Classes="input" Classes.invalid="{Binding SkipInvalid}" Padding="8,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Classes="ui small muted" Margin="0,0,8,0" Text="{Binding Loc[Cw_Skip]}" />
+              <TextBox Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding SkipText}"
+                       Foreground="{DynamicResource VelaShellGreen}" KeyDown="OnOptionKeyDown" />
+            </DockPanel>
+          </Border>
+          <Border Grid.Column="3" Classes="input" Classes.invalid="{Binding LimitInvalid}" Padding="8,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Classes="ui small muted" Margin="0,0,8,0" Text="{Binding Loc[Cw_Limit]}" />
+              <TextBox Theme="{StaticResource MongoTextBox}" Classes="inline" Text="{Binding LimitText}"
+                       Foreground="{DynamicResource VelaShellGreen}" KeyDown="OnOptionKeyDown" />
+            </DockPanel>
+          </Border>
+          <Border Grid.Column="4" Classes="input" Padding="8,0,2,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Classes="ui small muted" Margin="0,0,4,0" Text="{Binding Loc[Cw_Hint]}" />
+              <ComboBox Classes="compact" ItemsSource="{Binding HintChoices}" SelectedItem="{Binding SelectedHint}"
+                        Background="Transparent" BorderThickness="0" Height="22" MinHeight="22" Padding="4,0"
+                        Foreground="{DynamicResource VelaTextTertiary}" HorizontalAlignment="Stretch" />
+            </DockPanel>
+          </Border>
+          <Button Grid.Column="5" Theme="{StaticResource MongoToolButton}" Padding="8,0" Command="{Binding ExplainCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaInfo}" />
+              <TextBlock Classes="ui info" Text="{Binding Loc[Cw_Explain]}" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- ══ 数据区 ══ -->
+    <Panel Grid.Row="3">
+      <Panel IsVisible="{Binding ShowData}">
+        <ui:GridPaneView x:Name="GridPane" IsVisible="{Binding IsGridMode}" />
+        <ui:DocTreeView x:Name="TreePane" IsVisible="{Binding IsTreeMode}" />
+        <ui:JsonCardsView x:Name="JsonPane" IsVisible="{Binding IsJsonMode}" />
+      </Panel>
+
+      <!-- 空集合 -->
+      <StackPanel Classes="state" IsVisible="{Binding IsEmptyCollection}">
+        <ui:Glyph Key="Mongo.inbox" Size="28" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+        <TextBlock Classes="ui secondary medium" Text="{Binding EmptyTitle}" />
+        <TextBlock Classes="ui small muted" Text="{Binding Loc[State_EmptyHint]}" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,4,0,0">
+          <Button Theme="{StaticResource MongoPillButton}" Padding="12,0" Command="{Binding AddDocumentCommand}" IsEnabled="{Binding CanEdit}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.plus" Size="12" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Text="{Binding Loc[Cw_AddDocument]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoOutlineButton}" Padding="12,0" Command="{Binding ImportCommand}" IsEnabled="{Binding CanEdit}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[State_ImportEllipsis]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- 筛选无结果 -->
+      <StackPanel Classes="state" IsVisible="{Binding IsNoResult}">
+        <ui:Glyph Key="Mongo.search-x" Size="28" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+        <TextBlock Classes="ui secondary medium" Text="{Binding Loc[State_NoResultTitle]}" />
+        <Border Background="{DynamicResource VelaBgInput}" CornerRadius="3" Padding="8,3" HorizontalAlignment="Center" MaxWidth="560">
+          <TextBlock Classes="mono small tertiary trim" Text="{Binding LastRunFilter}" />
+        </Border>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,4,0,0">
+          <Button Theme="{StaticResource MongoOutlineButton}" Padding="12,0" Command="{Binding ClearFilterCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.x" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[State_ClearFilter]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoOutlineButton}" Padding="12,0" Command="{Binding ExplainCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[State_ViewPlan]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- 长查询进行中 -->
+      <Border Background="{DynamicResource VelaBgTerminal}" IsVisible="{Binding IsLongQuery}">
+        <StackPanel Classes="state">
+          <ui:CollectionSpinner Width="24" Height="24" HorizontalAlignment="Center" />
+          <TextBlock Classes="ui secondary medium" Text="{Binding LongQueryTitle}" />
+          <TextBlock Classes="mono small muted" Text="{Binding LongQueryText}" />
+          <Button Theme="{StaticResource MongoDangerButton}" Padding="12,0" HorizontalAlignment="Center" Command="{Binding StopCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.octagon-x" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[State_KillOp]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+    </Panel>
+
+    <!-- ══ 32px 底栏 ══ -->
+    <Border Grid.Row="4" Background="{DynamicResource VelaBgSidebar}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+            BorderThickness="0,1,0,0" Padding="8,0">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,16,Auto,Auto,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+          <Button Theme="{StaticResource MongoIconButton}" Command="{Binding AddRowCommand}" IsEnabled="{Binding CanEdit}"
+                  ToolTip.Tip="{Binding Loc[Cw_AddRow]}">
+            <ui:Glyph Key="Mongo.plus" Size="13" Brush="{DynamicResource VelaStatusConnected}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanEdit}"
+                  ToolTip.Tip="{Binding Loc[Cw_DeleteRows]}">
+            <ui:Glyph Key="Mongo.minus" Size="13" Brush="{DynamicResource VelaError}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Command="{Binding ApplyCommand}" IsEnabled="{Binding HasPending}"
+                  Background="{DynamicResource VelaAccentDim}" ToolTip.Tip="{Binding Loc[Cw_ApplyTip]}">
+            <ui:Glyph Key="Mongo.check" Size="13" Brush="{DynamicResource VelaAccent}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Command="{Binding DiscardCommand}" IsEnabled="{Binding HasPending}"
+                  ToolTip.Tip="{Binding Loc[Cw_DiscardTip]}">
+            <ui:Glyph Key="Mongo.x" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Command="{Binding RefreshCommand}" ToolTip.Tip="{Binding Loc[Common_Refresh]}">
+            <ui:Glyph Key="Mongo.refresh-cw" Size="13" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Command="{Binding StopCommand}" ToolTip.Tip="{Binding Loc[Cw_StopTip]}">
+            <ui:Glyph Key="Mongo.square" Size="13" Brush="{DynamicResource VelaTextMuted}" />
+          </Button>
+        </StackPanel>
+        <Rectangle Grid.Column="1" Classes="vsep" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="8,0" VerticalAlignment="Center">
+          <Ellipse Classes="dot warn" IsVisible="{Binding HasPending}" />
+          <TextBlock Classes="ui warn" Text="{Binding PendingText}" IsVisible="{Binding HasPending}" />
+          <TextBlock Classes="ui muted" Text="{Binding PendingText}" IsVisible="{Binding !HasPending}" />
+          <TextBlock Classes="ui small muted" Text="{Binding Loc[Cw_PendingKeys]}" IsVisible="{Binding HasPending}" />
+        </StackPanel>
+        <TextBlock Grid.Column="4" Classes="mono small tertiary trim" MaxWidth="460" Text="{Binding EchoText}"
+                   ToolTip.Tip="{Binding EchoText}" />
+        <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+          <Button Theme="{StaticResource MongoIconButton}" Width="22" Height="22" Command="{Binding FirstPageCommand}">
+            <ui:Glyph Key="Mongo.chevrons-left" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Width="22" Height="22" Command="{Binding PreviousPageCommand}">
+            <ui:Glyph Key="Mongo.chevron-left" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+          </Button>
+          <TextBox x:Name="PageBox" Theme="{StaticResource MongoTextBox}" Height="22" MinHeight="22" MinWidth="28" Padding="8,0"
+                   HorizontalContentAlignment="Center" Text="{Binding PageText}" KeyDown="OnPageKeyDown" />
+          <TextBlock Classes="ui tertiary" Margin="2,0,2,0" Text="{Binding PageCountText}" />
+          <Button Theme="{StaticResource MongoIconButton}" Width="22" Height="22" Command="{Binding NextPageCommand}">
+            <ui:Glyph Key="Mongo.chevron-right" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+          </Button>
+          <Button Theme="{StaticResource MongoIconButton}" Width="22" Height="22" Command="{Binding LastPageCommand}">
+            <ui:Glyph Key="Mongo.chevrons-right" Size="12" Brush="{DynamicResource VelaTextSecondary}" />
+          </Button>
+          <TextBlock Classes="mono small tertiary" Margin="8,0,0,0" Text="{Binding RangeText}" />
+        </StackPanel>
+        <!-- 右下角:收起 / 展开数据区右侧的面板(Navicat 的习惯)。 -->
+        <Rectangle Grid.Column="7" Classes="vsep" Margin="8,0,4,0" />
+        <Button x:Name="SidePanelToggle" Grid.Column="8" Theme="{StaticResource MongoIconButton}" Width="22" Height="22"
+                Command="{Binding ToggleSidePanelCommand}" ToolTip.Tip="{Binding SidePanelTip}" IsVisible="{Binding !IsTreeMode}">
+          <Panel>
+            <ui:Glyph Key="Mongo.panel-right-close" Size="13" Brush="{DynamicResource VelaTextTertiary}" IsVisible="{Binding IsSidePanelVisible}" />
+            <ui:Glyph Key="Mongo.panel-right-open" Size="13" Brush="{DynamicResource VelaAccent}" IsVisible="{Binding !IsSidePanelVisible}" />
+          </Panel>
+        </Button>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

@@ -63,7 +63,7 @@ internal sealed partial class RedisConnection
         ArgumentNullException.ThrowIfNull(value);
         cancellationToken.ThrowIfCancellationRequested();
         IDatabase db = Db();
-        RedisKey redisKey = key.ToRedisKey();
+        var redisKey = key.ToRedisKey();
 
         if (type is "string")
         {
@@ -81,28 +81,28 @@ internal sealed partial class RedisConnection
         switch (type)
         {
             case "hash":
-                await db.HashSetAsync(redisKey, field.Length > 0 ? field : "field", value).ConfigureAwait(false);
+                _ = await db.HashSetAsync(redisKey, field.Length > 0 ? field : "field", value).ConfigureAwait(false);
                 break;
             case "list":
-                await db.ListRightPushAsync(redisKey, value).ConfigureAwait(false);
+                _ = await db.ListRightPushAsync(redisKey, value).ConfigureAwait(false);
                 break;
             case "set":
-                await db.SetAddAsync(redisKey, value).ConfigureAwait(false);
+                _ = await db.SetAddAsync(redisKey, value).ConfigureAwait(false);
                 break;
             case "zset":
-                await db.SortedSetAddAsync(redisKey, value,
+                _ = await db.SortedSetAddAsync(redisKey, value,
                     double.TryParse(field, NumberStyles.Float, CultureInfo.InvariantCulture, out double score) ? score : 0)
                     .ConfigureAwait(false);
                 break;
             case "stream":
-                await db.StreamAddAsync(redisKey, field.Length > 0 ? field : "field", value).ConfigureAwait(false);
+                _ = await db.StreamAddAsync(redisKey, field.Length > 0 ? field : "field", value).ConfigureAwait(false);
                 break;
             default:
                 return false;
         }
         if (ttl is { } expiry)
         {
-            await db.KeyExpireAsync(redisKey, expiry).ConfigureAwait(false);
+            _ = await db.KeyExpireAsync(redisKey, expiry).ConfigureAwait(false);
         }
         return true;
     }
@@ -136,13 +136,13 @@ internal sealed partial class RedisConnection
         string? directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory))
         {
-            Directory.CreateDirectory(directory);
+            _ = Directory.CreateDirectory(directory);
         }
         await using (var file = new StreamWriter(path, append: false, new UTF8Encoding(false)))
         {
             if (format == RedisExportFormat.RespCommands)
             {
-                await file.WriteLineAsync($"# velashell redis export · {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} · db{_database}")
+                await file.WriteLineAsync($"# velashell redis export · {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} · db{Database}")
                     .ConfigureAwait(false);
             }
             foreach (RedisKeyName key in keys)
@@ -173,7 +173,7 @@ internal sealed partial class RedisConnection
 
     private async Task<string?> BuildExportLineAsync(IDatabase db, RedisKeyName key, RedisExportFormat format)
     {
-        RedisKey redisKey = key.ToRedisKey();
+        var redisKey = key.ToRedisKey();
         TimeSpan? ttl = await db.KeyTimeToLiveAsync(redisKey).ConfigureAwait(false);
         long ttlMs = ttl is { } span ? (long)span.TotalMilliseconds : 0;
 
@@ -200,7 +200,7 @@ internal sealed partial class RedisConnection
 
     private static async Task<string?> BuildRespLineAsync(IDatabase db, RedisKeyName key, string type, long ttlMs)
     {
-        RedisKey redisKey = key.ToRedisKey();
+        var redisKey = key.ToRedisKey();
         string name = Quote(key.Raw.ToArray());
         string expire = ttlMs > 0
             ? $"\nPEXPIRE {name} {ttlMs.ToString(CultureInfo.InvariantCulture)}"
@@ -208,50 +208,50 @@ internal sealed partial class RedisConnection
         switch (type)
         {
             case "string":
-            {
-                RedisValue value = await db.StringGetAsync(redisKey).ConfigureAwait(false);
-                return $"SET {name} {Quote((byte[]?)value ?? [])}{expire}";
-            }
+                {
+                    RedisValue value = await db.StringGetAsync(redisKey).ConfigureAwait(false);
+                    return $"SET {name} {Quote((byte[]?)value ?? [])}{expire}";
+                }
             case "hash":
-            {
-                HashEntry[] entries = await db.HashGetAllAsync(redisKey).ConfigureAwait(false);
-                if (entries.Length == 0)
                 {
-                    return null;
+                    HashEntry[] entries = await db.HashGetAllAsync(redisKey).ConfigureAwait(false);
+                    if (entries.Length == 0)
+                    {
+                        return null;
+                    }
+                    StringBuilder builder = new StringBuilder("HSET ").Append(name);
+                    foreach (HashEntry entry in entries)
+                    {
+                        _ = builder.Append(' ').Append(Quote((byte[]?)entry.Name ?? []))
+                            .Append(' ').Append(Quote((byte[]?)entry.Value ?? []));
+                    }
+                    return builder.Append(expire).ToString();
                 }
-                var builder = new StringBuilder("HSET ").Append(name);
-                foreach (HashEntry entry in entries)
-                {
-                    builder.Append(' ').Append(Quote((byte[]?)entry.Name ?? []))
-                        .Append(' ').Append(Quote((byte[]?)entry.Value ?? []));
-                }
-                return builder.Append(expire).ToString();
-            }
             case "list":
-            {
-                RedisValue[] items = await db.ListRangeAsync(redisKey).ConfigureAwait(false);
-                return items.Length == 0 ? null : Join("RPUSH", name, items) + expire;
-            }
+                {
+                    RedisValue[] items = await db.ListRangeAsync(redisKey).ConfigureAwait(false);
+                    return items.Length == 0 ? null : Join("RPUSH", name, items) + expire;
+                }
             case "set":
-            {
-                RedisValue[] members = await db.SetMembersAsync(redisKey).ConfigureAwait(false);
-                return members.Length == 0 ? null : Join("SADD", name, members) + expire;
-            }
+                {
+                    RedisValue[] members = await db.SetMembersAsync(redisKey).ConfigureAwait(false);
+                    return members.Length == 0 ? null : Join("SADD", name, members) + expire;
+                }
             case "zset":
-            {
-                SortedSetEntry[] entries = await db.SortedSetRangeByRankWithScoresAsync(redisKey).ConfigureAwait(false);
-                if (entries.Length == 0)
                 {
-                    return null;
+                    SortedSetEntry[] entries = await db.SortedSetRangeByRankWithScoresAsync(redisKey).ConfigureAwait(false);
+                    if (entries.Length == 0)
+                    {
+                        return null;
+                    }
+                    StringBuilder builder = new StringBuilder("ZADD ").Append(name);
+                    foreach (SortedSetEntry entry in entries)
+                    {
+                        _ = builder.Append(' ').Append(FormatScore(entry.Score))
+                            .Append(' ').Append(Quote((byte[]?)entry.Element ?? []));
+                    }
+                    return builder.Append(expire).ToString();
                 }
-                var builder = new StringBuilder("ZADD ").Append(name);
-                foreach (SortedSetEntry entry in entries)
-                {
-                    builder.Append(' ').Append(FormatScore(entry.Score))
-                        .Append(' ').Append(Quote((byte[]?)entry.Element ?? []));
-                }
-                return builder.Append(expire).ToString();
-            }
             default:
                 // 流的条目 id 是服务端生成的,用 XADD 重放会拿到**新的 id** —— 那不是同一份数据。
                 // 与其写一行看着像成功的命令,不如如实跳过,并让界面提示改用 DUMP。
@@ -260,10 +260,10 @@ internal sealed partial class RedisConnection
 
         static string Join(string command, string name, RedisValue[] values)
         {
-            var builder = new StringBuilder(command).Append(' ').Append(name);
+            StringBuilder builder = new StringBuilder(command).Append(' ').Append(name);
             foreach (RedisValue value in values)
             {
-                builder.Append(' ').Append(Quote((byte[]?)value ?? []));
+                _ = builder.Append(' ').Append(Quote((byte[]?)value ?? []));
             }
             return builder.ToString();
         }
@@ -271,7 +271,7 @@ internal sealed partial class RedisConnection
 
     private static async Task<string?> BuildJsonLineAsync(IDatabase db, RedisKeyName key, string type, long ttlMs)
     {
-        RedisKey redisKey = key.ToRedisKey();
+        var redisKey = key.ToRedisKey();
         var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["key"] = key.Display,

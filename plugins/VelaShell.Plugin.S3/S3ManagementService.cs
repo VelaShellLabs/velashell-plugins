@@ -23,8 +23,10 @@ public sealed class S3ManagementService : IS3ManagementService
 
     /// <summary>创建管理服务;<paramref name="accessor" /> 提供会话到客户端的解析。</summary>
     /// <param name="accessor">会话客户端访问器,通常就是 <see cref="S3ProtocolFileSystem" />。</param>
-    internal S3ManagementService(IS3ClientAccessor accessor) =>
+    internal S3ManagementService(IS3ClientAccessor accessor)
+    {
         _accessor = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
 
     /// <summary>供 DI 使用的工厂:把文件服务同时当作客户端访问器。</summary>
     /// <param name="fileService">同一条会话上的 S3 文件服务。</param>
@@ -230,7 +232,7 @@ public sealed class S3ManagementService : IS3ManagementService
         IAmazonS3 client = _accessor.GetClient(sessionId);
         try
         {
-            await client.DeleteObjectAsync(new DeleteObjectRequest
+            _ = await client.DeleteObjectAsync(new DeleteObjectRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -251,7 +253,7 @@ public sealed class S3ManagementService : IS3ManagementService
         {
             // 把旧版本复制成一个**新版本**,而不是删掉它之后的版本 —— 后者会永久销毁数据,
             // 且一旦删错无法挽回。复制是幂等且完全可逆的。
-            await client.CopyObjectAsync(new CopyObjectRequest
+            _ = await client.CopyObjectAsync(new CopyObjectRequest
             {
                 SourceBucket = bucket,
                 SourceKey = key,
@@ -375,10 +377,10 @@ public sealed class S3ManagementService : IS3ManagementService
         {
             if (tags.Count == 0)
             {
-                await client.DeleteObjectTaggingAsync(new DeleteObjectTaggingRequest { BucketName = bucket, Key = key }, cancellationToken).ConfigureAwait(false);
+                _ = await client.DeleteObjectTaggingAsync(new DeleteObjectTaggingRequest { BucketName = bucket, Key = key }, cancellationToken).ConfigureAwait(false);
                 return;
             }
-            await client.PutObjectTaggingAsync(new PutObjectTaggingRequest
+            _ = await client.PutObjectTaggingAsync(new PutObjectTaggingRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -416,7 +418,7 @@ public sealed class S3ManagementService : IS3ManagementService
         IAmazonS3 client = _accessor.GetClient(sessionId);
         try
         {
-            await client.PutObjectAclAsync(new PutObjectAclRequest
+            _ = await client.PutObjectAclAsync(new PutObjectAclRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -489,7 +491,7 @@ public sealed class S3ManagementService : IS3ManagementService
         IAmazonS3 client = _accessor.GetClient(sessionId);
         try
         {
-            await client.PutObjectRetentionAsync(new PutObjectRetentionRequest
+            _ = await client.PutObjectRetentionAsync(new PutObjectRetentionRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -534,7 +536,7 @@ public sealed class S3ManagementService : IS3ManagementService
         IAmazonS3 client = _accessor.GetClient(sessionId);
         try
         {
-            await client.PutObjectLegalHoldAsync(new PutObjectLegalHoldRequest
+            _ = await client.PutObjectLegalHoldAsync(new PutObjectLegalHoldRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -557,7 +559,7 @@ public sealed class S3ManagementService : IS3ManagementService
         IAmazonS3 client = _accessor.GetClient(sessionId);
         try
         {
-            await client.RestoreObjectAsync(new RestoreObjectRequest
+            _ = await client.RestoreObjectAsync(new RestoreObjectRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -618,7 +620,7 @@ public sealed class S3ManagementService : IS3ManagementService
         IAmazonS3 client = _accessor.GetClient(sessionId);
         try
         {
-            await client.AbortMultipartUploadAsync(new AbortMultipartUploadRequest
+            _ = await client.AbortMultipartUploadAsync(new AbortMultipartUploadRequest
             {
                 BucketName = bucket,
                 Key = key,
@@ -660,7 +662,7 @@ public sealed class S3ManagementService : IS3ManagementService
                 if (item is RecordsEvent { Payload: { } records })
                 {
                     using var reader = new StreamReader(records, Encoding.UTF8);
-                    output.Append(await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false));
+                    _ = output.Append(await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false));
                 }
             }
             return output.ToString();
@@ -762,87 +764,87 @@ public sealed class S3ManagementService : IS3ManagementService
         switch (kind)
         {
             case S3ConfigKind.Versioning:
-                await client.PutBucketVersioningAsync(new PutBucketVersioningRequest
+                _ = await client.PutBucketVersioningAsync(new PutBucketVersioningRequest
                 {
                     BucketName = bucket,
                     VersioningConfig = S3ConfigJson.Deserialize<S3BucketVersioningConfig>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Lifecycle:
-                await client.PutLifecycleConfigurationAsync(new PutLifecycleConfigurationRequest
+                _ = await client.PutLifecycleConfigurationAsync(new PutLifecycleConfigurationRequest
                 {
                     BucketName = bucket,
                     Configuration = S3ConfigJson.Deserialize<LifecycleConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Policy:
-                await client.PutBucketPolicyAsync(new PutBucketPolicyRequest { BucketName = bucket, Policy = json }, ct).ConfigureAwait(false);
+                _ = await client.PutBucketPolicyAsync(new PutBucketPolicyRequest { BucketName = bucket, Policy = json }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.PublicAccessBlock:
-                await client.PutPublicAccessBlockAsync(new PutPublicAccessBlockRequest
+                _ = await client.PutPublicAccessBlockAsync(new PutPublicAccessBlockRequest
                 {
                     BucketName = bucket,
                     PublicAccessBlockConfiguration = S3ConfigJson.Deserialize<PublicAccessBlockConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.OwnershipControls:
-                await client.PutBucketOwnershipControlsAsync(new PutBucketOwnershipControlsRequest
+                _ = await client.PutBucketOwnershipControlsAsync(new PutBucketOwnershipControlsRequest
                 {
                     BucketName = bucket,
                     OwnershipControls = S3ConfigJson.Deserialize<OwnershipControls>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Acl:
-                await client.PutBucketAclAsync(new PutBucketAclRequest
+                _ = await client.PutBucketAclAsync(new PutBucketAclRequest
                 {
                     BucketName = bucket,
                     AccessControlPolicy = S3ConfigJson.Deserialize<S3AccessControlList>(json),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Cors:
-                await client.PutCORSConfigurationAsync(new PutCORSConfigurationRequest
+                _ = await client.PutCORSConfigurationAsync(new PutCORSConfigurationRequest
                 {
                     BucketName = bucket,
                     Configuration = S3ConfigJson.Deserialize<CORSConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Encryption:
-                await client.PutBucketEncryptionAsync(new PutBucketEncryptionRequest
+                _ = await client.PutBucketEncryptionAsync(new PutBucketEncryptionRequest
                 {
                     BucketName = bucket,
                     ServerSideEncryptionConfiguration = S3ConfigJson.Deserialize<ServerSideEncryptionConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.ObjectLock:
-                await client.PutObjectLockConfigurationAsync(new PutObjectLockConfigurationRequest
+                _ = await client.PutObjectLockConfigurationAsync(new PutObjectLockConfigurationRequest
                 {
                     BucketName = bucket,
                     ObjectLockConfiguration = S3ConfigJson.Deserialize<ObjectLockConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Tagging:
-                await client.PutBucketTaggingAsync(new PutBucketTaggingRequest
+                _ = await client.PutBucketTaggingAsync(new PutBucketTaggingRequest
                 {
                     BucketName = bucket,
                     TagSet = S3ConfigJson.Deserialize<Tagging>(json)?.TagSet ?? [],
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Replication:
-                await client.PutBucketReplicationAsync(new PutBucketReplicationRequest
+                _ = await client.PutBucketReplicationAsync(new PutBucketReplicationRequest
                 {
                     BucketName = bucket,
                     Configuration = S3ConfigJson.Deserialize<ReplicationConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Website:
-                await client.PutBucketWebsiteAsync(new PutBucketWebsiteRequest
+                _ = await client.PutBucketWebsiteAsync(new PutBucketWebsiteRequest
                 {
                     BucketName = bucket,
                     WebsiteConfiguration = S3ConfigJson.Deserialize<WebsiteConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Logging:
-                await client.PutBucketLoggingAsync(new PutBucketLoggingRequest
+                _ = await client.PutBucketLoggingAsync(new PutBucketLoggingRequest
                 {
                     BucketName = bucket,
                     LoggingConfig = S3ConfigJson.Deserialize<S3BucketLoggingConfig>(json) ?? new(),
@@ -850,7 +852,7 @@ public sealed class S3ManagementService : IS3ManagementService
                 break;
             case S3ConfigKind.Notification:
                 NotificationDocument notification = S3ConfigJson.Deserialize<NotificationDocument>(json) ?? new();
-                await client.PutBucketNotificationAsync(new PutBucketNotificationRequest
+                _ = await client.PutBucketNotificationAsync(new PutBucketNotificationRequest
                 {
                     BucketName = bucket,
                     TopicConfigurations = notification.TopicConfigurations,
@@ -860,21 +862,21 @@ public sealed class S3ManagementService : IS3ManagementService
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.AccelerateConfiguration:
-                await client.PutBucketAccelerateConfigurationAsync(new PutBucketAccelerateConfigurationRequest
+                _ = await client.PutBucketAccelerateConfigurationAsync(new PutBucketAccelerateConfigurationRequest
                 {
                     BucketName = bucket,
                     AccelerateConfiguration = new() { Status = BucketAccelerateStatus.FindValue(S3ConfigJson.Unwrap(json, "Status")) },
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.RequestPayment:
-                await client.PutBucketRequestPaymentAsync(new PutBucketRequestPaymentRequest
+                _ = await client.PutBucketRequestPaymentAsync(new PutBucketRequestPaymentRequest
                 {
                     BucketName = bucket,
                     RequestPaymentConfiguration = new() { Payer = S3ConfigJson.Unwrap(json, "Payer") },
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Inventory:
-                await client.PutBucketInventoryConfigurationAsync(new PutBucketInventoryConfigurationRequest
+                _ = await client.PutBucketInventoryConfigurationAsync(new PutBucketInventoryConfigurationRequest
                 {
                     BucketName = bucket,
                     InventoryId = id,
@@ -882,7 +884,7 @@ public sealed class S3ManagementService : IS3ManagementService
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Analytics:
-                await client.PutBucketAnalyticsConfigurationAsync(new PutBucketAnalyticsConfigurationRequest
+                _ = await client.PutBucketAnalyticsConfigurationAsync(new PutBucketAnalyticsConfigurationRequest
                 {
                     BucketName = bucket,
                     AnalyticsId = id,
@@ -890,7 +892,7 @@ public sealed class S3ManagementService : IS3ManagementService
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Metrics:
-                await client.PutBucketMetricsConfigurationAsync(new PutBucketMetricsConfigurationRequest
+                _ = await client.PutBucketMetricsConfigurationAsync(new PutBucketMetricsConfigurationRequest
                 {
                     BucketName = bucket,
                     MetricsId = id,
@@ -898,7 +900,7 @@ public sealed class S3ManagementService : IS3ManagementService
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.IntelligentTiering:
-                await client.PutBucketIntelligentTieringConfigurationAsync(new PutBucketIntelligentTieringConfigurationRequest
+                _ = await client.PutBucketIntelligentTieringConfigurationAsync(new PutBucketIntelligentTieringConfigurationRequest
                 {
                     BucketName = bucket,
                     IntelligentTieringId = id,
@@ -906,14 +908,14 @@ public sealed class S3ManagementService : IS3ManagementService
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.MetadataConfiguration:
-                await client.CreateBucketMetadataConfigurationAsync(new CreateBucketMetadataConfigurationRequest
+                _ = await client.CreateBucketMetadataConfigurationAsync(new CreateBucketMetadataConfigurationRequest
                 {
                     BucketName = bucket,
                     MetadataConfiguration = S3ConfigJson.Deserialize<MetadataConfiguration>(json) ?? new(),
                 }, ct).ConfigureAwait(false);
                 break;
             case S3ConfigKind.Abac:
-                await client.PutBucketAbacAsync(new PutBucketAbacRequest
+                _ = await client.PutBucketAbacAsync(new PutBucketAbacRequest
                 {
                     BucketName = bucket,
                     AbacStatus = new() { Status = BucketAbacStatus.FindValue(S3ConfigJson.Unwrap(json, "Status")) },
@@ -995,7 +997,7 @@ public sealed class S3ManagementService : IS3ManagementService
                 MetadataDirective = S3MetadataDirective.COPY,
             };
             configure(request);
-            await client.CopyObjectAsync(request, cancellationToken).ConfigureAwait(false);
+            _ = await client.CopyObjectAsync(request, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

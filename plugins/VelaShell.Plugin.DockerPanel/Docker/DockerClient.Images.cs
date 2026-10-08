@@ -53,7 +53,7 @@ public sealed partial class DockerClient
     public async Task PullImageAsync(string fromImage, string? tag, string? platform, bool allTags,
         string? registryAuth, IProgress<PullProgressFrame> progress, CancellationToken cancellationToken = default)
     {
-        var path = "/images/create" + Query(
+        string path = "/images/create" + Query(
             ("fromImage", fromImage),
             ("tag", allTags ? null : string.IsNullOrWhiteSpace(tag) ? "latest" : tag),
             ("platform", string.IsNullOrWhiteSpace(platform) ? null : platform));
@@ -64,7 +64,7 @@ public sealed partial class DockerClient
     public async Task PushImageAsync(string name, string? tag, string? registryAuth,
         IProgress<PullProgressFrame> progress, CancellationToken cancellationToken = default)
     {
-        var path = $"/images/{Uri.EscapeDataString(name)}/push" + Query(("tag", tag));
+        string path = $"/images/{Uri.EscapeDataString(name)}/push" + Query(("tag", tag));
         await StreamNdjsonAsync(HttpMethod.Post, path, registryAuth, progress, cancellationToken).ConfigureAwait(false);
     }
 
@@ -90,7 +90,7 @@ public sealed partial class DockerClient
     public async Task<Stream> SaveImagesAsync(IReadOnlyList<string> names, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var path = "/images/get" + Query([.. names.Select(n => ("names", (string?)n))]);
+        string path = "/images/get" + Query([.. names.Select(n => ("names", (string?)n))]);
         HttpResponseMessage response;
         try
         {
@@ -135,7 +135,7 @@ public sealed partial class DockerClient
         }
         if (!string.IsNullOrEmpty(registryAuth))
         {
-            request.Headers.TryAddWithoutValidation("X-Registry-Auth", registryAuth);
+            _ = request.Headers.TryAddWithoutValidation("X-Registry-Auth", registryAuth);
         }
         HttpResponseMessage response;
         try
@@ -150,7 +150,7 @@ public sealed partial class DockerClient
         using (response)
         {
             await EnsureSuccessAsync(response, path, cancellationToken).ConfigureAwait(false);
-            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             using var reader = new StreamReader(body);
             string? failure = null;
             while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)

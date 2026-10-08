@@ -24,7 +24,7 @@ public class InspectionTests
             Processes = [["root", "1234", "1200", "0", "10:21", "?", "00:00:03", "nginx: master process"]]
         };
 
-        var rows = ProcessTable.Normalize(top);
+        IReadOnlyList<ProcessRow> rows = ProcessTable.Normalize(top);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual("1234", rows[0].Pid);
@@ -44,7 +44,7 @@ public class InspectionTests
             Processes = [["1", "nobody", "0:00", "/bin/sh -c server"]]
         };
 
-        var rows = ProcessTable.Normalize(top);
+        IReadOnlyList<ProcessRow> rows = ProcessTable.Normalize(top);
 
         Assert.AreEqual("1", rows[0].Pid);
         Assert.AreEqual("nobody", rows[0].User);
@@ -74,7 +74,7 @@ public class InspectionTests
             Processes = [["root", "1"]]
         };
 
-        var rows = ProcessTable.Normalize(top);
+        IReadOnlyList<ProcessRow> rows = ProcessTable.Normalize(top);
 
         // 缺列不能抛:一个越界异常会把整张表换成一句报错,而前两列本来是读得到的。
         Assert.AreEqual("1", rows[0].Pid);
@@ -141,7 +141,7 @@ public class InspectionTests
             ]
         };
 
-        var reclaim = DiskMath.Reclaimable(usage);
+        ReclaimBreakdown reclaim = DiskMath.Reclaimable(usage);
 
         // 只算悬空的那 50 会把可回收量报少五倍 —— prune -a 会把 old:1 也删掉。
         Assert.AreEqual(300, reclaim.Images);
@@ -160,7 +160,7 @@ public class InspectionTests
             ]
         };
 
-        var reclaim = DiskMath.Reclaimable(usage);
+        ReclaimBreakdown reclaim = DiskMath.Reclaimable(usage);
 
         Assert.AreEqual(400, reclaim.Volumes);
         Assert.AreEqual(1, reclaim.UnusedVolumes);
@@ -206,7 +206,7 @@ public class InspectionTests
     [TestMethod]
     public void AgoFromIso_HandlesTheRfc3339FormThatImageInspectUses()
     {
-        var text = Humanize.AgoFromIso(DateTimeOffset.UtcNow.AddHours(-3).ToString("O"));
+        string text = Humanize.AgoFromIso(DateTimeOffset.UtcNow.AddHours(-3).ToString("O"));
 
         Assert.EndsWith("前", text);
         // 列表接口给 unix 秒、inspect 给 RFC3339,两条路要落到同一句话上。

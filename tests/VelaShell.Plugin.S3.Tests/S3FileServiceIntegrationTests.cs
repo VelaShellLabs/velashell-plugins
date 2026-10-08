@@ -166,7 +166,7 @@ public sealed class S3FileServiceIntegrationTests
         S3FileEntry bucket = await _service.GetFileInfoAsync(_session, "/test-bucket");
         Assert.IsTrue(bucket.IsDirectory);
 
-        await Assert.ThrowsExactlyAsync<VelaS3PathNotFoundException>(
+        _ = await Assert.ThrowsExactlyAsync<VelaS3PathNotFoundException>(
             () => _service.GetFileInfoAsync(_session, "/test-bucket/nope.txt"));
         AssertAllRequestsSigned();
     }
@@ -190,7 +190,7 @@ public sealed class S3FileServiceIntegrationTests
     [TestMethod]
     public async Task SetPermissions_IsRejectedAsUnsupported()
     {
-        await Assert.ThrowsExactlyAsync<VelaS3UnsupportedOperationException>(
+        _ = await Assert.ThrowsExactlyAsync<VelaS3UnsupportedOperationException>(
             () => _service.SetPermissionsAsync(_session, "/test-bucket/a.txt", 644));
     }
 
@@ -333,7 +333,7 @@ public sealed class S3FileServiceIntegrationTests
     {
         byte[] content = Encoding.UTF8.GetBytes(new string('z', 3000) + "end");
         _server.AddObject(Bucket, "public/asset.png", content);
-        _server.DeniedMethods.Add("HEAD");
+        _ = _server.DeniedMethods.Add("HEAD");
         string local = Path.Combine(Path.GetTempPath(), $"vela-s3-{Guid.NewGuid():N}");
         try
         {
@@ -405,8 +405,8 @@ public sealed class S3FileServiceIntegrationTests
     public async Task Download_GetDenied_ReportsAccessDeniedWithObjectPath()
     {
         _server.AddObject(Bucket, "public/asset.png", "x");
-        _server.DeniedMethods.Add("HEAD");
-        _server.DeniedMethods.Add("GET");
+        _ = _server.DeniedMethods.Add("HEAD");
+        _ = _server.DeniedMethods.Add("GET");
         string local = Path.Combine(Path.GetTempPath(), $"vela-s3-{Guid.NewGuid():N}");
         try
         {
@@ -519,7 +519,7 @@ public sealed class S3FileServiceIntegrationTests
     [TestMethod]
     public async Task Delete_MissingPath_Throws()
     {
-        await Assert.ThrowsExactlyAsync<VelaS3PathNotFoundException>(
+        _ = await Assert.ThrowsExactlyAsync<VelaS3PathNotFoundException>(
             () => _service.DeleteAsync(_session, "/test-bucket/ghost"));
     }
 
@@ -545,7 +545,7 @@ public sealed class S3FileServiceIntegrationTests
     {
         _server.AddObject(Bucket, "precious.dat", "irreplaceable");
 
-        await Assert.ThrowsAsync<VelaS3OperationException>(
+        _ = await Assert.ThrowsAsync<VelaS3OperationException>(
             () => _service.DeleteAsync(_session, "/test-bucket"));
 
         Assert.IsTrue(_server.HasBucket(Bucket), "桶不能被删掉。");
@@ -612,7 +612,7 @@ public sealed class S3FileServiceIntegrationTests
     [TestMethod]
     public async Task Rename_Bucket_IsRejectedAsUnsupported()
     {
-        await Assert.ThrowsExactlyAsync<VelaS3UnsupportedOperationException>(
+        _ = await Assert.ThrowsExactlyAsync<VelaS3UnsupportedOperationException>(
             () => _service.RenameAsync(_session, "/test-bucket", "/renamed-bucket"));
     }
 
@@ -624,7 +624,7 @@ public sealed class S3FileServiceIntegrationTests
     {
         await using var service = new S3ProtocolFileSystem();
 
-        await Assert.ThrowsExactlyAsync<VelaS3AuthenticationException>(() => service.OpenSessionAsync("probe-session", new()
+        _ = await Assert.ThrowsExactlyAsync<VelaS3AuthenticationException>(() => service.OpenSessionAsync("probe-session", new()
         {
             Endpoint = "127.0.0.1",
             Port = _server.Port,
@@ -640,7 +640,7 @@ public sealed class S3FileServiceIntegrationTests
     {
         await using var service = new S3ProtocolFileSystem();
 
-        await Assert.ThrowsExactlyAsync<VelaS3ConnectionException>(() => service.OpenSessionAsync("probe-session", new()
+        _ = await Assert.ThrowsExactlyAsync<VelaS3ConnectionException>(() => service.OpenSessionAsync("probe-session", new()
         {
             // 端口 1 上不会有 S3 服务。
             Endpoint = "127.0.0.1",
@@ -690,7 +690,7 @@ public sealed class S3FileServiceIntegrationTests
     [TestMethod]
     public async Task CreatePresignedUrl_RequiresObjectPath()
     {
-        await Assert.ThrowsExactlyAsync<VelaS3OperationException>(
+        _ = await Assert.ThrowsExactlyAsync<VelaS3OperationException>(
             () => _service.CreatePresignedUrlAsync(_session, "/test-bucket", TimeSpan.FromHours(1)));
     }
 

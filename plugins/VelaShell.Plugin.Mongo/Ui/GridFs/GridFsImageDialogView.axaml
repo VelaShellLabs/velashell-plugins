@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.GridFsImageDialogView"
+             x:DataType="ui:GridFsImageDialogViewModel">
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="*,48">
+    <Panel Grid.Row="0" Background="{DynamicResource VelaBgTerminal}">
+      <Image Source="{Binding Image}" Stretch="Uniform" Margin="12" IsVisible="{Binding IsFit}" />
+      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" IsVisible="{Binding IsActualSize}">
+        <Image Source="{Binding Image}" Stretch="None" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </ScrollViewer>
+    </Panel>
+
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+          <Button Theme="{StaticResource MongoOutlineButton}" Command="{Binding DownloadCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.download" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Text="{Binding Loc[Fs_Download]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoPillButton}" Content="{Binding Loc[Common_Close]}" Command="{Binding CloseCommand}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <Border Classes="segments">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <RadioButton Theme="{StaticResource MongoSegment}" GroupName="zoom" Content="{Binding Loc[Fs_Fit]}" IsChecked="{Binding IsFit}" />
+              <RadioButton Theme="{StaticResource MongoSegment}" GroupName="zoom" Content="100%" IsChecked="{Binding IsActualSize}" />
+            </StackPanel>
+          </Border>
+          <TextBlock Classes="mono small tertiary" Text="{Binding Info}" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

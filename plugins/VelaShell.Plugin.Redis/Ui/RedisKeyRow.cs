@@ -1,4 +1,4 @@
-﻿namespace VelaShell.Plugin.Redis.Ui;
+namespace VelaShell.Plugin.Redis.Ui;
 
 /// <summary>
 /// 键列表上的一行。两种形态:**一个真实的键**,或**一条把同前缀的一批键折起来的分组行**。
@@ -59,7 +59,7 @@ public sealed class RedisKeyRow : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(CountText));
         }
     }
@@ -79,7 +79,7 @@ public sealed class RedisKeyRow : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(IsCollapsed));
             RaisePropertyChanged(nameof(IsExpandedGroup));
         }
@@ -112,7 +112,7 @@ public sealed class RedisKeyRow : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             foreach (string flag in TypeFlags)
             {
                 RaisePropertyChanged(flag);

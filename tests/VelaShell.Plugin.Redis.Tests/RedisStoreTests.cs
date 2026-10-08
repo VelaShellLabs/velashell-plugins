@@ -109,7 +109,7 @@ public sealed class RedisStoreTests
 
         await store.AppendHistoryAsync("host:6379", "A");
         await store.AppendHistoryAsync("host:6379", "B");
-        await store.LoadHistoryAsync("host:6379");
+        _ = await store.LoadHistoryAsync("host:6379");
 
         Assert.AreEqual(1, stub.OpenAttempts);
     }

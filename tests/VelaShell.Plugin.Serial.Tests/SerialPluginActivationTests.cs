@@ -1,4 +1,5 @@
 using VelaShell.PluginSdk;
+using VelaShell.PluginSdk.Commands;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Testing;
 
@@ -128,7 +129,7 @@ public sealed class SerialPluginActivationTests
     {
         using TestPluginContext context = NewContext();
 
-        await ActivateAsync(context);
+        _ = await ActivateAsync(context);
 
         string[] ids = [.. context.RecordingCommands.Registered.Select(command => command.Id)];
         Assert.AreSequenceEqual(
@@ -145,7 +146,7 @@ public sealed class SerialPluginActivationTests
     {
         // 命令面板里点一下就崩掉插件是不可接受的;没有会话时它只该记一条日志。
         using TestPluginContext context = NewContext();
-        await ActivateAsync(context);
+        _ = await ActivateAsync(context);
 
         PluginCommandDescriptorSnapshot command = Snapshot(context, "velashell.serial.break");
         await command.ExecuteAsync(CancellationToken.None);
@@ -155,7 +156,7 @@ public sealed class SerialPluginActivationTests
     public async Task GetChoices_ReturnsPortsForTheHostColumnOnly()
     {
         using TestPluginContext context = NewContext();
-        await ActivateAsync(context);
+        _ = await ActivateAsync(context);
         var source = (IProtocolChoiceSource)context.RecordingProtocols.GetTerminal("velashell.serial")!;
 
         IReadOnlyList<ProtocolSettingChoice> ports =
@@ -172,7 +173,7 @@ public sealed class SerialPluginActivationTests
     public async Task Connect_WithoutADeviceName_SaysSoInPlainLanguage()
     {
         using TestPluginContext context = NewContext();
-        await ActivateAsync(context);
+        _ = await ActivateAsync(context);
         IProtocolTerminal terminal = context.RecordingProtocols.GetTerminal("velashell.serial")!;
 
         ProtocolConnectionException error = await Assert.ThrowsExactlyAsync<ProtocolConnectionException>(
@@ -212,7 +213,7 @@ public sealed class SerialPluginActivationTests
     /// <summary>命令替身的形状随 SDK 走,这里只取执行体。</summary>
     private static PluginCommandDescriptorSnapshot Snapshot(TestPluginContext context, string id)
     {
-        var command = context.RecordingCommands.Registered.Single(c => c.Id == id);
+        PluginCommandDescriptor command = context.RecordingCommands.Registered.Single(c => c.Id == id);
         return new(command.ExecuteAsync);
     }
 

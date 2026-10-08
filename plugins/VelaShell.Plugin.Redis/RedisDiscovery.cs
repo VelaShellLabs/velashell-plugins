@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using VelaShell.PluginSdk;
 using VelaShell.PluginSdk.RemoteExec;
@@ -105,7 +105,7 @@ internal sealed partial class RedisDiscovery(IPluginContext context)
         var ports = new SortedSet<int>(CollectPorts(listening));
         foreach (int port in CollectPortsFromProcesses(processes))
         {
-            ports.Add(port);
+            _ = ports.Add(port);
         }
         if (ports.Count == 0)
         {
@@ -131,7 +131,7 @@ internal sealed partial class RedisDiscovery(IPluginContext context)
         var found = new List<RedisDiscoveredInstance>();
         foreach (int port in ports)
         {
-            byPort.TryGetValue(port, out (string Path, string Password, bool Tls) config);
+            _ = byPort.TryGetValue(port, out (string Path, string Password, bool Tls) config);
             found.Add(new(
                 "127.0.0.1",
                 port,

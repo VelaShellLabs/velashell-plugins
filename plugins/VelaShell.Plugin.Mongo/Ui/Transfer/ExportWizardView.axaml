@@ -1,0 +1,582 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             xmlns:sys="using:System"
+             x:Class="VelaShell.Plugin.Mongo.Ui.ExportWizardView"
+             x:DataType="ui:ExportWizardViewModel">
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/Transfer/TransferStyles.axaml" />
+  </UserControl.Styles>
+
+  <!-- 设计稿 19「导出向导」:左栏四步 200 / 主区 / 右栏 300 / 底栏 48。外壳画 28px 标题栏,这里画标题栏以下。 -->
+  <Grid RowDefinitions="*,48">
+    <Grid Grid.Row="0" ColumnDefinitions="200,*,300">
+
+      <!-- ══ 左栏:步骤 ══ -->
+      <Border Grid.Column="0" Classes="xfer-steps">
+        <ItemsControl ItemsSource="{Binding Steps}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="2" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ui:XferStep">
+              <Button Theme="{StaticResource XferStepButton}" Classes.current="{Binding IsCurrent}"
+                      Command="{Binding $parent[UserControl].((ui:ExportWizardViewModel)DataContext).JumpCommand}"
+                      CommandParameter="{Binding}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <Panel Width="20" Height="20" VerticalAlignment="Top">
+                    <Border Classes="xnum done" IsVisible="{Binding IsDone}">
+                      <ui:Glyph Key="Mongo.check" Size="11" Brush="{DynamicResource VelaStatusConnected}" HorizontalAlignment="Center" />
+                    </Border>
+                    <Border Classes="xnum current" IsVisible="{Binding IsCurrent}">
+                      <TextBlock Text="{Binding NumberText}" />
+                    </Border>
+                    <Border Classes="xnum pending" IsVisible="{Binding IsPending}">
+                      <TextBlock Text="{Binding NumberText}" />
+                    </Border>
+                  </Panel>
+                  <StackPanel Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Classes="xstep-title" Classes.current="{Binding IsCurrent}" Classes.pending="{Binding IsPending}"
+                               Text="{Binding Title}" />
+                    <TextBlock Classes="ui small muted trim" MaxWidth="140" Text="{Binding Summary}" IsVisible="{Binding HasSummary}" />
+                  </StackPanel>
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <!-- ══ 主区 ══ -->
+      <DockPanel Grid.Column="1" Margin="16,14">
+
+        <!-- 来源条:shop.orders { status: "paid", … }  ·  约 312 份文档 -->
+        <Border DockPanel.Dock="Top" Classes="xcard" Margin="0,0,0,14">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Classes="ui small secondary" Margin="12,0,0,0" Text="{Binding CountText}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ui:Glyph Key="{Binding SourceIconKey}" Size="13" Brush="{Binding SourceIconToken, Converter={x:Static ui:Converters.Token}}" />
+              <TextBlock Classes="mono primary medium" Text="{Binding SourceTitle}" />
+              <TextBlock Classes="mono small tertiary trim" MaxWidth="440" Text="{Binding FilterSummary}" IsVisible="{Binding IsSingle}" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <Panel>
+          <!-- ── 第 1 步:数据来源 ── -->
+          <DockPanel IsVisible="{Binding IsStep0}">
+            <StackPanel DockPanel.Dock="Top" Spacing="14">
+              <StackPanel Spacing="6" IsVisible="{Binding HasProfiles}">
+                <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_LoadProfile]}" />
+                <ComboBox Classes="compact xsel" MaxWidth="360" HorizontalAlignment="Left" ItemsSource="{Binding Profiles}"
+                          SelectedItem="{Binding Profile}" PlaceholderText="{Binding Loc[Exp_PickProfile]}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="ui:XferOption">
+                      <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+
+              <StackPanel Spacing="8" IsVisible="{Binding IsSingle}">
+                <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_Condition]}" />
+                <Border Classes="segments" HorizontalAlignment="Left">
+                  <StackPanel Orientation="Horizontal" Spacing="1">
+                    <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-scope" IsChecked="{Binding UseQuery}"
+                                 Content="{Binding Loc[Exp_CurrentFilter]}" />
+                    <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-scope" IsChecked="{Binding UseAll}"
+                                 Content="{Binding Loc[Exp_AllDocuments]}" />
+                  </StackPanel>
+                </Border>
+                <TextBox Theme="{StaticResource MongoTextBox}" Height="28" Classes.invalid="{Binding FilterInvalid}"
+                         Text="{Binding FilterText}" PlaceholderText="{}{ status: &quot;paid&quot; }" />
+                <TextBlock Classes="ui small err" Text="{Binding Loc[Exp_BadFilter]}" IsVisible="{Binding FilterInvalid}" />
+                <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Exp_ConditionHint]}" />
+              </StackPanel>
+            </StackPanel>
+
+            <!-- 整库:集合多选 -->
+            <DockPanel IsVisible="{Binding IsMulti}">
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
+                  <Button Theme="{StaticResource MongoToolButton}" Command="{Binding SelectAllCommand}" Content="{Binding Loc[Exp_SelectAll]}" />
+                  <Button Theme="{StaticResource MongoToolButton}" Command="{Binding SelectNoneCommand}" Content="{Binding Loc[Exp_SelectNone]}" />
+                </StackPanel>
+                <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_Collections]}" />
+              </DockPanel>
+              <Border Classes="xtable">
+                <DockPanel>
+                  <Border DockPanel.Dock="Top" Classes="colheader">
+                    <Grid ColumnDefinitions="36,*,120" ui:TableColumns.Header="exportColls" ui:TableColumns.Fixed="0">
+                      <TextBlock Grid.Column="1" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Exp_ColCollection]}" />
+                      <TextBlock Grid.Column="2" Classes="ui small muted" Margin="10,0" HorizontalAlignment="Right" Text="{Binding Loc[Exp_ColDocs]}" />
+                    </Grid>
+                  </Border>
+                  <ListBox Classes="rows" ItemsSource="{Binding Sources}">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="ui:ExportSourceRow">
+                        <Border Classes="row">
+                          <Grid ColumnDefinitions="36,*,120" ui:TableColumns.Row="exportColls">
+                            <CheckBox Grid.Column="0" Theme="{StaticResource XferCheck}" HorizontalAlignment="Center" IsChecked="{Binding IsChecked}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="10,0">
+                              <ui:Glyph Key="{Binding IconKey}" Size="12" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                              <TextBlock Classes="mono primary" Text="{Binding Name}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Classes="mono small tertiary" Margin="10,0" HorizontalAlignment="Right" Text="{Binding CountText}" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </DockPanel>
+              </Border>
+            </DockPanel>
+          </DockPanel>
+
+          <!-- ── 第 2 步:格式与字段 ── -->
+          <DockPanel IsVisible="{Binding IsStep1}">
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,14">
+              <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_Format]}" />
+              <ItemsControl ItemsSource="{Binding Formats}" Margin="-4,0">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ui:ExportFormatCard">
+                    <RadioButton Theme="{StaticResource XferFormatCard}" Margin="4,0" GroupName="exp-format" IsChecked="{Binding IsSelected}">
+                      <StackPanel Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <ui:Glyph Key="{Binding IconKey}" Size="13" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                          <TextBlock Classes="ui secondary medium" Classes.primary="{Binding IsSelected}" Text="{Binding Title}" />
+                        </StackPanel>
+                        <TextBlock Classes="ui small muted trim" Text="{Binding Subtitle}" />
+                      </StackPanel>
+                    </RadioButton>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <Panel>
+            <!-- 字段表 -->
+            <DockPanel IsVisible="{Binding ShowFieldTable}">
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_Fields]}" />
+                <TextBlock Classes="ui small muted" Text="{Binding FieldsHint}" />
+              </StackPanel>
+              <Border Classes="xtable">
+                <DockPanel>
+                  <Border DockPanel.Dock="Top" Classes="colheader">
+                    <Grid ColumnDefinitions="36,160,96,*,130" ui:TableColumns.Header="exportFields" ui:TableColumns.Fixed="0">
+                      <TextBlock Grid.Column="1" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Exp_ColPath]}" />
+                      <TextBlock Grid.Column="2" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Exp_ColType]}" />
+                      <TextBlock Grid.Column="3" Classes="ui small muted" Margin="10,0" Text="{Binding ColumnHeaderText}"
+                                 IsVisible="{Binding ShowColumnEditing}" />
+                      <TextBlock Grid.Column="4" Classes="ui small muted" Margin="10,0" Text="{Binding Loc[Exp_ColConvert]}"
+                                 IsVisible="{Binding ShowColumnEditing}" />
+                    </Grid>
+                  </Border>
+                  <Panel>
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                      <ItemsControl x:Name="FieldList" ItemsSource="{Binding Fields}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="ui:ExportFieldRow">
+                            <Border Classes="row" Background="Transparent">
+                              <Grid ColumnDefinitions="36,160,96,*,130" ui:TableColumns.Row="exportFields">
+                                <CheckBox Grid.Column="0" Theme="{StaticResource XferCheck}" HorizontalAlignment="Center" IsChecked="{Binding Include}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="10,0" Opacity="{Binding RowOpacity}">
+                                  <Border Classes="grip" Background="Transparent" Cursor="SizeNorthSouth" VerticalAlignment="Center">
+                                    <ui:Glyph Key="Mongo.grip-vertical" Size="11" Brush="{DynamicResource VelaTextMuted}" />
+                                  </Border>
+                                  <TextBlock Classes="mono primary trim" MaxWidth="120" Text="{Binding Path}" ToolTip.Tip="{Binding Path}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="10,0" Opacity="{Binding RowOpacity}">
+                                  <Rectangle Width="7" Height="7" RadiusX="2" RadiusY="2" VerticalAlignment="Center"
+                                             Fill="{Binding KindToken, Converter={x:Static ui:Converters.Token}}" />
+                                  <TextBlock Classes="ui small tertiary trim" MaxWidth="66" Text="{Binding KindsText}" />
+                                </StackPanel>
+                                <TextBox Grid.Column="3" Theme="{StaticResource MongoTextBox}" Classes="xcell" Margin="6,0"
+                                         Opacity="{Binding RowOpacity}" Text="{Binding Header}"
+                                         IsVisible="{Binding $parent[UserControl].((ui:ExportWizardViewModel)DataContext).ShowColumnEditing}" />
+                                <Panel Grid.Column="4" Margin="10,0" Opacity="{Binding RowOpacity}"
+                                       IsVisible="{Binding $parent[UserControl].((ui:ExportWizardViewModel)DataContext).ShowColumnEditing}">
+                                  <ComboBox Classes="compact xsel xflat" Height="22" MinHeight="22" ItemsSource="{Binding Choices}"
+                                            SelectedItem="{Binding ConversionOption}" IsVisible="{Binding HasChoices}">
+                                    <ComboBox.ItemTemplate>
+                                      <DataTemplate x:DataType="ui:XferOption">
+                                        <TextBlock Text="{Binding Label}" />
+                                      </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                  </ComboBox>
+                                  <TextBlock Classes="ui small trim" Classes.secondary="{Binding ConversionActive}" Classes.muted="{Binding !ConversionActive}"
+                                             Text="{Binding ConversionText}" IsVisible="{Binding !HasChoices}" />
+                                </Panel>
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Classes="ui muted" HorizontalAlignment="Center" VerticalAlignment="Center" Text="{Binding Loc[Common_Loading]}"
+                               IsVisible="{Binding Loading}" />
+                  </Panel>
+                </DockPanel>
+              </Border>
+            </DockPanel>
+
+            <!-- 转储 / 多集合:不显示字段表 -->
+            <Border Classes="notice" VerticalAlignment="Top" IsVisible="{Binding !ShowFieldTable}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <ui:Glyph Key="Mongo.info" Size="13" Brush="{DynamicResource VelaInfo}" VerticalAlignment="Top" />
+                <TextBlock Classes="ui secondary wrap" MaxWidth="520" Text="{Binding FormatNotice}" />
+              </StackPanel>
+            </Border>
+            </Panel>
+          </DockPanel>
+
+          <!-- ── 第 3 步:目标与选项 ── -->
+          <StackPanel Spacing="14" IsVisible="{Binding IsStep2}">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="ui small muted medium" Text="{Binding TargetLabel}" />
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Theme="{StaticResource MongoOutlineButton}" Margin="8,0,0,0" Command="{Binding BrowseCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                    <TextBlock Text="{Binding Loc[Exp_Browse]}" />
+                  </StackPanel>
+                </Button>
+                <TextBox Theme="{StaticResource MongoTextBox}" Height="28" Text="{Binding TargetPath}" PlaceholderText="{Binding Loc[Exp_TargetPlaceholder]}" />
+              </DockPanel>
+              <Border Classes="notice warn" IsVisible="{Binding TargetExists}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <ui:Glyph Key="Mongo.triangle-alert" Size="13" Brush="{DynamicResource VelaWarning}" />
+                  <TextBlock Classes="ui secondary wrap" Text="{Binding Loc[Exp_TargetExists]}" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_Plan]}" />
+              <Border Classes="xcard" Padding="12,10">
+                <StackPanel Spacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ui:Glyph Key="Mongo.list-checks" Size="13" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="ui primary" Text="{Binding PlanSummary}" />
+                  </StackPanel>
+                  <TextBlock Classes="ui small tertiary wrap" Text="{Binding Loc[Exp_PlanHint]}" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+              <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_AfterRun]}" />
+              <CheckBox Theme="{StaticResource XferCheck}" FontSize="{DynamicResource VelaFontSize11}" IsChecked="{Binding RevealWhenDone}"
+                        Content="{Binding Loc[Exp_RevealWhenDone]}" />
+            </StackPanel>
+          </StackPanel>
+
+          <!-- ── 第 4 步:执行 ── -->
+          <StackPanel Spacing="14" IsVisible="{Binding IsStep3}">
+            <StackPanel Spacing="6">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="mono accent semibold" Text="{Binding PercentText}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Classes="ui primary semibold" Text="{Binding Loc[Exp_Progress]}" />
+                  <TextBlock Classes="mono small tertiary trim" Text="{Binding ProgressText}" />
+                </StackPanel>
+              </DockPanel>
+              <ProgressBar Classes="xbar" Minimum="0" Maximum="100" Value="{Binding Progress}" />
+              <StackPanel Orientation="Horizontal" Spacing="16">
+                <TextBlock Classes="mono small tertiary" Text="{Binding RateText}" />
+                <TextBlock Classes="mono small tertiary" Text="{Binding BytesText}" />
+              </StackPanel>
+            </StackPanel>
+
+            <Border Classes="notice ok" IsVisible="{Binding ResultOk}" Opacity="{Binding HasResult, Converter={x:Static ui:Converters.Dim}}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <ui:Glyph Key="Mongo.circle-check" Size="13" Brush="{DynamicResource VelaStatusConnected}" />
+                <TextBlock Classes="ui secondary wrap" Text="{Binding ResultText}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="notice err" IsVisible="{Binding ResultFailed}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <ui:Glyph Key="Mongo.circle-x" Size="13" Brush="{DynamicResource VelaError}" />
+                <TextBlock Classes="ui secondary wrap" Text="{Binding ResultText}" />
+              </StackPanel>
+            </Border>
+
+            <StackPanel Spacing="6" IsVisible="{Binding OutputFiles.Count, Converter={x:Static ui:Converters.Positive}}">
+              <TextBlock Classes="ui small muted medium" Text="{Binding Loc[Exp_Files]}" />
+              <Border Classes="xtable" Padding="10,6" MaxHeight="220">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                  <ItemsControl ItemsSource="{Binding OutputFiles}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="sys:String">
+                        <StackPanel Orientation="Horizontal" Spacing="6" Height="22">
+                          <ui:Glyph Key="Mongo.file-text" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                          <TextBlock Classes="mono small secondary trim" Text="{Binding}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Border>
+            </StackPanel>
+          </StackPanel>
+        </Panel>
+      </DockPanel>
+
+      <!-- ══ 右栏 ══ -->
+      <Border Grid.Column="2" Classes="xfer-side">
+        <Panel>
+          <!-- 设置阶段:格式选项 / 输出预览 / 预估 -->
+          <ScrollViewer VerticalScrollBarVisibility="Auto" IsVisible="{Binding IsSetup}">
+            <StackPanel>
+              <Border Classes="xsec">
+                <StackPanel Spacing="8">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ui:Glyph Key="Mongo.settings-2" Size="12" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="h" Text="{Binding OptionsTitle}" />
+                  </StackPanel>
+
+                  <!-- CSV -->
+                  <StackPanel Spacing="8" IsVisible="{Binding IsCsv}">
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_Delimiter]}" />
+                      <ComboBox Grid.Column="1" Classes="compact xsel" Margin="8,0,0,0" ItemsSource="{Binding Delimiters}" SelectedItem="{Binding Delimiter}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="ui:XferOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_Encoding]}" />
+                      <ComboBox Grid.Column="1" Classes="compact xsel" Margin="8,0,0,0" ItemsSource="{Binding Encodings}" SelectedItem="{Binding Encoding}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="ui:XferOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_Nested]}" />
+                      <ComboBox Grid.Column="1" Classes="compact xsel" Margin="8,0,0,0" ItemsSource="{Binding NestedModes}" SelectedItem="{Binding Nested}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="ui:XferOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_NullValue]}" />
+                      <ComboBox Grid.Column="1" Classes="compact xsel" Margin="8,0,0,0" ItemsSource="{Binding NullModes}" SelectedItem="{Binding NullMode}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="ui:XferOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                    <CheckBox Theme="{StaticResource XferCheck}" IsChecked="{Binding WriteHeader}" Content="{Binding Loc[Exp_WriteHeader]}" />
+                  </StackPanel>
+
+                  <!-- JSON -->
+                  <StackPanel Spacing="8" IsVisible="{Binding IsJson}">
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_JsonLayout]}" />
+                      <Border Grid.Column="1" Classes="segments" Margin="8,0,0,0" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="1">
+                          <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-json-layout" IsChecked="{Binding JsonLines}"
+                                       Content="{Binding Loc[Exp_JsonLines]}" />
+                          <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-json-layout" IsChecked="{Binding JsonArray}"
+                                       Content="{Binding Loc[Exp_JsonArray]}" />
+                        </StackPanel>
+                      </Border>
+                    </Grid>
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_JsonMode]}" />
+                      <Border Grid.Column="1" Classes="segments" Margin="8,0,0,0" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="1">
+                          <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-json-mode" IsChecked="{Binding JsonShell}" Content="Shell" />
+                          <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-json-mode" IsChecked="{Binding JsonRelaxed}" Content="Relaxed" />
+                          <RadioButton Theme="{StaticResource MongoSegment}" GroupName="exp-json-mode" IsChecked="{Binding JsonCanonical}" Content="Canonical" />
+                        </StackPanel>
+                      </Border>
+                    </Grid>
+                    <TextBlock Classes="ui small muted wrap" Text="{Binding Loc[Exp_JsonHint]}" />
+                  </StackPanel>
+
+                  <!-- Excel -->
+                  <StackPanel Spacing="8" IsVisible="{Binding IsExcel}">
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_SheetName]}" />
+                      <TextBox Grid.Column="1" Theme="{StaticResource MongoTextBox}" Margin="8,0,0,0" Height="24" Text="{Binding SheetName}" />
+                    </Grid>
+                    <CheckBox Theme="{StaticResource XferCheck}" IsChecked="{Binding FreezeHeader}" Content="{Binding Loc[Exp_FreezeHeader]}" />
+                    <CheckBox Theme="{StaticResource XferCheck}" IsChecked="{Binding WriteHeader}" Content="{Binding Loc[Exp_WriteHeader]}" />
+                  </StackPanel>
+
+                  <!-- BSON 转储 -->
+                  <StackPanel Spacing="8" IsVisible="{Binding IsDump}">
+                    <CheckBox Theme="{StaticResource XferCheck}" IsChecked="{Binding Gzip}" Content="{Binding Loc[Exp_Gzip]}" />
+                    <TextBlock Classes="ui small muted wrap" Text="{Binding Loc[Exp_DumpHint]}" />
+                  </StackPanel>
+
+                  <!-- Shell -->
+                  <StackPanel Spacing="8" IsVisible="{Binding IsShell}">
+                    <Grid ColumnDefinitions="60,*">
+                      <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_ShellBatch]}" />
+                      <TextBox Grid.Column="1" Theme="{StaticResource MongoTextBox}" Margin="8,0,0,0" Height="24" Text="{Binding ShellBatch}" />
+                    </Grid>
+                    <TextBlock Classes="ui small muted wrap" Text="{Binding Loc[Exp_ShellHint]}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="xsec">
+                <StackPanel Spacing="8">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ui:Glyph Key="Mongo.eye" Size="12" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="h" Text="{Binding Loc[Exp_Preview]}" />
+                  </StackPanel>
+                  <Border Classes="input" Padding="8" MinHeight="40">
+                    <ItemsControl ItemsSource="{Binding PreviewLines}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="2" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:XferPreviewLine">
+                          <TextBlock Classes="mono tiny secondary trim" Classes.accent="{Binding IsHeader}" Classes.medium="{Binding IsHeader}"
+                                     Text="{Binding Text}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Border>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="xsec">
+                <StackPanel Spacing="8">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ui:Glyph Key="Mongo.gauge" Size="12" Brush="{DynamicResource VelaAccent}" />
+                    <TextBlock Classes="h" Text="{Binding Loc[Exp_Estimate]}" />
+                  </StackPanel>
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Classes="mono small primary" Text="{Binding EstimateDocs}" />
+                    <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_EstDocs]}" />
+                  </DockPanel>
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Classes="mono small primary" Text="{Binding EstimateSize}" />
+                    <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_EstSize]}" />
+                  </DockPanel>
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Classes="mono small primary" Text="{Binding EstimateTime}" />
+                    <TextBlock Classes="ui small tertiary" Text="{Binding Loc[Exp_EstTime]}" />
+                  </DockPanel>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- 执行阶段:日志 -->
+          <DockPanel IsVisible="{Binding IsStep3}" Margin="14,12">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+              <ui:Glyph DockPanel.Dock="Left" Key="Mongo.scroll-text" Size="12" Margin="0,0,6,0" Brush="{DynamicResource VelaAccent}" />
+              <TextBlock Classes="h" Text="{Binding Loc[Xfer_Log]}" />
+            </DockPanel>
+            <Border Classes="input" Padding="8">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding RunLog}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="3" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:XferLogLine">
+                      <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Classes="mono tiny muted" VerticalAlignment="Top" Margin="0,0,8,0" Text="{Binding Time}" />
+                        <TextBlock Grid.Column="1" Classes="mono tiny" TextWrapping="Wrap" Text="{Binding Text}"
+                                   Foreground="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+          </DockPanel>
+        </Panel>
+      </Border>
+    </Grid>
+
+    <!-- ══ 底栏 ══ -->
+    <Border Grid.Row="1" Classes="dialog-footer">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Panel Grid.Column="0">
+          <Button Theme="{StaticResource MongoToolButton}" Height="28" Padding="10,0" Command="{Binding SaveProfileCommand}"
+                  IsVisible="{Binding ShowSetupFooter}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.bookmark" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="ui secondary" Text="{Binding Loc[Exp_SaveProfile]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoToolButton}" Height="28" Padding="10,0" Command="{Binding BackgroundCommand}"
+                  IsVisible="{Binding ShowRunFooter}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.minimize-2" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="ui secondary" Text="{Binding Loc[Xfer_Background]}" />
+            </StackPanel>
+          </Button>
+          <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowDoneFooter}">
+            <Button Theme="{StaticResource MongoToolButton}" Height="28" Padding="10,0" Command="{Binding RevealCommand}"
+                    IsVisible="{Binding ResultOk}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.folder-open" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Classes="ui secondary" Text="{Binding Loc[Exp_Reveal]}" />
+              </StackPanel>
+            </Button>
+            <Button Theme="{StaticResource MongoToolButton}" Height="28" Padding="10,0" Command="{Binding CopyPathCommand}"
+                    IsVisible="{Binding ResultOk}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ui:Glyph Key="Mongo.copy" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+                <TextBlock Classes="ui secondary" Text="{Binding Loc[Exp_CopyPath]}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Panel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowSetupFooter}">
+            <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Cancel]}" Command="{Binding CloseCommand}" />
+            <Button Theme="{StaticResource MongoOutlineButton}" Content="{Binding Loc[Common_Back]}" Command="{Binding BackCommand}" />
+            <Button x:Name="NextButton" Theme="{StaticResource MongoPillButton}" Command="{Binding NextCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <TextBlock Text="{Binding NextText}" />
+                <ui:Glyph Key="Mongo.arrow-right" Size="12" Brush="{DynamicResource VelaAccent}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+          <Button Theme="{StaticResource MongoDangerButton}" Command="{Binding StopCommand}" IsVisible="{Binding ShowRunFooter}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.octagon-x" Size="12" Brush="{DynamicResource VelaError}" />
+              <TextBlock Text="{Binding Loc[Exp_Stop]}" />
+            </StackPanel>
+          </Button>
+          <Button Theme="{StaticResource MongoPillButton}" Content="{Binding Loc[Common_Close]}" Command="{Binding CloseCommand}"
+                  IsVisible="{Binding ShowDoneFooter}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,5 +1,5 @@
-using Avalonia.Threading;
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 
 namespace VelaShell.Plugin.DockerPanel.Ui;
 
@@ -79,7 +79,7 @@ public sealed class LineBuffer<T>(ObservableCollection<T> target, int max)
             batch = [.. _pending];
             _pending.Clear();
         }
-        foreach (var item in batch)
+        foreach (T? item in batch)
         {
             target.Add(item);
         }

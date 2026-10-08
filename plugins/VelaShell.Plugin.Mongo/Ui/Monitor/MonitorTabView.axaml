@@ -1,0 +1,397 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             x:Class="VelaShell.Plugin.Mongo.Ui.MonitorTabView"
+             x:DataType="ui:MonitorTabViewModel">
+
+  <!-- 服务器监控(设计稿 11):36px 工具行 / 六张指标卡 / 操作每秒 + 副本集 / 连接数 + 存储 Top + 事件。
+       卡片一律 VelaBgSidebar 底 + 1px VelaBorderPrimary + 圆角 4;数字等宽。
+       图表两行按 1 : 1 分剩余高度(中间的分隔可拖):设计稿 900 高时正好是 282,窗口一高就不再是
+       上面定死、下面一行被拉成一面墙。 -->
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml" />
+
+    <Style Selector="Border.panel">
+      <Setter Property="Background" Value="{DynamicResource VelaBgSidebar}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="12,10" />
+    </Style>
+    <!-- 复制延迟超阈值:整张卡橙色描边(设计稿 11 的「偏高」)。 -->
+    <Style Selector="Border.panel.alert">
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaWarning}" />
+    </Style>
+    <Style Selector="TextBlock.kpi">
+      <Setter Property="FontFamily" Value="{DynamicResource VelaUiMonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize20}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextPrimary}" />
+    </Style>
+
+    <!-- 「● 实时」:采样中绿点 + 绿字 + 淡绿底;暂停时整颗变灰。 -->
+    <Style Selector="Border.live">
+      <Setter Property="Background" Value="{ui:Dim VelaStatusConnected, 0.1}" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.live.paused">
+      <Setter Property="Background" Value="{DynamicResource VelaBgActive}" />
+    </Style>
+    <Style Selector="Border.live TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaStatusConnected}" />
+    </Style>
+    <Style Selector="Border.live.paused TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource VelaTextTertiary}" />
+    </Style>
+    <Style Selector="Border.live Ellipse">
+      <Setter Property="Fill" Value="{DynamicResource VelaStatusConnected}" />
+    </Style>
+    <Style Selector="Border.live.paused Ellipse">
+      <Setter Property="Fill" Value="{DynamicResource VelaTextMuted}" />
+    </Style>
+
+    <!-- 采样间隔「下拉」:输入框底 + 描边(设计稿 11 的「⏱ 每 2 s ⌄」)。 -->
+    <Style Selector="Button.drop">
+      <Setter Property="Background" Value="{DynamicResource VelaBgInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource VelaBorderPrimary}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="8,0" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.Resources>
+    <!-- 共享主题里的 Mongo.timer 只有表盘那个圆,少了顶上的按钮与指针(lucide timer),在本视图里补全。 -->
+    <StreamGeometry x:Key="Mongo.timer">M10 2 h4 M12 14 l3 -3 M4 14 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z</StreamGeometry>
+    <DataTemplate x:Key="Kpi" x:DataType="ui:MonitorKpi">
+      <Border Classes="panel" Classes.alert="{Binding IsAlert}">
+        <StackPanel Spacing="6">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Classes="ui tiny warn medium" Text="{Binding AlertText}" IsVisible="{Binding IsAlert}" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="{Binding IconKey}" Size="12" Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+              <TextBlock Classes="ui small tertiary" Text="{Binding Title}" />
+            </StackPanel>
+          </DockPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Classes="kpi" Text="{Binding Value}" VerticalAlignment="Bottom" />
+            <TextBlock Classes="ui tertiary" Text="{Binding Unit}" VerticalAlignment="Bottom" Margin="0,0,0,3" />
+          </StackPanel>
+          <TextBlock Classes="mono small muted trim" Classes.warn="{Binding FootWarn}" Text="{Binding Foot}" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="36,Auto,*">
+
+    <!-- ══ 工具行 ══ -->
+    <Border Grid.Row="0" Classes="toolrow">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Classes="mono tiny muted trim" FontSize="{DynamicResource VelaFontSize10}"
+                   Margin="12,0,0,0" Text="{Binding ServerLine}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Border Classes="live" Classes.paused="{Binding IsPaused}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Ellipse Width="7" Height="7" VerticalAlignment="Center" />
+              <TextBlock Classes="ui medium" Text="{Binding Loc[Mon_Live]}" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="segments">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Mon_Range5m]}"
+                           IsChecked="{Binding Window, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=5m}" />
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Mon_Range15m]}"
+                           IsChecked="{Binding Window, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=15m}" />
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Mon_Range1h]}"
+                           IsChecked="{Binding Window, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=1h}" />
+              <RadioButton Theme="{StaticResource MongoSegment}" Content="{Binding Loc[Mon_Range6h]}"
+                           IsChecked="{Binding Window, Converter={x:Static ui:Converters.IsEqual}, ConverterParameter=6h}" />
+            </StackPanel>
+          </Border>
+
+          <Button x:Name="IntervalButton" Theme="{StaticResource MongoToolButton}" Classes="drop"
+                  ToolTip.Tip="{Binding Loc[Mon_IntervalTip]}" Click="OnIntervalClick">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ui:Glyph Key="Mongo.timer" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="ui secondary" Text="{Binding IntervalText}" />
+              <ui:Glyph Key="Mongo.chevron-down" Size="10" Brush="{DynamicResource VelaTextTertiary}" />
+            </StackPanel>
+          </Button>
+
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding PauseCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="{Binding PauseIcon}" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="ui secondary" Text="{Binding PauseLabel}" />
+            </StackPanel>
+          </Button>
+
+          <Button Theme="{StaticResource MongoToolButton}" Command="{Binding ExportCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ui:Glyph Key="Mongo.camera" Size="12" Brush="{DynamicResource VelaTextTertiary}" />
+              <TextBlock Classes="ui secondary" Text="{Binding Loc[Mon_Export]}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- 采样失败(权限不够、连接断了) -->
+    <Border Grid.Row="1" Classes="notice err" Margin="14,12,14,0" Padding="12,7" IsVisible="{Binding HasError}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ui:Glyph Key="Mongo.circle-x" Size="13" Brush="{DynamicResource VelaError}" />
+        <TextBlock Classes="ui err wrap" Text="{Binding ErrorText}" />
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="2" Margin="14">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="12" />
+        <RowDefinition Height="*" MinHeight="220" />
+        <RowDefinition Height="12" />
+        <RowDefinition Height="*" MinHeight="200" />
+      </Grid.RowDefinitions>
+      <GridSplitter Grid.Row="3" Classes="hsplit" Margin="0" />
+
+      <!-- ══ 六张指标卡 ══ -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,12,*,12,*,12,*,12,*,12,*">
+        <ContentControl Grid.Column="0" Content="{Binding Connections}" ContentTemplate="{StaticResource Kpi}" />
+        <ContentControl Grid.Column="2" Content="{Binding Ops}" ContentTemplate="{StaticResource Kpi}" />
+        <ContentControl Grid.Column="4" Content="{Binding Network}" ContentTemplate="{StaticResource Kpi}" />
+        <ContentControl Grid.Column="6" Content="{Binding Cache}" ContentTemplate="{StaticResource Kpi}" />
+        <ContentControl Grid.Column="8" Content="{Binding Lag}" ContentTemplate="{StaticResource Kpi}" />
+        <ContentControl Grid.Column="10" Content="{Binding Oplog}" ContentTemplate="{StaticResource Kpi}" />
+      </Grid>
+
+      <!-- ══ 操作 / 秒 + 副本集 ══ -->
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MinWidth="320" />
+          <ColumnDefinition Width="12" />
+          <ColumnDefinition Width="340" MinWidth="220" MaxWidth="720" />
+        </Grid.ColumnDefinitions>
+        <GridSplitter Grid.Column="1" Classes="vsplit" Margin="0" />
+        <Border Grid.Column="0" Classes="panel">
+          <DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+              <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding Legend}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="12" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ui:MonitorLegend">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Border Width="8" Height="8" CornerRadius="2" VerticalAlignment="Center"
+                              Background="{Binding Token, Converter={x:Static ui:Converters.Token}}" />
+                      <TextBlock Classes="mono small secondary" Text="{Binding Name}" />
+                      <TextBlock Classes="mono small primary medium" Text="{Binding Value}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="h" Text="{Binding Loc[Mon_OpsTitle]}" />
+                <TextBlock Classes="ui small muted trim" Text="{Binding OpsSubtitle}" />
+              </StackPanel>
+            </DockPanel>
+            <ui:BarChart Series="{Binding OpsSeries}" Labels="{Binding OpsLabels}" MaxValue="{Binding OpsMax}" GapRatio="0.16"
+                         MinSlots="{Binding ChartSlots}" />
+          </DockPanel>
+        </Border>
+
+        <Border Grid.Column="2" Classes="panel">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+              <TextBlock Classes="h" Text="{Binding ReplicaTitle}" />
+              <TextBlock Classes="ui small muted" Classes.err="{Binding MajorityLost}" Text="{Binding ReplicaSubtitle}" />
+            </StackPanel>
+            <Panel>
+              <ScrollViewer IsVisible="{Binding HasMembers}" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Members}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="8" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:MonitorMember">
+                      <Border Background="{DynamicResource VelaBgTerminal}" BorderBrush="{DynamicResource VelaBorderPrimary}"
+                              BorderThickness="1" CornerRadius="4" Padding="10,8">
+                        <StackPanel Spacing="6">
+                          <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Classes="mono tiny medium" Text="{Binding State}"
+                                       Foreground="{Binding StateToken, Converter={x:Static ui:Converters.Token}}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                       Fill="{Binding DotToken, Converter={x:Static ui:Converters.Token}}" />
+                              <TextBlock Classes="mono primary medium" Text="{Binding Name}" />
+                            </StackPanel>
+                          </DockPanel>
+                          <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Classes="ui small muted" Text="{Binding LagLabel}" />
+                            <TextBlock DockPanel.Dock="Right" Classes="mono small" Margin="8,0,0,0" Text="{Binding LagText}"
+                                       Foreground="{Binding LagTextToken, Converter={x:Static ui:Converters.Token}}" />
+                            <ui:MonitorBar Height="4" Margin="8,0,0,0" VerticalAlignment="Center"
+                                         Ratio="{Binding LagRatio}" Token="{Binding LagToken}" />
+                          </DockPanel>
+                          <TextBlock Classes="ui small muted trim" Text="{Binding Meta}" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <StackPanel IsVisible="{Binding !HasMembers}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                          Spacing="6" MaxWidth="260">
+                <ui:Glyph Key="Mongo.network" Size="20" Brush="{DynamicResource VelaTextMuted}" HorizontalAlignment="Center" />
+                <TextBlock Classes="ui secondary" HorizontalAlignment="Center" Text="{Binding ReplicaEmptyTitle}" />
+                <TextBlock Classes="ui small muted wrap" TextAlignment="Center" Text="{Binding ReplicaEmptyHint}" />
+              </StackPanel>
+            </Panel>
+          </DockPanel>
+        </Border>
+      </Grid>
+
+      <!-- ══ 连接数 + 存储 Top + 事件 ══ -->
+      <Grid Grid.Row="4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MinWidth="220" />
+          <ColumnDefinition Width="12" />
+          <ColumnDefinition Width="*" MinWidth="220" />
+          <ColumnDefinition Width="12" />
+          <ColumnDefinition Width="340" MinWidth="220" MaxWidth="720" />
+        </Grid.ColumnDefinitions>
+        <GridSplitter Grid.Column="1" Classes="vsplit" Margin="0" />
+        <GridSplitter Grid.Column="3" Classes="vsplit" Margin="0" />
+        <Border Grid.Column="0" Classes="panel">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+              <TextBlock Classes="h" Text="{Binding Loc[Mon_ConnTitle]}" />
+              <TextBlock Classes="ui small muted" Text="{Binding ConnSubtitle}" />
+            </StackPanel>
+            <ui:BarChart Series="{Binding ConnSeries}" Labels="{Binding ConnLabels}" MaxValue="{Binding ConnMax}" GapRatio="0.16"
+                         MinSlots="{Binding ChartSlots}" />
+          </DockPanel>
+        </Border>
+
+        <Border Grid.Column="2" Classes="panel">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+              <TextBlock Classes="h" Text="{Binding Loc[Mon_StorageTitle]}" />
+              <TextBlock Classes="ui small muted trim" Text="{Binding StorageSubtitle}" />
+            </StackPanel>
+            <Panel>
+              <!--
+                集合名一列:默认按最长的名字自适应(SharedSizeGroup,各行对齐),列头的分隔线可拖、双击按内容重新自适应。
+                库名淡色、集合名亮色,一眼分得出;悬停整行看完整命名空间与数据 / 索引各占多少。
+              -->
+              <DockPanel IsVisible="{Binding HasStorage}" Grid.IsSharedSizeScope="True">
+                <Grid DockPanel.Dock="Top" Height="22" Margin="0,0,10,6" ui:TableColumns.Header="storage" ui:TableColumns.Fixed="1,2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" MinWidth="72" SharedSizeGroup="StorageName" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="76" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Classes="ui small muted" VerticalAlignment="Center" Margin="0,0,12,0" Text="{Binding Loc[Mon_StorageColName]}" />
+                  <TextBlock Grid.Column="1" Classes="ui small muted" VerticalAlignment="Center" Text="{Binding Loc[Mon_StorageColBar]}" />
+                  <TextBlock Grid.Column="2" Classes="ui small muted" VerticalAlignment="Center" HorizontalAlignment="Right"
+                             Text="{Binding Loc[Mon_StorageColSize]}" />
+                </Grid>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="12" Margin="0,10,0,0">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <Border Width="8" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{DynamicResource MongoChart1}" />
+                    <TextBlock Classes="ui small secondary" Text="{Binding Loc[Mon_StorageData]}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <Border Width="8" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{DynamicResource MongoChart2}" />
+                    <TextBlock Classes="ui small secondary" Text="{Binding Loc[Mon_StorageIndex]}" />
+                  </StackPanel>
+                </StackPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                  <!-- 右边留 10px 给竖向滚动条(它浮在内容上面),不然盖住「占用」那一列。 -->
+                  <ItemsControl ItemsSource="{Binding Storage}" Margin="0,0,10,0">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="10" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="ui:MonitorStorageRow">
+                        <Grid Background="Transparent" ToolTip.Tip="{Binding Tip}" ui:TableColumns.Row="storage">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="72" SharedSizeGroup="StorageName" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="76" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Classes="mono small" Margin="0,0,12,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                            <!-- 两个 Run 写在同一行:中间的换行会被当成一个空格画出来(shop. orders)。 -->
+                            <Run Text="{Binding Prefix}" Foreground="{DynamicResource VelaTextMuted}" /><Run Text="{Binding Collection}" Foreground="{DynamicResource VelaTextPrimary}" />
+                          </TextBlock>
+                          <ui:MonitorBar Grid.Column="1" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Ratio="{Binding DataRatio}" Ratio2="{Binding IndexRatio}"
+                                       Token="MongoChart1" Token2="MongoChart2" TrackToken="" Gap="2" Radius="1" />
+                          <TextBlock Grid.Column="2" Classes="mono small primary" HorizontalAlignment="Right" Text="{Binding SizeText}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </DockPanel>
+              <TextBlock IsVisible="{Binding StorageEmpty}" Classes="ui small muted" HorizontalAlignment="Center"
+                         Text="{Binding Loc[Mon_StorageEmpty]}" />
+            </Panel>
+          </DockPanel>
+        </Border>
+
+        <Border Grid.Column="4" Classes="panel">
+          <DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+              <Button DockPanel.Dock="Right" Theme="{StaticResource MongoToolButton}" Height="16" Padding="2,0"
+                      Command="{Binding ToggleEventsCommand}" IsVisible="{Binding HasEvents}">
+                <TextBlock Classes="ui small info" Text="{Binding EventsToggleText}" />
+              </Button>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="h" Text="{Binding Loc[Mon_EventsTitle]}" />
+                <TextBlock Classes="ui small muted" Text="{Binding Loc[Mon_EventsSubtitle]}" />
+              </StackPanel>
+            </DockPanel>
+            <Panel>
+              <ScrollViewer VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasEvents}">
+                <ItemsControl ItemsSource="{Binding VisibleEvents}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="10" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ui:MonitorEvent">
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <ui:Glyph Key="{Binding IconKey}" Size="12" VerticalAlignment="Top" Margin="0,2,8,0"
+                                  Brush="{Binding IconToken, Converter={x:Static ui:Converters.Token}}" />
+                        <StackPanel Grid.Column="1" Spacing="2">
+                          <TextBlock Classes="ui primary trim" Text="{Binding Title}" />
+                          <TextBlock Classes="mono small muted trim" Text="{Binding Detail}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Classes="mono small muted" VerticalAlignment="Top" Margin="8,0,0,0"
+                                   Text="{Binding TimeText}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <TextBlock IsVisible="{Binding !HasEvents}" Classes="ui small muted wrap" HorizontalAlignment="Center"
+                         TextAlignment="Center" Text="{Binding Loc[Mon_EventsEmpty]}" />
+            </Panel>
+          </DockPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>
