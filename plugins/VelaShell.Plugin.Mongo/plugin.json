@@ -1,6 +1,6 @@
 {
   "id": "velashell.mongo",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "displayName": "MongoDB Workbench",
   "description": "MongoDB 工作台:对象树、网格 / 树 / JSON 三视图与暂存区编辑、查询编辑器、聚合管道、Schema 分析、索引建议、GridFS、服务器监控、慢查询、用户与角色、导入导出与数据传输。从命令面板打开,连接由插件自己管理。",
   "publisher": "velashell",
