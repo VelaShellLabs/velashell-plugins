@@ -45,7 +45,7 @@
   </ItemGroup>
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
-    <PackageVersion Include="StackExchange.Redis" Version="4.0.99-alpha" />
+    <PackageVersion Include="StackExchange.Redis" Version="4.0.127-alpha" />
   </ItemGroup>
   <ItemGroup Label="MongoDB 插件">
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发(连同它带的
@@ -67,10 +67,10 @@
          注意:这个包带 runtimes/<rid>/native/,插件目录里必须**有那一层** ——
          没有的话 Linux/macOS 上是运行期 PlatformNotSupportedException,
          而在 Windows 开发机上永远测不出来(调研文档 §五.2 记的正是这条)。 -->
-    <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.1.26425.128" />
+    <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.2.26504.105" />
   </ItemGroup>
   <ItemGroup Label="测试框架">
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.5.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.5.1" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
