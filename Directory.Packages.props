@@ -51,7 +51,7 @@
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发(连同它带的
          MongoDB.Bson / DnsClient / SharpCompress / Snappier / ZstdSharp)。
          测试工程也引它:种数据与清理走同一个驱动,版本集中管才不会两边各说各话。 -->
-    <PackageVersion Include="MongoDB.Driver" Version="3.12.0" />
+    <PackageVersion Include="MongoDB.Driver" Version="3.13.0" />
   </ItemGroup>
   <ItemGroup Label="S3 插件">
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
