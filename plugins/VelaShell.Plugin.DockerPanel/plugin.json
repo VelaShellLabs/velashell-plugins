@@ -12,7 +12,8 @@
   // 1.1 的远程执行只有"整段 UTF-8 解码"与"按 \n 切行"两种文本形态,
   // 承载不了分块传输、tar 归档流与 exec 的多路复用帧 —— 那不是慢一点,是数据静默损坏。
   // apiLevel 表达不了这一档(它只在**破坏性**变更时才动),所以钉 minSdkVersion。
-  "minSdkVersion": "2.0.0",
+  // 现在用到的最高一档是 2.0.4 的 PluginIcon(经 PanelOptions.Icon 自报面板的页签图标)。
+  "minSdkVersion": "2.0.4",
   "license": "MIT",
   "homepage": "https://github.com/joesdu/VelaShell",
   // 命令贡献:发现期就进命令面板(**不装载本程序集**),用户按下它才触发下面的惰性激活。

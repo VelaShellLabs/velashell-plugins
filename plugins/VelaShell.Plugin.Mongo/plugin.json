@@ -8,8 +8,9 @@
   "apiLevel": 2,
   // 连接由插件自己管:SSH 跳板要经宿主打开一条已保存的 SSH 会话(ISessionsApi.OpenAsync)
   // 再在上面开 TCP 流(IRemoteTunnelApi.OpenTcpAsync)。前者是 2.0.2 才有的面,apiLevel 表达不了这一档,
-  // 所以钉 minSdkVersion(同 DockerPanel)。
-  "minSdkVersion": "2.0.2",
+  // 所以钉 minSdkVersion(同 DockerPanel)。现在用到的最高一档是 2.0.4 的 PluginIcon
+  // (经 PanelOptions.Icon 自报工作台的页签图标)。
+  "minSdkVersion": "2.0.4",
   "license": "MIT",
   "homepage": "https://github.com/joesdu/VelaShell",
   // 命令贡献:发现期就进命令面板(**不装载本程序集**),用户按下它才触发下面的惰性激活 ——
