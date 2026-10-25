@@ -1,8 +1,9 @@
 # plugins/ —— 第一方插件
 
 本目录存放官方维护的插件,每个插件一个子目录(独立 csproj)。
-SDK 契约与开发文档在工具链仓库
-[VelaShellLabs/velashell-plugin-cli](https://github.com/VelaShellLabs/velashell-plugin-cli)
+SDK 契约与 `VelaShell.PluginSdk.Build` 在
+[VelaShellLabs/velashell-plugin-sdk](https://github.com/VelaShellLabs/velashell-plugin-sdk),
+开发文档在 [velashell-docs](https://github.com/VelaShellLabs/velashell-docs)
 ([开发指南](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/dev-guide.md)、[SDK 参考](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/sdk/sdk-reference.md))。
 
 ## 现有插件
@@ -24,7 +25,15 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 (控件无法跨进程嵌入),而且 `IRemoteTunnelApi` 交给它的是一条**活的 `Stream`**,
 隔离进程里明确不可用。
 
-> **Docker 面板要 SDK ≥ 2.0.0**(`plugin.json` 里钉了 `minSdkVersion`)。它说的是
+> **六个插件都要 SDK ≥ 2.0.4**(各自 `plugin.json` 里钉了 `minSdkVersion: "2.0.4"`)。
+> 它们都自报标签页图标:`PluginIcon` 经 `ProtocolDescriptor.Icon`(Telnet / 串口 / S3)、
+> `WorkspaceDescriptor.Icon`(Redis)或 `PanelOptions.Icon`(Docker 面板 / MongoDB / S3 的工具窗)
+> 交给宿主,这是 SDK 2.0.4 才有的面。`apiLevel` 表达不了这一档(它只在**破坏性**变更时才动),
+> 不声明的话装在 2.0.0–2.0.3 的宿主上不会在发现期标为不兼容,而是激活时撞上运行期的
+> `TypeLoadException` / `MissingMethodException`。`minSdkVersion` 跟的是插件**实际用到**的
+> 最高一档契约,不是 `Directory.Packages.props` 里引用的包版本:用了更新的 SDK 面再跟着抬。
+>
+> **Docker 面板是最早钉 `minSdkVersion` 的插件**。它说的是
 > Docker Engine 的 HTTP API,而这条 API 的载体是远端的一个 unix socket ——
 > 要的是到那个 socket 的**裸字节双工流**(`IRemoteTunnelApi`)。SDK 1.1 的远程执行只有
 > "整段 UTF-8 解码"与"按 `\n` 切行"两种**文本**形态,承载不了分块传输、tar 归档流与
@@ -35,12 +44,12 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 > 它也是本仓库**唯一直接引 Avalonia.\* 包**的插件(`Avalonia.AvaloniaEdit`,用于
 > compose.yaml / .env 的语法高亮)。这一条有个反直觉的后果,见下一节最后那段。
 
-> **串口插件要 SDK ≥ 1.5.0**。它是连接表单三件新面的驱动者与首个使用者:
+> **串口插件是 SDK 1.5 连接表单三件新面的驱动者与首个使用者**:
 > `ProtocolFeatures.NoEndpoint`(收起端口栏)、`ProtocolSettingKind.DynamicChoice` +
 > `IProtocolChoiceSource`(候选项在表单打开时现取 —— USB 转串口是热插拔设备)、
 > 以及 `AllowsCustomValue` / `HostKind`(可编辑下拉;主机那一栏也能做成下拉)。
-> 它的 `plugin.json` 里因此有一条 `minSdkVersion`:老宿主上这些成员根本不存在,
-> 不声明就是运行期 `MissingMethodException`。
+> 它的 `plugin.json` 最早就是为此钉了 `minSdkVersion`(当时是 1.5.0):老宿主上这些成员
+> 根本不存在,不声明就是运行期 `MissingMethodException`。
 
 > **AI 插件不在这里**:`velashell.ai` 住在主仓库 [joesdu/VelaShell](https://github.com/joesdu/VelaShell)
 > 的 `plugins/` 下,随主程序同仓构建、同版发布。理由见那边的 `plugins/README.md` ——

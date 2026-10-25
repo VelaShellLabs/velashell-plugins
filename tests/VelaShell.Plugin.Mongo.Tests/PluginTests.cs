@@ -110,7 +110,7 @@ public sealed class PluginTests
         Assert.IsFalse(context.FakeUi.LastPanel.IsOpen);
     }
 
-    /// <summary>清单:命令贡献 + 按命令惰性激活,不贡献工作台连接类型;用到 2.0.2 的会话面要钉 minSdkVersion。</summary>
+    /// <summary>清单:命令贡献 + 按命令惰性激活,不贡献工作台连接类型;用到 2.0.2 的会话面与 2.0.4 的 PluginIcon,minSdkVersion 钉最高那一档。</summary>
     [TestMethod]
     public void Manifest_ContributesTheCommandNotAWorkspace()
     {
@@ -118,7 +118,7 @@ public sealed class PluginTests
         string json = File.ReadAllText(path);
         StringAssert.Contains(json, "\"onCommand:velashell.mongo.open\"");
         StringAssert.Contains(json, "\"commands\"");
-        StringAssert.Contains(json, "\"minSdkVersion\": \"2.0.2\"");
+        StringAssert.Contains(json, "\"minSdkVersion\": \"2.0.4\"");
         Assert.IsFalse(json.Contains("\"workspaces\"", StringComparison.Ordinal), "不再出现在宿主的新建连接窗口里");
         Assert.IsFalse(json.Contains("onWorkspace:", StringComparison.Ordinal));
     }

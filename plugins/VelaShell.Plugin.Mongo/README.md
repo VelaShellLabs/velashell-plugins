@@ -1,6 +1,6 @@
 # VelaShell.Plugin.Mongo —— MongoDB 工作台
 
-> id `velashell.mongo` · 进程内装载 · 命令面板入口(`contributes.commands`,与 Docker 面板同一个路数) · `minSdkVersion` 2.0.2
+> id `velashell.mongo` · 进程内装载 · 命令面板入口(`contributes.commands`,与 Docker 面板同一个路数) · `minSdkVersion` 2.0.4
 
 照设计稿 `velashell-plugin-mongo.pen`(仓库根,24 个画板)实现的 MongoDB 客户端:
 Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Schema 分析、索引建议与 GridFS;

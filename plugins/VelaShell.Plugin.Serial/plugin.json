@@ -6,10 +6,11 @@
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.Serial.dll",
   "apiLevel": 2,
-  // 用到 SDK 1.5 的协议表单新面(NoEndpoint / DynamicChoice / IProtocolChoiceSource /
-  // HostKind)。不声明的话,在 1.4 宿主上是**运行期** MissingMethodException ——
+  // 用到的最高一档 SDK 面是 2.0.4 的 PluginIcon(经 ProtocolDescriptor.Icon 自报页签图标);
+  // 最早钉它是为了 SDK 1.5 的协议表单新面(NoEndpoint / DynamicChoice / IProtocolChoiceSource /
+  // HostKind)。不声明的话,在老宿主上是**运行期** TypeLoadException / MissingMethodException ——
   // 而且要等用户点开串口页签那一刻才炸。
-  "minSdkVersion": "1.5.0",
+  "minSdkVersion": "2.0.4",
   "license": "MIT",
   "homepage": "https://github.com/joesdu/VelaShell",
   // 协议贡献:连接配置页在**不装载本程序集**的前提下就能画出「Serial」页签,

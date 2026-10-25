@@ -6,6 +6,11 @@
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.S3.dll",
   "apiLevel": 2,
+  // 用到的最高一档 SDK 面是 2.0.4 的 PluginIcon(经 ProtocolDescriptor.Icon 自报页签图标,
+  // 桶管理器 / 对象检视器窗口经 PanelOptions.Icon 报标题栏图标)。apiLevel 表达不了这一档(它只在**破坏性**变更时才动),
+  // 不声明的话在 2.0.0–2.0.3 的宿主上是激活时的运行期 TypeLoadException / MissingMethodException,
+  // 而不是发现期的「不兼容」。
+  "minSdkVersion": "2.0.4",
   "license": "MIT",
   "homepage": "https://github.com/joesdu/VelaShell",
   // 协议贡献:连接配置页在**不装载本程序集**的前提下就能画出 S3 页签,
