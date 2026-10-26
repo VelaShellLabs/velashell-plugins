@@ -67,7 +67,7 @@
          注意:这个包带 runtimes/<rid>/native/,插件目录里必须**有那一层** ——
          没有的话 Linux/macOS 上是运行期 PlatformNotSupportedException,
          而在 Windows 开发机上永远测不出来(调研文档 §五.2 记的正是这条)。 -->
-    <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.2.26504.105" />
+    <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.3.26522.148" />
   </ItemGroup>
   <ItemGroup Label="测试框架">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
