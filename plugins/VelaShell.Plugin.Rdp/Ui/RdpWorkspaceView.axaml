@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:VelaShell.Plugin.Rdp.Ui"
+             x:Class="VelaShell.Plugin.Rdp.Ui.RdpWorkspaceView"
+             FontFamily="{DynamicResource VelaUiFont}" FontSize="{DynamicResource VelaFontSize11}"
+             Foreground="{DynamicResource VelaTextPrimary}" Background="{DynamicResource VelaBgTerminal}">
+  <UserControl.Styles>
+    <Style Selector="Button.rdp-tool">
+      <Setter Property="Theme" Value="{DynamicResource VelaOutlineButtonTheme}" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="FontSize" Value="{DynamicResource VelaFontSize11}" />
+    </Style>
+    <Style Selector="Button.rdp-tool:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource VelaBgHover}" />
+    </Style>
+    <Style Selector="Button.rdp-tool.active">
+      <Setter Property="Foreground" Value="{DynamicResource VelaAccent}" />
+      <Setter Property="Background" Value="{DynamicResource VelaAccentDim}" />
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="36,*,24">
+    <Border Grid.Row="0" Background="{DynamicResource VelaBgSidebar}"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1" Padding="12,0">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBlock x:Name="EndpointText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   FontFamily="{DynamicResource VelaUiMonoFont}" Foreground="{DynamicResource VelaTextSecondary}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Button x:Name="FitButton" Classes="rdp-tool" Click="FitClicked" />
+          <Button x:Name="ActualButton" Classes="rdp-tool" Click="ActualClicked" />
+          <Button x:Name="CtrlAltDelButton" Classes="rdp-tool" Click="CtrlAltDelClicked" />
+          <Button x:Name="DisconnectButton" Classes="rdp-tool" Click="DisconnectClicked"
+                  Foreground="{DynamicResource VelaWarning}" />
+          <Button x:Name="ReconnectButton" Classes="rdp-tool" Click="ReconnectClicked" />
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Row="1" RowDefinitions="Auto,*">
+      <Border x:Name="ErrorBanner" Background="{DynamicResource VelaBgActive}" Padding="12,8" IsVisible="False">
+        <TextBlock x:Name="ErrorText" Foreground="{DynamicResource VelaError}" TextWrapping="Wrap" />
+      </Border>
+      <Grid Grid.Row="1">
+        <ScrollViewer x:Name="DesktopScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
+          <ui:RdpDesktopSurface x:Name="Desktop" />
+        </ScrollViewer>
+        <TextBlock x:Name="WaitingText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="{DynamicResource VelaTextMuted}" IsHitTestVisible="False" />
+      </Grid>
+    </Grid>
+    <Border Grid.Row="2" Background="{DynamicResource VelaBgSidebar}"
+            BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,1,0,0" Padding="12,0">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+        <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource VelaTextSecondary}"
+                   FontSize="{DynamicResource VelaFontSize10}" />
+        <TextBlock x:Name="KeyboardHintText" Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource VelaTextTertiary}" FontSize="{DynamicResource VelaFontSize10}" />
+        <TextBlock x:Name="ResolutionText" Grid.Column="2" VerticalAlignment="Center"
+                   FontFamily="{DynamicResource VelaUiMonoFont}" Foreground="{DynamicResource VelaTextTertiary}"
+                   FontSize="{DynamicResource VelaFontSize10}" />
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

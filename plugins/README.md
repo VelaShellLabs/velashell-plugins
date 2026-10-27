@@ -13,21 +13,22 @@ SDK 契约与 `VelaShell.PluginSdk.Build` 在
 | [VelaShell.Plugin.DockerPanel](VelaShell.Plugin.DockerPanel/) | `velashell.dockerpanel` | 是 | 进程内 | 远端 Docker 管理面板:容器 / 镜像 / 卷 / 网络 / Compose,含实时统计、日志、容器内文件编辑与内置终端 |
 | [VelaShell.Plugin.Mongo](VelaShell.Plugin.Mongo/) | `velashell.mongo` | 是 | 进程内 | MongoDB 工作台:Navicat 式对象树与工具栏、网格 / 树 / JSON 三视图与暂存区编辑、查询编辑器与可视化执行计划、聚合管道构建器、Schema 分析与验证规则、索引建议、GridFS、服务器监控、慢查询、用户与角色、导入 / 导出 / 数据传输 |
 | [VelaShell.Plugin.Redis](VelaShell.Plugin.Redis/) | `velashell.redis` | 是 | 进程内 | Redis 客户端:键浏览、类型化查看与编辑、命令执行 |
+| [VelaShell.Plugin.Rdp](VelaShell.Plugin.Rdp/README.md) | `velashell.rdp` | 是 | 进程内 | 内嵌 RDP 桌面:TLS/NLA、固定初始分辨率、本地缩放、键鼠、显式断开/重连与宿主 SSH 隧道；真实端点与非 Windows 实机尚未验收 |
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
 | [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
 | [VelaShell.Plugin.Telnet](VelaShell.Plugin.Telnet/) | `velashell.telnet` | 是 | 进程内 | RFC 854 Telnet 终端:选项协商 + NAWS + 8 位透明(**终端**协议能力的首个使用者) |
 
 装载模式由 `plugin.json` 的 `hostMode` 决定(`isolated` / `inProcess`,默认进程内)。
 隔离插件跑在独立的 `VelaShell.PluginHost` 进程里(实现在主仓库),崩溃不波及宿主;
-S3 与 Redis 因为**协议能力只在进程内可用**必须进程内装载(MongoDB 与 Docker 面板同理:面板要把原生控件挂进主窗口的文档区) —— 协议是宿主反向调用插件的
+S3 与 Redis 因为**协议/工作台能力只在进程内可用**必须进程内装载(MongoDB 与 Docker 面板同理:面板要把原生控件挂进主窗口的文档区) —— 协议是宿主反向调用插件的
 高频通道,隔离进程的 RPC 只承载插件→宿主方向(清单校验会直接拒绝 protocols + isolated 的组合);
-Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原生 Avalonia 控件挂进主窗口标签区
+Telnet 与串口同理。RDP 使用工作台能力，在内嵌标签页中呈现桌面，也必须进程内装载。Docker 面板的理由是另一条:它要把一个原生 Avalonia 控件挂进主窗口标签区
 (控件无法跨进程嵌入),而且 `IRemoteTunnelApi` 交给它的是一条**活的 `Stream`**,
 隔离进程里明确不可用。
 
-> **六个插件都要 SDK ≥ 2.0.4**(各自 `plugin.json` 里钉了 `minSdkVersion: "2.0.4"`)。
+> **七个插件都要 SDK ≥ 2.0.4**(各自 `plugin.json` 里钉了 `minSdkVersion: "2.0.4"`)。
 > 它们都自报标签页图标:`PluginIcon` 经 `ProtocolDescriptor.Icon`(Telnet / 串口 / S3)、
-> `WorkspaceDescriptor.Icon`(Redis)或 `PanelOptions.Icon`(Docker 面板 / MongoDB / S3 的工具窗)
+> `WorkspaceDescriptor.Icon`(Redis / RDP)或 `PanelOptions.Icon`(Docker 面板 / MongoDB / S3 的工具窗)
 > 交给宿主,这是 SDK 2.0.4 才有的面。`apiLevel` 表达不了这一档(它只在**破坏性**变更时才动),
 > 不声明的话装在 2.0.0–2.0.3 的宿主上不会在发现期标为不兼容,而是激活时撞上运行期的
 > `TypeLoadException` / `MissingMethodException`。`minSdkVersion` 跟的是插件**实际用到**的
@@ -58,6 +59,27 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 > 语言、字体走,UI 改动几乎每次都同时落在两侧。分仓的话每改一行 UI 都要"发一次 Release
 > → 回主仓库抬 pin → 才看得到效果"。
 
+## RDP 使用与验证边界
+
+在连接配置中选择 RDP，填写 Windows 主机、默认 3389 端口和宿主凭据字段；
+域可单独填或使用 `DOMAIN\user`，UPN（`user@domain`）须将域留空，本地账户使用 Windows 计算机名，`.` 互操作未验证。
+高级页配置初始尺寸（默认 1280×720）、连接超时（默认 15000ms）和适应窗口/1:1 本地缩放。
+选择「经 SSH 会话抵达」后隧道归宿主管理，TLS/NLA 仍核验真实目标身份。
+
+依赖正式 NuGet `Devolutions.IronRdp 2026.10.19`，托管桥与六桌面 RID 原生库随包，
+SDK/Avalonia/MicroCom.Runtime 不随插件复制。`Licenses/` 保留对应官方提交的 MIT/Apache 文本和第三方 NOTICE，
+来源与核实范围见 `Licenses/IronRDP-SOURCES.txt`，不代表已完成静态 Rust 依赖的全面法律审核。
+仅使用 TLS/NLA，不降级明文安全模式、不自动跟随服务器重定向；SHA-256 pin 变化需要重新确认。
+重连遇到证书变化时关闭标签页，再从连接配置重新打开核实；插件不自行弹信任框或改 pin。
+目前 NLA 仅支持密码 NTLM；域/UPN 语法不代表 Kerberos、SSO 或智能卡支持。
+进程内第三方原生解码异常与内部内存峰值不完全受托管预算约束，不提供崩溃隔离。
+
+首版不含剪贴板、音频、磁盘/打印机重定向、RD Gateway、RemoteApp、多屏、远端动态分辨率及 IME/Unicode 输入。
+宿主和操作系统保留键优先，宿主快捷键可在设置中改键/解绑；Ctrl+Alt+Del 通过按钮发送，不保证捕获全部键盘组合。
+「测试」会实际登录并断开，可能创建/附加远程 Windows 会话；关闭/断开不注销远端用户，不能保证无远端副作用。
+不保留整个含口令的连接请求，不将凭据写普通 Storage/日志/UI 模型；仅会话/重连所需内存副本，且不承诺不可变字符串和原生副本可可靠擦除。
+当前没有获授权真实端点，远程登录、证书交互、画面键鼠与非 Windows 实机仍未验收；六 RID 文件存在仅证明分发资产，不证明跨平台运行通过。
+
 ## 每个插件的 csproj 长什么样
 
 拆库之后,第一方插件与第三方插件走**完全同一条路径**:
@@ -82,7 +104,7 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 ### 例外:确实需要某个 `Avalonia.*` 包时,`ExcludeAssets="runtime"` 必须自己写
 
 上一段那条"不要写 `ExcludeAssets`"的前提是**插件不直接引 Avalonia 包** ——
-Redis、S3、Telnet、串口这四个插件都不引,SDK 包处理它自己那条引用就够了。
+Redis、RDP、S3、Telnet、串口这五个插件都不引,SDK 包处理它自己那条引用就够了。
 
 DockerPanel 与 MongoDB 都要 `Avalonia.AvaloniaEdit`(compose.yaml 高亮;查询编辑器 / JSON 视图 / 管道阶段的高亮、补全与诊断),于是撞上了另一面:
 `VelaExcludeSharedRuntimeAssets` 排得掉 `Avalonia.AvaloniaEdit` 自己的运行时资产,
@@ -108,7 +130,7 @@ CI 那条泄漏体检原本也只认 `Avalonia*` 与 `VelaShell.PluginSdk.dll`�
 "随包分发"由 csproj 的 `<VelaPluginShip>` 控制(默认 `true`)。设成 `false` 的插件
 本机构建仍会镜像到 `artifacts/plugins/`(以及 `VELASHELL_DEV_APP_DIR` 指定的应用目录),
 装载起来验证插件系统没问题,但它不会被收进分发布局 —— 给开发者读的范例用这一档。
-(当前六个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
+(当前七个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
 
 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`
 的插件收成安装包 `plugins/` 那一层的布局:它不再作为 Release 资产上传,只在 CI 与发布流水线里
