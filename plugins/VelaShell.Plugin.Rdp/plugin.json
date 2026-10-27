@@ -1,0 +1,19 @@
+{
+  "id": "velashell.rdp",
+  "version": "2.0.7",
+  "displayName": "RDP Client",
+  "description": "Embedded RDP desktop client with TLS/NLA, keyboard and mouse input, and optional SSH tunnelling.",
+  "publisher": "velashell",
+  "entry": "VelaShell.Plugin.Rdp.dll",
+  "apiLevel": 2,
+  "minSdkVersion": "2.0.4",
+  "hostMode": "inProcess",
+  "license": "MIT",
+  "homepage": "https://github.com/VelaShellLabs/velashell-plugins",
+  "contributes": {
+    "workspaces": [
+      { "id": "velashell.rdp", "displayName": "RDP", "defaultPort": 3389 }
+    ]
+  },
+  "activationEvents": [ "onWorkspace:velashell.rdp" ]
+}

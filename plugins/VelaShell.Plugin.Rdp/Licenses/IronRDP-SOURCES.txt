@@ -1,0 +1,20 @@
+Devolutions.IronRdp 2026.10.19
+Official NuGet package repository commit: 1f69e124e6bf85608efce3495c12eaf5f6b5a95d
+Upstream repository: https://github.com/Devolutions/IronRDP
+Workspace Cargo.toml license expression at that commit: MIT OR Apache-2.0
+
+IronRDP-LICENSE-MIT and IronRDP-LICENSE-APACHE reproduce the upstream root
+LICENSE-MIT and LICENSE-APACHE at that exact commit, obtained through the
+GitHub API. The NuGet archive itself does not contain license text or a
+license expression in its nuspec.
+
+IronRDP-THIRD_PARTY_NOTICES reproduces
+crates/ironrdp-egfx/THIRD_PARTY_NOTICES at that same commit. Its OpenH264
+integration conditions are conditional; retaining this notice does not
+assert that this plugin enables H.264 or bundles a Cisco OpenH264 binary.
+
+The managed bridge and native binaries are redistributed unmodified from
+NuGet. This records inspected upstream notices, not a legal audit or an
+exhaustive license inventory of the Rust dependencies statically linked
+into upstream native binaries. No audio, clipboard, drive/printer,
+gateway, RemoteApp or multi-monitor capability is enabled by this plugin.
