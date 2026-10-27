@@ -1,0 +1,2271 @@
+{
+  "version": "2.21",
+  "children": [
+    {
+      "type": "frame",
+      "id": "rdp-cover",
+      "x": 0,
+      "y": 0,
+      "name": "00 · RDP / 设计导览",
+      "theme": {
+        "mode": "dark"
+      },
+      "width": 2960,
+      "height": 220,
+      "fill": "$bg-page",
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "cover-accent",
+          "x": 40,
+          "y": 44,
+          "width": 4,
+          "height": 112,
+          "fill": "$accent",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "cover-kicker",
+          "x": 64,
+          "y": 40,
+          "fill": "$text-tertiary",
+          "content": "VELASHELL  /  WORKSPACE PLUGINS",
+          "fontFamily": "$font-mono",
+          "fontSize": 12,
+          "fontWeight": "500",
+          "letterSpacing": 2
+        },
+        {
+          "type": "text",
+          "id": "cover-title",
+          "x": 64,
+          "y": 71,
+          "fill": "$text-primary",
+          "content": "RDP · 远程桌面工作台",
+          "fontFamily": "$font-ui",
+          "fontSize": 34,
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "cover-subtitle",
+          "x": 64,
+          "y": 130,
+          "fill": "$text-secondary",
+          "content": "让远程 Windows 成为一个安静、可靠的标签页。连接、信任与故障恢复，每一步都清楚。",
+          "fontFamily": "$font-ui",
+          "fontSize": 14,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "cover-meta",
+          "x": 2090,
+          "y": 53,
+          "fill": "$accent",
+          "content": "DESIGN SPEC  /  2026.10",
+          "fontFamily": "$font-mono",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "cover-contract",
+          "x": 2090,
+          "y": 87,
+          "fill": "$text-secondary",
+          "content": "28px 标题栏   ·   36px 工具栏   ·   24px 状态条",
+          "fontFamily": "$font-ui",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "cover-scope",
+          "x": 2090,
+          "y": 122,
+          "fill": "$text-tertiary",
+          "content": "TLS + NLA / NTLM    ·    宿主工作台契约    ·    深浅主题",
+          "fontFamily": "$font-ui",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "cover-note",
+          "x": 64,
+          "y": 181,
+          "fill": "$text-tertiary",
+          "content": "可编辑矢量设计稿 · 界面示例为演示数据，非连接截图 · 证书框属于宿主，不由插件自行实现",
+          "fontFamily": "$font-ui",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "label-dark",
+      "x": 0,
+      "y": 270,
+      "fill": "#B0B8D6",
+      "content": "01  /  已连接 · VelaDark",
+      "fontFamily": "Microsoft YaHei UI",
+      "fontSize": 18,
+      "fontWeight": "600"
+    },
+    {
+      "type": "frame",
+      "id": "rdp-workspace",
+      "x": 0,
+      "y": 320,
+      "name": "01 · 已连接 / VelaDark",
+      "theme": {
+        "mode": "dark"
+      },
+      "reusable": true,
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-page",
+      "cornerRadius": 8,
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "host-titlebar",
+          "x": 0,
+          "y": 0,
+          "name": "宿主 / 标题栏 28px",
+          "width": 1440,
+          "height": 28,
+          "fill": "$bg-sidebar",
+          "stroke": "$border",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "icon",
+              "id": "host-logo",
+              "x": 12,
+              "y": 7,
+              "width": 14,
+              "height": 14,
+              "icon": "square-terminal",
+              "library": "lucide",
+              "fill": "$accent"
+            },
+            {
+              "type": "text",
+              "id": "host-brand",
+              "x": 34,
+              "y": 6,
+              "fill": "$text-primary",
+              "content": "VelaShell",
+              "fontFamily": "$font-ui",
+              "fontSize": 11,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "host-project",
+              "x": 610,
+              "y": 7,
+              "fill": "$text-tertiary",
+              "content": "Infrastructure / Windows",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "icon",
+              "id": "host-search",
+              "x": 1283,
+              "y": 7,
+              "width": 13,
+              "height": 13,
+              "icon": "search",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "icon",
+              "id": "host-settings",
+              "x": 1311,
+              "y": 7,
+              "width": 13,
+              "height": 13,
+              "icon": "settings-2",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "icon",
+              "id": "host-minimize",
+              "x": 1366,
+              "y": 8,
+              "width": 12,
+              "height": 12,
+              "icon": "minus",
+              "library": "lucide",
+              "fill": "$text-secondary"
+            },
+            {
+              "type": "icon",
+              "id": "host-maximize",
+              "x": 1393,
+              "y": 9,
+              "width": 10,
+              "height": 10,
+              "icon": "square",
+              "library": "lucide",
+              "fill": "$text-secondary"
+            },
+            {
+              "type": "icon",
+              "id": "host-close",
+              "x": 1420,
+              "y": 8,
+              "width": 12,
+              "height": 12,
+              "icon": "x",
+              "library": "lucide",
+              "fill": "$text-secondary"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "host-sidebar",
+          "x": 0,
+          "y": 28,
+          "name": "宿主 / 资源管理器 260px",
+          "width": 260,
+          "height": 848,
+          "fill": "$bg-sidebar",
+          "stroke": "$border",
+          "strokeWidth": {
+            "right": 1
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "sidebar-title",
+              "x": 16,
+              "y": 10,
+              "fill": "$text-secondary",
+              "content": "资源管理器",
+              "fontFamily": "$font-ui",
+              "fontSize": 11,
+              "fontWeight": "600"
+            },
+            {
+              "type": "icon",
+              "id": "sidebar-plus",
+              "x": 193,
+              "y": 11,
+              "width": 13,
+              "height": 13,
+              "icon": "plus",
+              "library": "lucide",
+              "fill": "$text-secondary"
+            },
+            {
+              "type": "icon",
+              "id": "sidebar-more",
+              "x": 225,
+              "y": 11,
+              "width": 13,
+              "height": 13,
+              "icon": "ellipsis",
+              "library": "lucide",
+              "fill": "$text-secondary"
+            },
+            {
+              "type": "frame",
+              "id": "session-search",
+              "x": 12,
+              "y": 44,
+              "width": 236,
+              "height": 28,
+              "fill": "$bg-input",
+              "cornerRadius": 4,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "session-search-icon",
+                  "x": 8,
+                  "y": 8,
+                  "width": 12,
+                  "height": 12,
+                  "icon": "search",
+                  "library": "lucide",
+                  "fill": "$text-tertiary"
+                },
+                {
+                  "type": "text",
+                  "id": "session-search-text",
+                  "x": 27,
+                  "y": 6,
+                  "fill": "$text-tertiary",
+                  "content": "搜索主机、标签…",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "session-search-key",
+                  "x": 196,
+                  "y": 7,
+                  "fill": "$text-tertiary",
+                  "content": "⌘ K",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "icon",
+              "id": "group-prod-arrow",
+              "x": 14,
+              "y": 94,
+              "width": 12,
+              "height": 12,
+              "icon": "chevron-down",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "icon",
+              "id": "group-prod-icon",
+              "x": 33,
+              "y": 93,
+              "width": 14,
+              "height": 14,
+              "icon": "folder",
+              "library": "lucide",
+              "fill": "$warning"
+            },
+            {
+              "type": "text",
+              "id": "group-prod-text",
+              "x": 54,
+              "y": 91,
+              "fill": "$text-secondary",
+              "content": "生产环境",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "group-prod-count",
+              "x": 226,
+              "y": 93,
+              "fill": "$text-tertiary",
+              "content": "3",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "session-selected",
+              "x": 8,
+              "y": 116,
+              "width": 244,
+              "height": 28,
+              "fill": "$bg-active",
+              "cornerRadius": 4,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "session-active-dot",
+                  "x": 29,
+                  "y": 11,
+                  "fill": "$success",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "icon",
+                  "id": "session-rdp-icon",
+                  "x": 44,
+                  "y": 7,
+                  "width": 13,
+                  "height": 13,
+                  "icon": "monitor",
+                  "library": "lucide",
+                  "fill": "$accent"
+                },
+                {
+                  "type": "text",
+                  "id": "session-active-text",
+                  "x": 65,
+                  "y": 6,
+                  "fill": "$accent",
+                  "content": "win-prod-01",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "session-type-tag",
+                  "x": 208,
+                  "y": 8,
+                  "fill": "$text-secondary",
+                  "content": "RDP",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "ellipse",
+              "id": "session-idle-dot",
+              "x": 37,
+              "y": 155,
+              "fill": "$text-tertiary",
+              "width": 6,
+              "height": 6
+            },
+            {
+              "type": "icon",
+              "id": "session-idle-icon",
+              "x": 52,
+              "y": 151,
+              "width": 13,
+              "height": 13,
+              "icon": "monitor",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "text",
+              "id": "session-idle-text",
+              "x": 73,
+              "y": 150,
+              "fill": "$text-secondary",
+              "content": "win-backup-02",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "ellipse",
+              "id": "session-bastion-dot",
+              "x": 37,
+              "y": 183,
+              "fill": "$success",
+              "width": 6,
+              "height": 6
+            },
+            {
+              "type": "icon",
+              "id": "session-bastion-icon",
+              "x": 52,
+              "y": 179,
+              "width": 13,
+              "height": 13,
+              "icon": "terminal",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "text",
+              "id": "session-bastion-text",
+              "x": 73,
+              "y": 178,
+              "fill": "$text-secondary",
+              "content": "bastion-01",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "icon",
+              "id": "group-lab-arrow",
+              "x": 14,
+              "y": 222,
+              "width": 12,
+              "height": 12,
+              "icon": "chevron-right",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "icon",
+              "id": "group-lab-icon",
+              "x": 33,
+              "y": 221,
+              "width": 14,
+              "height": 14,
+              "icon": "folder",
+              "library": "lucide",
+              "fill": "$warning"
+            },
+            {
+              "type": "text",
+              "id": "group-lab-text",
+              "x": 54,
+              "y": 219,
+              "fill": "$text-secondary",
+              "content": "测试环境",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "group-lab-count",
+              "x": 226,
+              "y": 221,
+              "fill": "$text-tertiary",
+              "content": "4",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "sidebar-footer",
+              "x": 0,
+              "y": 808,
+              "width": 260,
+              "height": 40,
+              "fill": "$bg-sidebar",
+              "stroke": "$border",
+              "strokeWidth": {
+                "top": 1
+              },
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "sidebar-plugin-icon",
+                  "x": 16,
+                  "y": 14,
+                  "width": 13,
+                  "height": 13,
+                  "icon": "puzzle",
+                  "library": "lucide",
+                  "fill": "$text-tertiary"
+                },
+                {
+                  "type": "text",
+                  "id": "sidebar-plugin-text",
+                  "x": 37,
+                  "y": 11,
+                  "fill": "$text-secondary",
+                  "content": "插件",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon",
+                  "id": "sidebar-settings-icon",
+                  "x": 224,
+                  "y": 13,
+                  "width": 14,
+                  "height": 14,
+                  "icon": "settings",
+                  "library": "lucide",
+                  "fill": "$text-tertiary"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "workspace-tabbar",
+          "x": 260,
+          "y": 28,
+          "name": "宿主 / 标签栏 36px",
+          "width": 1180,
+          "height": 36,
+          "fill": "$bg-page",
+          "stroke": "$border",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "tab-bastion",
+              "x": 4,
+              "y": 3,
+              "width": 164,
+              "height": 32,
+              "fill": "$bg-page",
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "tab-ssh-icon",
+                  "x": 12,
+                  "y": 10,
+                  "width": 12,
+                  "height": 12,
+                  "icon": "terminal",
+                  "library": "lucide",
+                  "fill": "$text-tertiary"
+                },
+                {
+                  "type": "text",
+                  "id": "tab-ssh-name",
+                  "x": 34,
+                  "y": 8,
+                  "fill": "$text-secondary",
+                  "content": "bastion-01",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "tab-rdp",
+              "x": 172,
+              "y": 3,
+              "width": 216,
+              "height": 32,
+              "fill": "$bg-terminal",
+              "stroke": "$accent",
+              "strokeWidth": {
+                "top": 2
+              },
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "tab-rdp-icon",
+                  "x": 12,
+                  "y": 10,
+                  "width": 13,
+                  "height": 13,
+                  "icon": "monitor",
+                  "library": "lucide",
+                  "fill": "$accent"
+                },
+                {
+                  "type": "ellipse",
+                  "id": "tab-rdp-dot",
+                  "x": 35,
+                  "y": 14,
+                  "fill": "$success",
+                  "width": 5,
+                  "height": 5
+                },
+                {
+                  "type": "text",
+                  "id": "tab-rdp-name",
+                  "x": 48,
+                  "y": 8,
+                  "fill": "$text-primary",
+                  "content": "win-prod-01",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon",
+                  "id": "tab-rdp-close",
+                  "x": 192,
+                  "y": 11,
+                  "width": 11,
+                  "height": 11,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$text-tertiary"
+                }
+              ]
+            },
+            {
+              "type": "icon",
+              "id": "tab-add",
+              "x": 404,
+              "y": 12,
+              "width": 13,
+              "height": 13,
+              "icon": "plus",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            },
+            {
+              "type": "icon",
+              "id": "tab-layout",
+              "x": 1152,
+              "y": 12,
+              "width": 13,
+              "height": 13,
+              "icon": "panels-top-left",
+              "library": "lucide",
+              "fill": "$text-tertiary"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "rdp-toolbar",
+          "x": 260,
+          "y": 64,
+          "name": "插件 / 文档工具栏 36px",
+          "width": 1180,
+          "height": 36,
+          "fill": "$bg-sidebar",
+          "stroke": "$border",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "icon",
+              "id": "endpoint-icon",
+              "x": 14,
+              "y": 11,
+              "width": 14,
+              "height": 14,
+              "icon": "monitor",
+              "library": "lucide",
+              "fill": "$accent"
+            },
+            {
+              "type": "text",
+              "id": "endpoint-text",
+              "x": 38,
+              "y": 10,
+              "fill": "$text-secondary",
+              "content": "10.20.0.15:3389",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "endpoint-route",
+              "x": 194,
+              "y": 10,
+              "fill": "$text-tertiary",
+              "content": "↝ bastion-01",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "fit-button",
+              "x": 690,
+              "y": 5,
+              "width": 84,
+              "height": 26,
+              "fill": "$accent-dim",
+              "cornerRadius": 4,
+              "stroke": "$accent",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "fit-icon",
+                  "x": 8,
+                  "y": 7,
+                  "width": 12,
+                  "height": 12,
+                  "icon": "scan",
+                  "library": "lucide",
+                  "fill": "$accent"
+                },
+                {
+                  "type": "text",
+                  "id": "fit-text",
+                  "x": 27,
+                  "y": 5,
+                  "fill": "$accent",
+                  "content": "适应窗口",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "actual-button",
+              "x": 778,
+              "y": 5,
+              "width": 48,
+              "height": 26,
+              "cornerRadius": 4,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "actual-text",
+                  "x": 13,
+                  "y": 5,
+                  "fill": "$text-secondary",
+                  "content": "1:1",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cad-button",
+              "x": 838,
+              "y": 5,
+              "width": 144,
+              "height": 26,
+              "cornerRadius": 4,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "cad-icon",
+                  "x": 8,
+                  "y": 7,
+                  "width": 12,
+                  "height": 12,
+                  "icon": "keyboard",
+                  "library": "lucide",
+                  "fill": "$text-secondary"
+                },
+                {
+                  "type": "text",
+                  "id": "cad-text",
+                  "x": 28,
+                  "y": 5,
+                  "fill": "$text-secondary",
+                  "content": "Ctrl + Alt + Del",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "disconnect-button",
+              "x": 994,
+              "y": 5,
+              "width": 78,
+              "height": 26,
+              "cornerRadius": 4,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "disconnect-icon",
+                  "x": 9,
+                  "y": 7,
+                  "width": 12,
+                  "height": 12,
+                  "icon": "unplug",
+                  "library": "lucide",
+                  "fill": "$warning"
+                },
+                {
+                  "type": "text",
+                  "id": "disconnect-text",
+                  "x": 30,
+                  "y": 5,
+                  "fill": "$warning",
+                  "content": "断开",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "reconnect-button",
+              "x": 1076,
+              "y": 5,
+              "width": 88,
+              "height": 26,
+              "cornerRadius": 4,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "reconnect-icon",
+                  "x": 10,
+                  "y": 7,
+                  "width": 12,
+                  "height": 12,
+                  "icon": "rotate-cw",
+                  "library": "lucide",
+                  "fill": "$text-secondary"
+                },
+                {
+                  "type": "text",
+                  "id": "reconnect-text",
+                  "x": 32,
+                  "y": 5,
+                  "fill": "$text-secondary",
+                  "content": "重连",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "desktop-letterbox",
+          "x": 260,
+          "y": 100,
+          "name": "插件 / 桌面画布 · Fit",
+          "width": 1180,
+          "height": 752,
+          "fill": "$bg-terminal",
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "remote-desktop",
+              "x": 30,
+              "y": 61,
+              "name": "远端 Windows 示例 · 内容不随宿主换肤",
+              "clip": true,
+              "width": 1120,
+              "height": 630,
+              "fill": "#153B65",
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "remote-pc",
+                  "x": 30,
+                  "y": 28,
+                  "width": 30,
+                  "height": 30,
+                  "icon": "monitor",
+                  "library": "lucide",
+                  "fill": "#E9F2FF"
+                },
+                {
+                  "type": "text",
+                  "id": "remote-pc-label",
+                  "x": 23,
+                  "y": 67,
+                  "fill": "#FFFFFF",
+                  "content": "此电脑",
+                  "fontFamily": "Microsoft YaHei UI",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon",
+                  "id": "remote-bin",
+                  "x": 33,
+                  "y": 110,
+                  "width": 25,
+                  "height": 28,
+                  "icon": "trash-2",
+                  "library": "lucide",
+                  "fill": "#E9F2FF"
+                },
+                {
+                  "type": "text",
+                  "id": "remote-bin-label",
+                  "x": 23,
+                  "y": 148,
+                  "fill": "#FFFFFF",
+                  "content": "回收站",
+                  "fontFamily": "Microsoft YaHei UI",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "remote-host-watermark",
+                  "x": 852,
+                  "y": 26,
+                  "fill": "#DCE9FC",
+                  "content": "WIN-PROD-01",
+                  "fontFamily": "Cascadia Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "remote-explorer",
+                  "x": 132,
+                  "y": 64,
+                  "name": "远端 / 文件资源管理器",
+                  "width": 852,
+                  "height": 468,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 5,
+                  "stroke": "#D4DCE7",
+                  "strokeWidth": 1,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "explorer-title",
+                      "x": 0,
+                      "y": 0,
+                      "width": 852,
+                      "height": 34,
+                      "fill": "#F4F6F9",
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "explorer-folder-icon",
+                          "x": 14,
+                          "y": 10,
+                          "width": 14,
+                          "height": 14,
+                          "icon": "folder",
+                          "library": "lucide",
+                          "fill": "#B48735"
+                        },
+                        {
+                          "type": "text",
+                          "id": "explorer-title-label",
+                          "x": 37,
+                          "y": 8,
+                          "fill": "#263143",
+                          "content": "文件资源管理器",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-min",
+                          "x": 756,
+                          "y": 12,
+                          "width": 10,
+                          "height": 10,
+                          "icon": "minus",
+                          "library": "lucide",
+                          "fill": "#64748B"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-max",
+                          "x": 790,
+                          "y": 12,
+                          "width": 10,
+                          "height": 10,
+                          "icon": "square",
+                          "library": "lucide",
+                          "fill": "#64748B"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-close",
+                          "x": 824,
+                          "y": 12,
+                          "width": 10,
+                          "height": 10,
+                          "icon": "x",
+                          "library": "lucide",
+                          "fill": "#64748B"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "explorer-pathbar",
+                      "x": 0,
+                      "y": 34,
+                      "width": 852,
+                      "height": 44,
+                      "fill": "#FAFBFC",
+                      "stroke": "#E8ECF2",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "explorer-back",
+                          "x": 15,
+                          "y": 15,
+                          "width": 14,
+                          "height": 14,
+                          "icon": "arrow-left",
+                          "library": "lucide",
+                          "fill": "#64748B"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-up",
+                          "x": 47,
+                          "y": 15,
+                          "width": 14,
+                          "height": 14,
+                          "icon": "arrow-up",
+                          "library": "lucide",
+                          "fill": "#64748B"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "explorer-pathbox",
+                          "x": 82,
+                          "y": 8,
+                          "width": 524,
+                          "height": 28,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "#DFE5ED",
+                          "strokeWidth": 1,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "explorer-path-text",
+                              "x": 12,
+                              "y": 6,
+                              "fill": "#334155",
+                              "content": "此电脑   ›   数据 (D:)   ›   Deployments",
+                              "fontFamily": "Microsoft YaHei UI",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "explorer-searchbox",
+                          "x": 617,
+                          "y": 8,
+                          "width": 222,
+                          "height": 28,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "#DFE5ED",
+                          "strokeWidth": 1,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "explorer-search-label",
+                              "x": 11,
+                              "y": 6,
+                              "fill": "#78869B",
+                              "content": "搜索 Deployments",
+                              "fontFamily": "Microsoft YaHei UI",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "explorer-search-icon",
+                              "x": 198,
+                              "y": 9,
+                              "width": 11,
+                              "height": 11,
+                              "icon": "search",
+                              "library": "lucide",
+                              "fill": "#78869B"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "explorer-nav",
+                      "x": 0,
+                      "y": 78,
+                      "width": 168,
+                      "height": 362,
+                      "fill": "#F7F9FC",
+                      "stroke": "#E5EAF0",
+                      "strokeWidth": {
+                        "right": 1
+                      },
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "explorer-quick-label",
+                          "x": 18,
+                          "y": 18,
+                          "fill": "#5F708A",
+                          "content": "快速访问",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-nav-desktop-icon",
+                          "x": 20,
+                          "y": 53,
+                          "width": 13,
+                          "height": 13,
+                          "icon": "monitor",
+                          "library": "lucide",
+                          "fill": "#758BA7"
+                        },
+                        {
+                          "type": "text",
+                          "id": "explorer-nav-desktop",
+                          "x": 44,
+                          "y": 51,
+                          "fill": "#334155",
+                          "content": "桌面",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-nav-download-icon",
+                          "x": 20,
+                          "y": 85,
+                          "width": 13,
+                          "height": 13,
+                          "icon": "download",
+                          "library": "lucide",
+                          "fill": "#758BA7"
+                        },
+                        {
+                          "type": "text",
+                          "id": "explorer-nav-download",
+                          "x": 44,
+                          "y": 83,
+                          "fill": "#334155",
+                          "content": "下载",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-nav-doc-icon",
+                          "x": 20,
+                          "y": 117,
+                          "width": 13,
+                          "height": 13,
+                          "icon": "file-text",
+                          "library": "lucide",
+                          "fill": "#758BA7"
+                        },
+                        {
+                          "type": "text",
+                          "id": "explorer-nav-doc",
+                          "x": 44,
+                          "y": 115,
+                          "fill": "#334155",
+                          "content": "文档",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "explorer-nav-active",
+                          "x": 8,
+                          "y": 158,
+                          "width": 152,
+                          "height": 30,
+                          "fill": "#E5EDF8",
+                          "cornerRadius": 3,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "explorer-drive-icon",
+                              "x": 12,
+                              "y": 9,
+                              "width": 13,
+                              "height": 13,
+                              "icon": "hard-drive",
+                              "library": "lucide",
+                              "fill": "#4871A1"
+                            },
+                            {
+                              "type": "text",
+                              "id": "explorer-drive-text",
+                              "x": 36,
+                              "y": 7,
+                              "fill": "#2E5688",
+                              "content": "数据 (D:)",
+                              "fontFamily": "Microsoft YaHei UI",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "explorer-network-icon",
+                          "x": 20,
+                          "y": 211,
+                          "width": 13,
+                          "height": 13,
+                          "icon": "network",
+                          "library": "lucide",
+                          "fill": "#758BA7"
+                        },
+                        {
+                          "type": "text",
+                          "id": "explorer-network-label",
+                          "x": 44,
+                          "y": 209,
+                          "fill": "#334155",
+                          "content": "网络",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "explorer-colhead",
+                      "x": 168,
+                      "y": 78,
+                      "width": 684,
+                      "height": 32,
+                      "fill": "#FFFFFF",
+                      "stroke": "#E8ECF2",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "col-name",
+                          "x": 24,
+                          "y": 9,
+                          "fill": "#718096",
+                          "content": "名称",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "col-date",
+                          "x": 297,
+                          "y": 9,
+                          "fill": "#718096",
+                          "content": "修改日期",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "col-type",
+                          "x": 475,
+                          "y": 9,
+                          "fill": "#718096",
+                          "content": "类型",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "col-size",
+                          "x": 596,
+                          "y": 9,
+                          "fill": "#718096",
+                          "content": "大小",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "file-api",
+                      "x": 177,
+                      "y": 117,
+                      "width": 666,
+                      "height": 32,
+                      "fill": "#EAF1FC",
+                      "cornerRadius": 3,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "file-api-icon",
+                          "x": 13,
+                          "y": 9,
+                          "width": 14,
+                          "height": 14,
+                          "icon": "folder",
+                          "library": "lucide",
+                          "fill": "#B88935"
+                        },
+                        {
+                          "type": "text",
+                          "id": "file-api-name",
+                          "x": 38,
+                          "y": 8,
+                          "fill": "#25344A",
+                          "content": "api-gateway",
+                          "fontFamily": "Segoe UI",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "file-api-date",
+                          "x": 288,
+                          "y": 9,
+                          "fill": "#66758B",
+                          "content": "2026/10/27  09:18",
+                          "fontFamily": "Segoe UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "file-api-type",
+                          "x": 466,
+                          "y": 9,
+                          "fill": "#66758B",
+                          "content": "文件夹",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "file-worker-icon",
+                      "x": 190,
+                      "y": 161,
+                      "width": 14,
+                      "height": 14,
+                      "icon": "folder",
+                      "library": "lucide",
+                      "fill": "#B88935"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-worker-name",
+                      "x": 215,
+                      "y": 159,
+                      "fill": "#25344A",
+                      "content": "background-worker",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-worker-date",
+                      "x": 465,
+                      "y": 160,
+                      "fill": "#66758B",
+                      "content": "2026/10/26  18:42",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-worker-type",
+                      "x": 643,
+                      "y": 160,
+                      "fill": "#66758B",
+                      "content": "文件夹",
+                      "fontFamily": "Microsoft YaHei UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "file-logs-icon",
+                      "x": 190,
+                      "y": 193,
+                      "width": 14,
+                      "height": 14,
+                      "icon": "folder",
+                      "library": "lucide",
+                      "fill": "#B88935"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-logs-name",
+                      "x": 215,
+                      "y": 191,
+                      "fill": "#25344A",
+                      "content": "logs",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-logs-date",
+                      "x": 465,
+                      "y": 192,
+                      "fill": "#66758B",
+                      "content": "2026/10/27  10:36",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-logs-type",
+                      "x": 643,
+                      "y": 192,
+                      "fill": "#66758B",
+                      "content": "文件夹",
+                      "fontFamily": "Microsoft YaHei UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "file-config-icon",
+                      "x": 190,
+                      "y": 225,
+                      "width": 14,
+                      "height": 14,
+                      "icon": "file-code",
+                      "library": "lucide",
+                      "fill": "#758BA7"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-config-name",
+                      "x": 215,
+                      "y": 223,
+                      "fill": "#25344A",
+                      "content": "deployment.json",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-config-date",
+                      "x": 465,
+                      "y": 224,
+                      "fill": "#66758B",
+                      "content": "2026/10/27  09:12",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-config-type",
+                      "x": 643,
+                      "y": 224,
+                      "fill": "#66758B",
+                      "content": "JSON 文件",
+                      "fontFamily": "Microsoft YaHei UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-config-size",
+                      "x": 775,
+                      "y": 224,
+                      "fill": "#66758B",
+                      "content": "4 KB",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "file-readme-icon",
+                      "x": 190,
+                      "y": 257,
+                      "width": 14,
+                      "height": 14,
+                      "icon": "file-text",
+                      "library": "lucide",
+                      "fill": "#758BA7"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-readme-name",
+                      "x": 215,
+                      "y": 255,
+                      "fill": "#25344A",
+                      "content": "README.txt",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-readme-date",
+                      "x": 465,
+                      "y": 256,
+                      "fill": "#66758B",
+                      "content": "2026/10/25  16:20",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-readme-type",
+                      "x": 643,
+                      "y": 256,
+                      "fill": "#66758B",
+                      "content": "文本文档",
+                      "fontFamily": "Microsoft YaHei UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "file-readme-size",
+                      "x": 775,
+                      "y": 256,
+                      "fill": "#66758B",
+                      "content": "2 KB",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "explorer-status",
+                      "x": 0,
+                      "y": 440,
+                      "width": 852,
+                      "height": 28,
+                      "fill": "#FAFBFC",
+                      "stroke": "#E8ECF2",
+                      "strokeWidth": {
+                        "top": 1
+                      },
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "explorer-status-text",
+                          "x": 14,
+                          "y": 7,
+                          "fill": "#718096",
+                          "content": "5 个项目     已选择 1 个项目",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "remote-taskbar",
+                  "x": 0,
+                  "y": 590,
+                  "width": 1120,
+                  "height": 40,
+                  "fill": "#102B4A",
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "remote-start",
+                      "x": 19,
+                      "y": 12,
+                      "width": 17,
+                      "height": 17,
+                      "icon": "panels-top-left",
+                      "library": "lucide",
+                      "fill": "#F5F8FF"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "remote-search",
+                      "x": 51,
+                      "y": 5,
+                      "width": 214,
+                      "height": 30,
+                      "fill": "#26415F",
+                      "cornerRadius": 3,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "remote-search-i",
+                          "x": 10,
+                          "y": 9,
+                          "width": 13,
+                          "height": 13,
+                          "icon": "search",
+                          "library": "lucide",
+                          "fill": "#CFDCEB"
+                        },
+                        {
+                          "type": "text",
+                          "id": "remote-search-t",
+                          "x": 32,
+                          "y": 7,
+                          "fill": "#CFDCEB",
+                          "content": "搜索 Windows",
+                          "fontFamily": "Microsoft YaHei UI",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "remote-explorer-task",
+                      "x": 285,
+                      "y": 11,
+                      "width": 19,
+                      "height": 19,
+                      "icon": "folder",
+                      "library": "lucide",
+                      "fill": "#F2C76C"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "remote-task-active",
+                      "x": 279,
+                      "y": 37,
+                      "fill": "#80B9FF",
+                      "width": 31,
+                      "height": 2
+                    },
+                    {
+                      "type": "icon",
+                      "id": "remote-terminal-task",
+                      "x": 334,
+                      "y": 12,
+                      "width": 18,
+                      "height": 18,
+                      "icon": "terminal",
+                      "library": "lucide",
+                      "fill": "#DCE9FC"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "remote-net-task",
+                      "x": 968,
+                      "y": 14,
+                      "width": 13,
+                      "height": 13,
+                      "icon": "network",
+                      "library": "lucide",
+                      "fill": "#CFDCEB"
+                    },
+                    {
+                      "type": "text",
+                      "id": "remote-clock",
+                      "x": 1012,
+                      "y": 6,
+                      "fill": "#E7F0FC",
+                      "content": "10:42\n2026/10/27",
+                      "textAlign": "center",
+                      "fontFamily": "Segoe UI",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "canvas-scale-note",
+              "x": 30,
+              "y": 718,
+              "fill": "$text-tertiary",
+              "content": "远端桌面示意 · 内容与配色由 Windows 生成，不随 VelaShell 主题变化",
+              "fontFamily": "$font-ui",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "rdp-statusbar",
+          "x": 260,
+          "y": 852,
+          "name": "插件 / 状态条 24px",
+          "width": 1180,
+          "height": 24,
+          "fill": "$bg-sidebar",
+          "stroke": "$border",
+          "strokeWidth": {
+            "top": 1
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "ellipse",
+              "id": "status-dot",
+              "x": 14,
+              "y": 9,
+              "fill": "$success",
+              "width": 6,
+              "height": 6
+            },
+            {
+              "type": "text",
+              "id": "status-text",
+              "x": 28,
+              "y": 5,
+              "fill": "$text-secondary",
+              "content": "已连接",
+              "fontFamily": "$font-ui",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "status-keyboard",
+              "x": 102,
+              "y": 5,
+              "fill": "$text-tertiary",
+              "content": "宿主 / OS 快捷键优先 · 点击画面获取输入焦点",
+              "fontFamily": "$font-ui",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "status-resolution",
+              "x": 1052,
+              "y": 5,
+              "fill": "$text-tertiary",
+              "content": "1920 × 1080",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "host-statusbar",
+          "x": 0,
+          "y": 876,
+          "name": "宿主 / 全局状态条",
+          "width": 1440,
+          "height": 24,
+          "fill": "$bg-sidebar",
+          "stroke": "$border",
+          "strokeWidth": {
+            "top": 1
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "host-status-left",
+              "x": 12,
+              "y": 5,
+              "fill": "$text-tertiary",
+              "content": "就绪",
+              "fontFamily": "$font-ui",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "host-status-right",
+              "x": 1198,
+              "y": 5,
+              "fill": "$text-tertiary",
+              "content": "velashell.rdp    ·    UTF-8",
+              "fontFamily": "$font-mono",
+              "fontSize": 9,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "label-light",
+      "x": 1520,
+      "y": 270,
+      "fill": "#B0B8D6",
+      "content": "02  /  已连接 · VelaLight",
+      "fontFamily": "Microsoft YaHei UI",
+      "fontSize": 18,
+      "fontWeight": "600"
+    },
+    {
+      "id": "rdp-light",
+      "type": "ref",
+      "ref": "rdp-workspace",
+      "name": "02 · 已连接 / VelaLight",
+      "x": 1520,
+      "y": 320,
+      "theme": {
+        "mode": "light"
+      }
+    }
+  ],
+  "themes": {
+    "mode": [
+      "dark",
+      "light"
+    ]
+  },
+  "variables": {
+    "bg-page": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#191A21",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#F2EDDA",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "bg-sidebar": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#252734",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#F8F4E4",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "bg-terminal": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#282A36",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#FFFBEB",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "bg-surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#343746",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#FFFBEB",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "bg-input": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#282A36",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#F7F2DF",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "bg-active": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#44475A",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#644AC922",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#3B3E51",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#E3DCBF",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "text-primary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#F8F8F2",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#1F1F1F",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "text-secondary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#B0B8D6",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#4A4636",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "text-tertiary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#6272A4",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#6C664B",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "text-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#545B76",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#9A9377",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "accent": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#BD93F9",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#644AC9",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "accent-dim": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#BD93F926",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#644AC91A",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "accent-on": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#191A21",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#FFFBEB",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "success": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#50FA7B",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#14710A",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "warning": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#FFB86C",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#846E15",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#FF5555",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#CB3A2A",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "info": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#8BE9FD",
+          "theme": {
+            "mode": "dark"
+          }
+        },
+        {
+          "value": "#036A96",
+          "theme": {
+            "mode": "light"
+          }
+        }
+      ]
+    },
+    "font-ui": {
+      "type": "string",
+      "value": "Microsoft YaHei UI"
+    },
+    "font-mono": {
+      "type": "string",
+      "value": "Cascadia Mono"
+    }
+  },
+  "fileToken": "5474dfb0-c345-4140-8566-b6713ed6bb75"
+}
