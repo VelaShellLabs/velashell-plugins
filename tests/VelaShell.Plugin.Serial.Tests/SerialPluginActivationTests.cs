@@ -166,7 +166,7 @@ public sealed class SerialPluginActivationTests
 
         // 本机有没有串口不确定,所以只能断言"不抛、给得出一份表" —— 内容由枚举器的单测钉。
         Assert.IsNotNull(ports);
-        Assert.AreEqual(0, other.Count, "不认识的字段键必须给空表:宿主会对每个动态字段都问一遍");
+        Assert.IsEmpty(other, "不认识的字段键必须给空表:宿主会对每个动态字段都问一遍");
     }
 
     [TestMethod]
@@ -195,8 +195,8 @@ public sealed class SerialPluginActivationTests
 
         await plugin.DeactivateAsync(CancellationToken.None);
 
-        Assert.AreEqual(0, context.RecordingProtocols.Registered.Count);
-        Assert.AreEqual(0, context.RecordingCommands.Registered.Count);
+        Assert.IsEmpty(context.RecordingProtocols.Registered);
+        Assert.IsEmpty(context.RecordingCommands.Registered);
     }
 
     [TestMethod]

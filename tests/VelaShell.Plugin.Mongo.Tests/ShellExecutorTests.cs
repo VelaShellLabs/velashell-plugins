@@ -96,10 +96,10 @@ public sealed class ShellExecutorTests
                 ShellResult index = await RunAsync(executor, session, "db.orders.createIndex({ s: 1, n: -1 })");
                 Assert.AreEqual("Documents", index.Kind.ToString());
                 ShellResult indexes = await RunAsync(executor, session, "db.orders.getIndexes()");
-                Assert.IsTrue(indexes.Documents.Any(static d => d["name"] == "s_1_n_-1"));
+                Assert.Contains(static d => d["name"] == "s_1_n_-1", indexes.Documents);
 
                 ShellResult show = await RunAsync(executor, session, "show collections");
-                Assert.IsTrue(show.Documents.Any(static d => d["name"] == "orders"));
+                Assert.Contains(static d => d["name"] == "orders", show.Documents);
                 ShellResult names = await RunAsync(executor, session, "db.getCollectionNames()");
                 Assert.HasCount(1, names.Documents);
                 ShellResult ping = await RunAsync(executor, session, "db.runCommand({ ping: 1 })");
@@ -223,7 +223,7 @@ public sealed class ShellExecutorTests
                 Assert.AreEqual("IXSCAN", plan.Stages[0].Name);
                 Assert.AreEqual("status_1_createdAt_-1", plan.Stages[0].IndexName);
                 Assert.IsTrue(plan.SortFromIndex, "排序由索引提供");
-                Assert.IsTrue(plan.Stages.Any(static s => s.Name == "FETCH" && s.Discarded > 0));
+                Assert.Contains(static s => s.Name == "FETCH" && s.Discarded > 0, plan.Stages);
                 Assert.AreEqual(20L, plan.NReturned);
                 Assert.IsNotNull(plan.Advice);
                 Assert.AreEqual("{ \"status\" : 1, \"createdAt\" : -1, \"total\" : 1 }", plan.Advice.Keys.ToString());
@@ -231,15 +231,15 @@ public sealed class ShellExecutorTests
 
                 ShellResult hinted = await executor.ExplainAsync(find, database, "executionStats", new ShellRunOptions(), new BsonString("_id_"));
                 var hintedPlan = ExplainPlan.Parse(hinted.Explain!);
-                Assert.IsTrue(hintedPlan.Stages.Any(static s => s.IndexName == "_id_"), "hint 要落到 explain 命令里");
+                Assert.Contains(static s => s.IndexName == "_id_", hintedPlan.Stages, "hint 要落到 explain 命令里");
 
                 ShellCommand aggregate = ShellParser.Parse(ShellScript.Split(
                     "db.orders.aggregate([{ $match: { status: \"paid\" } }, { $group: { _id: \"$status\", n: { $sum: 1 } } }])")[0]);
                 ShellResult aggregateResult = await executor.ExplainAsync(aggregate, database, "executionStats", new ShellRunOptions(), null);
                 var aggregatePlan = ExplainPlan.Parse(aggregateResult.Explain!);
                 Assert.IsTrue(aggregatePlan.IsAggregate);
-                Assert.IsTrue(aggregatePlan.Stages.Any(static s => s.Name is "IXSCAN" or "COLLSCAN"));
-                Assert.IsTrue(aggregatePlan.Stages.Any(static s => s.Name.Contains("GROUP", StringComparison.OrdinalIgnoreCase)));
+                Assert.Contains(static s => s.Name is "IXSCAN" or "COLLSCAN", aggregatePlan.Stages);
+                Assert.Contains(static s => s.Name.Contains("GROUP", StringComparison.OrdinalIgnoreCase), aggregatePlan.Stages);
             }
             finally
             {

@@ -38,7 +38,7 @@ public sealed class CollectionTests
         edit.Set("customer", new BsonDocument("name", "李四"));
         edit.Set("customer.level", "VIP");
 
-        Assert.AreEqual(1, edit.Changes.Count, "MongoDB rejects $set on both customer and customer.level");
+        Assert.HasCount(1, edit.Changes, "MongoDB rejects $set on both customer and customer.level");
         Assert.AreEqual("customer", edit.Changes[0].Path);
         Assert.AreEqual(new BsonDocument { { "name", "李四" }, { "level", "VIP" } }, edit.Changes[0].Value);
     }
@@ -51,7 +51,7 @@ public sealed class CollectionTests
         edit.Set("customer.level", "VIP");
         edit.Set("customer", new BsonDocument("name", "王五"));
 
-        Assert.AreEqual(1, edit.Changes.Count);
+        Assert.HasCount(1, edit.Changes);
         Assert.AreEqual("customer", edit.Changes[0].Path);
         Assert.AreEqual(ChangeRelation.InsideChange, edit.RelationOf("customer.name"));
 
@@ -70,7 +70,7 @@ public sealed class CollectionTests
         Assert.IsTrue(edit.IsEmpty, "changed and changed back is not a pending change");
 
         edit.Set("items.0.qty", new BsonDouble(2));
-        Assert.AreEqual(1, edit.Changes.Count, "Int32 2 → Double 2.0 is a type change and must be kept");
+        Assert.HasCount(1, edit.Changes, "Int32 2 → Double 2.0 is a type change and must be kept");
     }
 
     [TestMethod]
@@ -126,9 +126,9 @@ public sealed class CollectionTests
         area.SetField(b, "status", "refunded");
         StagedInsert insert = area.AddInsert(new BsonDocument("n", 1));
 
-        Assert.AreEqual(3, StagingCommitter.Plan(area, CommitScope.All).Count);
+        Assert.HasCount(3, StagingCommitter.Plan(area, CommitScope.All));
         IReadOnlyList<StagedOperation> onlyA = StagingCommitter.Plan(area, new CommitScope(a["_id"]));
-        Assert.AreEqual(1, onlyA.Count);
+        Assert.HasCount(1, onlyA);
         Assert.AreEqual(a["_id"], ((UpdateOperation)onlyA[0]).Edit.Id);
         IReadOnlyList<StagedOperation> onlyInsert = StagingCommitter.Plan(area, new CommitScope(OnlyInsert: insert));
         _ = Assert.IsInstanceOfType<InsertOperation>(onlyInsert.Single());
@@ -215,7 +215,7 @@ public sealed class CollectionTests
     {
         Assert.AreEqual(180d, CollectionTabViewModel.EstimateWidth("_id", BsonKind.ObjectId, 24));
         Assert.AreEqual(156d, CollectionTabViewModel.EstimateWidth("createdAt", BsonKind.Date, 19));
-        Assert.IsTrue(CollectionTabViewModel.EstimateWidth("note", BsonKind.String, 200) <= 280);
+        Assert.IsLessThanOrEqualTo(280, CollectionTabViewModel.EstimateWidth("note", BsonKind.String, 200));
     }
 
     [TestMethod]
@@ -225,7 +225,7 @@ public sealed class CollectionTests
         var en = new Loc("en");
         Assert.AreEqual("待提交：", zh["Cw_PendingPrefix"]);
         Assert.AreEqual("Edit conflict", en["State_ConflictTitle"]);
-        Assert.IsTrue(Loc.AllKeys.Count(static k => k.StartsWith("Cw_", StringComparison.Ordinal)) > 100);
+        Assert.IsGreaterThan(100, Loc.AllKeys.Count(static k => k.StartsWith("Cw_", StringComparison.Ordinal)));
     }
 
     // ── 提交 / 撤销 / 冲突:真实服务器,临时库 ────────────────────────────────────
@@ -262,7 +262,7 @@ public sealed class CollectionTests
             Assert.AreEqual(1, outcome.Updated);
             Assert.AreEqual(1, outcome.Inserted);
             Assert.AreEqual(1, outcome.Deleted);
-            Assert.AreEqual(0, outcome.Conflicts.Count);
+            Assert.IsEmpty(outcome.Conflicts);
             Assert.IsTrue(area.IsEmpty, "everything that was written leaves the staging area");
 
             BsonDocument first = await collection.Find(new BsonDocument("_id", 1)).FirstAsync();
@@ -303,7 +303,7 @@ public sealed class CollectionTests
 
             CommitOutcome outcome = await StagingCommitter.CommitAsync(collection, area, CommitScope.All);
             Assert.AreEqual(1, outcome.Updated, "the unrelated document still goes through");
-            Assert.AreEqual(1, outcome.Conflicts.Count);
+            Assert.HasCount(1, outcome.Conflicts);
             EditConflict conflict = outcome.Conflicts[0];
             Assert.AreEqual("refunded", conflict.Server!["status"].AsString);
             Assert.AreEqual(1, area.EditCount, "the conflicting edit stays staged");
@@ -345,7 +345,7 @@ public sealed class CollectionTests
         {
             await using Workbench bench = await Screens.OpenWorkbenchAsync(database);
             CollectionTabViewModel tab = await OpenTabAsync(bench, database, "orders");
-            Assert.AreEqual(3, tab.Rows.Count);
+            Assert.HasCount(3, tab.Rows);
             CollectionAssert.AreEqual(new[] { "_id", "status", "customer", "qty" }, tab.Columns.Select(static c => c.Name).ToArray());
 
             CollectionRow row = tab.Rows[0];
@@ -375,7 +375,7 @@ public sealed class CollectionTests
             Assert.IsFalse(tab.HasPending);
             BsonDocument written = await collection.Find(new BsonDocument("_id", 1)).FirstAsync();
             Assert.AreEqual("shipped", written["status"].AsString);
-            Assert.IsTrue(bench.ViewModel.Toasts.Any(static t => t.HasAction), "the success toast carries an undo action");
+            Assert.Contains(static t => t.HasAction, bench.ViewModel.Toasts, "the success toast carries an undo action");
         }
         finally
         {
@@ -399,7 +399,7 @@ public sealed class CollectionTests
         Assert.IsNull(cell.Editor, "read-only mode refuses to start an edit");
         Assert.IsTrue(tab.Staging.IsEmpty);
         await Screens.PumpAsync(5);
-        Assert.IsTrue(bench.ViewModel.Toasts.Count > 0, "the refusal explains how to unlock");
+        Assert.IsNotEmpty(bench.ViewModel.Toasts, "the refusal explains how to unlock");
     });
 
     [TestMethod]
@@ -411,7 +411,7 @@ public sealed class CollectionTests
         Assert.IsFalse(tab.IsEditable);
         Assert.IsFalse(tab.CanEdit);
         Assert.IsTrue(tab.ShowViewBanner);
-        Assert.IsTrue(tab.Rows.Count > 0);
+        Assert.IsNotEmpty(tab.Rows);
     });
 
     [TestMethod]
@@ -423,7 +423,7 @@ public sealed class CollectionTests
 
         tab.FilterText = "{ items.sku: \"SKU-7710\" }";
         Assert.IsTrue(tab.HasFilterError, "dotted bare keys must be quoted, as in mongosh");
-        Assert.IsTrue(tab.FilterDiagnostics.Count > 0);
+        Assert.IsNotEmpty(tab.FilterDiagnostics);
         tab.FilterText = "{ status: \"refunded\", total: { $gte: 1e12 } }";
         Assert.IsFalse(tab.HasFilterError);
         await tab.RunQueryAsync(resetPage: true);
@@ -452,7 +452,7 @@ public sealed class CollectionTests
         }
         Assert.AreEqual("{ status: \"shipped\" }", tab.FilterText, "Enter must not insert a line break into the one-line filter");
         Assert.AreEqual(tab.FilterText, tab.LastRunFilter);
-        Assert.IsTrue(tab.Rows.Count > 0);
+        Assert.IsNotEmpty(tab.Rows);
         Assert.IsTrue(tab.Rows.All(static r => r.Document["status"].AsString == "shipped"));
     });
 
@@ -536,13 +536,13 @@ public sealed class CollectionTests
             await tab.RunQueryAsync(resetPage: true);
             await Screens.PumpAsync(10);
             watch.Stop();
-            Assert.AreEqual(50_000, tab.Rows.Count);
-            Assert.IsTrue(watch.Elapsed < TimeSpan.FromSeconds(8), $"50k rows took {watch.Elapsed}");
+            Assert.HasCount(50_000, tab.Rows);
+            Assert.IsLessThan(TimeSpan.FromSeconds(8), watch.Elapsed, $"50k rows took {watch.Elapsed}");
 
             var stage = System.Diagnostics.Stopwatch.StartNew();
             _ = tab.Stage(tab.Rows[10], "name", "changed");
             stage.Stop();
-            Assert.IsTrue(stage.Elapsed < TimeSpan.FromMilliseconds(500), $"staging one cell in a 50k page took {stage.Elapsed}");
+            Assert.IsLessThan(TimeSpan.FromMilliseconds(500), stage.Elapsed, $"staging one cell in a 50k page took {stage.Elapsed}");
             ViewOf(bench).Grid.List.ScrollIntoView(tab.Rows[40_000]);
             await Screens.PumpAsync(10);
             tab.Staging.Clear();
@@ -605,7 +605,7 @@ public sealed class CollectionTests
 
         WriteableBitmap? frame = Screens.Capture(bench.Window, "01-collection");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(tab.Inspector.Fields.Count > 5, "the inspector lists the selected document's fields");
+        Assert.IsGreaterThan(5, tab.Inspector.Fields.Count, "the inspector lists the selected document's fields");
         Assert.AreEqual(1, tab.Staging.EditCount);
         Assert.AreEqual(1, tab.Staging.InsertCount);
         Assert.AreEqual(1, tab.Staging.DeleteCount);
@@ -621,7 +621,7 @@ public sealed class CollectionTests
         }
         await Screens.PumpAsync(10);
         _ = Screens.Capture(bench.Window, "01-collection-inspector-info");
-        Assert.IsTrue(tab.Inspector.InfoLines.Count > 5, "the collection page lists count, sizes and indexes");
+        Assert.IsGreaterThan(5, tab.Inspector.InfoLines.Count, "the collection page lists count, sizes and indexes");
         tab.Staging.Clear();
     });
 
@@ -650,9 +650,9 @@ public sealed class CollectionTests
 
         WriteableBitmap? frame = Screens.Capture(bench.Window, "02-collection-json");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(card.Outline.Count > 5, "the outline lists the edited card's fields");
-        Assert.IsTrue(card.EditMarks.Count >= 2, "the edited and the added field are marked while editing");
-        Assert.IsTrue(tab.Cards[2].Marks.Count > 0, "a staged change is marked on the read-only card");
+        Assert.IsGreaterThan(5, card.Outline.Count, "the outline lists the edited card's fields");
+        Assert.IsGreaterThanOrEqualTo(2, card.EditMarks.Count, "the edited and the added field are marked while editing");
+        Assert.IsNotEmpty(tab.Cards[2].Marks, "a staged change is marked on the read-only card");
         tab.Staging.Clear();
     });
 
@@ -675,7 +675,7 @@ public sealed class CollectionTests
 
         WriteableBitmap? frame = Screens.Capture(bench.Window, "13-collection-tree");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(tab.TreeRows.Any(static r => r.IsModified), "the staged qty is marked in the tree");
+        Assert.Contains(static r => r.IsModified, tab.TreeRows, "the staged qty is marked in the tree");
         tab.Staging.Clear();
     });
 
@@ -710,7 +710,7 @@ public sealed class CollectionTests
         await Screens.PumpAsync(30);
         WriteableBitmap? conflict = Screens.Capture(bench.Window, "22-collection-conflict");
         Assert.IsNotNull(conflict);
-        Assert.AreEqual(3, dialog.Rows.Count);
+        Assert.HasCount(3, dialog.Rows);
         Assert.IsTrue(dialog.Rows.Single(static r => r.Path == "status").BothChanged);
         Assert.IsFalse(dialog.Rows.Single(static r => r.Path == "shippedAt").BothChanged);
         dialog.Rows[0].PickServerCommand.Execute(null);

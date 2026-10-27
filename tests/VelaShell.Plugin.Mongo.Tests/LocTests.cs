@@ -40,7 +40,7 @@ public sealed partial class LocTests
                 mismatches.Add($"{key}: en {{{string.Join(",", a)}}} / zh {{{string.Join(",", b)}}}");
             }
         }
-        Assert.AreEqual(0, mismatches.Count, string.Join(Environment.NewLine, mismatches));
+        Assert.IsEmpty(mismatches, string.Join(Environment.NewLine, mismatches));
     }
 
     [TestMethod]
@@ -63,7 +63,7 @@ public sealed partial class LocTests
                 }
             }
         }
-        Assert.AreEqual(0, failures.Count, string.Join(Environment.NewLine, failures));
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
 
     [TestMethod]

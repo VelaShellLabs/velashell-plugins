@@ -96,7 +96,7 @@ public sealed class TransferTests
             Assert.AreEqual(1, copied.Indexes);
             CollectionInfo targetItems = (await target.ListCollectionsAsync(to)).Single(static c => c.Name == "items");
             Assert.IsNotNull(targetItems.Validator, "validation rules travel with the collection");
-            Assert.IsTrue((await target.ListIndexesAsync(to, "items")).Any(static i => i["name"] == "sku_1" && i["unique"].ToBoolean()));
+            Assert.Contains(static i => i["name"] == "sku_1" && i["unique"].ToBoolean(), await target.ListIndexesAsync(to, "items"));
 
             _ = await CollectionCopier.CopyAsync(source, from, target, to, new XferItem("v_items", XferObjectKind.View, viewInfo, XferAction.Create),
                 options, new XferPauseGate(), _ => { }, (t, tone) => log.Add((t, tone)), loc, CancellationToken.None);
@@ -159,8 +159,8 @@ public sealed class TransferTests
             Assert.AreEqual(XferAction.Skip, coupons.ActionValue);
             Assert.IsTrue(coupons.HasNote);
             Assert.AreEqual(XferAction.Create, vm.Objects.Single(static o => o.Name == "orders").ActionValue);
-            Assert.IsTrue(vm.Objects.Any(static o => o.Kind == XferObjectKind.Bucket && o.Name == "fs"));
-            Assert.IsFalse(vm.Objects.Any(static o => o.Name.StartsWith("system.", StringComparison.Ordinal) || o.Name == "fs.files"));
+            Assert.Contains(static o => o.Kind == XferObjectKind.Bucket && o.Name == "fs", vm.Objects);
+            Assert.DoesNotContain(static o => o.Name.StartsWith("system.", StringComparison.Ordinal) || o.Name == "fs.files", vm.Objects);
 
             // 只传几个小的,其余不勾
             string[] wanted = ["customers", "products", "inventory", "coupons", "v_order_summary"];
@@ -180,7 +180,7 @@ public sealed class TransferTests
             long coupons2 = await second.Collection(to, "coupons").CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
             Assert.AreEqual(1, coupons2, "the existing collection was skipped, not touched");
             Assert.AreEqual(TransferObjectState.Skipped, coupons.State);
-            Assert.IsTrue(vm.Log.Any(static l => l.Tone == XferTone.Ok));
+            Assert.Contains(static l => l.Tone == XferTone.Ok, vm.Log);
         }
         finally
         {

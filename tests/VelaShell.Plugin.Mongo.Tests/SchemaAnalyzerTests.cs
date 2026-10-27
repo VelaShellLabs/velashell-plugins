@@ -60,7 +60,7 @@ public sealed class SchemaAnalyzerTests
         Assert.AreEqual(200, schema.Sampled);
         string[] paths = [.. schema.Fields.Select(static f => f.Path)];
         CollectionAssert.IsSubsetOf(new[] { "_id", "orderNo", "status", "total", "createdAt", "customer", "customer.id", "customer.level", "items", "items.sku", "items.qty", "note" }, paths);
-        Assert.IsTrue(Array.IndexOf(paths, "customer") < Array.IndexOf(paths, "customer.level"), "parents come before children");
+        Assert.IsLessThan(Array.IndexOf(paths, "customer.level"), Array.IndexOf(paths, "customer"), "parents come before children");
 
         AnalyzedField level = schema["customer.level"]!;
         Assert.AreEqual(200 - 7, level.Present, "i % 33 == 0 → 7 documents without customer.level");
@@ -70,7 +70,7 @@ public sealed class SchemaAnalyzerTests
         AnalyzedField sku = schema["items.sku"]!;
         Assert.IsTrue(sku.InArray);
         Assert.AreEqual(200, sku.Present, "presence is per document, not per array element");
-        Assert.IsTrue(sku.ScalarCount > 200, "values are counted per element");
+        Assert.IsGreaterThan(200, sku.ScalarCount, "values are counted per element");
     }
 
     [TestMethod]
@@ -119,10 +119,10 @@ public sealed class SchemaAnalyzerTests
         StringAssert.StartsWith(SchemaAnalyzer.Describe(total, Zh).Text, "Decimal128 · 中位数 ");
         Assert.AreEqual(AnalyzedViz.Histogram, SchemaAnalyzer.VizOf(total));
         (double[] bins, double min, double max, bool _) = SchemaAnalyzer.Histogram(total);
-        Assert.AreEqual(SchemaAnalyzer.HistogramBins, bins.Length);
+        Assert.HasCount(SchemaAnalyzer.HistogramBins, bins);
         Assert.AreEqual(200, bins.Sum(), "every value lands in exactly one bin");
         Assert.AreEqual(0, min, "non-negative values close to zero start the axis at 0");
-        Assert.IsTrue(max > 7000);
+        Assert.IsGreaterThan(7000, max);
     }
 
     [TestMethod]
@@ -134,7 +134,7 @@ public sealed class SchemaAnalyzerTests
         (double[] bins, DateTime start, DateTime end, int perBin) = SchemaAnalyzer.Timeline(created);
         Assert.AreEqual(1, perBin);
         Assert.AreEqual(new DateTime(2026, 8, 27), start);
-        Assert.AreEqual((end - start).Days + 1, bins.Length);
+        Assert.HasCount((end - start).Days + 1, bins);
         Assert.AreEqual(200, bins.Sum());
 
         AnalyzedField items = schema["items"]!;
@@ -172,6 +172,6 @@ public sealed class SchemaAnalyzerTests
     {
         AnalyzedSchema schema = SchemaAnalyzer.Analyze([]);
         Assert.AreEqual(0, schema.Sampled);
-        Assert.AreEqual(0, schema.Fields.Count);
+        Assert.IsEmpty(schema.Fields);
     }
 }

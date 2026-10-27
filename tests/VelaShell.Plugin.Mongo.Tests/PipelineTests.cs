@@ -126,7 +126,7 @@ public sealed class PipelineTests
 
         PipelineBodyParse garbage = PipelineText.ParseBody("{ a: }");
         Assert.AreEqual("Pipe_ErrSyntax", garbage.ErrorKey);
-        Assert.IsTrue(garbage.Length > 0);
+        Assert.IsGreaterThan(0, garbage.Length);
 
         Assert.AreEqual("Pipe_ErrEmptyBody", PipelineText.ParseBody("  ").ErrorKey);
     }
@@ -209,7 +209,7 @@ public sealed class PipelineTests
         const string op = "{ qty: { $su";
         CompletionSet? ops = PipelineFields.Complete(new(op, op.Length, false), "$group", upstream, 20, loc);
         Assert.IsNotNull(ops);
-        Assert.IsTrue(ops.Items.Any(i => i.Label == "$sum"));
+        Assert.Contains(i => i.Label == "$sum", ops.Items);
         // $group 里先给表达式(累加器),$match 里先给查询运算符。
         Assert.AreEqual("$sum", ops.Items[0].Label);
         CompletionSet? query = PipelineFields.Complete(new("{ a: { $", 8, false), "$match", upstream, 20, loc);
@@ -329,7 +329,7 @@ public sealed class PipelineTests
             ("$addFields", new BsonDocument("x", 1), false),
             ("$group", new BsonDocument("_id", "$a"), true)
         ];
-        Assert.AreEqual(0, PipelineResults.Ghosts(masked).Count);
+        Assert.IsEmpty(PipelineResults.Ghosts(masked));
     }
 
     [TestMethod]
@@ -345,7 +345,7 @@ public sealed class PipelineTests
         };
         PipelineMiniDoc mini = PipelineResults.Mini(doc);
 
-        Assert.AreEqual(4, mini.Fields.Count);
+        Assert.HasCount(4, mini.Fields);
         Assert.AreEqual(new PipelineMiniField("_id:", "66f5c2a1b04e97d2…", "VelaShellBlue"), mini.Fields[0]);
         Assert.AreEqual(new PipelineMiniField("orderNo:", "\"SO2609-10400\"", "VelaShellCyan"), mini.Fields[1]);
         Assert.AreEqual(new PipelineMiniField("items:", "Array[3]", "VelaWarning"), mini.Fields[2]);
@@ -370,7 +370,7 @@ public sealed class PipelineTests
         StringAssert.Contains(vm.StatusText, "管道 · 未保存");
 
         Assert.IsTrue(vm.LoadFromText(DesignPipeline));
-        Assert.AreEqual(6, vm.Stages.Count);
+        Assert.HasCount(6, vm.Stages);
         Assert.IsTrue(vm.IsModified);
         Assert.AreEqual("6 个阶段 · 5 个启用", vm.StageSummary);
         Assert.AreEqual("关联集合 · 已停用", vm.Stages[5].Description);
@@ -415,15 +415,15 @@ public sealed class PipelineTests
         vm.IsStagesMode = true;
         Assert.AreEqual(PipelineMode.Text, vm.Mode);
         Assert.IsTrue(vm.HasTextError);
-        Assert.AreEqual(1, vm.TextDiagnostics.Count);
-        Assert.AreEqual(5, vm.Stages.Count);
-        Assert.IsTrue(workspace.Toasts.Any(t => t.Kind == ToastKind.Warning));
+        Assert.HasCount(1, vm.TextDiagnostics);
+        Assert.HasCount(5, vm.Stages);
+        Assert.Contains(t => t.Kind == ToastKind.Warning, workspace.Toasts);
 
         // 修好就能回卡片。
         vm.PipelineTextValue = "[ { $match: { status: \"paid\" } }, { $limit: 5 } ]";
         vm.IsStagesMode = true;
         Assert.AreEqual(PipelineMode.Stages, vm.Mode);
-        Assert.AreEqual(2, vm.Stages.Count);
+        Assert.HasCount(2, vm.Stages);
         Assert.IsFalse(vm.HasTextError);
 
         // 卡片上的语法错误:标在卡片上,底栏计数。
@@ -432,7 +432,7 @@ public sealed class PipelineTests
         Assert.AreEqual("语法错误", vm.Stages[0].ErrorBadge);
         Assert.AreEqual(1, vm.ErrorCount);
         StringAssert.Contains(vm.StageSummary, "1 个有错");
-        Assert.AreEqual(1, vm.Stages[0].Diagnostics.Count);
+        Assert.HasCount(1, vm.Stages[0].Diagnostics);
 
         // 换运算符:没动过的模板跟着换,写过的阶段体保留。
         PipelineStage added = vm.AddStage("$unwind");
@@ -447,7 +447,7 @@ public sealed class PipelineTests
         vm.DuplicateStage(vm.Stages[0]);
         CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, vm.Stages.Select(s => s.Index).ToArray());
         vm.RemoveStage(vm.Stages[0]);
-        Assert.AreEqual(3, vm.Stages.Count);
+        Assert.HasCount(3, vm.Stages);
         await Task.CompletedTask;
     });
 
@@ -489,15 +489,15 @@ public sealed class PipelineTests
 
         PipelinePreviewRun run = await PipelinePreview.RunAsync(orders, stages, 20, new AggregateOptions(), CancellationToken.None);
 
-        Assert.AreEqual(20, run.Input.Count);
+        Assert.HasCount(20, run.Input);
         Assert.IsTrue(run.Stages.Take(5).All(s => s.State == PipelineStageState.Ok), string.Join(",", run.Stages.Select(s => s.State)));
         Assert.AreEqual(PipelineStageState.Skipped, run.Stages[5].State);
         long matched = run.Stages[0].Count;
         long unwound = run.Stages[1].Count;
         long grouped = run.Stages[2].Count;
         Assert.IsTrue(matched is > 0 and <= 20, $"match {matched}");
-        Assert.IsTrue(unwound >= matched, $"unwind {unwound} < match {matched}");
-        Assert.IsTrue(grouped <= unwound);
+        Assert.IsGreaterThanOrEqualTo(matched, unwound, $"unwind {unwound} < match {matched}");
+        Assert.IsLessThanOrEqualTo(unwound, grouped);
         Assert.AreEqual(grouped, run.Stages[3].Count);
         Assert.AreEqual(Math.Min(10, grouped), run.Stages[4].Count);
         CollectionAssert.AreEqual(new[] { "_id", "qty", "revenue" }, run.Stages[2].Documents[0].Names.ToArray());
@@ -505,7 +505,7 @@ public sealed class PipelineTests
         IReadOnlyList<BsonDocument> sorted = run.Stages[3].Documents;
         for (int i = 1; i < sorted.Count; i++)
         {
-            Assert.IsTrue(sorted[i - 1]["revenue"].ToDecimal() >= sorted[i]["revenue"].ToDecimal());
+            Assert.IsGreaterThanOrEqualTo(sorted[i]["revenue"].ToDecimal(), sorted[i - 1]["revenue"].ToDecimal());
         }
     });
 
@@ -567,7 +567,7 @@ public sealed class PipelineTests
             // 运行:结果进输出表。
             await vm.RunAsync();
             Assert.IsTrue(vm.HasRows);
-            Assert.AreEqual(2, vm.ResultRows.Count);
+            Assert.HasCount(2, vm.ResultRows);
             Assert.AreEqual("\"a\"", vm.ResultRows[0].Cells[0].Text);
             Assert.AreEqual("7", vm.ResultRows[0].Cells[1].Text);
             StringAssert.Contains(vm.ResultSummary, "2 份文档 · 完整运行");
@@ -575,8 +575,8 @@ public sealed class PipelineTests
             // 带 $out 的管道:先过 EnsureWritable 与确认,再真写。
             vm.AddStage("$out").Body = "\"out_totals\"";
             await vm.RunAsync();
-            Assert.AreEqual(1, workspace.Confirms.Count);
-            Assert.IsTrue(workspace.Writable.Contains(db));
+            Assert.HasCount(1, workspace.Confirms);
+            Assert.Contains(db, workspace.Writable);
             long written = await connection.Collection(db, "out_totals").CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
             Assert.AreEqual(2, written);
 
@@ -585,7 +585,7 @@ public sealed class PipelineTests
             vm.Stages[^1].Body = "\"blocked\"";
             await vm.RunAsync();
             List<string> names = await (await connection.Database(db).ListCollectionNamesAsync()).ToListAsync();
-            Assert.IsFalse(names.Contains("blocked"));
+            Assert.DoesNotContain("blocked", names);
             workspace.AllowWrites = true;
 
             // 建视图。
@@ -640,7 +640,7 @@ public sealed class PipelineTests
         Assert.IsTrue(tab.Stages[0].HasPreviewCards);
         Assert.IsTrue(tab.HasRows);
         Assert.IsTrue(tab.ResultRows.Count is > 0 and <= 10);
-        Assert.IsTrue(tab.ResultColumns.Any(c => c.IsGhost && c.Name == "product.name"));
+        Assert.Contains(c => c.IsGhost && c.Name == "product.name", tab.ResultColumns);
     });
 }
 

@@ -78,8 +78,8 @@ public sealed class UsersTests
     {
         var editor = new RoleSetEditor(new Loc("zh-CN"), [new("readWrite", "shop"), new("backup", "admin")], ["logs", "shop"]);
 
-        Assert.AreEqual(3, editor.Rows.Count, "logs, shop and the anyDatabase row");
-        Assert.AreEqual(1, editor.Extras.Count, "backup is not on the matrix");
+        Assert.HasCount(3, editor.Rows, "logs, shop and the anyDatabase row");
+        Assert.HasCount(1, editor.Extras, "backup is not on the matrix");
         Assert.IsFalse(editor.IsModified);
 
         MatrixCellViewModel logsRead = editor.Rows.First(r => r.Database == "logs").Cells[0];
@@ -92,14 +92,14 @@ public sealed class UsersTests
         Assert.IsFalse(editor.IsModified, "ticking and unticking again is no change");
 
         editor.Add(new("refund_operator", "shop"));
-        Assert.IsTrue(editor.Extras.Any(e => e.Ref == new RoleRef("refund_operator", "shop") && e.IsPending));
+        Assert.Contains(e => e.Ref == new RoleRef("refund_operator", "shop") && e.IsPending, editor.Extras);
         editor.Add(new("dbAdmin", "crm"));
-        Assert.IsTrue(editor.Rows.Any(r => r.Database == "crm"), "a matrix role on an unlisted database adds a row");
+        Assert.Contains(r => r.Database == "crm", editor.Rows, "a matrix role on an unlisted database adds a row");
         Assert.IsNull(editor.Rows[^1].Database, "the anyDatabase row stays last");
 
         editor.Reset();
         Assert.IsFalse(editor.IsModified);
-        Assert.IsFalse(editor.Rows.Any(r => r.Database == "crm"));
+        Assert.DoesNotContain(r => r.Database == "crm", editor.Rows);
     }
 
     /// <summary>非 admin 库的角色只能继承同库角色,矩阵只列那一个库。</summary>
@@ -108,7 +108,7 @@ public sealed class UsersTests
     {
         var editor = new RoleSetEditor(new Loc("en"), [new("read", "shop")], ["logs", "shop"], onlyDatabase: "shop");
 
-        Assert.AreEqual(1, editor.Rows.Count);
+        Assert.HasCount(1, editor.Rows);
         Assert.AreEqual("shop", editor.Rows[0].Database);
         Assert.IsTrue(editor.Rows[0].Cells[0].IsChecked);
     }
@@ -131,7 +131,7 @@ public sealed class UsersTests
         Assert.IsFalse(before.ContainsKey("shop.system.js"), "system.js covered by shop.* folds away");
         IReadOnlyList<EffectiveLine> lines = UserAdmin.EffectiveLines(before, after);
 
-        Assert.AreEqual(3, lines.Count);
+        Assert.HasCount(3, lines);
         EffectiveLine logs = lines.Single(l => l.Resource == "logs.*");
         Assert.AreEqual(PrivilegeChange.Added, logs.Change);
         Assert.AreEqual("find · listCollections", logs.Actions);
@@ -161,12 +161,12 @@ public sealed class UsersTests
 
         (IReadOnlyList<Privilege> grant, IReadOnlyList<Privilege> revoke) = UserAdmin.DiffPrivileges(original, current);
 
-        Assert.AreEqual(2, grant.Count);
+        Assert.HasCount(2, grant);
         CollectionAssert.AreEqual(new[] { "remove" }, grant.Single(p => p.Resource["collection"] == "orders").Actions.ToArray());
-        Assert.IsTrue(grant.Any(p => p.Resource["db"] == "logs"));
-        Assert.AreEqual(2, revoke.Count);
+        Assert.Contains(p => p.Resource["db"] == "logs", grant);
+        Assert.HasCount(2, revoke);
         CollectionAssert.AreEqual(new[] { "update" }, revoke.Single(p => p.Resource["collection"] == "orders").Actions.ToArray());
-        Assert.IsTrue(revoke.Any(p => p.Resource["collection"] == "refunds"));
+        Assert.Contains(p => p.Resource["collection"] == "refunds", revoke);
     }
 
     // ── 登录限制、密码、标签 ─────────────────────────────────────────────
@@ -209,7 +209,7 @@ public sealed class UsersTests
             Assert.AreEqual(password, Uri.EscapeDataString(password), "no escaping needed inside a URI");
             _ = seen.Add(password);
         }
-        Assert.AreEqual(200, seen.Count);
+        Assert.HasCount(200, seen);
     }
 
     /// <summary>密码年龄徽章在策略的三分之二处出现,超过策略即过期;合并 customData 保留原字段。</summary>
@@ -235,7 +235,7 @@ public sealed class UsersTests
     public void Role_tags_fit_the_column_and_fold_into_a_count()
     {
         (IReadOnlyList<RoleTag> writer, string? more) = RoleTag.Fit([new("readWrite", "shop"), new("read", "logs")], "admin", "shop");
-        Assert.AreEqual(1, writer.Count);
+        Assert.HasCount(1, writer);
         Assert.AreEqual("readWrite@shop", writer[0].Text);
         Assert.AreEqual("VelaWarning", writer[0].Token);
         Assert.AreEqual("+1", more);
@@ -274,7 +274,7 @@ public sealed class UsersTests
         try
         {
             UsersTabViewModel tab = await OpenUsersAsync(bench);
-            Assert.IsTrue(tab.Users.Any(u => u.Name == "ops_writer"), "usersInfo forAllDBs lists the seeded users");
+            Assert.Contains(u => u.Name == "ops_writer", tab.Users, "usersInfo forAllDBs lists the seeded users");
 
             // 新建:账号 + 矩阵里勾 read@shop。
             tab.NewUserCommand.Execute(null);
@@ -299,7 +299,7 @@ public sealed class UsersTests
             editor.Roles.Rows.First(r => r.Database == "logs").Cells[1].IsChecked = true;
             editor.Roles.Rows.First(r => r.Database == "shop").Cells[0].IsChecked = false;
             editor.ClientSource = "10.20.0.0/16, 127.0.0.1";
-            Assert.AreEqual(3, editor.Commands.Count, "grant + revoke + updateUser");
+            Assert.HasCount(3, editor.Commands, "grant + revoke + updateUser");
             Assert.IsTrue(tab.IsModified);
             Assert.IsTrue(tab.SelectedUser!.IsEditing);
             await tab.SaveUserAsync(editor);
@@ -351,7 +351,7 @@ public sealed class UsersTests
             _ = Screens.Capture(bench.Window, "18-users-reveal");
             reveal.Close();
             user = await UserDocAsync(admin, name);
-            Assert.IsTrue(user["customData"][UserAdmin.PasswordChangedKey].ToUniversalTime() > before, "rotation refreshes the change time");
+            Assert.IsGreaterThan(before, user["customData"][UserAdmin.PasswordChangedKey].ToUniversalTime(), "rotation refreshes the change time");
 
             // 删除:确认框 → dropUser。
             tab.DeleteCommand.Execute(null);
@@ -481,7 +481,7 @@ public sealed class UsersTests
         Assert.AreEqual("""db.getSiblingDB("admin").grantRolesToUser("ops_writer", [{ role: "read", db: "logs" }])""", editor.CommandPreview);
         Assert.IsTrue(tab.SelectedUser!.IsEditing);
         Assert.IsTrue(tab.StatusText.Contains("ops_writer", StringComparison.Ordinal), tab.StatusText);
-        Assert.IsTrue(editor.Effective.Lines.Any(l => l.Resource == "logs.*" && l.IsAdded));
+        Assert.Contains(l => l.Resource == "logs.*" && l.IsAdded, editor.Effective.Lines);
 
         // 不保存:截完放弃,服务器上的 ops_writer 原封不动。
         editor.DiscardCommand.Execute(null);

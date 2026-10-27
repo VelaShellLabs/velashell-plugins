@@ -85,7 +85,7 @@ public sealed class IndexAdvisorTests
             new BsonDocument { { "op", "getmore" }, { "command", new BsonDocument("getMore", 1L) } }
         };
         IReadOnlyList<AdvisorQueryGroup> groups = IndexAdvisor.GroupSlowQueries(profile);
-        Assert.AreEqual(1, groups.Count);
+        Assert.HasCount(1, groups);
         AdvisorQueryGroup group = groups[0];
         Assert.AreEqual(2, group.Count);
         Assert.AreEqual(710, group.AverageMillis, 0.001);
@@ -131,7 +131,7 @@ public sealed class IndexAdvisorTests
         IReadOnlyList<AdvisorQueryGroup> groups = IndexAdvisor.GroupSlowQueries(
             [Find(BsonDocument.Parse("{ status: 'paid', total: { $gte: 1 } }"), BsonDocument.Parse("{ total: -1 }"))]);
         AdvisorIndex[] indexes = [Index("status_1_total_-1_x_1", BsonDocument.Parse("{ status: 1, total: -1, x: 1 }"))];
-        Assert.AreEqual(0, IndexAdvisor.Advise(groups, indexes, Now).Count);
+        Assert.IsEmpty(IndexAdvisor.Advise(groups, indexes, Now));
 
         AdvisorIndex[] hidden = [Index("status_1_total_-1", BsonDocument.Parse("{ status: 1, total: -1 }"), extra: new BsonDocument("hidden", true))];
         Assert.AreEqual(AdvisorKind.CreateIndex, IndexAdvisor.Advise(groups, hidden, Now).First().Kind,
@@ -220,6 +220,6 @@ public sealed class IndexAdvisorTests
         long small = IndexAdvisor.EstimateSize(1_000, 20);
         long large = IndexAdvisor.EstimateSize(1_000_000, 20);
         Assert.AreEqual(small * 1000, large, large / 100.0);
-        Assert.IsTrue(IndexAdvisor.EstimateBuildSeconds(1_284_902, 42L << 30) > 60);
+        Assert.IsGreaterThan(60, IndexAdvisor.EstimateBuildSeconds(1_284_902, 42L << 30));
     }
 }

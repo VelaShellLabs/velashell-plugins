@@ -127,7 +127,7 @@ public class PaletteAndRunCommandTests
 
         // 一片空白不如一句"没有匹配的命令"。
         Assert.IsTrue(palette.IsEmpty);
-        Assert.HasCount(0, palette.Items);
+        Assert.IsEmpty(palette.Items);
     }
 
     // ── docker run 反推 ───────────────────────────────────────────

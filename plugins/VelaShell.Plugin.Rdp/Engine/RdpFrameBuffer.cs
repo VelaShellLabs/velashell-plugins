@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace VelaShell.Plugin.Rdp.Engine;
@@ -63,14 +64,17 @@ internal sealed class RdpFrameBuffer : IAsyncDisposable
             _pending = false;
         }
     }
-    public bool TryCopy(Memory<byte> destination, out RdpFrameInfo info)
+    public bool TryCopy(IntPtr destination, int width, int height, int stride, int capacity, out RdpFrameInfo info)
     {
         if (!TryAcquire(out var lease)) { info = Info; return false; }
         using (lease)
         {
             info = lease.Info;
-            if (destination.Length < info.ByteLength) return false;
-            lease.Pixels.CopyTo(destination);
+            if (info.Width != width || info.Height != height) return false;
+            int rowBytes = checked(width * 4);
+            if (destination == IntPtr.Zero || stride < rowBytes || capacity < 0 ||
+                (long)stride * height > capacity) return false;
+            lease.CopyTo(destination, stride, rowBytes);
             return true;
         }
     }
@@ -115,6 +119,14 @@ internal sealed class RdpFrameBuffer : IAsyncDisposable
         private RdpFrameBuffer? _owner = owner;
         public ReadOnlyMemory<byte> Pixels { get; } = pixels;
         public RdpFrameInfo Info { get; } = info;
+        internal void CopyTo(IntPtr destination, int stride, int rowBytes)
+        {
+            if (stride == Info.Stride && stride == rowBytes)
+                Marshal.Copy(pixels, 0, destination, Info.ByteLength);
+            else
+                for (int y = 0; y < Info.Height; y++)
+                    Marshal.Copy(pixels, checked(y * Info.Stride), IntPtr.Add(destination, checked(y * stride)), rowBytes);
+        }
         public void Dispose() => Interlocked.Exchange(ref _owner, null)?.Release(pixels);
     }
 }

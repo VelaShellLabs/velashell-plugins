@@ -140,7 +140,7 @@ public sealed class NewCollectionTests
         var vm = new NewCollectionDialogViewModel(bench.Session, db) { Name = "never" };
         await vm.CreateAsync();
         List<string> names = await (await bench.Connection.Database(db).ListCollectionNamesAsync()).ToListAsync();
-        Assert.AreEqual(0, names.Count);
+        Assert.IsEmpty(names);
     });
 
     /// <summary>设计稿 17:时序集合填好(device_metrics),不真建。</summary>

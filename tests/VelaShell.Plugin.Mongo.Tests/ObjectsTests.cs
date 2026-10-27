@@ -107,7 +107,7 @@ public sealed class ObjectsTests
 
         List<ObjectItem> items = ObjectsTabViewModel.BuildItems("shop", list, Zh);
 
-        Assert.AreEqual(4, items.Count);
+        Assert.HasCount(4, items);
         ObjectItem bucket = items.Single(static i => i.Kind == ObjectKind.Bucket);
         Assert.AreEqual("fs", bucket.Name);
         Assert.AreEqual("fs.files / chunks", bucket.DisplayName);
@@ -142,7 +142,7 @@ public sealed class ObjectsTests
         IReadOnlyCollection<string> system = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "system.profile");
 
         CollectionAssert.AreEquivalent(new[] { "find", "insert", "listIndexes" }, orders.ToArray());
-        Assert.AreEqual(0, system.Count);
+        Assert.IsEmpty(system);
     }
 
     // ── 连服务器 ─────────────────────────────────────────────────────────
@@ -158,11 +158,11 @@ public sealed class ObjectsTests
         await WaitUntilAsync(() => tab.Items.Where(static i => !i.IsView).All(static i => i.HasStats));
 
         Assert.AreEqual(tab.AllCount, tab.CollectionCount + tab.ViewCount + tab.GridFsCount);
-        Assert.IsTrue(tab.Items.Any(static i => i is { Name: "events", Kind: ObjectKind.TimeSeries }), "events should be a time-series row");
-        Assert.IsTrue(tab.Items.Any(static i => i is { Name: "fs", Kind: ObjectKind.Bucket }), "fs.files + fs.chunks should merge into one bucket row");
-        Assert.IsTrue(tab.Items.Any(static i => i is { Name: "products", HasValidator: true }), "products carries a validator");
-        Assert.IsTrue(tab.Items.Any(static i => i is { Name: "carts", IsTtl: true }), "carts has a TTL index");
-        Assert.IsFalse(tab.Items.Any(static i => i.Name.StartsWith("system.", StringComparison.Ordinal)));
+        Assert.Contains(static i => i is { Name: "events", Kind: ObjectKind.TimeSeries }, tab.Items, "events should be a time-series row");
+        Assert.Contains(static i => i is { Name: "fs", Kind: ObjectKind.Bucket }, tab.Items, "fs.files + fs.chunks should merge into one bucket row");
+        Assert.Contains(static i => i is { Name: "products", HasValidator: true }, tab.Items, "products carries a validator");
+        Assert.Contains(static i => i is { Name: "carts", IsTtl: true }, tab.Items, "carts has a TTL index");
+        Assert.DoesNotContain(static i => i.Name.StartsWith("system.", StringComparison.Ordinal), tab.Items);
 
         tab.Filter = ObjectFilter.Views;
         Assert.IsTrue(tab.Items.All(static i => i.IsView));
@@ -237,7 +237,7 @@ public sealed class ObjectsTests
         tab.DropCommand.Execute(null);
         await Screens.PumpAsync(20);
         Assert.IsNull(bench.ViewModel.Dialog, "read-only mode must stop before the confirmation dialog");
-        Assert.IsTrue(bench.ViewModel.Toasts.Count > 0, "a toast should explain why nothing happened");
+        Assert.IsNotEmpty(bench.ViewModel.Toasts, "a toast should explain why nothing happened");
     });
 
     /// <summary>设计稿 12:shop 的对象列表,选中 events。</summary>
@@ -258,7 +258,7 @@ public sealed class ObjectsTests
         WriteableBitmap? frame = Screens.Capture(bench.Window, "12-objects");
 
         Assert.IsNotNull(frame);
-        Assert.AreEqual(3, tab.Sections.Count);
+        Assert.HasCount(3, tab.Sections);
 
         // 另两种形态顺手各截一张(不对应画板,给人看 DDL 页与大图标视图有没有画坏)。
         tab.IsDdlTab = true;

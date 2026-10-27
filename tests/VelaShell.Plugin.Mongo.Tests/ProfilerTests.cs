@@ -54,7 +54,7 @@ public sealed class ProfilerTests
             { "ts", T0.AddMinutes(2) }
         };
         List<ProfileEntry> entries = [ProfileEntry.Parse(first), ProfileEntry.Parse(second), ProfileEntry.Parse(getMore)];
-        Assert.AreEqual(1, entries.Select(static e => e.Shape.Key).Distinct().Count(), "same shape regardless of literal values");
+        Assert.HasCount(1, entries.Select(static e => e.Shape.Key).Distinct(), "same shape regardless of literal values");
         var row = new ProfilerShapeRow(entries, 2400);
         Assert.AreEqual(2, row.Count);
         Assert.AreEqual(600, row.AvgMillis, 1e-9);
@@ -184,12 +184,12 @@ public sealed class ProfilerTests
             WriteableBitmap? frame = Screens.Capture(bench.Window, "15-profiler");
             Assert.IsNotNull(frame);
             Assert.AreEqual(2, tab.Level);
-            Assert.IsTrue(tab.Shapes.Count >= 5, $"{tab.Shapes.Count} shapes");
-            Assert.IsTrue(tab.Shapes.Any(s => s.Title == "orders.find" && s.PlanErr), "the unindexed orders.find is a COLLSCAN");
-            Assert.IsTrue(tab.Shapes.Any(s => s.Title == "reviews.find" && s.PlanOk), "reviews.find hits its index");
+            Assert.IsGreaterThanOrEqualTo(5, tab.Shapes.Count, $"{tab.Shapes.Count} shapes");
+            Assert.Contains(s => s.Title == "orders.find" && s.PlanErr, tab.Shapes, "the unindexed orders.find is a COLLSCAN");
+            Assert.Contains(s => s.Title == "reviews.find" && s.PlanOk, tab.Shapes, "reviews.find hits its index");
             Assert.IsNotNull(tab.Detail);
-            Assert.IsTrue(tab.Ops.Any(o => o.IsLong), "a > 10 s operation is listed in red");
-            Assert.IsFalse(tab.Ops.Any(o => o.Summary.Contains("$currentOp", StringComparison.Ordinal)), "our own $currentOp is hidden");
+            Assert.Contains(o => o.IsLong, tab.Ops, "a > 10 s operation is listed in red");
+            Assert.DoesNotContain(o => o.Summary.Contains("$currentOp", StringComparison.Ordinal), tab.Ops, "our own $currentOp is hidden");
             StringAssert.Contains(tab.StatusText, "system.profile");
         }
         finally

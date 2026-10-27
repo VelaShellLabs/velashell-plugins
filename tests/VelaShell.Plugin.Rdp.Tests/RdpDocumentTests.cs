@@ -61,7 +61,7 @@ public sealed class RdpDocumentTests
         Assert.AreEqual("user", factory.Credentials.Username);
         Assert.Contains("windows.example:3389", document.Endpoint);
         foreach (Type type in new[] { typeof(RdpWorkspaceDocument), typeof(RdpWorkspaceProvider) })
-            Assert.IsFalse(type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Any(f => f.FieldType == typeof(WorkspaceConnectRequest)));
+            Assert.DoesNotContain(f => f.FieldType == typeof(WorkspaceConnectRequest), type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic));
         Assert.AreEqual(nameof(RdpCredentials), factory.Credentials.ToString());
     }
 
@@ -341,7 +341,8 @@ public sealed class RdpDocumentTests
             }
             remove { _statusChanged -= value; }
         }
-        public bool TryCopyFrame(Memory<byte> destination, out RdpFrameInfo frame) { frame = FrameInfo; return false; }
+        public bool TryCopyFrame(IntPtr destination, int width, int height, int stride, int capacity, out RdpFrameInfo frame) { frame = FrameInfo; return false; }
+        public void SetFrameConsumer(bool enabled) { }
         public ValueTask SendInputAsync(RdpInput input, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public Task DisconnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public async ValueTask DisposeAsync()

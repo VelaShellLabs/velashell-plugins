@@ -99,8 +99,8 @@ public sealed class DocumentEditorTests
         // customer 默认展开,数组收起;末尾是「添加字段」那一格。
         Assert.IsTrue(Row(vm, "customer").IsExpanded);
         Assert.IsFalse(Row(vm, "items").IsExpanded);
-        Assert.IsTrue(vm.FormItems.Contains(Row(vm, "customer.level")));
-        Assert.IsFalse(vm.FormItems.Contains(Row(vm, "items").Children[0]));
+        Assert.Contains(Row(vm, "customer.level"), vm.FormItems);
+        Assert.DoesNotContain(Row(vm, "items").Children[0], vm.FormItems);
         _ = Assert.IsInstanceOfType<DocumentEditorTail>(vm.FormItems[^1]);
         Assert.IsFalse(vm.HasChanges);
         Assert.IsFalse(vm.CanSave);
@@ -208,7 +208,7 @@ public sealed class DocumentEditorTests
         DocumentEditorRow total = Row(vm, "total");
         total.SelectedKind = BsonKind.Int64;
         Assert.AreEqual("8740", total.Text);
-        Assert.HasCount(0, workspace.Toasts);
+        Assert.IsEmpty(workspace.Toasts);
 
         DocumentEditorRow orderNo = Row(vm, "orderNo");
         orderNo.SelectedKind = BsonKind.Int32;
@@ -398,10 +398,10 @@ public sealed class DocumentEditorTests
         CollectionAssert.AreEqual(new object[] { Row(vm, "customer"), Row(vm, "customer.level") }, vm.FormItems.Take(2).ToArray());
         Assert.HasCount(3, vm.FormItems);
         vm.Search = "sku";
-        Assert.IsTrue(vm.FormItems.Contains(Row(vm, "items")), "matches inside a collapsed array are revealed");
+        Assert.Contains(Row(vm, "items"), vm.FormItems, "matches inside a collapsed array are revealed");
         vm.IsSearching = false;
         Assert.AreEqual("", vm.Search);
-        Assert.IsTrue(vm.FormItems.Count > 10);
+        Assert.IsGreaterThan(10, vm.FormItems.Count);
         return Task.CompletedTask;
     });
 
@@ -422,7 +422,7 @@ public sealed class DocumentEditorTests
 
         vm.JsonText = vm.JsonText.Replace("orderNo:", "orderNo", StringComparison.Ordinal);
         vm.ApplyJson();
-        Assert.IsTrue(vm.JsonDiagnostics.Count > 0);
+        Assert.IsNotEmpty(vm.JsonDiagnostics);
         Assert.IsTrue(vm.HasErrors);
         Assert.IsFalse(vm.CanSave);
 
@@ -530,7 +530,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(ToastKind.Error, workspace.Toasts[^1].Kind);
         vm.ApplyPastedText("   ");
         Assert.AreEqual(Zh["Doc_PasteEmpty"], workspace.Toasts[^1].Title);
-        Assert.AreEqual(before, vm.Roots.Count);
+        Assert.HasCount(before, vm.Roots);
         return Task.CompletedTask;
     });
 
@@ -570,7 +570,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(BsonKind.Boolean, Row(vm, "customer.vip").Kind);
         Assert.IsNull(vm.FindRow("rare"), "fields under the threshold are left out");
         Assert.IsNull(vm.FindRow("items.sku"), "fields inside arrays are never filled");
-        Assert.HasCount(0, vm.FillFrom(schema), "a second run has nothing left to fill");
+        Assert.IsEmpty(vm.FillFrom(schema), "a second run has nothing left to fill");
         return Task.CompletedTask;
     });
 
@@ -813,7 +813,7 @@ public sealed class DocumentEditorTests
     public void Line_diff_finds_the_changed_lines()
     {
         (HashSet<int> removed, HashSet<int> added) = DocumentEditorDiff.Lines(["{", "  a: 1,", "  b: 2", "}"], ["{", "  a: 1,", "  c: 3,", "  b: 2", "}"]);
-        Assert.HasCount(0, removed);
+        Assert.IsEmpty(removed);
         CollectionAssert.AreEqual(new[] { 3 }, added.ToArray());
         (removed, added) = DocumentEditorDiff.Lines(["x", "y", "z"], ["x", "Y", "z"]);
         CollectionAssert.AreEqual(new[] { 2 }, removed.ToArray());
@@ -932,7 +932,7 @@ public sealed class DocumentEditorTests
             Assert.IsNotNull(savedDoc);
             Assert.AreEqual(stored, savedDoc);
             Assert.AreEqual(ToastKind.Success, workspace.Toasts[^1].Kind);
-            Assert.HasCount(0, workspace.Confirms, "a development connection does not ask");
+            Assert.IsEmpty(workspace.Confirms, "a development connection does not ask");
         }
         finally
         {
@@ -966,7 +966,7 @@ public sealed class DocumentEditorTests
             ToastRequest conflict = workspace.Toasts[^1];
             Assert.AreEqual(Zh["Doc_Conflict"], conflict.Title);
             Assert.IsNotNull(conflict.Action);
-            Assert.HasCount(0, workspace.ClosedDialogs, "the editor stays open with the edits");
+            Assert.IsEmpty(workspace.ClosedDialogs, "the editor stays open with the edits");
             BsonDocument untouched = await collection.Find(new BsonDocument("_id", order["_id"])).FirstAsync();
             Assert.AreEqual("paid", untouched["status"].AsString, "nothing is overwritten");
 
@@ -1101,7 +1101,7 @@ public sealed class DocumentEditorTests
             vm.SaveCommand.Execute(null);
             await WaitAsync(() => workspace.Toasts.Count > 0);
             Assert.AreEqual(Zh["Doc_ServerRejected"], workspace.Toasts[^1].Title);
-            Assert.HasCount(0, workspace.ClosedDialogs);
+            Assert.IsEmpty(workspace.ClosedDialogs);
         }
         finally
         {
@@ -1124,7 +1124,7 @@ public sealed class DocumentEditorTests
         {
             Assert.Inconclusive("the screenshot database has no orders");
         }
-        Assert.IsTrue(schema.Fields.Any(static f => f.Path == "orderNo"));
+        Assert.Contains(static f => f.Path == "orderNo", schema.Fields);
         Assert.AreSame(schema, await vm.EnsureSampleAsync(reportErrors: true), "sampled once");
     });
 

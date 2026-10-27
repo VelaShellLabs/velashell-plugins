@@ -38,7 +38,7 @@ public sealed class JsonSchemaValidatorTests
     }
 
     [TestMethod]
-    public void A_query_expression_validator_is_not_evaluated() => Assert.HasCount(0, Check("{ status: { $in: ['paid'] } }", "{ status: 'refunded' }"));
+    public void A_query_expression_validator_is_not_evaluated() => Assert.IsEmpty(Check("{ status: { $in: ['paid'] } }", "{ status: 'refunded' }"));
 
     [TestMethod]
     public void A_valid_document_has_no_violations()
@@ -54,7 +54,7 @@ public sealed class JsonSchemaValidatorTests
                 } } }
             """;
         const string doc = "{ orderNo: 'SO2609-10403', total: NumberDecimal('8740.00'), customer: { level: 'SVIP' }, tags: ['企业', '开票'] }";
-        Assert.HasCount(0, Check(schema, doc));
+        Assert.IsEmpty(Check(schema, doc));
     }
 
     // ── 类型 ────────────────────────────────────────────────────────────────
@@ -71,12 +71,12 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void BsonType_accepts_an_array_of_names_and_the_number_alias()
     {
-        Assert.HasCount(0, Check("{ properties: { a: { bsonType: ['int', 'null'] } } }", "{ a: null }"));
-        Assert.HasCount(0, Check("{ properties: { a: { bsonType: ['int', 'null'] } } }", "{ a: 3 }"));
+        Assert.IsEmpty(Check("{ properties: { a: { bsonType: ['int', 'null'] } } }", "{ a: null }"));
+        Assert.IsEmpty(Check("{ properties: { a: { bsonType: ['int', 'null'] } } }", "{ a: 3 }"));
         Assert.HasCount(1, Check("{ properties: { a: { bsonType: ['int', 'null'] } } }", "{ a: 'x' }"));
         foreach (string value in new[] { "1", "NumberLong('2')", "1.5", "NumberDecimal('2.50')" })
         {
-            Assert.HasCount(0, Check("{ properties: { n: { bsonType: 'number' } } }", $"{{ n: {value} }}"), value);
+            Assert.IsEmpty(Check("{ properties: { n: { bsonType: 'number' } } }", $"{{ n: {value} }}"), value);
         }
         Assert.HasCount(1, Check("{ properties: { n: { bsonType: 'number' } } }", "{ n: '1' }"));
     }
@@ -100,7 +100,7 @@ public sealed class JsonSchemaValidatorTests
         ];
         foreach ((string alias, string value) in cases)
         {
-            Assert.HasCount(0, Check($"{{ properties: {{ v: {{ bsonType: '{alias}' }} }} }}", $"{{ v: {value} }}"), alias);
+            Assert.IsEmpty(Check($"{{ properties: {{ v: {{ bsonType: '{alias}' }} }} }}", $"{{ v: {value} }}"), alias);
         }
         Assert.HasCount(1, Check("{ properties: { v: { bsonType: 'int' } } }", "{ v: NumberLong('5') }"), "long is not int");
     }
@@ -108,18 +108,18 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void Unknown_type_names_and_unknown_keywords_pass()
     {
-        Assert.HasCount(0, Check("{ properties: { v: { bsonType: 'dbPointer', 'x-ui': { widget: 'slider' }, format: 'email' } } }", "{ v: 1 }"));
-        Assert.HasCount(0, Check("{ properties: { v: { type: 'whatever' } } }", "{ v: 1 }"));
+        Assert.IsEmpty(Check("{ properties: { v: { bsonType: 'dbPointer', 'x-ui': { widget: 'slider' }, format: 'email' } } }", "{ v: 1 }"));
+        Assert.IsEmpty(Check("{ properties: { v: { type: 'whatever' } } }", "{ v: 1 }"));
     }
 
     [TestMethod]
     public void Json_type_keyword_is_checked()
     {
-        Assert.HasCount(0, Check("{ properties: { v: { type: 'number' } } }", "{ v: NumberDecimal('1') }"));
-        Assert.HasCount(0, Check("{ properties: { v: { type: ['string', 'null'] } } }", "{ v: null }"));
-        Assert.HasCount(0, Check("{ properties: { v: { type: 'boolean' } } }", "{ v: false }"));
+        Assert.IsEmpty(Check("{ properties: { v: { type: 'number' } } }", "{ v: NumberDecimal('1') }"));
+        Assert.IsEmpty(Check("{ properties: { v: { type: ['string', 'null'] } } }", "{ v: null }"));
+        Assert.IsEmpty(Check("{ properties: { v: { type: 'boolean' } } }", "{ v: false }"));
         Assert.AreEqual("type", Single("{ properties: { v: { type: 'string' } } }", "{ v: 1 }").Keyword);
-        Assert.HasCount(0, Check("{ properties: { v: { type: 'integer' } } }", "{ v: 4.0 }"));
+        Assert.IsEmpty(Check("{ properties: { v: { type: 'integer' } } }", "{ v: 4.0 }"));
         Assert.HasCount(1, Check("{ properties: { v: { type: 'integer' } } }", "{ v: 4.5 }"));
     }
 
@@ -142,8 +142,8 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void Enum_compares_numbers_by_value_across_types()
     {
-        Assert.HasCount(0, Check("{ properties: { n: { enum: [1, 2] } } }", "{ n: NumberLong('2') }"));
-        Assert.HasCount(0, Check("{ properties: { n: { enum: [1.0] } } }", "{ n: 1 }"));
+        Assert.IsEmpty(Check("{ properties: { n: { enum: [1, 2] } } }", "{ n: NumberLong('2') }"));
+        Assert.IsEmpty(Check("{ properties: { n: { enum: [1.0] } } }", "{ n: 1 }"));
         Assert.HasCount(1, Check("{ properties: { n: { enum: [1, 2] } } }", "{ n: 3 }"));
     }
 
@@ -163,8 +163,8 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void Boundaries_are_inclusive_unless_exclusive_is_set()
     {
-        Assert.HasCount(0, Check("{ properties: { n: { minimum: 0, maximum: 10 } } }", "{ n: 0 }"));
-        Assert.HasCount(0, Check("{ properties: { n: { minimum: 0, maximum: 10 } } }", "{ n: 10 }"));
+        Assert.IsEmpty(Check("{ properties: { n: { minimum: 0, maximum: 10 } } }", "{ n: 0 }"));
+        Assert.IsEmpty(Check("{ properties: { n: { minimum: 0, maximum: 10 } } }", "{ n: 10 }"));
         Assert.AreEqual("n 须 > 0", Single("{ properties: { n: { minimum: 0, exclusiveMinimum: true } } }", "{ n: 0 }").Message);
         Assert.AreEqual("n 须 < 10", Single("{ properties: { n: { maximum: 10, exclusiveMaximum: true } } }", "{ n: 10 }").Message);
         Assert.AreEqual("n 须 ≤ 10", Single("{ properties: { n: { maximum: 10 } } }", "{ n: 10.5 }").Message);
@@ -176,27 +176,27 @@ public sealed class JsonSchemaValidatorTests
     public void Decimal_and_long_bounds_compare_without_losing_precision()
     {
         Assert.AreEqual("price 须 ≥ 0", Single("{ properties: { price: { bsonType: 'decimal', minimum: 0 } } }", "{ price: NumberDecimal('-0.01') }").Message);
-        Assert.HasCount(0, Check("{ properties: { price: { minimum: NumberDecimal('0.10') } } }", "{ price: NumberDecimal('0.10') }"));
+        Assert.IsEmpty(Check("{ properties: { price: { minimum: NumberDecimal('0.10') } } }", "{ price: NumberDecimal('0.10') }"));
         Assert.HasCount(1, Check("{ properties: { id: { maximum: NumberLong('9007199254740993') } } }", "{ id: NumberLong('9007199254740994') }"));
     }
 
     [TestMethod]
     public void MultipleOf_is_checked()
     {
-        Assert.HasCount(0, Check("{ properties: { n: { multipleOf: 0.5 } } }", "{ n: 2.5 }"));
+        Assert.IsEmpty(Check("{ properties: { n: { multipleOf: 0.5 } } }", "{ n: 2.5 }"));
         Assert.AreEqual("multipleOf", Single("{ properties: { n: { multipleOf: 5 } } }", "{ n: 12 }").Keyword);
     }
 
     [TestMethod]
-    public void Number_keywords_ignore_non_numbers() => Assert.HasCount(0, Check("{ properties: { n: { minimum: 0, maxLength: 1 } } }", "{ n: 'not a number' }").Where(static v => v.Keyword == "minimum").ToList());
+    public void Number_keywords_ignore_non_numbers() => Assert.IsEmpty(Check("{ properties: { n: { minimum: 0, maxLength: 1 } } }", "{ n: 'not a number' }").Where(static v => v.Keyword == "minimum").ToList());
 
     // ── 字符串 ──────────────────────────────────────────────────────────────
 
     [TestMethod]
     public void String_length_counts_characters_not_bytes_or_code_units()
     {
-        Assert.HasCount(0, Check("{ properties: { name: { maxLength: 2 } } }", "{ name: '张伟' }"));
-        Assert.HasCount(0, Check("{ properties: { name: { maxLength: 1 } } }", "{ name: '😀' }"));
+        Assert.IsEmpty(Check("{ properties: { name: { maxLength: 2 } } }", "{ name: '张伟' }"));
+        Assert.IsEmpty(Check("{ properties: { name: { maxLength: 1 } } }", "{ name: '😀' }"));
         Assert.AreEqual("name 至少 3 个字符", Single("{ properties: { name: { minLength: 3 } } }", "{ name: '张伟' }").Message);
         Assert.AreEqual("maxLength", Single("{ properties: { name: { maxLength: 1 } } }", "{ name: 'ab' }").Keyword);
     }
@@ -204,11 +204,11 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void Pattern_is_checked_and_a_broken_pattern_passes()
     {
-        Assert.HasCount(0, Check("{ properties: { sku: { pattern: '^SKU-\\\\d+$' } } }", "{ sku: 'SKU-7710' }"));
+        Assert.IsEmpty(Check("{ properties: { sku: { pattern: '^SKU-\\\\d+$' } } }", "{ sku: 'SKU-7710' }"));
         SchemaViolation v = Single("{ properties: { sku: { pattern: '^SKU-\\\\d+$' } } }", "{ sku: 'X-1' }");
         Assert.AreEqual("pattern", v.Keyword);
         StringAssert.StartsWith(v.Message, "sku 不匹配");
-        Assert.HasCount(0, Check("{ properties: { sku: { pattern: '([' } } }", "{ sku: 'anything' }"));
+        Assert.IsEmpty(Check("{ properties: { sku: { pattern: '([' } } }", "{ sku: 'anything' }"));
     }
 
     // ── 对象 ────────────────────────────────────────────────────────────────
@@ -234,14 +234,14 @@ public sealed class JsonSchemaValidatorTests
             "{ additionalProperties: false, properties: { name: {} } }", "{ _id: 1, name: 'a', extra: true }");
         CollectionAssert.AreEquivalent(new[] { "_id", "extra" }, found.Select(static v => v.Path).ToArray());
         Assert.IsTrue(found.All(static v => v.Keyword == "additionalProperties"));
-        Assert.HasCount(0, Check("{ additionalProperties: false, properties: { _id: {}, name: {} } }", "{ _id: 1, name: 'a' }"));
+        Assert.IsEmpty(Check("{ additionalProperties: false, properties: { _id: {}, name: {} } }", "{ _id: 1, name: 'a' }"));
     }
 
     [TestMethod]
     public void AdditionalProperties_schema_and_patternProperties_are_applied()
     {
         Assert.AreEqual("x", Single("{ properties: { a: {} }, additionalProperties: { bsonType: 'int' } }", "{ a: 's', x: 's' }").Path);
-        Assert.HasCount(0, Check("{ additionalProperties: false, patternProperties: { '^attr_': { bsonType: 'string' } } }", "{ attr_color: 'red' }"));
+        Assert.IsEmpty(Check("{ additionalProperties: false, patternProperties: { '^attr_': { bsonType: 'string' } } }", "{ attr_color: 'red' }"));
         Assert.AreEqual("attr_size", Single("{ patternProperties: { '^attr_': { bsonType: 'string' } } }", "{ attr_size: 3 }").Path);
     }
 
@@ -268,7 +268,7 @@ public sealed class JsonSchemaValidatorTests
     public void Tuple_items_and_additionalItems_are_checked()
     {
         const string schema = "{ properties: { point: { items: [ { bsonType: 'double' }, { bsonType: 'double' } ], additionalItems: false } } }";
-        Assert.HasCount(0, Check(schema, "{ point: [1.5, 2.5] }"));
+        Assert.IsEmpty(Check(schema, "{ point: [1.5, 2.5] }"));
         Assert.AreEqual("point.1", Single(schema, "{ point: [1.5, 'x'] }").Path);
         Assert.AreEqual("additionalItems", Single(schema, "{ point: [1.5, 2.5, 3.5] }").Keyword);
     }
@@ -280,7 +280,7 @@ public sealed class JsonSchemaValidatorTests
         Assert.AreEqual("maxItems", Single("{ properties: { tags: { maxItems: 1 } } }", "{ tags: ['a', 'b'] }").Keyword);
         Assert.AreEqual("tags 有重复项", Single("{ properties: { tags: { uniqueItems: true } } }", "{ tags: ['企业', '企业'] }").Message);
         Assert.AreEqual("uniqueItems", Single("{ properties: { n: { uniqueItems: true } } }", "{ n: [1, 1.0] }").Keyword);
-        Assert.HasCount(0, Check("{ properties: { n: { uniqueItems: true } } }", "{ n: [1, 2, '1'] }"));
+        Assert.IsEmpty(Check("{ properties: { n: { uniqueItems: true } } }", "{ n: [1, 2, '1'] }"));
     }
 
     // ── 组合 ────────────────────────────────────────────────────────────────
@@ -289,16 +289,16 @@ public sealed class JsonSchemaValidatorTests
     public void Combinators_are_evaluated()
     {
         const string anyOf = "{ properties: { v: { anyOf: [ { bsonType: 'int' }, { bsonType: 'string', minLength: 2 } ] } } }";
-        Assert.HasCount(0, Check(anyOf, "{ v: 3 }"));
-        Assert.HasCount(0, Check(anyOf, "{ v: 'ab' }"));
+        Assert.IsEmpty(Check(anyOf, "{ v: 3 }"));
+        Assert.IsEmpty(Check(anyOf, "{ v: 'ab' }"));
         Assert.AreEqual("v 不满足 anyOf 中的任何一项", Single(anyOf, "{ v: 'a' }").Message);
 
         const string oneOf = "{ properties: { v: { oneOf: [ { minimum: 0 }, { maximum: 10 } ] } } }";
-        Assert.HasCount(0, Check(oneOf, "{ v: -5 }"));
+        Assert.IsEmpty(Check(oneOf, "{ v: -5 }"));
         Assert.AreEqual("v 须恰好满足 oneOf 中的一项(满足了 2 项)", Single(oneOf, "{ v: 5 }").Message);
 
         Assert.AreEqual("not", Single("{ properties: { v: { not: { bsonType: 'null' } } } }", "{ v: null }").Keyword);
-        Assert.HasCount(0, Check("{ properties: { v: { not: { bsonType: 'null' } } } }", "{ v: 1 }"));
+        Assert.IsEmpty(Check("{ properties: { v: { not: { bsonType: 'null' } } } }", "{ v: 1 }"));
 
         IReadOnlyList<SchemaViolation> all = Check("{ properties: { v: { allOf: [ { minimum: 5 }, { multipleOf: 2 } ] } } }", "{ v: 3 }");
         CollectionAssert.AreEquivalent(new[] { "minimum", "multipleOf" }, all.Select(static v => v.Keyword).ToArray());

@@ -18,6 +18,6 @@ public sealed class ScreenshotTests
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
         WriteableBitmap? frame = Screens.Capture(bench.Window, "00-shell");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(bench.ViewModel.VisibleNodes.Count > 3, "the object tree should list the databases");
+        Assert.IsGreaterThan(3, bench.ViewModel.VisibleNodes.Count, "the object tree should list the databases");
     });
 }

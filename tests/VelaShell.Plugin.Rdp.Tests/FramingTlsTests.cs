@@ -26,7 +26,7 @@ public sealed class FramingTlsTests
     {
         using var fast = new ChunkedStream([0, 0x80, 5, 7, 8]);
         byte[] actual = await RdpFraming.ReadRdpAsync(fast, CancellationToken.None);
-        Assert.AreEqual(5, actual.Length);
+        Assert.HasCount(5, actual);
         byte[] der = [0x30, 0x81, 0x80, .. new byte[128]];
         using var ts = new ChunkedStream(der);
         byte[] request = await RdpFraming.ReadCredsspAsync(ts, CancellationToken.None);
@@ -78,7 +78,7 @@ public sealed class FramingTlsTests
         Task<IRdpSession> connect = RdpSessionFactory.Instance.ConnectAsync(Options(port), credentials, cancel.Token);
         using var peer = await listener.AcceptTcpClientAsync(deadline.Token);
         byte[] bytes = new byte[4096];
-        Assert.IsTrue(await peer.GetStream().ReadAsync(bytes, deadline.Token) > 0);
+        Assert.IsGreaterThan(0, await peer.GetStream().ReadAsync(bytes, deadline.Token));
         cancel.Cancel();
         var error = await Assert.ThrowsAsync<OperationCanceledException>(async () => { await connect; });
         Assert.AreEqual(cancel.Token, error.CancellationToken);
@@ -95,7 +95,7 @@ public sealed class FramingTlsTests
         Task<IRdpSession> connect = RdpSessionFactory.Instance.ConnectAsync(Options(port) with { ConnectTimeout = TimeSpan.FromSeconds(1) }, credentials);
         using var peer = await listener.AcceptTcpClientAsync(deadline.Token);
         byte[] bytes = new byte[4096];
-        Assert.IsTrue(await peer.GetStream().ReadAsync(bytes, deadline.Token) > 0);
+        Assert.IsGreaterThan(0, await peer.GetStream().ReadAsync(bytes, deadline.Token));
         await Assert.ThrowsAsync<TimeoutException>(async () => { await connect; });
         Assert.AreEqual(0, await peer.GetStream().ReadAsync(bytes, deadline.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(3)));
     }

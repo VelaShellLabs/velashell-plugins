@@ -135,7 +135,7 @@ public sealed class GridFsTests
         await UploadAsync(fs, "readme.txt", 10, null);
 
         GridFsListing root = await fs.ListAsync("", virtualDirs: true, GridFsTypeFilter.All, null);
-        Assert.AreEqual(2, root.Items.Count);
+        Assert.HasCount(2, root.Items);
         GridFsListItem products = root.Items.Single(static i => i.IsFolder);
         Assert.AreEqual("products", products.Folder);
         Assert.AreEqual(3L, products.Files, "a folder counts distinct file names, recursively");
@@ -148,7 +148,7 @@ public sealed class GridFsTests
         Assert.AreEqual("image/jpeg", main.Latest.ContentType);
 
         GridFsListing flat = await fs.ListAsync("", virtualDirs: false, GridFsTypeFilter.All, null);
-        Assert.AreEqual(4, flat.Items.Count, "flat mode lists every file name once");
+        Assert.HasCount(4, flat.Items, "flat mode lists every file name once");
 
         GridFsListing images = await fs.ListAsync("", virtualDirs: false, GridFsTypeFilter.Images, null);
         Assert.AreEqual("products/SKU-1/main.jpg", images.Items.Single().Latest!.Filename);
@@ -156,12 +156,12 @@ public sealed class GridFsTests
         Assert.AreEqual("products/SKU-2/clip.mp4", videos.Items.Single().Latest!.Filename, "the extension decides when contentType is missing");
 
         GridFsListing bySku = await fs.ListAsync("", virtualDirs: true, GridFsTypeFilter.All, "sku:SKU-1");
-        Assert.AreEqual(2, bySku.Items.Count, "a metadata search lists matches flat, recursively");
+        Assert.HasCount(2, bySku.Items, "a metadata search lists matches flat, recursively");
         GridFsListing byName = await fs.ListAsync("products/", virtualDirs: true, GridFsTypeFilter.All, "CLIP");
         Assert.AreEqual("products/SKU-2/clip.mp4", byName.Items.Single().Latest!.Filename);
 
         IReadOnlyList<GridFsFile> versions = await fs.VersionsAsync("products/SKU-1/main.jpg");
-        Assert.AreEqual(3, versions.Count);
+        Assert.HasCount(3, versions);
         Assert.IsTrue(versions[0].UploadDate >= versions[1].UploadDate, "newest first");
     });
 
@@ -186,7 +186,7 @@ public sealed class GridFsTests
             _ = await fs.UploadAsync("docs/a.bin", source, new BsonDocument("note", "second"));
         }
         IReadOnlyList<GridFsFile> versions = await fs.VersionsAsync("docs/a.bin");
-        Assert.AreEqual(2, versions.Count);
+        Assert.HasCount(2, versions);
         Assert.AreEqual(3L, versions[1].ChunkCount);
 
         using (var target = new MemoryStream())
@@ -199,7 +199,7 @@ public sealed class GridFsTests
         // 恢复 v1:新写一份,成为最新;旧的两份都还在。
         _ = await fs.RestoreAsync(versions[1]);
         IReadOnlyList<GridFsFile> afterRestore = await fs.VersionsAsync("docs/a.bin");
-        Assert.AreEqual(3, afterRestore.Count);
+        Assert.HasCount(3, afterRestore);
         Assert.AreEqual(v1.Length, afterRestore[0].Length);
         Assert.AreEqual("first", afterRestore[0].Metadata!["note"].AsString, "restore carries the old metadata");
         byte[] restored = await fs.ReadAllAsync(afterRestore[0].Id);
@@ -214,7 +214,7 @@ public sealed class GridFsTests
         long moved = await fs.RenameFolderAsync("docs/", "archive/2026/");
         Assert.AreEqual(3L, moved);
         IReadOnlyList<GridFsFile> archived = await fs.VersionsAsync("archive/2026/b.bin");
-        Assert.AreEqual(3, archived.Count);
+        Assert.HasCount(3, archived);
 
         // metadata:改、删。
         await fs.UpdateMetadataAsync(archived[0].Id, new BsonDocument { { "contentType", "application/x-test" }, { "owner", "qa" } });
@@ -227,15 +227,15 @@ public sealed class GridFsTests
         // 只删一个版本 vs 删全部版本。
         await fs.DeleteAsync(archived[0].Id);
         IReadOnlyList<GridFsFile> afterOne = await fs.VersionsAsync("archive/2026/b.bin");
-        Assert.AreEqual(2, afterOne.Count);
+        Assert.HasCount(2, afterOne);
         long chunksBefore = await fs.Chunks.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
-        Assert.IsTrue(chunksBefore > 0);
+        Assert.IsGreaterThan(0, chunksBefore);
         IReadOnlyList<GridFsFile> remaining = await fs.FilesUnderAsync("archive/", latestOnly: false);
         long deleted = await fs.DeleteManyAsync([.. remaining.Select(static f => f.Id)]);
         Assert.AreEqual(2L, deleted);
         long chunksAfter = await fs.Chunks.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
         Assert.AreEqual(0L, chunksAfter, "chunks go with their files");
-        Assert.IsTrue(reported >= v1.Length, "upload progress reaches the full length");
+        Assert.IsGreaterThanOrEqualTo(v1.Length, reported, "upload progress reaches the full length");
     });
 
     [TestMethod]
@@ -256,7 +256,7 @@ public sealed class GridFsTests
         ]);
 
         IReadOnlyList<GridFsOrphan> orphans = await fs.FindOrphansAsync();
-        Assert.AreEqual(1, orphans.Count);
+        Assert.HasCount(1, orphans);
         Assert.AreEqual(new BsonObjectId(ghost), orphans[0].FilesId);
         Assert.AreEqual(2L, orphans[0].Chunks);
         Assert.AreEqual(150L, orphans[0].Bytes);
@@ -264,7 +264,7 @@ public sealed class GridFsTests
         long cleaned = await fs.DeleteOrphansAsync([orphans[0].FilesId]);
         Assert.AreEqual(2L, cleaned);
         IReadOnlyList<GridFsOrphan> after = await fs.FindOrphansAsync();
-        Assert.AreEqual(0, after.Count);
+        Assert.IsEmpty(after);
         long healthy = await fs.Chunks.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
         Assert.AreEqual(1L, healthy, "the healthy file keeps its chunk");
 
@@ -275,7 +275,7 @@ public sealed class GridFsTests
         BsonDocument unique = chunkIndexes.Single(static i => i["name"].AsString == "files_id_1_n_1");
         Assert.IsTrue(unique.GetValue("unique", false).ToBoolean());
         IReadOnlyList<BsonDocument> fileIndexes = await temp.Connection.ListIndexesAsync(temp.Database, "images.files");
-        Assert.IsTrue(fileIndexes.Any(static i => i["name"].AsString == "filename_1_uploadDate_1"));
+        Assert.Contains(static i => i["name"].AsString == "filename_1_uploadDate_1", fileIndexes);
     });
 
     // ── 标签页(视图模型 + 外壳) ─────────────────────────────────────────
@@ -460,7 +460,7 @@ public sealed class GridFsTests
             File.WriteAllBytes(big, Bytes(96 * 1024 * 1024, seed: 8));
             await tab.UploadPathsAsync([big], ask: false);
             await WaitAsync(() => tab.IsTransferring && tab.TransferProgress > 0.02, timeoutMs: 30000);
-            Assert.IsTrue(tab.Entries.Any(static e => e.IsUpload), "the pending upload shows as a row in its folder");
+            Assert.Contains(static e => e.IsUpload, tab.Entries, "the pending upload shows as a row in its folder");
             await Screens.PumpAsync(4);
             _ = Screens.Capture(bench.Window, "06-gridfs-uploading");
             tab.CancelTransfersCommand.Execute(null);
@@ -469,7 +469,7 @@ public sealed class GridFsTests
             bool partial = await temp.Service.ExistsAsync("seed/detail-07.jpg");
             Assert.IsFalse(partial, "a cancelled upload leaves no file");
             IReadOnlyList<GridFsOrphan> leftovers = await temp.Service.FindOrphansAsync();
-            Assert.AreEqual(0, leftovers.Count, "a cancelled upload leaves no chunks behind");
+            Assert.IsEmpty(leftovers, "a cancelled upload leaves no chunks behind");
 
             // 勾两个 → 底栏汇总(刷新过,行对象是新的)。
             png = tab.Entries.Single(static e => e.Name == "photo.png");
@@ -553,7 +553,7 @@ public sealed class GridFsTests
         await Screens.PumpAsync(40);
         WriteableBitmap? frame = Screens.Capture(bench.Window, "06-gridfs");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(tab.Details.Versions.Count >= 1);
+        Assert.IsGreaterThanOrEqualTo(1, tab.Details.Versions.Count);
         StringAssert.Contains(tab.StatusText, "products/SKU-7710/");
     });
 
@@ -612,7 +612,7 @@ public sealed class GridFsTests
         _ = Screens.Capture(bench.Window, "06-gridfs-delete");
         confirm.Close();
         await Screens.PumpAsync(5);
-        Assert.IsTrue(tab.Entries.Any(static e => e.Name == "main.jpg"), "cancel deletes nothing");
+        Assert.Contains(static e => e.Name == "main.jpg", tab.Entries, "cancel deletes nothing");
     });
 
     // ── 工具 ───────────────────────────────────────────────────────────────

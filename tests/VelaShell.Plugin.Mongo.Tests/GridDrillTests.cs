@@ -73,7 +73,7 @@ public sealed class GridDrillTests
         foreach (string system in new[] { "admin", "config", "local" })
         {
             Assert.IsFalse(Lists(bench, system), $"{system} is hidden by default");
-            Assert.IsFalse(bench.Session.Databases.Contains(system), "pickers follow the tree");
+            Assert.DoesNotContain(system, bench.Session.Databases, "pickers follow the tree");
         }
         Assert.IsTrue(Lists(bench, Screens.Database));
 
@@ -81,7 +81,7 @@ public sealed class GridDrillTests
         await Screens.PumpAsync(5);
         Assert.IsTrue(bench.ViewModel.ShowSystemDatabases);
         Assert.IsTrue(Lists(bench, "admin"));
-        Assert.IsTrue(bench.Session.Databases.Contains("admin"));
+        Assert.Contains("admin", bench.Session.Databases);
         StringAssert.Contains(bench.ViewModel.SystemDatabasesTip, "隐藏");
 
         bench.ViewModel.ToggleSystemDatabasesCommand.Execute(null);
@@ -176,7 +176,7 @@ public sealed class GridDrillTests
             await Screens.PumpAsync(5);
             Assert.IsTrue(tab.IsDrilled);
             CollectionAssert.AreEqual(new[] { "sku", "qty", "attrs", "note" }, tab.GridColumns.Select(static c => c.Name).ToArray());
-            Assert.AreEqual(2, tab.GridRows.Count);
+            Assert.HasCount(2, tab.GridRows);
             CollectionAssert.AreEqual(new[] { "0", "1" }, tab.GridRows.Select(static r => r.NumberText).ToArray(), "rows are numbered by array index");
             CollectionAssert.AreEqual(new[] { "文档 #1", "items" }, tab.DrillCrumbs.Select(static c => c.Label).ToArray());
             Assert.AreEqual("数组 · 2 项", tab.DrillSummary);
@@ -199,10 +199,10 @@ public sealed class GridDrillTests
             tab.GridSelectedRows = [tab.GridRows[0]];
             tab.DeleteCommand.Execute(null);
             await Screens.PumpAsync(5);
-            Assert.AreEqual(1, tab.GridRows.Count);
+            Assert.HasCount(1, tab.GridRows);
             Assert.AreEqual("B-2", Cell(tab.GridRows[0], tab.GridColumns, "sku").Value!.AsString);
             Assert.AreEqual(5, Cell(tab.GridRows[0], tab.GridColumns, "qty").Value!.AsInt32);
-            Assert.AreEqual(1, tab.Staging.EditOf(first.Id)!.Changes.Count, "items.1.qty merges into the items change");
+            Assert.HasCount(1, tab.Staging.EditOf(first.Id)!.Changes, "items.1.qty merges into the items change");
 
             tab.DrillBack();
             await Screens.PumpAsync(5);
@@ -238,7 +238,7 @@ public sealed class GridDrillTests
             tab.ExitDrill();
 
             Assert.IsTrue(tab.DrillInto(Cell(first, tab.Columns, "customer")));
-            Assert.AreEqual(1, tab.GridRows.Count);
+            Assert.HasCount(1, tab.GridRows);
             Assert.AreEqual("", tab.GridRows[0].NumberText);
             CollectionAssert.AreEqual(new[] { "name", "level" }, tab.GridColumns.Select(static c => c.Name).ToArray());
             Assert.AreEqual("customer.level", Cell(tab.GridRows[0], tab.GridColumns, "level").Path);
@@ -248,11 +248,11 @@ public sealed class GridDrillTests
             // 空数组也进得去,底栏「+」往里加元素。
             CollectionRow second = tab.Rows.Single(static r => r.Id == 2);
             Assert.IsTrue(tab.DrillInto(Cell(second, tab.Columns, "items")));
-            Assert.AreEqual(0, tab.GridRows.Count);
+            Assert.IsEmpty(tab.GridRows);
             Assert.IsTrue(tab.GridColumns.Single().IsElementValue, "an empty array still gets a header");
             tab.AddRowCommand.Execute(null);
             await Screens.PumpAsync(5);
-            Assert.AreEqual(1, tab.GridRows.Count);
+            Assert.HasCount(1, tab.GridRows);
             Assert.IsNotNull(tab.Staging.EditOf(second.Id));
             tab.ExitDrill();
             tab.Staging.Clear();
@@ -318,7 +318,7 @@ public sealed class GridDrillTests
             bench.Window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
             await Screens.PumpAsync(10);
             Assert.IsTrue(tab.IsDrilled, "Enter on an array cell opens it instead of a text editor");
-            Assert.IsFalse(tab.GridRows.SelectMany(static r => r.Cells).Any(static c => c.IsEditing));
+            Assert.DoesNotContain(static c => c.IsEditing, tab.GridRows.SelectMany(static r => r.Cells));
 
             bench.Window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
             await Screens.PumpAsync(10);
@@ -344,8 +344,8 @@ public sealed class GridDrillTests
             await Screens.PumpAsync(5);
             GridOf(bench).AutoFit(orderNo);
             await Screens.PumpAsync(5);
-            Assert.IsTrue(orderNo.Width > 70, $"fitted width {orderNo.Width} should hold 'orderNo String' and 'SO-1'");
-            Assert.IsTrue(orderNo.Width < 200, $"fitted width {orderNo.Width} should not balloon");
+            Assert.IsGreaterThan(70, orderNo.Width, $"fitted width {orderNo.Width} should hold 'orderNo String' and 'SO-1'");
+            Assert.IsLessThan(200, orderNo.Width, $"fitted width {orderNo.Width} should not balloon");
         }
         finally
         {
@@ -444,7 +444,7 @@ public sealed class GridDrillTests
 
         TableColumns.Group group = TableColumns.GroupOf(header)!;
         Assert.IsNotNull(group);
-        Assert.AreEqual(2, header.Children.OfType<Thumb>().Count(), "a grip after each column but the trailing * column");
+        Assert.HasCount(2, header.Children.OfType<Thumb>(), "a grip after each column but the trailing * column");
         Assert.IsNotNull(header.Children.OfType<Thumb>().First().Theme, "grips use the shared MongoColumnGrip theme");
 
         group.Set(1, 150);
@@ -454,7 +454,7 @@ public sealed class GridDrillTests
         group.AutoFit(0);
         await Screens.PumpAsync(5);
         double fitted = header.ColumnDefinitions[0].Width.Value;
-        Assert.IsTrue(fitted > 120, $"the long name needs more than 120px, got {fitted}");
+        Assert.IsGreaterThan(120, fitted, $"the long name needs more than 120px, got {fitted}");
         Assert.AreEqual(fitted, shortRow.ColumnDefinitions[0].Width.Value);
 
         // 之后才实现出来的行(虚拟化列表滚出来的)也拿到同样的列宽。

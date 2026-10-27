@@ -19,6 +19,8 @@ internal sealed partial class RdpWorkspaceView : UserControl
     private string? _localErrorKey;
     private int _refreshPending;
     private int _refreshDirty;
+    private Loc? _displayedLocale;
+    private (int Width, int Height) _displayedResolution;
 
     public RdpWorkspaceView(RdpWorkspaceDocument document)
     {
@@ -82,18 +84,26 @@ internal sealed partial class RdpWorkspaceView : UserControl
             _boundSession = session;
             Desktop.SetSession(session);
         }
-        FitButton.Content = loc["Rdp_ScaleFit"];
-        ActualButton.Content = loc["Rdp_ScaleActual"];
-        CtrlAltDelButton.Content = loc["Rdp_SendCtrlAltDel"];
-        DisconnectButton.Content = loc["Rdp_Disconnect"];
-        ReconnectButton.Content = loc["Rdp_Reconnect"];
-        KeyboardHintText.Text = loc["Rdp_KeyboardHint"];
-        ToolTip.SetTip(KeyboardHintText, KeyboardHintText.Text);
-        WaitingText.Text = loc["Rdp_NoFrame"];
+        bool localeChanged = !ReferenceEquals(_displayedLocale, loc);
+        if (localeChanged)
+        {
+            _displayedLocale = loc;
+            FitButton.Content = loc["Rdp_ScaleFit"];
+            ActualButton.Content = loc["Rdp_ScaleActual"];
+            CtrlAltDelButton.Content = loc["Rdp_SendCtrlAltDel"];
+            DisconnectButton.Content = loc["Rdp_Disconnect"];
+            ReconnectButton.Content = loc["Rdp_Reconnect"];
+            KeyboardHintText.Text = loc["Rdp_KeyboardHint"];
+            ToolTip.SetTip(KeyboardHintText, KeyboardHintText.Text);
+            WaitingText.Text = loc["Rdp_NoFrame"];
+            AutomationProperties.SetName(Desktop, loc["Rdp_Desktop"]);
+            AutomationProperties.SetName(FitButton, FitButton.Content?.ToString());
+            AutomationProperties.SetName(ActualButton, ActualButton.Content?.ToString());
+            AutomationProperties.SetName(CtrlAltDelButton, CtrlAltDelButton.Content?.ToString());
+            AutomationProperties.SetName(DisconnectButton, DisconnectButton.Content?.ToString());
+            AutomationProperties.SetName(ReconnectButton, ReconnectButton.Content?.ToString());
+        }
         WaitingText.IsVisible = Desktop.Frame.Width == 0;
-        AutomationProperties.SetName(Desktop, loc["Rdp_Desktop"]);
-        foreach (Button button in new[] { FitButton, ActualButton, CtrlAltDelButton, DisconnectButton, ReconnectButton })
-            AutomationProperties.SetName(button, button.Content?.ToString());
         bool connected = _document.Session?.Status.State == RdpSessionState.Connected &&
                          _document.Status.State == ProtocolSessionState.Connected;
         bool closed = _document.Status.State == ProtocolSessionState.Closed;
@@ -101,7 +111,12 @@ internal sealed partial class RdpWorkspaceView : UserControl
         DisconnectButton.IsEnabled = connected && !_busy;
         ReconnectButton.IsEnabled = !closed && !_busy;
         StatusText.Text = _document.Status.Message;
-        ResolutionText.Text = Desktop.Frame.Width > 0 ? loc.Format("Rdp_Resolution", Desktop.Frame.Width, Desktop.Frame.Height) : "";
+        var resolution = (Desktop.Frame.Width, Desktop.Frame.Height);
+        if (localeChanged || _displayedResolution != resolution)
+        {
+            _displayedResolution = resolution;
+            ResolutionText.Text = resolution.Width > 0 ? loc.Format("Rdp_Resolution", resolution.Width, resolution.Height) : "";
+        }
         string? error = _localErrorKey is not null ? loc[_localErrorKey] :
             !connected && !closed ? _document.Status.Message : null;
         ErrorText.Text = error;

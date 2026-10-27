@@ -73,7 +73,7 @@ public sealed class RdpHeadlessUiTests
             Assert.AreSame(remote, document.Session);
             Click(window, Find<Button>(view, "CtrlAltDelButton"));
             await desktop.InputDrained;
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.CtrlAltDelete));
+            Assert.Contains(x => x.Kind == RdpInputKind.CtrlAltDelete, remote.Inputs);
             Click(window, Find<Button>(view, "ActualButton")); await Pump();
             Assert.AreEqual(RdpScaleMode.Actual, desktop.ScaleMode);
             remote.SetStatus(RdpSessionState.Faulted); await Pump();
@@ -91,7 +91,7 @@ public sealed class RdpHeadlessUiTests
     });
 
     [TestMethod]
-    public void FramesCoalesceReuseBitmapClearSensitiveBuffersAndIgnoreOldCallbacks() => OnUi(async () =>
+    public void FramesCoalesceReuseBitmapReleaseConsumerAndIgnoreOldCallbacks() => OnUi(async () =>
     {
         var remote = new RdpUiFakeSession(); remote.SetFrame(4, 2, padding: 8);
         var desktop = new RdpDesktopSurface(); desktop.SetSession(remote);
@@ -108,7 +108,7 @@ public sealed class RdpHeadlessUiTests
             Dispatcher.UIThread.RunJobs();
             Assert.AreEqual(copied + 1, remote.CopyCount);
             Assert.AreSame(bitmap, desktop.Bitmap);
-            byte[] firstBuffer = remote.LastCopyBuffer!;
+            Assert.IsTrue(remote.FrameConsumer);
             byte[] actual = new byte[32];
             using (ILockedFramebuffer locked = desktop.Bitmap!.Lock())
             {
@@ -119,15 +119,13 @@ public sealed class RdpHeadlessUiTests
             Action? staleFrame = remote.CaptureFrameCallback();
             Action<RdpSessionStatus>? staleStatus = remote.CaptureStatusCallback();
             remote.SetFrame(5, 2); await Pump();
-            Assert.IsTrue(firstBuffer.All(x => x == 0));
             Assert.AreNotSame(bitmap, desktop.Bitmap);
-            byte[] resizeBuffer = remote.LastCopyBuffer!;
             remote.NotifyFrame();
             window.Content = null;
             staleFrame?.Invoke(); staleStatus?.Invoke(new(RdpSessionState.Faulted));
             await Pump();
             Assert.IsNull(desktop.Bitmap);
-            Assert.IsTrue(resizeBuffer.All(x => x == 0));
+            Assert.IsFalse(remote.FrameConsumer);
             Assert.IsFalse(remote.Disposed);
             window.Content = desktop; await Pump();
             Assert.IsNotNull(desktop.Bitmap);
@@ -137,6 +135,50 @@ public sealed class RdpHeadlessUiTests
             await Pump();
             Assert.AreEqual(7, desktop.Frame.Width);
             Assert.AreEqual(RdpSessionState.Connected, desktop.Status.State);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void SameSizeFramesDoNotRefreshMetadataOrLayoutAndResizeFailureKeepsLastImage() => OnUi(async () =>
+    {
+        var remote = new RdpUiFakeSession(); remote.SetFrame(40, 20);
+        var desktop = new RdpDesktopSurface(); desktop.SetSession(remote);
+        var window = new Window { Width = 400, Height = 300, Content = desktop }; window.Show();
+        try
+        {
+            await Pump();
+            int metadataUpdates = 0;
+            desktop.Updated += () => metadataUpdates++;
+            var bitmap = desktop.Bitmap;
+            for (int i = 0; i < 3; i++)
+            {
+                remote.SetFrame(40, 20, value: (byte)(30 + i));
+                Dispatcher.UIThread.RunJobs(DispatcherPriority.Render);
+                Assert.IsTrue(desktop.IsMeasureValid);
+            }
+            Assert.AreEqual(0, metadataUpdates);
+            Assert.AreSame(bitmap, desktop.Bitmap);
+            remote.CopyUnavailable = true;
+            remote.SetFrame(50, 20);
+            await Pump();
+            Assert.AreSame(bitmap, desktop.Bitmap);
+            Assert.AreEqual(40, desktop.Frame.Width);
+            remote.CopyUnavailable = false;
+            remote.BeforeCopy = () =>
+            {
+                remote.BeforeCopy = null;
+                remote.SetFrame(20, 50, value: 99); // Same byte count, different geometry.
+            };
+            remote.NotifyFrame(); await Pump();
+            Assert.AreEqual(20, desktop.Frame.Width);
+            Assert.AreEqual(50, desktop.Frame.Height);
+            Assert.AreEqual(1, metadataUpdates);
+            remote.SetStatus(RdpSessionState.Disconnected); await Pump();
+            var last = desktop.Bitmap;
+            desktop.SetSession(null); await Pump();
+            Assert.AreSame(last, desktop.Bitmap);
+            Assert.IsFalse(remote.FrameConsumer);
         }
         finally { window.Close(); }
     });
@@ -202,10 +244,10 @@ public sealed class RdpHeadlessUiTests
             Assert.AreEqual(1, desktop.HeldButtonCount);
             await desktop.InputDrained;
             Assert.AreEqual(2, remote.Inputs.Count(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x1e));
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x11d));
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.PointerMove && x.X > 200));
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.Wheel && x.WheelDelta == -240 && !x.Horizontal));
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.Wheel && x.WheelDelta == 120 && x.Horizontal));
+            Assert.Contains(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x11d, remote.Inputs);
+            Assert.Contains(x => x.Kind == RdpInputKind.PointerMove && x.X > 200, remote.Inputs);
+            Assert.Contains(x => x.Kind == RdpInputKind.Wheel && x.WheelDelta == -240 && !x.Horizontal, remote.Inputs);
+            Assert.Contains(x => x.Kind == RdpInputKind.Wheel && x.WheelDelta == 120 && x.Horizontal, remote.Inputs);
             focusTarget.Focus();
             Assert.AreEqual(0, desktop.HeldKeyCount);
             Assert.AreEqual(0, desktop.HeldButtonCount);
@@ -217,13 +259,13 @@ public sealed class RdpHeadlessUiTests
             await desktop.InputDrained;
             window.KeyReleaseQwerty(PhysicalKey.ArrowLeft, RawInputModifiers.None);
             await desktop.InputDrained;
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.KeyUp && x.ScanCode == 0x14b));
+            Assert.Contains(x => x.Kind == RdpInputKind.KeyUp && x.ScanCode == 0x14b, remote.Inputs);
             window.MouseDown(point, MouseButton.XButton1); await desktop.InputDrained;
             window.MouseUp(point, MouseButton.XButton1); await desktop.InputDrained;
             window.MouseDown(point, MouseButton.XButton2); await desktop.InputDrained;
             window.MouseUp(point, MouseButton.XButton2); await desktop.InputDrained;
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.ButtonDown && x.Button == RdpMouseButton.X1));
-            Assert.IsTrue(remote.Inputs.Any(x => x.Kind == RdpInputKind.ButtonUp && x.Button == RdpMouseButton.X2));
+            Assert.Contains(x => x.Kind == RdpInputKind.ButtonDown && x.Button == RdpMouseButton.X1, remote.Inputs);
+            Assert.Contains(x => x.Kind == RdpInputKind.ButtonUp && x.Button == RdpMouseButton.X2, remote.Inputs);
             window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.None);
             remote.SetStatus(RdpSessionState.Disconnected); await Pump();
             Assert.AreEqual(0, desktop.HeldKeyCount);
@@ -294,11 +336,11 @@ public sealed class RdpHeadlessUiTests
             Assert.AreEqual(document.Loc["Rdp_SendInputError"], Find<TextBlock>(view, "ErrorText").Text);
             int count = remote.Inputs.Count;
             window.KeyPressQwerty(PhysicalKey.B, RawInputModifiers.None); await desktop.InputDrained;
-            Assert.AreEqual(count, remote.Inputs.Count);
+            Assert.HasCount(count, remote.Inputs);
             await document.ReconnectAsync(); await Pump();
             Assert.IsFalse(Find<Border>(view, "ErrorBanner").IsVisible);
             desktop.Focus(); window.KeyPressQwerty(PhysicalKey.B, RawInputModifiers.None); await desktop.InputDrained;
-            Assert.IsTrue(factory.Next.Inputs.Any(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x30));
+            Assert.Contains(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x30, factory.Next.Inputs);
         }
         finally { blocked.TrySetResult(); window.Close(); await document.DisposeAsync(); }
     });
