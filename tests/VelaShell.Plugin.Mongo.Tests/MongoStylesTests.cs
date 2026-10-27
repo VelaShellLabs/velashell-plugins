@@ -20,7 +20,7 @@ public sealed partial class MongoStylesTests
     {
         string xaml = File.ReadAllText(ThemeFile);
         MatchCollection icons = IconPattern().Matches(xaml);
-        Assert.IsTrue(icons.Count > 100, "the icon table should be there");
+        Assert.IsGreaterThan(100, icons.Count, "the icon table should be there");
         var failures = new List<string>();
         foreach (Match icon in icons)
         {
@@ -33,7 +33,7 @@ public sealed partial class MongoStylesTests
                 failures.Add($"{icon.Groups["key"].Value}: {ex.Message}");
             }
         }
-        Assert.AreEqual(0, failures.Count, string.Join(Environment.NewLine, failures));
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
         return Task.CompletedTask;
     });
 
@@ -42,7 +42,7 @@ public sealed partial class MongoStylesTests
     {
         // 令牌缺席(未命中的 DynamicResource 保持默认值)时样式表照样能装载。
         var styles = (Styles)AvaloniaXamlLoader.Load(new Uri("avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml"));
-        Assert.IsTrue(styles.Count > 10);
+        Assert.IsGreaterThan(10, styles.Count);
         Assert.IsTrue(styles.TryGetResource("MongoPillButton", null, out object? pill) && pill is ControlTheme);
         Assert.IsTrue(styles.TryGetResource("Mongo.leaf", null, out object? leaf) && leaf is Geometry);
         return Task.CompletedTask;

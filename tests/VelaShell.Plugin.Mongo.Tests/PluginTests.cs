@@ -166,7 +166,7 @@ public sealed class PluginTests
         WorkspaceConnectRequest request = Request(new() { ["hosts"] = "10.20.3.22:27017", ["replicaSet"] = "rs0" }, user: "ops", password: "pw");
         MongoClientSettings client = MongoConnection.BuildSettings(request, MongoSettings.From(request), null);
 
-        Assert.AreEqual(2, client.Servers.Count());
+        Assert.HasCount(2, client.Servers);
         Assert.AreEqual("rs0", client.ReplicaSetName);
         Assert.IsFalse(client.DirectConnection);
         Assert.AreEqual("ops", client.Credential.Username);
@@ -180,7 +180,7 @@ public sealed class PluginTests
             host: "127.0.0.1", port: 51872, tunnel: new("10.20.3.21", 27017, "bastion-ops"));
         MongoClientSettings client = MongoConnection.BuildSettings(request, MongoSettings.From(request), null);
 
-        Assert.AreEqual(1, client.Servers.Count(), "其余成员的地址经隧道够不着");
+        Assert.HasCount(1, client.Servers, "其余成员的地址经隧道够不着");
         Assert.AreEqual(51872, client.Servers.Single().Port);
         Assert.IsTrue(client.DirectConnection);
         Assert.IsNull(client.ReplicaSetName);
@@ -195,7 +195,7 @@ public sealed class PluginTests
 
         Assert.AreEqual("rs0", client.ReplicaSetName);
         Assert.AreEqual("ops", client.Credential.Username);
-        Assert.AreEqual(2, client.Servers.Count());
+        Assert.HasCount(2, client.Servers);
     }
 
     [TestMethod]
@@ -317,9 +317,9 @@ public sealed class PluginTests
             StringAssert.Contains(context.FakeSessions.LastOpenReason, "via-bastion");
             Assert.IsFalse(string.IsNullOrEmpty(link.Connection.Server.Version));
             sessionId = context.FakeSessions.OpenedByPlugin.Single();
-            Assert.IsTrue(context.FakeRemoteTunnel.Opened.Count > 0);
+            Assert.IsNotEmpty(context.FakeRemoteTunnel.Opened);
         }
-        Assert.IsFalse(context.FakeSessions.Sessions.Any(s => s.SessionId == sessionId), "插件开的跳板会话随连接一起关掉");
+        Assert.DoesNotContain(s => s.SessionId == sessionId, context.FakeSessions.Sessions, "插件开的跳板会话随连接一起关掉");
     });
 
     /// <summary>用户在宿主的确认框里点了「不」:连接失败,种类是跳板。</summary>

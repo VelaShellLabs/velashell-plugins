@@ -54,8 +54,9 @@ internal interface IRdpSession : IAsyncDisposable
     event Action? FrameAvailable;
     event Action<RdpSessionStatus>? StatusChanged;
     event Action<RdpPointer>? PointerChanged;
-    // Copies the latest complete managed frame. A small destination returns false and current metadata.
-    bool TryCopyFrame(Memory<byte> destination, out RdpFrameInfo frame);
+    // The caller owns a locked pixel target for this synchronous copy; a size mismatch never writes it.
+    bool TryCopyFrame(IntPtr destination, int width, int height, int stride, int capacity, out RdpFrameInfo frame);
+    void SetFrameConsumer(bool enabled);
     ValueTask SendInputAsync(RdpInput input, CancellationToken cancellationToken = default);
     Task DisconnectAsync(CancellationToken cancellationToken = default);
 }

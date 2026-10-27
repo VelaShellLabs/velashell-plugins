@@ -18,7 +18,9 @@ internal sealed class RdpUiFakeSession : IRdpSession
     public int CopyCount { get; private set; }
     public int CopyAttempts { get; private set; }
     public bool CopyUnavailable { get; set; }
-    public byte[]? LastCopyBuffer { get; private set; }
+    public bool FrameConsumer { get; private set; }
+    public Action? BeforeCopy { get; set; }
+    public void SetFrameConsumer(bool enabled) => FrameConsumer = enabled;
     public Action? CaptureFrameCallback() => FrameAvailable;
     public Action<RdpSessionStatus>? CaptureStatusCallback() => StatusChanged;
     public void SetFrame(int width = 4, int height = 2, int padding = 0, byte value = 20)
@@ -44,15 +46,15 @@ internal sealed class RdpUiFakeSession : IRdpSession
         StatusChanged?.Invoke(Status);
     }
     public void SetPointer(RdpPointer pointer) { Pointer = pointer; PointerChanged?.Invoke(pointer); }
-    public bool TryCopyFrame(Memory<byte> destination, out RdpFrameInfo frame)
+    public bool TryCopyFrame(IntPtr destination, int width, int height, int stride, int capacity, out RdpFrameInfo frame)
     {
+        BeforeCopy?.Invoke();
         frame = FrameInfo;
         CopyAttempts++;
-        if (CopyUnavailable || destination.Length < _frame.Length) return false;
-        _frame.CopyTo(destination);
+        if (CopyUnavailable || frame.Width != width || frame.Height != height || destination == IntPtr.Zero ||
+            stride < width * 4 || (long)stride * height > capacity) return false;
+        Ui.RdpDesktopSurface.CopyRows(_frame, frame, destination, stride);
         CopyCount++;
-        if (System.Runtime.InteropServices.MemoryMarshal.TryGetArray((ReadOnlyMemory<byte>)destination, out var segment))
-            LastCopyBuffer = segment.Array;
         return true;
     }
     public ValueTask SendInputAsync(RdpInput input, CancellationToken cancellationToken = default)

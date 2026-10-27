@@ -103,7 +103,7 @@ public sealed class SchemaGeneratorTests
     {
         BsonDocument validator = Generate();
         string text = JsonSchemaGenerator.Format(validator, width: 60);
-        Assert.IsTrue(text.Split('\n').Length > 5, "a long schema spans several lines");
+        Assert.IsGreaterThan(5, text.Split('\n').Length, "a long schema spans several lines");
         Assert.IsTrue(text.Split('\n').All(static line => line.Length <= 90), "lines stay near the width");
         StringAssert.Contains(text, "$jsonSchema: {");
         BsonDocument parsed = ShellJson.ParseDocument(text);

@@ -125,10 +125,9 @@ public sealed class InlineEditingTests
         // 点回网格:焦点离开编辑框 → 写进暂存区,编辑框与高亮的类型下拉一起收掉。
         _ = ViewOf(bench).Grid.List.ContainerFromItem(row)!.Focus();
         await Screens.PumpAsync(10);
-        Assert.IsFalse(tab.Inspector.Fields.Any(static f => f.IsEditing), "no field is left in editing state");
+        Assert.DoesNotContain(static f => f.IsEditing, tab.Inspector.Fields, "no field is left in editing state");
         Assert.AreEqual("on-hold", tab.Staging.EditOf(row.Id)!.Find("status")!.Value!.AsString);
-        Assert.IsFalse(inspector.GetVisualDescendants().OfType<Border>()
-            .Any(static b => b.Classes.Contains("typetag") && b.Classes.Contains("on") && b.IsEffectivelyVisible));
+        Assert.DoesNotContain(static b => b.Classes.Contains("typetag") && b.Classes.Contains("on") && b.IsEffectivelyVisible, inspector.GetVisualDescendants().OfType<Border>());
 
         // 选中行在焦点离开检查器时不着色;焦点回来又亮。
         InspectorField selected = tab.Inspector.SelectedField!;
@@ -179,11 +178,11 @@ public sealed class InlineEditingTests
         // 点值(不是箭头)展开;再点键收起 —— 两次落点隔得远,不算双击。
         await ClickAsync(150);
         Assert.IsTrue(Tags().IsExpanded, "clicking the value expands the array");
-        Assert.IsTrue(tab.Inspector.Fields.Any(static f => f.Path == "tags.0"));
+        Assert.Contains(static f => f.Path == "tags.0", tab.Inspector.Fields);
         Assert.AreEqual("tags", tab.Inspector.SelectedField?.Path, "the clicked row becomes the selection");
         await ClickAsync(30);
         Assert.IsFalse(Tags().IsExpanded, "clicking the key collapses it again");
-        Assert.IsFalse(tab.Inspector.Fields.Any(static f => f.Path == "tags.0"));
+        Assert.DoesNotContain(static f => f.Path == "tags.0", tab.Inspector.Fields);
 
         // 双击只翻一次(第二下不再翻回去,也不进入编辑整个数组)。
         Control row = inspector.Fields.ContainerFromItem(Tags())!;
@@ -195,6 +194,6 @@ public sealed class InlineEditingTests
         bench.Window.MouseUp(same, MouseButton.Left);
         await Screens.PumpAsync(10);
         Assert.IsTrue(Tags().IsExpanded);
-        Assert.IsFalse(tab.Inspector.Fields.Any(static f => f.IsEditing));
+        Assert.DoesNotContain(static f => f.IsEditing, tab.Inspector.Fields);
     });
 }

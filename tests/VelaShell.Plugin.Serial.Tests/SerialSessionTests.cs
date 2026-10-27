@@ -236,7 +236,7 @@ public sealed class SerialSessionTests
 
         await session.WriteAsync(new byte[] { 1, 2, 3 }, CancellationToken.None);
 
-        Assert.AreEqual(0, port.Written.Length);
+        Assert.IsEmpty(port.Written);
     }
 
     [TestMethod]
@@ -307,7 +307,7 @@ public sealed class SerialSessionTests
         await session.DisposeAsync();
 
         Assert.IsFalse(await session.SendBreakAsync(CancellationToken.None));
-        Assert.AreEqual(0, port.BreakStates.Count);
+        Assert.IsEmpty(port.BreakStates);
     }
 
     [TestMethod]

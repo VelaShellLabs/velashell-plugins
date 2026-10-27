@@ -103,6 +103,6 @@ public sealed class RdpViewportInputTests
         await queue.Drained.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.AreEqual(RdpSessionState.Disconnected, session.Status.State);
         CollectionAssert.AreEqual(new[] { RdpInputKind.KeyDown, RdpInputKind.ReleaseAll }, session.Inputs.Select(x => x.Kind).ToArray());
-        Assert.IsTrue(failed >= 1);
+        Assert.IsGreaterThanOrEqualTo(1, failed);
     }
 }

@@ -102,15 +102,15 @@ public sealed class DesignTests
             Assert.AreEqual("kind_1_price_-1", tab.DraftIndex!.Name);
             CollectionAssert.AreEqual(new[] { "kind", "price" }, tab.DraftIndex.Keys.Select(static k => k.Field).ToArray());
             Assert.AreEqual("复合", tab.DraftIndex.TypeText);
-            Assert.IsTrue(tab.DraftIndex.Attributes.Any(static a => a.Text == "部分"));
+            Assert.Contains(static a => a.Text == "部分", tab.DraftIndex.Attributes);
             StringAssert.StartsWith(tab.DraftIndex.SizeText, "≈ ");
-            Assert.IsFalse(tab.Indexes.Any(static r => r.Name == "kind_1_price_-1"), "the draft row is not an index yet");
+            Assert.DoesNotContain(static r => r.Name == "kind_1_price_-1", tab.Indexes, "the draft row is not an index yet");
             Assert.AreEqual($"将在 {db}.items 上执行 createIndexes", tab.NewTarget);
             tab.CreateIndexCommand.Execute(null);
             await WaitAsync(() => tab.Indexes.Any(static r => r.Name == "kind_1_price_-1" && !r.IsBuilding) && !tab.IsCreating);
             IndexRow created = tab.Indexes.Single(static r => r.Name == "kind_1_price_-1");
             Assert.AreEqual("复合", created.TypeText);
-            Assert.IsTrue(created.Attributes.Any(static a => a.Text == "部分"));
+            Assert.Contains(static a => a.Text == "部分", created.Attributes);
             Assert.IsFalse(tab.IsCreateOpen);
             Assert.IsFalse(tab.HasDraft);
 
@@ -132,14 +132,14 @@ public sealed class DesignTests
             // ── 删除(确认框)──
             await ConfirmAsync(bench, tab.DropIndexAsync(tab.Indexes.Single(static r => r.Name == "tags_1")));
             specs = await (await items.Indexes.ListAsync()).ToListAsync();
-            Assert.IsFalse(specs.Any(static s => s["name"] == "tags_1"));
+            Assert.DoesNotContain(static s => s["name"] == "tags_1", specs);
 
             // ── Schema 分析 → 生成规则 → 预检 → 应用(确认框)──
             tab.Page = DesignPage.Schema;
             await WaitAsync(() => tab.Schema is not null && !tab.IsAnalyzing && !tab.IsGenChecking);
             Assert.AreEqual(300, tab.Schema!.Sampled);
-            Assert.IsTrue(tab.SchemaFields.Any(static f => f.Path == "kind" && f.IsBars));
-            Assert.IsTrue(tab.SchemaFields.Any(static f => f.Path == "price" && f.IsHistogram));
+            Assert.Contains(static f => f.Path == "kind" && f.IsBars, tab.SchemaFields);
+            Assert.Contains(static f => f.Path == "price" && f.IsHistogram, tab.SchemaFields);
             Assert.IsNotNull(tab.Generated);
             Assert.AreEqual(0, tab.GenFailCount, "a rule generated from the whole collection fits it");
             StringAssert.Contains(tab.GeneratedText, "kind: { enum: [ \"toy\", \"book\" ] }");
@@ -177,7 +177,7 @@ public sealed class DesignTests
             Assert.IsTrue(tab.TryFailed);
             StringAssert.Contains(tab.TryTitle, "仍会写入并记录警告");
             StringAssert.StartsWith(tab.TryDetail, "properties.price.minimum:");
-            Assert.AreEqual(1, tab.TryMarks.Count);
+            Assert.HasCount(1, tab.TryMarks);
 
             tab.TryDocText = "{ sku: \"X\", price: 31 }";
             await tab.EvaluateTryDocAsync();
@@ -192,7 +192,7 @@ public sealed class DesignTests
             // ── 历史版本:再应用一次,上一版进历史 ──
             tab.RuleLevel = "strict";
             await ConfirmAsync(bench, tab.ApplyValidatorAsync(ShellJsonOf(tab.RuleText), "strict", "error", 0));
-            Assert.AreEqual(1, tab.RuleHistory.Count);
+            Assert.HasCount(1, tab.RuleHistory);
             Assert.AreEqual("moderate", tab.RuleHistory[0].Level);
 
             // ── 选项:TTL 秒数(collMod index)──
@@ -212,7 +212,7 @@ public sealed class DesignTests
             tab.Page = DesignPage.Stats;
             await WaitAsync(() => tab.StatCards.Count > 0);
             Assert.AreEqual("300", tab.StatCards[0].Value);
-            Assert.IsTrue(tab.IndexSizeBars.Count >= 3);
+            Assert.IsGreaterThanOrEqualTo(3, tab.IndexSizeBars.Count);
 
             // ── 只读模式拦下写路径 ──
             bench.Session.Guard.IsReadOnly = true;
@@ -289,7 +289,7 @@ public sealed class DesignTests
         await Screens.PumpAsync(40);
         WriteableBitmap? frame = Screens.Capture(bench.Window, "07-design-indexes");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(tab.Indexes.Count >= 7);
+        Assert.IsGreaterThanOrEqualTo(7, tab.Indexes.Count);
         Assert.IsTrue(tab.IsCreateOpen);
         Assert.AreEqual("status_1_total_-1", tab.NewName);
     });
@@ -322,7 +322,7 @@ public sealed class DesignTests
         await WaitAsync(() => orders.StatCards.Count > 0);
         await Screens.PumpAsync(20);
         _ = Screens.Capture(bench.Window, "design-stats");
-        Assert.AreEqual(6, orders.StatCards.Count);
+        Assert.HasCount(6, orders.StatCards);
         StringAssert.Contains(orders.StatsRaw, "indexSizes");
     });
 
@@ -338,9 +338,9 @@ public sealed class DesignTests
         await Screens.PumpAsync(40);
         WriteableBitmap? frame = Screens.Capture(bench.Window, "08-design-schema");
         Assert.IsNotNull(frame);
-        Assert.IsTrue(tab.SchemaFields.Count > 8);
-        Assert.IsTrue(tab.SchemaFields.Any(static f => f.Path == "status" && f.IsBars));
-        Assert.IsTrue(tab.SchemaFields.Any(static f => f.Path == "note" && f.HintWarn));
+        Assert.IsGreaterThan(8, tab.SchemaFields.Count);
+        Assert.Contains(static f => f.Path == "status" && f.IsBars, tab.SchemaFields);
+        Assert.Contains(static f => f.Path == "note" && f.HintWarn, tab.SchemaFields);
         StringAssert.Contains(tab.StatusText, "个字段路径");
     });
 

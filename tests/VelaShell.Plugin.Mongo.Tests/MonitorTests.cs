@@ -64,9 +64,9 @@ public sealed class MonitorTests
             history.Add(Rate(T0.AddSeconds(i * 2), query: i));
         }
         BucketSet set = history.Buckets(TimeSpan.FromMinutes(15), 30, T0.AddSeconds(20), TimeSpan.FromSeconds(2));
-        Assert.AreEqual(10, set.Buckets.Count, "one bar per sample while the window is still filling");
+        Assert.HasCount(10, set.Buckets, "one bar per sample while the window is still filling");
         Assert.AreEqual(2, set.BarSeconds, 1e-9);
-        Assert.IsTrue(set.Covered < TimeSpan.FromMinutes(15));
+        Assert.IsLessThan(TimeSpan.FromMinutes(15), set.Covered);
         Assert.AreEqual(10, set.Buckets[^1].Query, 1e-9);
     }
 
@@ -80,7 +80,7 @@ public sealed class MonitorTests
             history.Add(Rate(t, query: 6));
         }
         BucketSet set = history.Buckets(TimeSpan.FromMinutes(15), 30, now, TimeSpan.FromSeconds(2));
-        Assert.AreEqual(30, set.Buckets.Count);
+        Assert.HasCount(30, set.Buckets);
         Assert.AreEqual(30, set.BarSeconds, 1e-9, "15 minutes / 30 bars = 30 s per bar, as in the design");
         Assert.AreEqual(0, set.Buckets[0].Start.Second % 30, "bucket edges are aligned so bars do not shift each sample");
         Assert.IsTrue(set.Buckets.All(static b => b.Samples == 0 || Math.Abs(b.Query - 6) < 1e-9));
@@ -92,7 +92,7 @@ public sealed class MonitorTests
         var history = new SampleHistory();
         history.Add(Rate(T0, 1));
         history.Add(Rate(T0.AddHours(7), 2));
-        Assert.AreEqual(1, history.Rates.Count);
+        Assert.HasCount(1, history.Rates);
     }
 
     [TestMethod]
@@ -195,12 +195,12 @@ public sealed class MonitorTests
         Assert.AreNotEqual("—", tab.Connections.Value);
         Assert.AreNotEqual("—", tab.Ops.Value);
         Assert.IsTrue(tab.ServerLine.StartsWith("uptime ", StringComparison.Ordinal), tab.ServerLine);
-        Assert.AreEqual(4, tab.OpsSeries.Count);
+        Assert.HasCount(4, tab.OpsSeries);
         StringAssert.Contains(tab.StatusText, "serverStatus");
 
         BsonDocument snapshot = tab.BuildSnapshot();
         Assert.IsTrue(snapshot["serverStatus"].IsBsonDocument);
-        Assert.IsTrue(snapshot["series"].AsBsonArray.Count >= 3);
+        Assert.IsGreaterThanOrEqualTo(3, snapshot["series"].AsBsonArray.Count);
 
         // 切走即停:不再攒采样。
         bench.ViewModel.ActiveTab = bench.ViewModel.Tabs.First(t => !ReferenceEquals(t, tab));
@@ -229,7 +229,7 @@ public sealed class MonitorTests
             }));
             _ = await load.RunCommandAsync(db, new BsonDocument("profile", 1));
             List<BsonDocument> slow = await orders.Find(new BsonDocument("$where", "sleep(150) || true")).Limit(1).ToListAsync();
-            Assert.AreEqual(1, slow.Count);
+            Assert.HasCount(1, slow);
 
             await using Workbench bench = await Screens.OpenWorkbenchAsync();
             if (bench.ViewModel.VisibleNodes.FirstOrDefault(n => n.Name == "orders") is { } node)
@@ -248,9 +248,9 @@ public sealed class MonitorTests
 
             WriteableBitmap? frame = Screens.Capture(bench.Window, "11-monitor");
             Assert.IsNotNull(frame);
-            Assert.IsTrue(tab.SampleCount >= 15);
-            Assert.IsTrue(tab.OpsSeries[0].Values.Count >= 15, "one bar per sample while the window fills");
-            Assert.IsTrue(tab.Events.Any(e => e.Kind == "slow"), "the slow query in our temp database shows up as an event");
+            Assert.IsGreaterThanOrEqualTo(15, tab.SampleCount);
+            Assert.IsGreaterThanOrEqualTo(15, tab.OpsSeries[0].Values.Count, "one bar per sample while the window fills");
+            Assert.Contains(e => e.Kind == "slow", tab.Events, "the slow query in our temp database shows up as an event");
             Assert.IsTrue(tab.HasMembers, "the local test server is a one-member replica set");
 
             // 大窗口(用户报的 2000 × 1370 那种):两行图表平分高度,存储 Top 的集合名列宽够放下最长的名字,不被省略。
@@ -267,7 +267,7 @@ public sealed class MonitorTests
             foreach (Grid row in storageRows)
             {
                 TextBlock name = row.Children.OfType<TextBlock>().First();
-                Assert.IsFalse(name.TextLayout.TextLines.Any(static l => l.HasCollapsed), $"collection name trimmed: {tab.Storage[0].Name}");
+                Assert.DoesNotContain(static l => l.HasCollapsed, name.TextLayout.TextLines, $"collection name trimmed: {tab.Storage[0].Name}");
             }
         }
         finally
@@ -289,7 +289,7 @@ public sealed class MonitorTests
         {
             await Screens.PumpAsync(10);
         }
-        Assert.IsTrue(tab.SampleCount >= count, $"only {tab.SampleCount} samples after {watch.Elapsed}");
+        Assert.IsGreaterThanOrEqualTo(count, tab.SampleCount, $"only {tab.SampleCount} samples after {watch.Elapsed}");
     }
 
     /// <summary>

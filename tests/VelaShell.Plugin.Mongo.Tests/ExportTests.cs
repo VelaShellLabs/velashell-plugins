@@ -53,7 +53,7 @@ public sealed class ExportTests
         Assert.AreEqual(Tricky, array[1]);
 
         string empty = WriteText(output => new JsonExportWriter(output, new JsonOptions { Lines = false }));
-        Assert.HasCount(0, MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(empty));
+        Assert.IsEmpty(MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(empty));
     }
 
     [TestMethod]
@@ -190,7 +190,7 @@ public sealed class ExportTests
             {
                 using Stream sheet = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
                 var xml = System.Xml.Linq.XDocument.Load(sheet);
-                Assert.AreEqual(1251, xml.Descendants(System.Xml.Linq.XName.Get("row", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")).Count());
+                Assert.HasCount(1251, xml.Descendants(System.Xml.Linq.XName.Get("row", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")));
             }
 
             // JSON(Canonical):每行都能被驱动读回成原文档
@@ -226,7 +226,7 @@ public sealed class ExportTests
             using (var reader = new StreamReader(metadataStream))
             {
                 var metadata = BsonDocument.Parse(await reader.ReadToEndAsync());
-                Assert.IsTrue(metadata["indexes"].AsBsonArray.Any(static i => i["name"] == "orderNo_1" && i["unique"].ToBoolean()));
+                Assert.Contains(static i => i["name"] == "orderNo_1" && i["unique"].ToBoolean(), metadata["indexes"].AsBsonArray);
                 Assert.AreEqual(32, metadata["uuid"].AsString.Length);
             }
 
@@ -248,7 +248,7 @@ public sealed class ExportTests
                     long count = await connection.Collection(restored, "orders").CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
                     Assert.AreEqual(2500, count);
                     IReadOnlyList<BsonDocument> restoredIndexes = await connection.ListIndexesAsync(restored, "orders");
-                    Assert.IsTrue(restoredIndexes.Any(static i => i["name"] == "orderNo_1"), "mongorestore rebuilt the indexes from our metadata");
+                    Assert.Contains(static i => i["name"] == "orderNo_1", restoredIndexes, "mongorestore rebuilt the indexes from our metadata");
                 }
                 finally
                 {
@@ -309,14 +309,14 @@ public sealed class ExportTests
         await WaitAsync(() => !vm.Loading && vm.Fields.Count > 0);
         Assert.IsTrue(vm.IsCsv, "single collection defaults to CSV");
         Assert.IsTrue(vm.UseQuery);
-        Assert.IsTrue(vm.Fields.Any(static f => f.Path == "customer.name"), "nested documents are flattened for CSV");
+        Assert.Contains(static f => f.Path == "customer.name", vm.Fields, "nested documents are flattened for CSV");
         Assert.IsFalse(vm.Fields.Single(static f => f.Path == "items").Include, "arrays are off by default for CSV");
         Assert.IsTrue(vm.PreviewLines[0].IsHeader);
-        Assert.IsTrue(vm.PreviewLines.Count >= 2);
+        Assert.IsGreaterThanOrEqualTo(2, vm.PreviewLines.Count);
         StringAssert.StartsWith(vm.EstimateDocs, "≈ ");
 
         vm.Format = ExportFormat.Json;
-        Assert.IsFalse(vm.Fields.Any(static f => f.Path == "customer.name"), "JSON keeps top-level fields only");
+        Assert.DoesNotContain(static f => f.Path == "customer.name", vm.Fields, "JSON keeps top-level fields only");
         _ = BsonDocument.Parse(vm.PreviewLines[0].Text); // 预览是合法的 EJSON
 
         vm.Format = ExportFormat.BsonDump;
@@ -399,7 +399,7 @@ public sealed class ExportTests
             Assert.IsTrue(vm.IsMulti);
             Assert.IsTrue(vm.IsDump);
             Assert.IsTrue(vm.Sources.All(static s => s.IsChecked), "a dump takes the whole database by default");
-            Assert.IsFalse(vm.Sources.Any(static s => s.Name.StartsWith("system.", StringComparison.Ordinal)));
+            Assert.DoesNotContain(static s => s.Name.StartsWith("system.", StringComparison.Ordinal), vm.Sources);
             await Screens.PumpAsync(20);
             _ = Screens.Capture(bench.Window, "19-export-dump");
             vm.NextCommand.Execute(null);

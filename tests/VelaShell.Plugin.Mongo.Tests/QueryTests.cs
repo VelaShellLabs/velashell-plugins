@@ -154,7 +154,7 @@ public sealed class QueryTests
         Assert.AreSame(other.Session, moved.Owner);
         Assert.AreSame(moved, bench.ViewModel.ActiveTab);
         Assert.AreEqual(index, bench.ViewModel.Tabs.IndexOf(moved), "the tab is replaced in place");
-        Assert.AreEqual(count, bench.ViewModel.Tabs.Count, "a quiet connect opens no placeholder or object list");
+        Assert.HasCount(count, bench.ViewModel.Tabs, "a quiet connect opens no placeholder or object list");
         Assert.DoesNotContain(tab, bench.ViewModel.Tabs);
         Assert.AreEqual("shop", moved.Database);
         Assert.AreEqual(script + " ", moved.Text);
@@ -196,7 +196,7 @@ public sealed class QueryTests
         List<QueryResultSet> results = [.. tab.Panes.OfType<QueryResultSet>()];
         Assert.HasCount(2, results);
         Assert.AreEqual("find", results[0].Result.Operation);
-        Assert.AreEqual(100, results[0].Documents.Count);
+        Assert.HasCount(100, results[0].Documents);
         Assert.AreEqual("aggregate", results[1].Result.Operation);
         Assert.IsTrue(results[1].IsSelected, "跑完选中最后一份结果");
         Assert.AreEqual("_id,name,orders,sum", string.Join(",", results[1].Columns.Select(static c => c.Name)));
@@ -268,8 +268,8 @@ public sealed class QueryTests
 
         CompletionSet? collections = await tab.ProvideCompletionAsync(new CompletionRequest("use(\"shop\")\ndb.or", 16, false));
         Assert.IsNotNull(collections);
-        Assert.IsTrue(collections.Items.Any(static i => i.Label == "orders"));
-        Assert.IsTrue(collections.Items.Any(static i => i.Label == "getCollection"));
+        Assert.Contains(static i => i.Label == "orders", collections.Items);
+        Assert.Contains(static i => i.Label == "getCollection", collections.Items);
 
         const string filter = "db.orders.find({ cust";
         CompletionSet? fields = await tab.ProvideCompletionAsync(new CompletionRequest(filter, filter.Length, false));
@@ -286,8 +286,8 @@ public sealed class QueryTests
         Assert.AreEqual("上游 $group 输出的字段", sort.ChipsTitle);
         Assert.AreEqual("_id,name,orders,sum", string.Join(",", sort.Chips));
         Assert.AreEqual("聚合阶段", sort.Category);
-        Assert.IsTrue(stages.Items.Any(static i => i.Label == "$sort 降序…"));
-        Assert.IsFalse(stages.Items.Any(static i => i.Label == "sum"), "以 $ 起头时只给阶段");
+        Assert.Contains(static i => i.Label == "$sort 降序…", stages.Items);
+        Assert.DoesNotContain(static i => i.Label == "sum", stages.Items, "以 $ 起头时只给阶段");
 
         string bare = DesignScript.Replace("{ $so", "{ su", StringComparison.Ordinal);
         int bareCaret = bare.IndexOf("{ su", StringComparison.Ordinal) + 4;
@@ -297,12 +297,12 @@ public sealed class QueryTests
 
         const string op = "db.orders.find({ total: { $g";
         CompletionSet? operators = await tab.ProvideCompletionAsync(new CompletionRequest(op, op.Length, false));
-        Assert.IsTrue(operators!.Items.Any(static i => i.Label == "$gte"));
-        Assert.IsFalse(operators.Items.Any(static i => i.Label == "$or"), "字段的运算符对象里不给逻辑运算符");
+        Assert.Contains(static i => i.Label == "$gte", operators!.Items);
+        Assert.DoesNotContain(static i => i.Label == "$or", operators.Items, "字段的运算符对象里不给逻辑运算符");
 
         const string path = "db.orders.aggregate([{ $group: { _id: \"$cust";
         CompletionSet? paths = await tab.ProvideCompletionAsync(new CompletionRequest(path, path.Length, false));
-        Assert.IsTrue(paths!.Items.Any(static i => i.Label == "$customer.id" && i.InsertText == "$customer.id\""));
+        Assert.Contains(static i => i.Label == "$customer.id" && i.InsertText == "$customer.id\"", paths!.Items);
     });
 
     [TestMethod]
@@ -397,8 +397,8 @@ public sealed class QueryTests
         await tab.SaveAsAsync("高价值订单");
         Assert.IsFalse(tab.IsModified);
         await Screens.PumpAsync(20);
-        Assert.IsTrue(tab.Snippets.Any(static s => s.IsSaved && s.Label == "高价值订单"));
-        Assert.IsTrue(tab.Snippets.Any(static s => !s.IsSaved));
+        Assert.Contains(static s => s.IsSaved && s.Label == "高价值订单", tab.Snippets);
+        Assert.Contains(static s => !s.IsSaved, tab.Snippets);
     });
 
     // ── 截图 ────────────────────────────────────────────────────────────────

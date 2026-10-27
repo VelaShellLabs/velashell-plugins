@@ -18,7 +18,6 @@ internal sealed class RdpDesktopSurface : Control
     private const int MaximumFrameBytes = 128 * 1024 * 1024;
     private IRdpSession? _session;
     private RdpInputQueue? _input;
-    private byte[] _pixels = [];
     private readonly HashSet<ushort> _keys = [];
     private readonly HashSet<RdpMouseButton> _buttons = [];
     private IPointer? _captured;
@@ -53,7 +52,17 @@ internal sealed class RdpDesktopSurface : Control
     internal bool HasPendingUpdate => Volatile.Read(ref _pending) != 0;
     internal Task InputDrained => _input?.Drained ?? Task.CompletedTask;
     internal double DpiScale => _topLevel?.RenderScaling ?? 1;
-    public RdpScaleMode ScaleMode { get; set { field = value; UpdateExtent(); InvalidateVisual(); } }
+    public RdpScaleMode ScaleMode
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            UpdateExtent();
+            InvalidateVisual();
+        }
+    }
     internal RdpViewport Viewport => RdpViewport.Create(Bounds.Size, Frame.Width, Frame.Height, ScaleMode, DpiScale);
 
     public void SetSession(IRdpSession? session)
@@ -74,7 +83,7 @@ internal sealed class RdpDesktopSurface : Control
                 InputFailed?.Invoke();
             });
         });
-        ClearBitmap();
+        if (session is not null) ClearBitmap();
         _pointer = null;
         ResetCursor();
         Status = session?.Status ?? new(RdpSessionState.Disconnected);
@@ -116,10 +125,12 @@ internal sealed class RdpDesktopSurface : Control
         _session.FrameAvailable += ScheduleUpdate;
         _session.StatusChanged += StatusNotification;
         _session.PointerChanged += PointerNotification;
+        _session.SetFrameConsumer(true);
     }
     private void Unsubscribe()
     {
         if (_session is null || !_subscribed) return;
+        _session.SetFrameConsumer(false);
         _subscribed = false;
         _session.FrameAvailable -= ScheduleUpdate;
         _session.StatusChanged -= StatusNotification;
@@ -143,6 +154,8 @@ internal sealed class RdpDesktopSurface : Control
         try
         {
             if (!_attached || _session is not { } session) return;
+            RdpSessionStatus previousStatus = Status;
+            int previousWidth = Frame.Width, previousHeight = Frame.Height;
             Status = session.Status;
             if (Status.State != RdpSessionState.Connected) ReleaseInput();
             else CopyLatestFrame(session); // Keep the last image; a closing session may already have cleared its managed pixels.
@@ -151,7 +164,8 @@ internal sealed class RdpDesktopSurface : Control
                 _pointer = session.Pointer;
                 ApplyPointer(_pointer);
             }
-            Updated?.Invoke();
+            if (Status != previousStatus || Frame.Width != previousWidth || Frame.Height != previousHeight)
+                Updated?.Invoke();
         }
         catch (Exception)
         {
@@ -176,32 +190,40 @@ internal sealed class RdpDesktopSurface : Control
         for (int attempt = 0; attempt < 2; attempt++)
         {
             ValidateFrame(advertised);
-            if (_pixels.Length != advertised.ByteLength)
+            WriteableBitmap? candidate = null;
+            try
             {
-                Array.Clear(_pixels);
-                _pixels = new byte[advertised.ByteLength];
+                if (Bitmap is null || Bitmap.PixelSize != new PixelSize(advertised.Width, advertised.Height))
+                    candidate = new WriteableBitmap(new PixelSize(advertised.Width, advertised.Height), new Vector(96, 96),
+                        PixelFormat.Rgba8888, AlphaFormat.Unpremul);
+                WriteableBitmap bitmap = candidate ?? Bitmap!;
+                RdpFrameInfo copied;
+                bool success;
+                using (ILockedFramebuffer target = bitmap.Lock())
+                    success = session.TryCopyFrame(target.Address, advertised.Width, advertised.Height,
+                        target.RowBytes, checked(target.RowBytes * advertised.Height), out copied);
+                if (!success)
+                {
+                    // Retry once only for a changed size. Busy/closed metadata waits for a real notification.
+                    if (session.Status.State != RdpSessionState.Connected || copied == advertised || copied.Width <= 0 || copied.Height <= 0) return;
+                    advertised = copied;
+                    continue;
+                }
+                ValidateFrame(copied);
+                if (candidate is not null)
+                {
+                    WriteableBitmap? previous = Bitmap;
+                    Bitmap = candidate;
+                    candidate = null;
+                    previous?.Dispose();
+                }
+                bool resized = Frame.Width != copied.Width || Frame.Height != copied.Height;
+                Frame = copied;
+                if (resized) UpdateExtent();
+                InvalidateVisual();
+                return;
             }
-            if (!session.TryCopyFrame(_pixels, out RdpFrameInfo copied))
-            {
-                // Retry once only for a changed size. Busy/closed unchanged metadata waits for a real notification.
-                if (session.Status.State != RdpSessionState.Connected || copied == advertised || copied.Width <= 0 || copied.Height <= 0) return;
-                advertised = copied;
-                continue;
-            }
-            ValidateFrame(copied);
-            if (copied.ByteLength > _pixels.Length) throw new InvalidDataException("Incomplete managed RDP frame.");
-            if (Bitmap is null || Bitmap.PixelSize != new PixelSize(copied.Width, copied.Height))
-            {
-                Bitmap?.Dispose();
-                Bitmap = new WriteableBitmap(new PixelSize(copied.Width, copied.Height), new Vector(96, 96),
-                    PixelFormat.Rgba8888, AlphaFormat.Unpremul);
-            }
-            using (ILockedFramebuffer target = Bitmap.Lock())
-                CopyRows(_pixels, copied, target.Address, target.RowBytes);
-            Frame = copied;
-            UpdateExtent();
-            InvalidateVisual();
-            return;
+            finally { candidate?.Dispose(); }
         }
         // Further resize activity arrives through FrameAvailable. Do not self-schedule a permanently unavailable frame.
     }
@@ -223,17 +245,17 @@ internal sealed class RdpDesktopSurface : Control
 
     private void UpdateExtent()
     {
-        Width = ScaleMode == RdpScaleMode.Actual && Frame.Width > 0 ? Frame.Width / DpiScale : double.NaN;
-        Height = ScaleMode == RdpScaleMode.Actual && Frame.Height > 0 ? Frame.Height / DpiScale : double.NaN;
-        InvalidateMeasure();
+        double width = ScaleMode == RdpScaleMode.Actual && Frame.Width > 0 ? Frame.Width / DpiScale : double.NaN;
+        double height = ScaleMode == RdpScaleMode.Actual && Frame.Height > 0 ? Frame.Height / DpiScale : double.NaN;
+        if (Width.Equals(width) && Height.Equals(height)) return;
+        Width = width;
+        Height = height;
     }
 
     private void ClearBitmap()
     {
         Bitmap?.Dispose();
         Bitmap = null;
-        Array.Clear(_pixels);
-        _pixels = [];
         Frame = default;
         UpdateExtent();
         InvalidateVisual();

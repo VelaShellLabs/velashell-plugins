@@ -50,7 +50,7 @@ public sealed class XlsxTests
 
         XDocument types = Load(zip, "[Content_Types].xml");
         XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
-        Assert.AreEqual(4, types.Descendants(ct + "Override").Count(), "workbook + 2 sheets + styles");
+        Assert.HasCount(4, types.Descendants(ct + "Override"), "workbook + 2 sheets + styles");
     }
 
     [TestMethod]
@@ -81,7 +81,7 @@ public sealed class XlsxTests
         Assert.AreEqual("0", cells[3].Element(Main + "v")!.Value);
 
         XDocument styles = Load(zip, "xl/styles.xml");
-        Assert.AreEqual(3, styles.Descendants(Main + "cellXfs").Single().Elements().Count());
+        Assert.HasCount(3, styles.Descendants(Main + "cellXfs").Single().Elements());
         Assert.IsNotNull(styles.Descendants(Main + "font").ElementAt(1).Element(Main + "b"));
     }
 

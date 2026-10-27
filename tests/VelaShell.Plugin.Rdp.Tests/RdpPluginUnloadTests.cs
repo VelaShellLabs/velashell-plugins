@@ -18,7 +18,7 @@ public sealed class RdpPluginUnloadTests
         using var host = new TestPluginContext { PluginId = "velashell.rdp" };
         var retainedForm = new List<WorkspaceDescriptor>();
         WeakReference collectible = ActivateDeactivateAndUnload(host, retainedForm);
-        Assert.IsTrue(retainedForm.Count > 0);
+        Assert.IsNotEmpty(retainedForm);
         WorkspaceDescriptor form = retainedForm[0];
         TestContext.WriteLine($"Form fields: {form.Fields.GetType().AssemblyQualifiedName}");
         foreach (var field in form.Fields)

@@ -93,7 +93,7 @@ public sealed class ConnectionManagementTests
 
             TreeNode group = shell.VisibleNodes.Single(static n => n.Kind == NodeKind.Group);
             await shell.ToggleAsync(group);
-            Assert.IsFalse(shell.VisibleNodes.Any(static n => n.Name == "orders-prod"), "收起分组藏起它的连接");
+            Assert.DoesNotContain(static n => n.Name == "orders-prod", shell.VisibleNodes, "收起分组藏起它的连接");
         }
         finally
         {
@@ -115,7 +115,7 @@ public sealed class ConnectionManagementTests
         IReadOnlyList<MongoProfile> loaded = await store.LoadAsync();
         Assert.AreEqual("a", loaded.Single().Name);
         Assert.AreEqual("s3cret-pw", await store.GetPasswordAsync(profile.Id));
-        Assert.IsFalse(context.FakeSecrets.Values.Keys.Any(static k => !k.StartsWith("password:", StringComparison.Ordinal)));
+        Assert.DoesNotContain(static k => !k.StartsWith("password:", StringComparison.Ordinal), context.FakeSecrets.Values.Keys);
         foreach (string key in await context.Storage.GetKeysAsync())
         {
             System.Text.Json.JsonElement raw = await context.Storage.GetAsync<System.Text.Json.JsonElement>(key);
@@ -164,7 +164,7 @@ public sealed class ConnectionManagementTests
             Assert.AreEqual(
                 "mongodb://ops_reader:****@10.20.3.21:27017,10.20.3.22:27017,10.20.3.23:27017/shop?replicaSet=rs0&authSource=admin&authMechanism=SCRAM-SHA-256&readPreference=primaryPreferred",
                 dialog.PreviewText);
-            Assert.IsTrue(dialog.PreviewSpans.Any(static s => s is { IsSecret: true, Text: ":****@" }));
+            Assert.Contains(static s => s is { IsSecret: true, Text: ":****@" }, dialog.PreviewSpans);
             Assert.IsFalse(dialog.PreviewText.Contains("pw@", StringComparison.Ordinal), "口令不进连接串");
             Assert.IsTrue(dialog.ReadOnly && dialog.ConfirmWrites, "生产连接默认只读 + 写前确认");
 
@@ -175,7 +175,7 @@ public sealed class ConnectionManagementTests
             Assert.AreEqual(MongoEnvironment.Production, settings.Environment);
             Assert.AreEqual(bastion.SavedSessionId, settings.JumpSessionId);
             Assert.IsTrue(settings.ReadOnly);
-            Assert.IsFalse(profile.Settings.Values.Any(static v => v.Contains("pw", StringComparison.Ordinal)), "口令不进设置");
+            Assert.DoesNotContain(static v => v.Contains("pw", StringComparison.Ordinal), profile.Settings.Values, "口令不进设置");
             _ = Screens.Capture(window, "10-connection-dialog");
 
             dialog.IsSrvTopology = true;
@@ -311,7 +311,7 @@ public sealed class ConnectionManagementTests
             Assert.IsTrue(card.IsFailed);
             Assert.AreEqual("无法连接 mongo-inner-01", card.FailedTitle);
             StringAssert.Contains(card.ErrorMessage, "127.0.0.1:1");
-            Assert.IsTrue(view.GetVisualDescendants().OfType<TextBlock>().Any(static t => t.Text == "无法连接 mongo-inner-01" && t.IsEffectivelyVisible));
+            Assert.Contains(static t => t.Text == "无法连接 mongo-inner-01" && t.IsEffectivelyVisible, view.GetVisualDescendants().OfType<TextBlock>());
             _ = Screens.Capture(window, "22-connection-failed");
 
             card.EditCommand.Execute(null);
@@ -357,10 +357,10 @@ public sealed class ConnectionManagementTests
         Assert.AreEqual("mongo-inner-01", shell.StatusConnection);
 
         Assert.IsTrue(await shell.DisconnectAsync(second.Entry));
-        Assert.IsFalse(shell.Tabs.Any(t => ReferenceEquals(t.Owner, second)), "断开只关它自己的标签");
-        Assert.IsTrue(shell.Tabs.Contains(firstTab));
+        Assert.DoesNotContain(t => ReferenceEquals(t.Owner, second), shell.Tabs, "断开只关它自己的标签");
+        Assert.Contains(firstTab, shell.Tabs);
         Assert.AreEqual(ConnectionState.Disconnected, second.Entry.State);
-        Assert.IsFalse(shell.VisibleNodes.Any(n => n.Owner == second.Entry && n.Kind == NodeKind.Database), "断开后它下面的库收起来了");
+        Assert.DoesNotContain(n => n.Owner == second.Entry && n.Kind == NodeKind.Database, shell.VisibleNodes, "断开后它下面的库收起来了");
     });
 
     // ── 数据区右侧面板的收起(Navicat 右下角那颗按钮)──────────────────────

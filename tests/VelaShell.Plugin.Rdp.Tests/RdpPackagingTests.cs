@@ -24,9 +24,9 @@ public sealed class RdpPackagingTests
         Assert.IsTrue(expected.ToHashSet(StringComparer.Ordinal).SetEquals(actual), string.Join(", ", actual));
         foreach (string native in actual) Assert.IsGreaterThan(0L, new FileInfo(Path.Combine(payload, native)).Length);
         string[] dlls = Directory.GetFiles(payload, "*.dll", SearchOption.AllDirectories).Select(Path.GetFileName).OfType<string>().ToArray();
-        Assert.IsFalse(dlls.Any(name => name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)
+        Assert.DoesNotContain(name => name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("VelaShell.PluginSdk", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("MicroCom.Runtime.dll", StringComparison.OrdinalIgnoreCase)));
+            || name.Equals("MicroCom.Runtime.dll", StringComparison.OrdinalIgnoreCase), dlls);
         Assert.IsTrue(File.Exists(Path.Combine(payload, "Devolutions.IronRdp.dll")));
         using JsonDocument deps = JsonDocument.Parse(File.ReadAllText(Path.Combine(payload, "VelaShell.Plugin.Rdp.deps.json")));
         Assert.IsTrue(deps.RootElement.GetProperty("libraries").TryGetProperty("Devolutions.IronRdp/2026.10.19", out _));

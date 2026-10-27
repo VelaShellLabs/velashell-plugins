@@ -136,7 +136,7 @@ public sealed class ImportTests
         Assert.AreEqual(ImportRowStatus.Warning, warn.Status);
         Assert.AreEqual("paid", warn.Document["status"].AsString, "enum casing normalized to the validator's spelling");
         Assert.AreEqual("VIP", warn.Document["customer"]["level"].AsString);
-        Assert.AreEqual(3, warn.Issues.Count, "number from text + two enum case fixes");
+        Assert.HasCount(3, warn.Issues, "number from text + two enum case fixes");
 
         ConvertedRow missing = converter.Convert(new ImportRecord(4, ["", "219.00", "paid", "普通", ""], null));
         Assert.AreEqual(ImportRowStatus.Error, missing.Status);
@@ -320,7 +320,7 @@ public sealed class ImportTests
             var firstError = BsonDocument.Parse(report[0]);
             Assert.IsTrue(firstError.Contains("line"));
             Assert.IsTrue(firstError["row"].AsBsonDocument.Contains("orderNo"), "the original row is kept so it can be fixed and re-imported");
-            Assert.IsTrue(report.Any(static l => l.Contains("E11000", StringComparison.Ordinal)), "duplicate keys come back from the server");
+            Assert.Contains(static l => l.Contains("E11000", StringComparison.Ordinal), report, "duplicate keys come back from the server");
 
             // 再按 orderNo upsert 一遍:没有新增,全部命中,备份文件里是被覆盖前的文档
             ImportResult upserted = await ImportRunner.RunAsync(connection, new ImportJob
@@ -374,7 +374,7 @@ public sealed class ImportTests
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsStep2 && !vm.DryRunning && vm.PreviewRows.Count > 0);
             Assert.AreEqual("1,000", vm.AllCountText);
-            Assert.IsTrue(vm.Issues.Any(static i => i.IsError && i.Title.Contains("orderNo", StringComparison.Ordinal)));
+            Assert.Contains(static i => i.IsError && i.Title.Contains("orderNo", StringComparison.Ordinal), vm.Issues);
             Assert.IsTrue(vm.ShowDateFix);
             vm.ModeUpsert = true;
             await ExportTests.WaitAsync(() => !vm.DryRunning && vm.EstUpdate != "—");

@@ -138,7 +138,7 @@ public sealed class TreeMenuTests
             List<string> left = await (await client.GetDatabase(db).ListCollectionNamesAsync()).ToListAsync();
             CollectionAssert.DoesNotContain(left, "images.files");
             CollectionAssert.DoesNotContain(left, "images.chunks");
-            Assert.IsFalse(bench.ViewModel.Tabs.OfType<GridFsTabViewModel>().Any(), "the bucket's tab is closed");
+            Assert.IsEmpty(bench.ViewModel.Tabs.OfType<GridFsTabViewModel>(), "the bucket's tab is closed");
             dbNode = await DatabaseNodeAsync(bench, db);
             Assert.IsEmpty(Folder(dbNode, FolderKind.Buckets).Children);
         }

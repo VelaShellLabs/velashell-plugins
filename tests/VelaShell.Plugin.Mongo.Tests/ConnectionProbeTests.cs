@@ -45,7 +45,7 @@ public sealed class ConnectionProbeTests
             "mongodb://ops_reader:****@10.20.3.21:27017,10.20.3.22:27017,10.20.3.23:27017/shop?replicaSet=rs0&authSource=admin&authMechanism=SCRAM-SHA-256&readPreference=primaryPreferred",
             Text(preview));
         Assert.AreEqual("连接字符串", preview!.Title);
-        Assert.IsTrue(preview.Spans.Any(static s => s is { Role: PreviewRole.Secret, Text: ":****@" }));
+        Assert.Contains(static s => s is { Role: PreviewRole.Secret, Text: ":****@" }, preview.Spans);
         Assert.AreEqual(3, preview.Spans.Count(static s => s.Role == PreviewRole.Host));
         Assert.AreEqual("/shop", preview.Spans.Single(static s => s.Role == PreviewRole.Path).Text);
         _ = new MongoUrl(Text(preview).Replace("****", "x", StringComparison.Ordinal));
@@ -98,9 +98,9 @@ public sealed class ConnectionProbeTests
         Assert.IsTrue(report.Steps.Take(3).All(static s => s.State == ProbeState.Passed));
         StringAssert.StartsWith(report.Summary, "连接成功 · ");
         Assert.AreEqual("发现的成员", report.EndpointsTitle);
-        Assert.IsTrue(report.Endpoints.Any(static e => e.Role is "PRIMARY" or "STANDALONE" && e.Tone == Tone.Success));
-        Assert.IsTrue(seen.Any(static s => s is { Key: "tcp", State: ProbeState.Running }), "each step reports when it starts");
-        Assert.IsTrue(seen.Count > report.Steps.Count, "progress arrives step by step, not only at the end");
+        Assert.Contains(static e => e.Role is "PRIMARY" or "STANDALONE" && e.Tone == Tone.Success, report.Endpoints);
+        Assert.Contains(static s => s is { Key: "tcp", State: ProbeState.Running }, seen, "each step reports when it starts");
+        Assert.IsGreaterThan(report.Steps.Count, seen.Count, "progress arrives step by step, not only at the end");
     }
 
     /// <summary>端口不通:TCP 失败,后面的步骤一律「未执行」,结论点名失败的那一步;不抛异常。</summary>

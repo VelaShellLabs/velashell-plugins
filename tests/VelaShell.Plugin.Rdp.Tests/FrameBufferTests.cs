@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using VelaShell.Plugin.Rdp.Engine;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -21,7 +22,7 @@ public sealed class FrameBufferTests
         Assert.AreEqual(1, refresh);
         Assert.IsTrue(frames.Publish(bytes => Array.Fill(bytes, (byte)3)));
         var pixels = new byte[16];
-        Assert.IsTrue(frames.TryCopy(pixels, out var info));
+        Assert.IsTrue(CopyPixels(frames, pixels, out var info));
         Assert.AreEqual(3L, info.Sequence);
         Assert.IsTrue(pixels.All(b => b == 3));
         Assert.IsFalse(frames.Pending);
@@ -44,7 +45,7 @@ public sealed class FrameBufferTests
         release.SetResult(); await consumer.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.IsTrue(original.All(b => b == 0));
         var pixels = new byte[32];
-        Assert.IsTrue(frames.TryCopy(pixels, out var info));
+        Assert.IsTrue(CopyPixels(frames, pixels, out var info));
         Assert.AreEqual(4, info.Width); Assert.AreEqual(2, info.Height);
         Assert.IsTrue(pixels.All(b => b == 3));
     }
@@ -69,9 +70,52 @@ public sealed class FrameBufferTests
     public async Task SmallDestination_DoesNotLeakLease_AndServerDimensionsStayBounded()
     {
         await using var frames = new RdpFrameBuffer(2, 2, () => { });
-        Assert.IsFalse(frames.TryCopy(new byte[1], out var info));
+        Assert.IsFalse(CopyPixels(frames, new byte[1], out var info));
         Assert.AreEqual(16, info.ByteLength);
-        Assert.IsTrue(frames.TryCopy(new byte[16], out _));
+        Assert.IsTrue(CopyPixels(frames, new byte[16], out _));
         Assert.Throws<VelaShell.PluginSdk.Protocols.ProtocolConnectionException>(() => frames.Resize(65535, 65535));
+    }
+
+    [TestMethod]
+    public async Task DirectCopyValidatesGeometryAndCapacityBeforeWritingAndPreservesPadding()
+    {
+        await using var frames = new RdpFrameBuffer(2, 2, static () => { });
+        byte[] source = Enumerable.Range(1, 16).Select(x => (byte)x).ToArray();
+        frames.Publish(target => source.CopyTo(target, 0));
+        IntPtr target = Marshal.AllocHGlobal(24);
+        try
+        {
+            byte[] sentinel = Enumerable.Repeat((byte)77, 24).ToArray();
+            Marshal.Copy(sentinel, 0, target, sentinel.Length);
+            Assert.IsFalse(frames.TryCopy(target, 1, 4, 4, 24, out var info));
+            Assert.AreEqual(2, info.Width);
+            Assert.IsFalse(frames.TryCopy(target, 2, 2, 7, 24, out _));
+            Assert.IsFalse(frames.TryCopy(target, 2, 2, 12, 23, out _));
+            Assert.IsFalse(frames.TryCopy(IntPtr.Zero, 2, 2, 8, 16, out _));
+            Assert.IsFalse(frames.TryCopy(target, 2, 2, int.MaxValue, 24, out _));
+            byte[] actual = new byte[24];
+            Marshal.Copy(target, actual, 0, actual.Length);
+            CollectionAssert.AreEqual(sentinel, actual);
+            Assert.IsTrue(frames.TryCopy(target, 2, 2, 12, 24, out _));
+            Marshal.Copy(target, actual, 0, actual.Length);
+            CollectionAssert.AreEqual(source[..8], actual[..8]);
+            CollectionAssert.AreEqual(source[8..], actual[12..20]);
+            Assert.IsTrue(actual[8..12].Concat(actual[20..24]).All(x => x == 77));
+        }
+        finally { Marshal.FreeHGlobal(target); }
+    }
+
+    private static bool CopyPixels(RdpFrameBuffer frames, byte[] pixels, out RdpFrameInfo info)
+    {
+        RdpFrameInfo advertised = frames.Info;
+        IntPtr destination = Marshal.AllocHGlobal(pixels.Length);
+        try
+        {
+            bool copied = frames.TryCopy(destination, advertised.Width, advertised.Height,
+                advertised.Stride, pixels.Length, out info);
+            if (copied) Marshal.Copy(destination, pixels, 0, pixels.Length);
+            return copied;
+        }
+        finally { Marshal.FreeHGlobal(destination); }
     }
 }

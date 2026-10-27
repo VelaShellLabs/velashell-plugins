@@ -188,7 +188,7 @@ public sealed class QueryShapeTests
         Assert.IsNotNull(advice);
         Assert.AreEqual("{ \"customer.level\": 1, total: -1 }", advice.KeysText);
         CollectionAssert.AreEqual(new[] { "total" }, advice.SortAndRange.ToArray());
-        Assert.AreEqual(0, advice.Range.Count);
+        Assert.IsEmpty(advice.Range);
     }
 
     [TestMethod]
