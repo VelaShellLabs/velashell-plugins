@@ -47,7 +47,7 @@ internal enum RdpMouseButton { Left, Middle, Right, X1, X2 }
 /// <summary>ScanCode is a physical set-1 scan code, with extended bit encoded as 0x100.</summary>
 internal readonly record struct RdpInput(RdpInputKind Kind, ushort ScanCode = 0, int X = 0, int Y = 0,
     RdpMouseButton Button = RdpMouseButton.Left, short WheelDelta = 0, bool Horizontal = false, string? Text = null, bool SynchronizeClipboard = false,
-    TaskCompletionSource<bool>? ClipboardCompletion = null, long ClipboardEpoch = 0);
+    TaskCompletionSource<bool>? ClipboardCompletion = null, long ClipboardEpoch = 0, CancellationToken ClipboardCancellation = default);
 
 /// <summary>No UI, SDK or native types cross the desktop/session boundary.</summary>
 internal interface IRdpSession : IAsyncDisposable

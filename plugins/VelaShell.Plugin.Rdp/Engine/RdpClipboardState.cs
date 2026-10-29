@@ -288,19 +288,18 @@ internal sealed class RdpClipboardState
         return true;
     }
 
-    private void Fault()
+    internal void Pause()
     {
+        // Terminal for this connection. Retain no-ID wire slots: no re-pairing or
+        // Disable/Enable recovery is legal until the native channel is retired.
         _phase = RdpClipboardPhase.Faulted;
-        _peerMonitorReady = false;
-        _peerCapabilities = false;
-        _peerLongNames = false;
         _remoteOffersUnicode = false;
-        _outstandingRequest = null;
-        _outstandingResultInvalidated = false;
-        _formatListInFlight = null;
         _localText = null;
+        LocalAdvertisementAccepted = false;
         ClearQueue();
     }
+
+    private void Fault() => Pause();
 
     private static bool IsValidText(string text)
     {

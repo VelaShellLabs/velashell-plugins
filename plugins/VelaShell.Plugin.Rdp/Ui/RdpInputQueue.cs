@@ -2,8 +2,10 @@ using VelaShell.Plugin.Rdp.Engine;
 
 namespace VelaShell.Plugin.Rdp.Ui;
 
+internal enum RdpInputPreparation { Send, CancelPaste }
+
 /// <summary>A bounded UI-side producer. Only this worker awaits the engine's bounded input channel.</summary>
-internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<RdpInput, Task>? prepare = null)
+internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<RdpInput, CancellationToken, Task<RdpInputPreparation>>? prepare = null)
 {
     private const int Capacity = 128;
     private readonly Lock _gate = new();
@@ -12,6 +14,8 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<Rdp
     private bool _running;
     private bool _failed;
     private long _resetVersion;
+    private CancellationTokenSource? _preparing;
+    private readonly HashSet<ushort> _cancelledPasteKeys = [];
     public Task Drained { get { lock (_gate) return _drained.Task; } }
 
     public bool Enqueue(RdpInput input)
@@ -24,6 +28,8 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<Rdp
             {
                 // Drop unsent downs/moves as one atomic reset, never drop the reset itself.
                 _resetVersion++;
+                _preparing?.Cancel();
+                _cancelledPasteKeys.Clear();
                 _queue.Clear();
             }
             else if (input.Kind == RdpInputKind.PointerMove && _queue.Last?.Value.Kind == RdpInputKind.PointerMove)
@@ -34,6 +40,8 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<Rdp
             else if (_queue.Count >= Capacity)
             {
                 _resetVersion++;
+                _preparing?.Cancel();
+                _cancelledPasteKeys.Clear();
                 _queue.Clear();
                 input = new(RdpInputKind.ReleaseAll);
                 _failed = true; // Require an explicit reconnect after overflow, never resume a partial chord.
@@ -69,12 +77,32 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<Rdp
                 resetVersion = _resetVersion;
                 _queue.RemoveFirst();
             }
+            using var preparation = new CancellationTokenSource();
             try
             {
-                if (prepare is not null) await prepare(input).ConfigureAwait(false);
+                lock (_gate)
+                {
+                    if (input.Kind == RdpInputKind.KeyUp) _cancelledPasteKeys.Remove(input.ScanCode);
+                    else if (input.Kind == RdpInputKind.KeyDown && _cancelledPasteKeys.Contains(input.ScanCode)) continue;
+                    if (resetVersion != _resetVersion && input.Kind != RdpInputKind.ReleaseAll) continue;
+                    _preparing = preparation;
+                }
+                RdpInputPreparation result = RdpInputPreparation.Send;
+                try
+                {
+                    if (prepare is not null) result = await prepare(input, preparation.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (preparation.IsCancellationRequested)
+                { result = RdpInputPreparation.CancelPaste; }
+                finally { lock (_gate) _preparing = null; }
                 lock (_gate)
                 {
                     if (input.Kind != RdpInputKind.ReleaseAll && resetVersion != _resetVersion) continue;
+                    if (result == RdpInputPreparation.CancelPaste)
+                    {
+                        if (input.Kind == RdpInputKind.KeyDown) _cancelledPasteKeys.Add(input.ScanCode);
+                        continue;
+                    }
                 }
                 // In particular, focus-loss releases must not use a cancelled UI lifetime token.
                 await session.SendInputAsync(input, CancellationToken.None).ConfigureAwait(false);

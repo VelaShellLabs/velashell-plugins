@@ -95,11 +95,12 @@ public sealed class RdpViewportInputTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var prepared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var session = new RdpUiFakeSession();
-        var queue = new RdpInputQueue(session, () => Assert.Fail("Unexpected input failure."), input =>
+        var queue = new RdpInputQueue(session, () => Assert.Fail("Unexpected input failure."), async (input, token) =>
         {
-            if (!input.SynchronizeClipboard) return Task.CompletedTask;
+            if (!input.SynchronizeClipboard) return RdpInputPreparation.Send;
             entered.TrySetResult();
-            return prepared.Task;
+            await prepared.Task.WaitAsync(token);
+            return RdpInputPreparation.Send;
         });
         queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true));
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
@@ -107,6 +108,67 @@ public sealed class RdpViewportInputTests
         prepared.SetResult();
         await queue.Drained.WaitAsync(TimeSpan.FromSeconds(3));
         CollectionAssert.AreEqual(new[] { RdpInputKind.ReleaseAll }, session.Inputs.Select(x => x.Kind).ToArray());
+    }
+
+    [TestMethod]
+    public async Task CancelledPasteSuppressesRepeatsButPreservesReleasesAndOrdinaryInput()
+    {
+        var session = new RdpUiFakeSession();
+        int preparations = 0;
+        var queue = new RdpInputQueue(session, () => Assert.Fail("Unexpected input failure."), (input, _) =>
+        {
+            if (!input.SynchronizeClipboard) return Task.FromResult(RdpInputPreparation.Send);
+            preparations++;
+            return Task.FromResult(preparations == 1 ? RdpInputPreparation.CancelPaste : RdpInputPreparation.Send);
+        });
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x1d));
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true));
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true));
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f)); // repeat after Ctrl was released
+        queue.Enqueue(new(RdpInputKind.KeyUp, 0x2f));
+        queue.Enqueue(new(RdpInputKind.KeyUp, 0x1d));
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x1e));
+        await queue.Drained.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.AreEqual(1, preparations);
+        Assert.DoesNotContain(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x2f, session.Inputs);
+        Assert.Contains(x => x.Kind == RdpInputKind.KeyUp && x.ScanCode == 0x2f, session.Inputs);
+        Assert.Contains(x => x.Kind == RdpInputKind.KeyUp && x.ScanCode == 0x1d, session.Inputs);
+        Assert.Contains(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x1e, session.Inputs);
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true));
+        await queue.Drained.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.AreEqual(2, preparations);
+        Assert.Contains(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x2f, session.Inputs);
+        Assert.AreEqual(RdpSessionState.Connected, session.Status.State);
+    }
+
+    [TestMethod]
+    public void CancelledQueuedClipboardCommandCannotBeAppliedOrCompleteNextOperation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new RdpInput(RdpInputKind.ClipboardText, Text: "old", ClipboardEpoch: 4,
+            ClipboardCompletion: completion, ClipboardCancellation: cancellation.Token);
+        Assert.IsTrue(RdpSession.CanApplyClipboard(command, true, 4, false));
+        cancellation.Cancel();
+        Assert.IsFalse(RdpSession.CanApplyClipboard(command, true, 4, false));
+        var next = command with { Text = "new", ClipboardCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously), ClipboardCancellation = default };
+        completion.TrySetResult(true);
+        Assert.IsFalse(next.ClipboardCompletion!.Task.IsCompleted);
+        Assert.IsTrue(RdpSession.CanApplyClipboard(next, true, 4, false));
+        Assert.IsFalse(RdpSession.CanApplyClipboard(next, true, 5, false));
+        Assert.IsFalse(RdpSession.CanApplyClipboard(next, true, 4, true));
+    }
+
+    [TestMethod]
+    public async Task TransportFailureDuringClipboardPreparationRemainsFatal()
+    {
+        var session = new RdpUiFakeSession();
+        var queue = new RdpInputQueue(session, () => { }, (_, _) =>
+            Task.FromException<RdpInputPreparation>(new IOException("transport failed")));
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true));
+        await queue.Drained.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.AreEqual(RdpSessionState.Disconnected, session.Status.State);
+        Assert.Contains(x => x.Kind == RdpInputKind.ReleaseAll, session.Inputs);
     }
 
     [TestMethod]

@@ -19,16 +19,33 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
     private bool _remoteTextNeeded;
     private string? _remoteText;
     private TaskCompletionSource<bool>? _clipboardCompletion;
+    private CancellationToken _clipboardCancellation;
+    private int _clipboardPaused;
+    public bool ClipboardUnavailable => Volatile.Read(ref _clipboardPaused) != 0;
+    public void PauseClipboard()
+    {
+        if (Interlocked.Exchange(ref _clipboardPaused, 1) == 0)
+        {
+            Interlocked.Exchange(ref _notificationChanges, 1);
+            _notifications.Writer.TryWrite(true);
+            RequestRefresh();
+        }
+    }
     public async Task<bool> SynchronizeClipboardAsync(string? text, CancellationToken cancellationToken)
     {
-        if (!ClipboardEnabled || !_clipboardFocused || Status.State != RdpSessionState.Connected) return false;
+        if (!ClipboardEnabled || ClipboardUnavailable || !_clipboardFocused || Status.State != RdpSessionState.Connected) return false;
         var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Cancellation retires the operation itself, not only the caller's wait. The pump
+        // checks both the token and completion before applying an already-queued command.
+        using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
         long epoch = Volatile.Read(ref _clipboardEpoch);
-        await SendInputAsync(new(RdpInputKind.ClipboardText, Text: text, ClipboardCompletion: completion, ClipboardEpoch: epoch), cancellationToken).ConfigureAwait(false);
+        await SendInputAsync(new(RdpInputKind.ClipboardText, Text: text, ClipboardCompletion: completion,
+            ClipboardEpoch: epoch, ClipboardCancellation: cancellationToken), cancellationToken).ConfigureAwait(false);
         return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
     public bool ClipboardEnabled => _clipboard is not null;
     public event System.Action<string>? RemoteTextAvailable;
+    public event System.Action? ClipboardFailed;
     public void SetClipboardFocus(bool focused)
     {
         _clipboardFocused = focused;
@@ -250,7 +267,8 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
                                 {
                                     _clipboardCompletion?.TrySetResult(false);
                                     _clipboardCompletion = command.ClipboardCompletion;
-                                    if (!_clipboardFocused || command.ClipboardEpoch != Volatile.Read(ref _clipboardEpoch) || !_clipboard.SetLocalText(command.Text))
+                                    _clipboardCancellation = command.ClipboardCancellation;
+                                    if (!CanApplyClipboard(command, _clipboardFocused, Volatile.Read(ref _clipboardEpoch), ClipboardUnavailable) || !_clipboard.SetLocalText(command.Text))
                                     {
                                         _clipboardCompletion?.TrySetResult(false);
                                         _clipboardCompletion = null;
@@ -315,9 +333,26 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
         }
     }
 
+    internal static bool CanApplyClipboard(RdpInput command, bool focused, long epoch, bool paused) =>
+        focused && !paused && command.ClipboardEpoch == epoch && !command.ClipboardCancellation.IsCancellationRequested &&
+        command.ClipboardCompletion?.Task.IsCompleted != true;
+
     private async Task FlushClipboardAsync()
     {
         if (_clipboard is null) return;
+        if (ClipboardUnavailable)
+        {
+            _clipboard.Pause();
+            _clipboardCompletion?.TrySetResult(false);
+            _clipboardCompletion = null;
+            Interlocked.Exchange(ref _remoteText, null);
+        }
+        else if (_clipboardCompletion?.Task.IsCompleted == true || _clipboardCancellation.IsCancellationRequested)
+        {
+            _clipboard.SetLocalText(null);
+            _clipboardCompletion = null;
+            _clipboardCancellation = default;
+        }
         long epoch = Volatile.Read(ref _clipboardEpoch);
         if (_clipboardProcessedEpoch != epoch)
         {
@@ -327,10 +362,14 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
             _clipboardCompletion = null;
         }
         byte[]? packet;
-        while ((packet = RdpClipboardNative.Next(_active!)) is not null)
+        // Native queue has a fixed twelve-packet bound; do not spin on a faulty bridge.
+        for (int count = 0; count < RdpClipboardState.MaximumQueuedMessages + 1 &&
+            (packet = RdpClipboardNative.Next(_active!)) is not null; count++)
         {
             try
             {
+                if (RdpClipboardNative.IsChannelFault(packet)) { PauseClipboard(); _clipboard.Pause(); continue; }
+                if (ClipboardUnavailable) continue;
                 var message = RdpClipboardProtocol.Decode(packet);
                 if (message.Type == RdpClipboardProtocol.FormatDataResponse && _clipboardRequest is { } request)
                 {
@@ -351,7 +390,22 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
                     if (message.Type == RdpClipboardProtocol.FormatList) _remoteTextNeeded = true;
                 }
             }
+            catch (IOException)
+            {
+                // Parsing/state failures belong to this optional channel only. Native
+                // Next/Send and socket writes remain outside this catch and are fatal.
+                PauseClipboard();
+                _clipboard.Pause();
+            }
             finally { CryptographicOperations.ZeroMemory(packet); }
+        }
+        if (_clipboard.IsFaulted) PauseClipboard();
+        if (ClipboardUnavailable)
+        {
+            _clipboard.Pause();
+            _clipboardCompletion?.TrySetResult(false);
+            _clipboardCompletion = null;
+            return;
         }
         if (_clipboardFocused && _remoteTextNeeded && _clipboardRequest is null && _clipboard.RemoteOffersUnicodeText)
         {
@@ -362,7 +416,7 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
                 _remoteTextNeeded = false;
             }
         }
-        if (_clipboard.IsFaulted) throw new IOException("RDP clipboard queue exceeded its budget.");
+        if (_clipboard.IsFaulted) { PauseClipboard(); _clipboardCompletion?.TrySetResult(false); _clipboardCompletion = null; return; }
         IReadOnlyList<byte[]> outbound = _clipboard.DrainOutbound();
         try
         {
@@ -584,9 +638,11 @@ internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
     }
     private async Task NotifyAsync()
     {
+        bool clipboardReported = false;
         await foreach (bool unused in _notifications.Reader.ReadAllAsync().ConfigureAwait(false))
         {
-            if (Interlocked.Exchange(ref _remoteText, null) is { } text) NotifySafely(RemoteTextAvailable, text);
+            if (ClipboardUnavailable && !clipboardReported) { clipboardReported = true; NotifySafely(ClipboardFailed); }
+            if (!ClipboardUnavailable && Interlocked.Exchange(ref _remoteText, null) is { } text) NotifySafely(RemoteTextAvailable, text);
             NotifySafely(FrameAvailable);
             if (Interlocked.Exchange(ref _notificationChanges, 0) != 0)
             {

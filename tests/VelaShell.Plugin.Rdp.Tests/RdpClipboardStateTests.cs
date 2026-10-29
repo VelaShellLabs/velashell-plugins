@@ -248,6 +248,36 @@ public sealed class RdpClipboardStateTests
     }
 
     [TestMethod]
+    public void PausedChannelNeverRestartsOnLateAcknowledgementsOrEnable()
+    {
+        var state = ReadyState();
+        state.SetLocalText("secret");
+        state.DrainOutbound(); // unacknowledged advertisement
+        state.Receive(Message(RdpClipboardProtocol.CreateFormatList(true, true)));
+        var request = state.RequestRemoteText()!.Value;
+        state.Pause();
+        state.Enable();
+        state.Receive(Acknowledge());
+        state.Receive(MonitorReady());
+        Assert.AreEqual(RdpClipboardTextResponseResult.Stale,
+            state.ReceiveRemoteTextResponse(request, Message(RdpClipboardProtocol.CreateTextResponse("late")), out _));
+        Assert.IsTrue(state.IsFaulted);
+        Assert.IsFalse(state.SetLocalText("new"));
+        Assert.IsNull(state.RequestRemoteText());
+        Assert.AreEqual(0, state.DrainOutbound().Count);
+        Assert.IsFalse(state.LocalAdvertisementAccepted);
+    }
+
+    [TestMethod]
+    public void NativeFaultMarkerCannotBeImpersonatedByWireMessage()
+    {
+        Assert.IsTrue(RdpClipboardNative.IsChannelFault("VELACB!"u8));
+        Assert.IsFalse(RdpClipboardNative.IsChannelFault("VELAFAT"u8));
+        Assert.IsFalse(RdpClipboardNative.IsChannelFault("VELACB!\0"u8));
+        Assert.IsFalse(RdpClipboardNative.IsChannelFault(RdpClipboardProtocol.CreateTextResponse("VELACB!")));
+    }
+
+    [TestMethod]
     public void RemoteCopyRequiresReadvertisingEvenIdenticalLocalText()
     {
         var state = ReadyState();

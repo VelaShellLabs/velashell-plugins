@@ -11,18 +11,37 @@ use crate::utils::ffi::VecU8;
 
 const MAX_PACKET: usize = 2 * 1024 * 1024 + 8;
 const MAX_QUEUE: usize = 12;
+// Deliberately shorter than a wire header. Never enqueue peer bytes of this size.
+const CHANNEL_FAULT: &[u8] = b"VELACB!";
 
 #[derive(Debug, Default)]
 struct ManagedClipboard {
     incoming: VecDeque<Vec<u8>>,
+    faulted: bool,
+    fault_pending: bool,
+}
+impl ManagedClipboard {
+    fn fault(&mut self) {
+        if self.faulted { return; }
+        self.faulted = true;
+        self.fault_pending = true;
+        for bytes in &mut self.incoming { bytes.fill(0); }
+        self.incoming.clear();
+    }
+    fn next(&mut self) -> Option<Vec<u8>> {
+        if std::mem::take(&mut self.fault_pending) { return Some(CHANNEL_FAULT.to_vec()); }
+        self.incoming.pop_front()
+    }
 }
 ironrdp_core::impl_as_any!(ManagedClipboard);
 impl SvcClientProcessor for ManagedClipboard {}
 impl SvcProcessor for ManagedClipboard {
     fn channel_name(&self) -> ChannelName { ChannelName::from_static(b"cliprdr\0") }
     fn process(&mut self, payload: &[u8]) -> PduResult<Vec<SvcMessage>> {
+        if self.faulted { return Ok(Vec::new()); }
         if payload.len() < 8 || payload.len() > MAX_PACKET || self.incoming.len() >= MAX_QUEUE {
-            return Err(ironrdp::pdu::pdu_other_err!("managed clipboard budget exceeded"));
+            self.fault();
+            return Ok(Vec::new()); // Optional channel failure must not kill ActiveStage.
         }
         self.incoming.push_back(payload.to_vec());
         Ok(Vec::new())
@@ -36,6 +55,10 @@ impl Drop for ManagedClipboard {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn VelaClipboard_abi_version() -> u32 { 1 }
+
+// ABI-compatible behavior revision: optional-channel faults no longer kill ActiveStage.
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn VelaClipboard_fault_isolation_version() -> u32 { 1 }
 
 /// Drains asynchronous drive IRP completions on the session's owning pump.
 #[unsafe(no_mangle)]
@@ -69,12 +92,17 @@ pub(crate) unsafe extern "C" fn VelaClipboard_attach(connector: *mut ClientConne
 /// Returns one owned VecU8, or null if no packet is waiting. Use VecU8_destroy.
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "C" fn VelaClipboard_next(stage: *mut ActiveStage) -> *mut VecU8 {
-    catch_unwind(AssertUnwindSafe(|| {
-        let Some(stage) = (unsafe { stage.as_mut() }) else { return std::ptr::null_mut(); };
-        let Some(channel) = stage.0.get_svc_processor_mut::<ManagedClipboard>() else { return std::ptr::null_mut(); };
-        channel.incoming.pop_front().map(|bytes| Box::into_raw(Box::new(VecU8(bytes))))
-            .unwrap_or(std::ptr::null_mut())
-    })).unwrap_or(std::ptr::null_mut())
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let stage = (unsafe { stage.as_mut() })?;
+        let channel = stage.0.get_svc_processor_mut::<ManagedClipboard>()?;
+        Some(channel.next().map(|bytes| Box::into_raw(Box::new(VecU8(bytes))))
+            .unwrap_or(std::ptr::null_mut()))
+    }));
+    match result {
+        Ok(Some(packet)) => packet,
+        // Distinct from no packet and from the optional-channel failure marker.
+        _ => Box::into_raw(Box::new(VecU8(b"VELAFAT".to_vec()))),
+    }
 }
 
 /// Encodes a single bounded CLIPRDR message with the negotiated channel framing.
@@ -92,4 +120,34 @@ pub(crate) unsafe extern "C" fn VelaClipboard_send(stage: *mut ActiveStage, byte
             Err(_) => std::ptr::null_mut(),
         }
     })).unwrap_or(std::ptr::null_mut())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_payload_faults_once_without_failing_session() {
+        for length in [0, 7, MAX_PACKET + 1] {
+            let mut channel = ManagedClipboard::default();
+            assert!(channel.process(&vec![0; length]).is_ok());
+            assert!(channel.faulted);
+            assert_eq!(channel.next().as_deref(), Some(CHANNEL_FAULT));
+            for _ in 0..MAX_QUEUE * 2 { assert!(channel.process(&[0; 8]).is_ok()); }
+            assert!(channel.next().is_none());
+            assert!(channel.incoming.is_empty());
+        }
+    }
+
+    #[test]
+    fn overflow_discards_queue_and_reports_only_internal_marker() {
+        let mut channel = ManagedClipboard::default();
+        for _ in 0..MAX_QUEUE { assert!(channel.process(&[42; 8]).is_ok()); }
+        assert_eq!(channel.incoming.len(), MAX_QUEUE);
+        assert!(channel.process(&[42; 8]).is_ok());
+        assert!(channel.incoming.is_empty());
+        assert_eq!(channel.next().as_deref(), Some(CHANNEL_FAULT));
+        assert!(channel.next().is_none());
+        assert!(CHANNEL_FAULT.len() < 8);
+    }
 }

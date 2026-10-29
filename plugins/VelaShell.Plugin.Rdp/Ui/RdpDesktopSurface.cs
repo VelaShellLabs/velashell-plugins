@@ -46,6 +46,11 @@ internal sealed class RdpDesktopSurface : Control
 
     public event Action? Updated;
     public event Action? InputFailed;
+    public event Action? ClipboardFailed;
+    internal void ReportClipboardFailure(IRdpSession session) => Dispatcher.UIThread.Post(() =>
+    {
+        if (_attached && ReferenceEquals(_session, session)) ClipboardFailed?.Invoke();
+    });
     public RdpFrameInfo Frame { get; private set; }
     public RdpSessionStatus Status { get; private set; } = new(RdpSessionState.Disconnected);
     internal WriteableBitmap? Bitmap { get; private set; }
@@ -183,7 +188,7 @@ internal sealed class RdpDesktopSurface : Control
             RdpSessionStatus previousStatus = Status;
             int previousWidth = Frame.Width, previousHeight = Frame.Height;
             Status = session.Status;
-            if (Status.State != RdpSessionState.Connected) ReleaseInput();
+            if (Status.State != RdpSessionState.Connected) { _clipboardBinding?.Suspend(); ReleaseInput(); }
             else CopyLatestFrame(session); // Keep the last image; a closing session may already have cleared its managed pixels.
             if (!ReferenceEquals(_pointer, session.Pointer))
             {
@@ -310,7 +315,8 @@ internal sealed class RdpDesktopSurface : Control
         if (!CanInput) return;
         ushort scan = RdpInputMapper.ScanCode(e.PhysicalKey);
         if (scan == 0) { InputFailed?.Invoke(); return; }
-        bool paste = scan == 0x2f && (e.KeyModifiers & KeyModifiers.Control) != 0;
+        bool paste = (scan == 0x2f && (e.KeyModifiers & KeyModifiers.Control) != 0) ||
+            (scan == 0x152 && (e.KeyModifiers & KeyModifiers.Shift) != 0);
         if (Send(new(RdpInputKind.KeyDown, scan, SynchronizeClipboard: paste))) _keys.Add(scan); // Repeats are sent, only release tracking is deduplicated.
         e.Handled = true;
     }

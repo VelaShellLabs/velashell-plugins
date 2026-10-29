@@ -29,6 +29,11 @@ internal sealed partial class RdpWorkspaceView : UserControl
         Desktop.ScaleMode = document.ScaleMode;
         Desktop.Updated += Refresh;
         Desktop.InputFailed += SurfaceInputFailed;
+        Desktop.ClipboardFailed += () =>
+        {
+            if (_localErrorKey != "Rdp_SendInputError") _localErrorKey = "Rdp_ClipboardError";
+            Refresh();
+        };
         EndpointText.Text = document.Endpoint;
         SetScale(document.ScaleMode);
         Refresh();
