@@ -14,6 +14,10 @@ internal sealed class RdpSessionFactory : IRdpSessionFactory
     public static RdpSessionFactory Instance { get; } = new();
     public async Task<IRdpSession> ConnectAsync(RdpConnectionOptions options, RdpCredentials credentials, CancellationToken cancellationToken = default)
     {
+        if (options.Drives.Count != 0 && (!OperatingSystem.IsWindows() || !RdpClipboardNative.IsAvailable))
+            throw new ProtocolUnsupportedException("Drive redirection requires the Windows RDP native extension.");
+        if (options.RedirectClipboard && !RdpClipboardNative.IsAvailable)
+            throw new ProtocolUnsupportedException("The installed RDP native library does not support clipboard redirection.");
         RdpLimits.DesktopBytes(options.DesktopWidth, options.DesktopHeight);
         if (options.ConnectTimeout < TimeSpan.FromSeconds(1) || options.ConnectTimeout > TimeSpan.FromMinutes(2))
             throw new ProtocolConnectionException("The RDP connection timeout must be between 1 and 120 seconds.");
@@ -45,6 +49,8 @@ internal sealed class RdpSessionFactory : IRdpSessionFactory
             builder.SetPerformanceFlags(performance);
             using var config = builder.Build();
             using var connector = ClientConnector.New(config, tcp.Client.LocalEndPoint!.ToString()!);
+            if (options.RedirectClipboard) RdpClipboardNative.Attach(connector);
+            if (options.Drives.Count != 0) RdpDriveNative.Attach(connector, options.Drives);
             using var output = WriteBuf.New();
             // Offer only HYBRID, never TLS-only/legacy RDP or automatic fallback.
             byte[] initial;
@@ -96,7 +102,7 @@ internal sealed class RdpSessionFactory : IRdpSessionFactory
             RdpLimits.DesktopBytes(width, height);
             image = DecodedImage.New(PixelFormat.RgbA32, checked((ushort)width), checked((ushort)height));
             active = ActiveStage.New(result); // Consumes the result's Rust value, not the owning wrapper.
-            var session = new RdpSession(tcp, tls, active, image, width, height);
+            var session = new RdpSession(tcp, tls, active, image, width, height, options.RedirectClipboard, options.Drives.Count != 0);
             transferred = true;
             active = null; image = null; tls = null;
             return session;

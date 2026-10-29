@@ -18,6 +18,8 @@ internal sealed class RdpDesktopSurface : Control
     private const int MaximumFrameBytes = 128 * 1024 * 1024;
     private IRdpSession? _session;
     private RdpInputQueue? _input;
+    private RdpClipboardBinding? _clipboardBinding;
+    internal void QueueClipboardFocus(bool focused) => _input?.Enqueue(new(RdpInputKind.ClipboardFocus, X: focused ? 1 : 0));
     private readonly HashSet<ushort> _keys = [];
     private readonly HashSet<RdpMouseButton> _buttons = [];
     private IPointer? _captured;
@@ -70,6 +72,8 @@ internal sealed class RdpDesktopSurface : Control
         if (ReferenceEquals(_session, session)) return;
         Unsubscribe();
         ReleaseInput();
+        _clipboardBinding?.Dispose();
+        _clipboardBinding = session is null ? null : new(this, session);
         _session = session;
         long generation = ++_bindingGeneration;
         CanInput = false;
@@ -82,7 +86,12 @@ internal sealed class RdpDesktopSurface : Control
                 ReleaseInput();
                 InputFailed?.Invoke();
             });
-        });
+        }, _clipboardBinding is { } binding ? binding.PrepareAsync : null);
+        if (_attached)
+        {
+            _clipboardBinding?.Attach();
+            if (_window?.IsActive != false) _clipboardBinding?.Resume();
+        }
         if (session is not null) ClearBitmap();
         _pointer = null;
         ResetCursor();
@@ -95,10 +104,16 @@ internal sealed class RdpDesktopSurface : Control
     {
         base.OnAttachedToVisualTree(e);
         _attached = true;
+        _clipboardBinding?.Attach();
         _topLevel = TopLevel.GetTopLevel(this);
         if (_topLevel is not null) _topLevel.ScalingChanged += ScalingChanged;
         _window = _topLevel as Window;
-        if (_window is not null) _window.Deactivated += WindowDeactivated;
+        if (_window is not null)
+        {
+            _window.Deactivated += WindowDeactivated;
+            _window.Activated += WindowActivated;
+        }
+        if (_window?.IsActive != false) _clipboardBinding?.Resume();
         Subscribe();
         ScheduleUpdate(); // Initial frame/status/pointer do not depend on receiving a notification.
     }
@@ -106,9 +121,15 @@ internal sealed class RdpDesktopSurface : Control
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _attached = false;
+        QueueClipboardFocus(false);
+        _clipboardBinding?.Detach();
         Unsubscribe();
         if (_topLevel is not null) _topLevel.ScalingChanged -= ScalingChanged;
-        if (_window is not null) _window.Deactivated -= WindowDeactivated;
+        if (_window is not null)
+        {
+            _window.Deactivated -= WindowDeactivated;
+            _window.Activated -= WindowActivated;
+        }
         _window = null;
         _topLevel = null;
         ReleaseInput();
@@ -139,7 +160,12 @@ internal sealed class RdpDesktopSurface : Control
     private void StatusNotification(RdpSessionStatus _) => ScheduleUpdate();
     private void PointerNotification(RdpPointer _) => ScheduleUpdate();
     private void ScalingChanged(object? sender, EventArgs e) { UpdateExtent(); InvalidateVisual(); }
-    private void WindowDeactivated(object? sender, EventArgs e) => ReleaseInput();
+    private void WindowActivated(object? sender, EventArgs e) => _clipboardBinding?.Resume();
+    private void WindowDeactivated(object? sender, EventArgs e)
+    {
+        _clipboardBinding?.Suspend();
+        ReleaseInput();
+    }
 
     private void ScheduleUpdate()
     {
@@ -284,7 +310,8 @@ internal sealed class RdpDesktopSurface : Control
         if (!CanInput) return;
         ushort scan = RdpInputMapper.ScanCode(e.PhysicalKey);
         if (scan == 0) { InputFailed?.Invoke(); return; }
-        if (Send(new(RdpInputKind.KeyDown, scan))) _keys.Add(scan); // Repeats are sent, only release tracking is deduplicated.
+        bool paste = scan == 0x2f && (e.KeyModifiers & KeyModifiers.Control) != 0;
+        if (Send(new(RdpInputKind.KeyDown, scan, SynchronizeClipboard: paste))) _keys.Add(scan); // Repeats are sent, only release tracking is deduplicated.
         e.Handled = true;
     }
     private void KeyReleased(object? sender, KeyEventArgs e)

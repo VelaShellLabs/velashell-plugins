@@ -90,6 +90,26 @@ public sealed class RdpViewportInputTests
     }
 
     [TestMethod]
+    public async Task FocusLossDuringClipboardPreparationDropsThePendingPasteKey()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prepared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var session = new RdpUiFakeSession();
+        var queue = new RdpInputQueue(session, () => Assert.Fail("Unexpected input failure."), input =>
+        {
+            if (!input.SynchronizeClipboard) return Task.CompletedTask;
+            entered.TrySetResult();
+            return prepared.Task;
+        });
+        queue.Enqueue(new(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        queue.Enqueue(new(RdpInputKind.ReleaseAll));
+        prepared.SetResult();
+        await queue.Drained.WaitAsync(TimeSpan.FromSeconds(3));
+        CollectionAssert.AreEqual(new[] { RdpInputKind.ReleaseAll }, session.Inputs.Select(x => x.Kind).ToArray());
+    }
+
+    [TestMethod]
     public async Task QueueFailureAttemptsReleaseThenDisconnectAndObservesCleanup()
     {
         var session = new RdpUiFakeSession

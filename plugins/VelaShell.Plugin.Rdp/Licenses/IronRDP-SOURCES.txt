@@ -13,8 +13,13 @@ crates/ironrdp-egfx/THIRD_PARTY_NOTICES at that same commit. Its OpenH264
 integration conditions are conditional; retaining this notice does not
 assert that this plugin enables H.264 or bundles a Cisco OpenH264 binary.
 
-The managed bridge and native binaries are redistributed unmodified from
-NuGet. This records inspected upstream notices, not a legal audit or an
-exhaustive license inventory of the Rust dependencies statically linked
-into upstream native binaries. No audio, clipboard, drive/printer,
-gateway, RemoteApp or multi-monitor capability is enabled by this plugin.
+The managed bridge and baseline native binaries are redistributed from NuGet.
+When native/artifacts/win-x64/native/DevolutionsIronRdp.dll is present, the Windows
+x64 binary is replaced by a build of the same commit with the source changes
+recorded in native/ironrdp-redirection.patch and native/vela_clipboard.rs.
+The extension adds a bounded raw text clipboard channel, Windows initial logical
+volume configuration using ironrdp-rdpdr-native, deferred drive completion polling,
+and a static-channel reassembly budget. It does not enable audio, printer,
+gateway, RemoteApp or multi-monitor capabilities. Original license notices remain.
+This records inspected upstream notices, not a legal audit or an exhaustive
+license inventory of statically linked Rust dependencies.

@@ -2,6 +2,8 @@
   <PropertyGroup>
     <Description>Embedded cross-platform RDP desktop workspace using TLS and NLA.</Description>
     <VelaPluginId>velashell.rdp</VelaPluginId>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <VelaRdpNativeRoot Condition="'$(VelaRdpNativeRoot)' == ''">$(MSBuildThisFileDirectory)native/artifacts</VelaRdpNativeRoot>
     <NoWarn>$(NoWarn);AVLN3001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
@@ -16,7 +18,7 @@
   <Target Name="SelectRdpDesktopNativeAssets" AfterTargets="ResolveReferences" BeforeTargets="GetCopyToOutputDirectoryItems">
     <ItemGroup>
       <Content Remove="$(PkgDevolutions_IronRdp)/runtimes/**" />
-      <Content Include="$(PkgDevolutions_IronRdp)/runtimes/win-x64/native/DevolutionsIronRdp.dll" Link="runtimes/win-x64/native/DevolutionsIronRdp.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="$(PkgDevolutions_IronRdp)/runtimes/win-x64/native/DevolutionsIronRdp.dll" Link="runtimes/win-x64/native/DevolutionsIronRdp.dll" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
       <Content Include="$(PkgDevolutions_IronRdp)/runtimes/win-arm64/native/DevolutionsIronRdp.dll" Link="runtimes/win-arm64/native/DevolutionsIronRdp.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="$(PkgDevolutions_IronRdp)/runtimes/linux-x64/native/libDevolutionsIronRdp.so" Link="runtimes/linux-x64/native/libDevolutionsIronRdp.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="$(PkgDevolutions_IronRdp)/runtimes/linux-arm64/native/libDevolutionsIronRdp.so" Link="runtimes/linux-arm64/native/libDevolutionsIronRdp.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -25,6 +27,11 @@
       <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '[/\\]runtimes[/\\](android-|ios|osx-universal)'))" />
       <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '[/\\]runtimes[/\\](android-|ios|osx-universal)'))" />
       <RuntimeCopyLocalItems Remove="@(RuntimeCopyLocalItems)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '[/\\]runtimes[/\\](android-|ios|osx-universal)'))" />
+    </ItemGroup>
+    <ItemGroup Condition="Exists('$(VelaRdpNativeRoot)/win-x64/native/DevolutionsIronRdp.dll')">
+      <Content Remove="$(PkgDevolutions_IronRdp)/runtimes/win-x64/native/DevolutionsIronRdp.dll" />
+      <Content Include="$(VelaRdpNativeRoot)/win-x64/native/DevolutionsIronRdp.dll" Link="runtimes/win-x64/native/DevolutionsIronRdp.dll" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+      <RuntimeCopyLocalItems Remove="@(RuntimeCopyLocalItems)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '[/\\]runtimes[/\\]win-x64[/\\]native[/\\]DevolutionsIronRdp.dll$'))" />
     </ItemGroup>
   </Target>
 </Project>

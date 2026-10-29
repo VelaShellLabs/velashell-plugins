@@ -53,7 +53,11 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             credentials = new(Username, request.Password, Domain);
             var options = new RdpConnectionOptions(request.Host, request.Port,
                 request.Tunnel?.TargetHost ?? request.Host, request.Tunnel?.TargetPort ?? request.Port,
-                settings.DesktopWidth, settings.DesktopHeight, TimeSpan.FromMilliseconds(settings.ConnectTimeoutMs), settings.TrustedThumbprint);
+                settings.DesktopWidth, settings.DesktopHeight, TimeSpan.FromMilliseconds(settings.ConnectTimeoutMs), settings.TrustedThumbprint)
+            {
+                RedirectClipboard = settings.RedirectClipboard,
+                Drives = settings.Drives
+            };
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
             _context.Shutdown.ThrowIfCancellationRequested();
             try { session = await _factory.ConnectAsync(options, credentials, linked.Token).ConfigureAwait(false); }
