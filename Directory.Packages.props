@@ -47,10 +47,6 @@
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->
     <PackageVersion Include="StackExchange.Redis" Version="4.0.127-alpha" />
   </ItemGroup>
-  <ItemGroup Label="RDP 插件">
-    <!-- MIT/Apache-2.0; 托管桥与六种桌面 RID 原生库随插件分发。 -->
-    <PackageVersion Include="Devolutions.IronRdp" Version="2026.10.19" />
-  </ItemGroup>
   <ItemGroup Label="MongoDB 插件">
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发(连同它带的
          MongoDB.Bson / DnsClient / SharpCompress / Snappier / ZstdSharp)。
