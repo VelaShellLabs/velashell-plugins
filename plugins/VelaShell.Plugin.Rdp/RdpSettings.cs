@@ -17,6 +17,8 @@ internal sealed record RdpSettings
     public int ConnectTimeoutMs { get; init; } = 15000;
     public string TrustedThumbprint { get; init; } = "";
     public string JumpSessionId { get; init; } = "";
+    public bool RedirectClipboard { get; init; }
+    public IReadOnlyList<Engine.RdpDriveMapping> Drives { get; init; } = Array.Empty<Engine.RdpDriveMapping>();
 
     public static RdpSettings From(WorkspaceConnectRequest request, Loc loc)
     {
@@ -52,7 +54,9 @@ internal sealed record RdpSettings
             ScaleMode = scale switch { "fit" => RdpScaleMode.Fit, "actual" => RdpScaleMode.Actual, _ => throw Invalid(loc, "scaleMode") },
             ConnectTimeoutMs = ParseInt(request, "connectTimeout", 15000, 1000, 120000, loc),
             TrustedThumbprint = pin.ToUpperInvariant(),
-            JumpSessionId = jump
+            JumpSessionId = jump,
+            RedirectClipboard = ParseBool(request, "redirectClipboard", false, loc),
+            Drives = ParseDrives(Get(request, "redirectDrives"), ParseBool(request, "drivesReadOnly", true, loc), loc)
         };
     }
 
@@ -108,8 +112,35 @@ internal sealed record RdpSettings
         new() { Key = "scaleMode", Label = loc["Rdp_Scale"], Kind = ProtocolSettingKind.Choice, DefaultValue = "fit", IsAdvanced = true,
             Choices = (ProtocolSettingChoice[])[new("fit", loc["Rdp_ScaleFit"]), new("actual", loc["Rdp_ScaleActual"])] },
         new() { Key = "connectTimeout", Label = loc["Rdp_ConnectTimeout"], Kind = ProtocolSettingKind.Integer, DefaultValue = "15000", IsAdvanced = true },
+        new() { Key = "redirectClipboard", Label = loc["Rdp_Clipboard"], Hint = loc["Rdp_ClipboardHint"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "false", IsAdvanced = true },
+        new() { Key = "redirectDrives", Label = loc["Rdp_Drives"], Hint = loc["Rdp_DrivesHint"], DefaultValue = "", IsAdvanced = true },
+        new() { Key = "drivesReadOnly", Label = loc["Rdp_DrivesReadOnly"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "true", IsAdvanced = true },
         new() { Key = TrustedThumbprintKey, Label = "TLS SHA-256", IsHidden = true }
     ];
+
+    internal static Engine.RdpDriveMapping[] ParseDrives(string raw, bool readOnly, Loc loc)
+    {
+        if (raw.Length > 256) throw Invalid(loc, "redirectDrives");
+        if (string.IsNullOrWhiteSpace(raw)) return [];
+        var drives = new List<Engine.RdpDriveMapping>();
+        var letters = new HashSet<char>();
+        foreach (string part in raw.Split(';'))
+        {
+            string root = part.Trim();
+            if (root.Length != 3 || !char.IsAsciiLetter(root[0]) || root[1] != ':' || root[2] != '\\')
+                throw Invalid(loc, "redirectDrives");
+            char letter = char.ToUpperInvariant(root[0]);
+            if (!letters.Add(letter)) throw Invalid(loc, "redirectDrives");
+            drives.Add(new((uint)(letter - 'A' + 1), letter.ToString(), $"{letter}:\\", readOnly));
+        }
+        return drives.ToArray();
+    }
+
+    private static bool ParseBool(WorkspaceConnectRequest request, string key, bool fallback, Loc loc)
+    {
+        if (!request.Settings.TryGetValue(key, out string? raw)) return fallback;
+        return bool.TryParse(raw, out bool value) ? value : throw Invalid(loc, key);
+    }
 
     private static string Get(WorkspaceConnectRequest request, string key, string fallback = "") =>
         request.Settings.TryGetValue(key, out string? value) ? value : fallback;

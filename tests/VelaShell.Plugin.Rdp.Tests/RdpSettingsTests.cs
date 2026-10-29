@@ -22,7 +22,9 @@ public sealed class RdpSettingsTests
         Assert.AreEqual(15000, settings.ConnectTimeoutMs);
         Assert.AreEqual(RdpScaleMode.Fit, settings.ScaleMode);
         var fields = RdpSettings.Declare(English);
-        Assert.HasCount(7, fields);
+        Assert.HasCount(10, fields);
+        Assert.IsFalse(settings.RedirectClipboard);
+        Assert.HasCount(0, settings.Drives);
         Assert.AreEqual("1280", fields.Single(f => f.Key == "desktopWidth").DefaultValue);
         Assert.AreEqual("720", fields.Single(f => f.Key == "desktopHeight").DefaultValue);
         Assert.AreEqual("15000", fields.Single(f => f.Key == "connectTimeout").DefaultValue);
@@ -50,6 +52,36 @@ public sealed class RdpSettingsTests
     [DataRow("jumpSession", "a\nb")]
     public void InvalidSettingsAreRejectedInsteadOfClamped(string key, string value) =>
         Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((key, value)), English));
+
+    [TestMethod]
+    public void DriveSelectionIsExplicitNormalizedAndReadOnlyByDefault()
+    {
+        var settings = RdpSettings.From(Request(("redirectDrives", "d:\\;E:\\"), ("redirectClipboard", "true")), English);
+        Assert.IsTrue(settings.RedirectClipboard);
+        Assert.HasCount(2, settings.Drives);
+        Assert.AreEqual("D:\\", settings.Drives[0].Root);
+        Assert.AreEqual(4u, settings.Drives[0].DeviceId);
+        Assert.IsTrue(settings.Drives.All(d => d.ReadOnly));
+        var writable = RdpSettings.From(Request(("redirectDrives", "D:\\"), ("drivesReadOnly", "false")), English);
+        Assert.IsFalse(writable.Drives[0].ReadOnly);
+    }
+
+    [TestMethod]
+    [DataRow("C:\\folder")]
+    [DataRow("C:")]
+    [DataRow("C:/")]
+    [DataRow("*")]
+    [DataRow("\\\\server\\share")]
+    [DataRow("C:\\;c:\\")]
+    [DataRow("C:\\;")]
+    public void InvalidDriveSelectionIsRejected(string value) =>
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request(("redirectDrives", value)), English));
+
+    [TestMethod]
+    [DataRow("redirectClipboard")]
+    [DataRow("drivesReadOnly")]
+    public void InvalidRedirectionBooleanIsRejected(string key) =>
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((key, "yes")), English));
 
     [TestMethod]
     public void Sha256PinAcceptsDisplaySeparatorsButNotSha1()

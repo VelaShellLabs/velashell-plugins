@@ -3,7 +3,7 @@ using VelaShell.Plugin.Rdp.Engine;
 namespace VelaShell.Plugin.Rdp.Ui;
 
 /// <summary>A bounded UI-side producer. Only this worker awaits the engine's bounded input channel.</summary>
-internal sealed class RdpInputQueue(IRdpSession session, Action failed)
+internal sealed class RdpInputQueue(IRdpSession session, Action failed, Func<RdpInput, Task>? prepare = null)
 {
     private const int Capacity = 128;
     private readonly Lock _gate = new();
@@ -11,6 +11,7 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed)
     private TaskCompletionSource _drained = Completed();
     private bool _running;
     private bool _failed;
+    private long _resetVersion;
     public Task Drained { get { lock (_gate) return _drained.Task; } }
 
     public bool Enqueue(RdpInput input)
@@ -22,6 +23,7 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed)
             if (input.Kind == RdpInputKind.ReleaseAll)
             {
                 // Drop unsent downs/moves as one atomic reset, never drop the reset itself.
+                _resetVersion++;
                 _queue.Clear();
             }
             else if (input.Kind == RdpInputKind.PointerMove && _queue.Last?.Value.Kind == RdpInputKind.PointerMove)
@@ -31,6 +33,7 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed)
             }
             else if (_queue.Count >= Capacity)
             {
+                _resetVersion++;
                 _queue.Clear();
                 input = new(RdpInputKind.ReleaseAll);
                 _failed = true; // Require an explicit reconnect after overflow, never resume a partial chord.
@@ -53,6 +56,7 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed)
         while (true)
         {
             RdpInput input;
+            long resetVersion;
             lock (_gate)
             {
                 if (_queue.First is null)
@@ -62,10 +66,16 @@ internal sealed class RdpInputQueue(IRdpSession session, Action failed)
                     return;
                 }
                 input = _queue.First.Value;
+                resetVersion = _resetVersion;
                 _queue.RemoveFirst();
             }
             try
             {
+                if (prepare is not null) await prepare(input).ConfigureAwait(false);
+                lock (_gate)
+                {
+                    if (input.Kind != RdpInputKind.ReleaseAll && resetVersion != _resetVersion) continue;
+                }
                 // In particular, focus-loss releases must not use a cancelled UI lifetime token.
                 await session.SendInputAsync(input, CancellationToken.None).ConfigureAwait(false);
             }

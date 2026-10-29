@@ -18,7 +18,7 @@
 ## 功能
 
 - 在宿主标签页中显示远程桌面，支持适应窗口和物理像素 1:1 本地缩放。
-- 配置主机、端口、域、账号密码、初始桌面分辨率与连接超时。
+- 配置主机、端口、域、账号密码、初始桌面分辨率与连接超时；高级设置可显式启用文本剪贴板与只读 Windows 盘符映射。
 - 通过 TLS + NLA/CredSSP 认证；当前使用密码 NTLM，不提供 Kerberos、SSO 或智能卡认证。
 - 物理键盘扫描码、重复按键、左右修饰键、扩展键、鼠标拖动、双轴滚轮与 X1/X2 按钮。
 - 通过工具栏发送 Ctrl+Alt+Del，主动断开或显式重连。
@@ -26,7 +26,19 @@
 - 复用宿主的 SSH 跳板会话与本地端口转发。
 - 跟随宿主主题及语言切换，更新描述符时保留同一个 provider，不关闭现有文档。
 
-首版**不包含**剪贴板同步、音频、磁盘/打印机重定向、RD Gateway、RemoteApp、多显示器、远端动态分辨率及 IME/Unicode 输入。本地缩放不会改变远端桌面分辨率。
+当前**不包含**音频、打印机重定向、图片/文件剪贴板、RD Gateway、RemoteApp、多显示器、远端动态分辨率及 IME/Unicode 输入。本地缩放不会改变远端桌面分辨率。文本剪贴板与静态磁盘映射需要下述原生扩展，尚不等同于 mstsc 完整功能。
+
+### 重定向扩展进度（2026-10-29）
+
+已接入固定版本 IronRDP 原生扩展：
+
+- Windows x64 静态 RDPDR 初始盘映射：配置格式为 `D:\;E:\`，默认关闭、默认只读；只接受完整逻辑盘根，不接受文件夹、UNC 或动态热插拔。Rust 后端保留根句柄、执行相对路径约束和只读检查；网络会话泵每 50ms 排出延迟文件 I/O 完成。
+- 文本 CLIPRDR：只在远程桌面控件取得焦点时同步文本；Ctrl+V 的按键包会先等待本地剪贴板公告 ACK，再发送给远端。远程文本回写只在焦点仍属于当前会话时执行，失焦、窗口停用、断线和重新挂载会使旧回调失效。图片、文件剪贴板仍不支持。
+- 原生补丁和 `native/Build-Native.ps1` 固定到 IronRDP 提交 `1f69e124e6bf85608efce3495c12eaf5f6b5a95d`；Windows x64 Release 测试库 SHA-256 为 `100EC7E145C4CEFD77D5311B972248BC5C28D351954B751EFDB2DADABBBA8B64`。构建脚本要求新临时目录，不覆盖已有源码。
+
+协议状态机仍保留 2 MiB 文本、64 KiB 控制/格式列表、1024 格式及 12 条出站 FIFO 限制；溢出显式故障并清零队列。
+
+本次正确性回归为 **152/152 通过，零失败/跳过**（含状态机、设置、原生 ABI 和 Headless Ctrl+V 顺序、失焦及重复文本用例，不含手动性能分类），关闭 runtime-async 的非增量构建为零警告、零错误。原生静态通道测试 **10/10 通过**，含 16 MiB 分片重组边界用例。原生 Rust Release 构建保留一条上游 `unfulfilled_lint_expectations` 警告；这不影响插件托管构建，但仍需上游自行修正。真实远端 Windows 桌面、磁盘 I/O、剪贴板互操作和吞吐仍未验收。
 
 ## 安装与连接
 
@@ -65,6 +77,9 @@
 | 本地缩放 `scaleMode` | `fit` | 高级；`fit` 适应窗口，`actual` 为物理像素 1:1，可滚动查看 |
 | 连接超时 `connectTimeout` | `15000` | 高级，1000–120000 毫秒，覆盖连接握手与首次激活 |
 | 已信任指纹 `trustedThumbprint` | 空 | 隐藏字段，由宿主确认后保存 SHA-256 指纹，不是跳过校验开关 |
+| `redirectClipboard` | `false` | 高级；仅焦点窗口的文本剪贴板，要求原生扩展 |
+| `redirectDrives` | 空 | 高级；完整盘符根列表，如 `D:\;E:\`，空值关闭 |
+| `drivesReadOnly` | `true` | 高级；共享磁盘默认只读 |
 
 高分辨率会增加原生解码、双缓冲与界面位图的内存占用。界面将托管帧直接复制到锁定的位图，不保留额外的 UI 全帧数组；两份托管帧与一份位图在 1080p / 4K 下分别约占 23.73 / 94.92 MiB（RGBA32，不含对齐、原生图像、图形后端及重分配峰值）。插件限制协商尺寸与单帧大小，不是整个进程或多会话总内存的硬上限，也不能完全约束第三方原生解码器的内部峰值。
 
@@ -167,7 +182,17 @@ dotnet test tests/VelaShell.Plugin.Rdp.Tests -c Debug --no-restore -p:VelaDevApp
 
 ### 原生依赖分发
 
-插件工程只从正式 NuGet 恢复依赖，不引用 SDK 源码项目，也不创建本地 SDK 包。上游构建目标按构建机操作系统复制资源，因此本工程局部补齐六种桌面 RID：
+插件托管桥仍从正式 NuGet 恢复，不引用 SDK 源码项目，也不创建本地 SDK 包。原生重定向扩展单独从固定上游提交构建；`native/artifacts` 是忽略入库的本地产物，缺少它时仍复制 NuGet 的原始 Windows x64 库，开启重定向会明确失败，而不是假装可用。其他五个 RID 当前仍使用 NuGet 原始库，不具备这些新增扩展。
+
+Windows x64 构建扩展需要 Rust MSVC 工具链和 Visual C++ 构建工具：
+
+```powershell
+# WorkRoot 必须尚不存在，父目录须存在；默认 Release，使用 --locked 依赖。
+./plugins/VelaShell.Plugin.Rdp/native/Build-Native.ps1 -WorkRoot "$env:TEMP/vela-rdp-build-new"
+dotnet build plugins/VelaShell.Plugin.Rdp -c Release -t:PackVpx -p:VelaDevAppDir= -p:VELASHELL_DEV_APP_DIR=
+```
+
+构建不会修改 NuGet 缓存。`VelaRdpNativeRoot` 可指向另一份按 RID 布局的扩展输出，插件只替换 `win-x64` 对应文件。上游构建目标按构建机操作系统复制资源，因此本工程局部补齐六种桌面 RID：
 
 ```text
 runtimes/win-x64/native/DevolutionsIronRdp.dll

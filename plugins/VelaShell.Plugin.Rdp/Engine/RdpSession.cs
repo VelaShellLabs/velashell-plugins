@@ -7,8 +7,35 @@ using VelaShell.PluginSdk.Protocols;
 
 namespace VelaShell.Plugin.Rdp.Engine;
 
-internal sealed class RdpSession : IRdpSession
+internal sealed class RdpSession : IRdpSession, IRdpClipboardSession
 {
+    private readonly RdpClipboardState? _clipboard;
+    private readonly bool _drives;
+    private RdpClipboardRemoteTextRequest? _clipboardRequest;
+    private volatile bool _clipboardFocused;
+    private long _clipboardEpoch;
+    private long _clipboardRequestEpoch;
+    private long _clipboardProcessedEpoch;
+    private bool _remoteTextNeeded;
+    private string? _remoteText;
+    private TaskCompletionSource<bool>? _clipboardCompletion;
+    public async Task<bool> SynchronizeClipboardAsync(string? text, CancellationToken cancellationToken)
+    {
+        if (!ClipboardEnabled || !_clipboardFocused || Status.State != RdpSessionState.Connected) return false;
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        long epoch = Volatile.Read(ref _clipboardEpoch);
+        await SendInputAsync(new(RdpInputKind.ClipboardText, Text: text, ClipboardCompletion: completion, ClipboardEpoch: epoch), cancellationToken).ConfigureAwait(false);
+        return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+    public bool ClipboardEnabled => _clipboard is not null;
+    public event System.Action<string>? RemoteTextAvailable;
+    public void SetClipboardFocus(bool focused)
+    {
+        _clipboardFocused = focused;
+        Interlocked.Increment(ref _clipboardEpoch);
+        if (!focused) Interlocked.Exchange(ref _remoteText, null);
+        RequestRefresh();
+    }
     private readonly TcpClient _tcp;
     private readonly SslStream _stream;
     private readonly ActiveStage? _active;
@@ -43,16 +70,18 @@ internal sealed class RdpSession : IRdpSession
     public event System.Action<RdpSessionStatus>? StatusChanged;
     public event System.Action<RdpPointer>? PointerChanged;
 
-    public RdpSession(TcpClient tcp, SslStream stream, ActiveStage active, DecodedImage image, int width, int height)
-        : this(tcp, stream, active, image, width, height, Task.CompletedTask) { }
+    public RdpSession(TcpClient tcp, SslStream stream, ActiveStage active, DecodedImage image, int width, int height, bool clipboard = false, bool drives = false)
+        : this(tcp, stream, active, image, width, height, Task.CompletedTask, clipboard, drives) { }
 
     // Offline lifetime tests delay the real pump before its first (deliberately unauthenticated) read.
     // No protocol operation is legal without an ActiveStage; production always supplies one.
     internal RdpSession(SslStream stream, DecodedImage image, int width, int height, Task start)
         : this(new TcpClient(), stream, null, image, width, height, start) { }
 
-    private RdpSession(TcpClient tcp, SslStream stream, ActiveStage? active, DecodedImage image, int width, int height, Task start)
+    private RdpSession(TcpClient tcp, SslStream stream, ActiveStage? active, DecodedImage image, int width, int height, Task start, bool clipboard = false, bool drives = false)
     {
+        _drives = drives;
+        if (clipboard) { _clipboard = new(); _clipboard.Enable(); }
         _tcp = tcp; _stream = stream; _active = active; _image = image;
         _stopToken = _stop.Token;
         _frames = new(width, height, RequestRefresh);
@@ -157,6 +186,8 @@ internal sealed class RdpSession : IRdpSession
         Task<byte[]>? read = null;
         Task<bool>? ready = null;
         Task<bool>? wake = null;
+        using var driveTimer = _drives ? new PeriodicTimer(TimeSpan.FromMilliseconds(50)) : null;
+        Task<bool>? driveTick = null;
         bool preferNetwork = true;
         try
         {
@@ -166,13 +197,23 @@ internal sealed class RdpSession : IRdpSession
                 read ??= RdpFraming.ReadRdpAsync(_stream, _stopToken);
                 ready ??= _inputs.Reader.WaitToReadAsync(_stopToken).AsTask();
                 wake ??= _wake.Reader.WaitToReadAsync(_stopToken).AsTask();
+                if (driveTimer is not null) driveTick ??= driveTimer.WaitForNextTickAsync(_stopToken).AsTask();
                 if (!read.IsCompleted && !ready.IsCompleted && !wake.IsCompleted)
-                    await Task.WhenAny(read, ready, wake).ConfigureAwait(false);
+                {
+                    if (driveTick is null) await Task.WhenAny(read, ready, wake).ConfigureAwait(false);
+                    else await Task.WhenAny(read, ready, wake, driveTick).ConfigureAwait(false);
+                }
+                if (driveTick?.IsCompleted == true)
+                {
+                    bool tick = await driveTick.ConfigureAwait(false); driveTick = null;
+                    if (tick) await RdpSessionFactory.WritePacketAsync(_stream, RdpClipboardNative.PollDrives(_active!), _stopToken).ConfigureAwait(false);
+                }
                 if (wake.IsCompleted)
                 {
                     bool available = await wake.ConfigureAwait(false); wake = null;
                     _wake.Reader.TryRead(out _);
                     if (!available) break;
+                    await FlushClipboardAsync().ConfigureAwait(false);
                 }
                 bool network = SelectNetwork(read.IsCompleted, ready.IsCompleted, ref preferNetwork);
                 if (network)
@@ -191,6 +232,7 @@ internal sealed class RdpSession : IRdpSession
                     await WriteBatchAsync(batch).ConfigureAwait(false);
                     if (batch.Terminate) break;
                     if (batch.Reactivate) await ReactivateAsync().ConfigureAwait(false);
+                    await FlushClipboardAsync().ConfigureAwait(false);
                 }
                 else if (ready.IsCompleted)
                 {
@@ -199,6 +241,25 @@ internal sealed class RdpSession : IRdpSession
                     // A finite batch prevents a flooded input queue from starving network reads.
                     for (int count = 0; count < 32 && _inputs.Reader.TryRead(out var command); count++)
                     {
+                        if (command.Kind is RdpInputKind.ClipboardText or RdpInputKind.ClipboardFocus)
+                        {
+                            if (_clipboard is not null)
+                            {
+                                await FlushClipboardAsync().ConfigureAwait(false);
+                                if (command.Kind == RdpInputKind.ClipboardText)
+                                {
+                                    _clipboardCompletion?.TrySetResult(false);
+                                    _clipboardCompletion = command.ClipboardCompletion;
+                                    if (!_clipboardFocused || command.ClipboardEpoch != Volatile.Read(ref _clipboardEpoch) || !_clipboard.SetLocalText(command.Text))
+                                    {
+                                        _clipboardCompletion?.TrySetResult(false);
+                                        _clipboardCompletion = null;
+                                    }
+                                }
+                                await FlushClipboardAsync().ConfigureAwait(false);
+                            }
+                            continue;
+                        }
                         foreach (var input in Expand(command))
                         {
                             if (input.Kind == RdpInputKind.KeyDown && _keys.Contains(input.ScanCode))
@@ -243,7 +304,79 @@ internal sealed class RdpSession : IRdpSession
             if (read is not null) { try { byte[] leftover = await read.ConfigureAwait(false); CryptographicOperations.ZeroMemory(leftover); } catch (Exception) { /* The terminal pump owns this read's failure. */ } }
             if (ready is not null) { try { await ready.ConfigureAwait(false); } catch (OperationCanceledException) { } }
             if (wake is not null) { try { await wake.ConfigureAwait(false); } catch (OperationCanceledException) { } }
+            if (driveTick is not null) { try { await driveTick.ConfigureAwait(false); } catch (OperationCanceledException) { } }
             _keys.Clear(); _buttons.Clear();
+            _clipboard?.Disable();
+            _clipboardRequest = null;
+            Interlocked.Exchange(ref _remoteText, null);
+            _clipboardCompletion?.TrySetResult(false);
+            _clipboardCompletion = null;
+            while (_inputs.Reader.TryRead(out var pending)) pending.ClipboardCompletion?.TrySetResult(false);
+        }
+    }
+
+    private async Task FlushClipboardAsync()
+    {
+        if (_clipboard is null) return;
+        long epoch = Volatile.Read(ref _clipboardEpoch);
+        if (_clipboardProcessedEpoch != epoch)
+        {
+            _clipboard.SetLocalText(null);
+            _clipboardProcessedEpoch = epoch;
+            _clipboardCompletion?.TrySetResult(false);
+            _clipboardCompletion = null;
+        }
+        byte[]? packet;
+        while ((packet = RdpClipboardNative.Next(_active!)) is not null)
+        {
+            try
+            {
+                var message = RdpClipboardProtocol.Decode(packet);
+                if (message.Type == RdpClipboardProtocol.FormatDataResponse && _clipboardRequest is { } request)
+                {
+                    var result = _clipboard.ReceiveRemoteTextResponse(request, message, out string? text);
+                    _clipboardRequest = null;
+                    if (result == RdpClipboardTextResponseResult.Accepted && _clipboardFocused &&
+                        _clipboardRequestEpoch == Volatile.Read(ref _clipboardEpoch))
+                    {
+                        Interlocked.Exchange(ref _remoteText, text);
+                        _notifications.Writer.TryWrite(true);
+                    }
+                    else if (_clipboardRequestEpoch != Volatile.Read(ref _clipboardEpoch))
+                        _remoteTextNeeded = _clipboard.RemoteOffersUnicodeText;
+                }
+                else
+                {
+                    _clipboard.Receive(message);
+                    if (message.Type == RdpClipboardProtocol.FormatList) _remoteTextNeeded = true;
+                }
+            }
+            finally { CryptographicOperations.ZeroMemory(packet); }
+        }
+        if (_clipboardFocused && _remoteTextNeeded && _clipboardRequest is null && _clipboard.RemoteOffersUnicodeText)
+        {
+            _clipboardRequest = _clipboard.RequestRemoteText();
+            if (_clipboardRequest is not null)
+            {
+                _clipboardRequestEpoch = Volatile.Read(ref _clipboardEpoch);
+                _remoteTextNeeded = false;
+            }
+        }
+        if (_clipboard.IsFaulted) throw new IOException("RDP clipboard queue exceeded its budget.");
+        IReadOnlyList<byte[]> outbound = _clipboard.DrainOutbound();
+        try
+        {
+            foreach (byte[] message in outbound)
+            {
+                byte[] encoded = RdpClipboardNative.Send(_active!, message);
+                await RdpSessionFactory.WritePacketAsync(_stream, encoded, _stopToken).ConfigureAwait(false);
+            }
+        }
+        finally { foreach (byte[] message in outbound) CryptographicOperations.ZeroMemory(message); }
+        if (_clipboardCompletion is not null && (!_clipboardFocused || _clipboard.LocalAdvertisementSettled))
+        {
+            _clipboardCompletion.TrySetResult(_clipboardFocused && _clipboard.LocalAdvertisementAccepted);
+            _clipboardCompletion = null;
         }
     }
     // Selection is independent of WhenAny's parameter ordering. With both queues ready each gets
@@ -453,6 +586,7 @@ internal sealed class RdpSession : IRdpSession
     {
         await foreach (bool unused in _notifications.Reader.ReadAllAsync().ConfigureAwait(false))
         {
+            if (Interlocked.Exchange(ref _remoteText, null) is { } text) NotifySafely(RemoteTextAvailable, text);
             NotifySafely(FrameAvailable);
             if (Interlocked.Exchange(ref _notificationChanges, 0) != 0)
             {

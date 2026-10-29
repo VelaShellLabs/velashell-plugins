@@ -3,8 +3,19 @@ using VelaShell.Plugin.Rdp.Engine;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
-internal sealed class RdpUiFakeSession : IRdpSession
+internal sealed class RdpUiFakeSession : IRdpSession, IRdpClipboardSession
 {
+    public bool ClipboardEnabled { get; set; }
+    public bool ClipboardFocused { get; private set; }
+    public event Action<string>? RemoteTextAvailable;
+    public Func<string?, CancellationToken, Task<bool>>? ClipboardHandler { get; set; }
+    public void SetClipboardFocus(bool focused) => ClipboardFocused = focused;
+    public Task<bool> SynchronizeClipboardAsync(string? text, CancellationToken cancellationToken)
+    {
+        Inputs.Enqueue(new(RdpInputKind.ClipboardText, Text: text));
+        return ClipboardHandler?.Invoke(text, cancellationToken) ?? Task.FromResult(true);
+    }
+    public void NotifyRemoteText(string text) => RemoteTextAvailable?.Invoke(text);
     private byte[] _frame = [];
     public RdpSessionStatus Status { get; private set; } = new(RdpSessionState.Connected);
     public RdpFrameInfo FrameInfo { get; private set; }

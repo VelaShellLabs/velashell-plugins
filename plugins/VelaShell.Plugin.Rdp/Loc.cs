@@ -14,6 +14,11 @@ internal sealed class Loc(string locale)
 
     private static readonly Dictionary<string, string> English = new(StringComparer.Ordinal)
     {
+        ["Rdp_Clipboard"] = "Share text clipboard",
+        ["Rdp_ClipboardHint"] = "Allow text exchange with the focused remote desktop. Requires the native extension; images and file clipboard are not supported.",
+        ["Rdp_Drives"] = "Windows drives to share",
+        ["Rdp_DrivesHint"] = "Explicit full volumes, e.g. D:\\;E:\\. Empty disables sharing. The remote can access the entire selected volume with your local permissions; folders and UNC are unsupported. Requires the Windows native extension.",
+        ["Rdp_DrivesReadOnly"] = "Read-only shared drives",
         ["Rdp_Host"] = "Windows host",
         ["Rdp_User"] = "Username (user, DOMAIN\\user or user@domain)",
         ["Rdp_Password"] = "Password",
@@ -53,6 +58,11 @@ internal sealed class Loc(string locale)
 
     private static readonly Dictionary<string, string> Chinese = new(StringComparer.Ordinal)
     {
+        ["Rdp_Clipboard"] = "共享文本剪贴板",
+        ["Rdp_ClipboardHint"] = "允许与当前取得焦点的远程桌面交换文本。需要原生扩展，不支持图片或文件剪贴板。",
+        ["Rdp_Drives"] = "共享的 Windows 盘符",
+        ["Rdp_DrivesHint"] = "明确选择整个卷，例如 D:\\;E:\\。留空关闭。远端可按你的本地权限访问所选整个卷；不支持文件夹或 UNC，需要 Windows 原生扩展。",
+        ["Rdp_DrivesReadOnly"] = "共享磁盘只读",
         ["Rdp_Host"] = "Windows 主机",
         ["Rdp_User"] = "用户名（user、DOMAIN\\user 或 user@domain）",
         ["Rdp_Password"] = "密码",
