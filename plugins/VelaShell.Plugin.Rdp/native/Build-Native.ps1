@@ -21,10 +21,11 @@ Run 'git' @('-C', $source, 'checkout', '--detach', $commit)
 Run 'git' @('-C', $source, 'apply', '--check', (Join-Path $here 'ironrdp-redirection.patch'))
 Run 'git' @('-C', $source, 'apply', (Join-Path $here 'ironrdp-redirection.patch'))
 Copy-Item (Join-Path $here 'vela_clipboard.rs') (Join-Path $source 'ffi/src/vela_clipboard.rs')
-$args = @('build', '--locked', '--manifest-path', (Join-Path $source 'ffi/Cargo.toml'), '--target', 'x86_64-pc-windows-msvc')
+Run 'cargo' @('+1.94.1', 'test', '--locked', '--manifest-path', (Join-Path $source 'ffi/Cargo.toml'), '--target', 'x86_64-pc-windows-msvc', 'vela_clipboard::tests')
+$args = @('+1.94.1', 'build', '--locked', '--manifest-path', (Join-Path $source 'ffi/Cargo.toml'), '--target', 'x86_64-pc-windows-msvc')
 if ($Profile -eq 'release') { $args += '--release' }
 Run 'cargo' $args
 $destination = Join-Path $here 'artifacts/win-x64/native'
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Copy-Item (Join-Path $source "target/x86_64-pc-windows-msvc/$Profile/ironrdp.dll") (Join-Path $destination 'DevolutionsIronRdp.dll')
-Get-FileHash (Join-Path $destination 'DevolutionsIronRdp.dll') -Algorithm SHA256
+& (Join-Path $here 'Test-Native.ps1') -Library (Join-Path $destination 'DevolutionsIronRdp.dll')

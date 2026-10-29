@@ -14,6 +14,10 @@
     <InternalsVisibleTo Include="VelaShell.Plugin.Rdp.Tests" />
     <Content Include="Licenses/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="ValidateRequiredRdpNativeExtension" BeforeTargets="SelectRdpDesktopNativeAssets;PackVpx" Condition="'$(VelaRequireRdpNativeExtension)' == 'true'">
+    <Error Condition="!Exists('$(VelaRdpNativeRoot)/win-x64/native/DevolutionsIronRdp.dll')" Text="The required Windows x64 RDP extension is missing. Run native/Build-Native.ps1 or set VelaRdpNativeRoot; NuGet fallback is not allowed for this build." />
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)native/Test-Native.ps1&quot; -Library &quot;$(VelaRdpNativeRoot)/win-x64/native/DevolutionsIronRdp.dll&quot;" />
+  </Target>
   <!-- The upstream build targets copy only the build machine's OS. The plugin is a six-RID payload. -->
   <Target Name="SelectRdpDesktopNativeAssets" AfterTargets="ResolveReferences" BeforeTargets="GetCopyToOutputDirectoryItems">
     <ItemGroup>

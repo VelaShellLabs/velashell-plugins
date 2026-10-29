@@ -34,11 +34,17 @@
 
 - Windows x64 静态 RDPDR 初始盘映射：配置格式为 `D:\;E:\`，默认关闭、默认只读；只接受完整逻辑盘根，不接受文件夹、UNC 或动态热插拔。Rust 后端保留根句柄、执行相对路径约束和只读检查；网络会话泵每 50ms 排出延迟文件 I/O 完成。
 - 文本 CLIPRDR：只在远程桌面控件取得焦点时同步文本；Ctrl+V 的按键包会先等待本地剪贴板公告 ACK，再发送给远端。远程文本回写只在焦点仍属于当前会话时执行，失焦、窗口停用、断线和重新挂载会使旧回调失效。图片、文件剪贴板仍不支持。
-- 原生补丁和 `native/Build-Native.ps1` 固定到 IronRDP 提交 `1f69e124e6bf85608efce3495c12eaf5f6b5a95d`；Windows x64 Release 测试库 SHA-256 为 `100EC7E145C4CEFD77D5311B972248BC5C28D351954B751EFDB2DADABBBA8B64`。构建脚本要求新临时目录，不覆盖已有源码。
+- 原生补丁和 `native/Build-Native.ps1` 固定到 IronRDP 提交 `1f69e124e6bf85608efce3495c12eaf5f6b5a95d`；Windows x64 Release 测试库 SHA-256 为 `FD3EA8A24328DC0075CCAC2F37DE22AF64A4071D47D98CBD3A0741EA5BCC5BAF`。构建脚本要求新临时目录，不覆盖已有源码。
 
 协议状态机仍保留 2 MiB 文本、64 KiB 控制/格式列表、1024 格式及 12 条出站 FIFO 限制；溢出显式故障并清零队列。
 
-本次正确性回归为 **152/152 通过，零失败/跳过**（含状态机、设置、原生 ABI 和 Headless Ctrl+V 顺序、失焦及重复文本用例，不含手动性能分类），关闭 runtime-async 的非增量构建为零警告、零错误。原生静态通道测试 **10/10 通过**，含 16 MiB 分片重组边界用例。原生 Rust Release 构建保留一条上游 `unfulfilled_lint_expectations` 警告；这不影响插件托管构建，但仍需上游自行修正。真实远端 Windows 桌面、磁盘 I/O、剪贴板互操作和吞吐仍未验收。
+本次阶段一 A 托管正确性回归为 **163/163 通过，零失败/跳过**（含剪贴板拒绝/超时/失焦取消、输入队列、状态机、Headless 与旧用例，不含手动性能分类），关闭 runtime-async 的严格非增量构建为零警告、零错误。Rust 静态通道测试 **2/2 通过**，并已用新构建 DLL 验证故障隔离导出；此前已有原生静态通道测试为 10/10，含 16 MiB 分片重组边界。真实远端 Windows 桌面、磁盘 I/O、剪贴板互操作和吞吐仍未验收。
+
+### 阶段一最新验证边界
+
+托管剪贴板拒绝/读取失败取消本次粘贴，协议同步超时暂停剪贴板至重连，不再通过输入队列断开桌面；Ctrl+V 与 Shift+Insert 的重复按键和失焦取消有回归覆盖。Rust 通道故障隔离源码及新 DLL 已验证。
+
+发布现在除 ABI=1 外还要求 `VelaClipboard_fault_isolation_version() == 1`，防止旧 DLL 被当作完整修复。旧本地 DLL 已被新门禁按预期拒绝。最终严格托管构建零警告/错误；最终回归 **163/163 通过、零跳过**，包含 VPX 正向检查。Rust 构建脚本内的原生静态测试 **2/2 通过**，Release DLL 摘要为 `FD3EA8A24328DC0075CCAC2F37DE22AF64A4071D47D98CBD3A0741EA5BCC5BAF`。未运行 GitHub 工作流或连接真实远端。
 
 ## 安装与连接
 
@@ -184,13 +190,18 @@ dotnet test tests/VelaShell.Plugin.Rdp.Tests -c Debug --no-restore -p:VelaDevApp
 
 插件托管桥仍从正式 NuGet 恢复，不引用 SDK 源码项目，也不创建本地 SDK 包。原生重定向扩展单独从固定上游提交构建；`native/artifacts` 是忽略入库的本地产物，缺少它时仍复制 NuGet 的原始 Windows x64 库，开启重定向会明确失败，而不是假装可用。其他五个 RID 当前仍使用 NuGet 原始库，不具备这些新增扩展。
 
-Windows x64 构建扩展需要 Rust MSVC 工具链和 Visual C++ 构建工具：
+Windows x64 构建扩展需要 Rust MSVC 工具链和 Visual C++ 构建工具；脚本固定使用上游要求的 Rust `1.94.1`：
 
 ```powershell
 # WorkRoot 必须尚不存在，父目录须存在；默认 Release，使用 --locked 依赖。
+rustup toolchain install 1.94.1 --profile minimal --target x86_64-pc-windows-msvc
 ./plugins/VelaShell.Plugin.Rdp/native/Build-Native.ps1 -WorkRoot "$env:TEMP/vela-rdp-build-new"
-dotnet build plugins/VelaShell.Plugin.Rdp -c Release -t:PackVpx -p:VelaDevAppDir= -p:VELASHELL_DEV_APP_DIR=
+dotnet build plugins/VelaShell.Plugin.Rdp -c Release -t:PackVpx -p:VelaDevAppDir= -p:VELASHELL_DEV_APP_DIR= -p:VelaRequireRdpNativeExtension=true
 ```
+
+CI/release 在托管测试前构建扩展并启用 `VelaRequireRdpNativeExtension=true`：缺少 DLL、ABI 不为 1 或缺少重定向导出都会失败，禁止回退。普通开发构建仍可不启用此门禁。打包后设置 `VELA_RDP_VERIFY_VPX` 为最终包路径、`VELA_RDP_EXPECTED_NATIVE` 为本次扩展路径，再运行 `FinalVpxContainsTheVerifiedNativeExtension`；它通过 SDK 读取 VPX，检查六 RID、许可证与共享程序集排除，并提取 win-x64 DLL 校验摘要、加载及导出。未提供包路径时该用例明确跳过。
+
+本次发布门禁已使用重新构建的原生扩展验证：严格非增量托管构建零警告/错误，完整离线正确性回归 **163/163**（含最终 VPX 检查），Rust 剪贴板测试 **2/2**，缺失扩展与旧能力版本的负向门禁也已验证。实际 GitHub 工作流和真实远端互操作仍待验收。
 
 构建不会修改 NuGet 缓存。`VelaRdpNativeRoot` 可指向另一份按 RID 布局的扩展输出，插件只替换 `win-x64` 对应文件。上游构建目标按构建机操作系统复制资源，因此本工程局部补齐六种桌面 RID：
 

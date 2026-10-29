@@ -46,7 +46,10 @@ internal static class RdpClipboardNative
     internal static unsafe byte[]? Next(ActiveStage stage)
     {
         IntPtr packet = Exports.Value!.Next((IntPtr)stage.AsFFI());
-        return packet == IntPtr.Zero ? null : Copy(packet);
+        if (packet == IntPtr.Zero) return null;
+        byte[] bytes = Copy(packet);
+        if (bytes.AsSpan().SequenceEqual("VELAFAT"u8)) throw new IOException("RDP clipboard native state is unavailable.");
+        return bytes;
     }
 
     internal static unsafe byte[] Send(ActiveStage stage, byte[] bytes)
@@ -58,6 +61,10 @@ internal static class RdpClipboardNative
             return Copy(packet);
         }
     }
+
+    // This seven-byte marker is generated only by the bridge, never relayed from the wire
+    // (wire messages shorter than eight bytes fault the channel before enqueue).
+    internal static bool IsChannelFault(ReadOnlySpan<byte> packet) => packet.SequenceEqual("VELACB!"u8);
 
     private static unsafe byte[] Copy(IntPtr pointer)
     {
@@ -73,7 +80,10 @@ internal static class RdpClipboardNative
 internal interface IRdpClipboardSession
 {
     bool ClipboardEnabled { get; }
+    bool ClipboardUnavailable { get; }
+    void PauseClipboard();
     void SetClipboardFocus(bool focused);
     Task<bool> SynchronizeClipboardAsync(string? text, CancellationToken cancellationToken);
     event Action<string>? RemoteTextAvailable;
+    event System.Action? ClipboardFailed;
 }

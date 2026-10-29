@@ -118,6 +118,159 @@ public sealed class RdpHeadlessUiTests
     });
 
     [TestMethod]
+    public void ClipboardFocusRejectionShowsNonfatalLocalizedBanner() => OnUi(async () =>
+    {
+        using var context = new TestPluginContext();
+        var remote = new RdpUiFakeSession { ClipboardEnabled = true, ClipboardHandler = (_, _) => Task.FromResult(false) };
+        remote.SetFrame(4, 2);
+        var document = Document(context, remote);
+        var view = new RdpWorkspaceView(document);
+        var window = new Window { Width = 800, Height = 500, Content = view }; window.Show();
+        try
+        {
+            await Pump();
+            var desktop = Find<RdpDesktopSurface>(view, "Desktop");
+            desktop.Focus(); await Pump(); await desktop.InputDrained; await Pump();
+            Assert.AreEqual(document.Loc["Rdp_ClipboardError"], Find<TextBlock>(view, "ErrorText").Text);
+            Assert.IsTrue(Find<Border>(view, "ErrorBanner").IsVisible);
+            Assert.IsTrue(Find<Button>(view, "CtrlAltDelButton").IsEnabled);
+            window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.None);
+            await desktop.InputDrained;
+            Assert.Contains(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x1e, remote.Inputs);
+            Assert.AreEqual(RdpSessionState.Connected, remote.Status.State);
+        }
+        finally { window.Close(); await document.DisposeAsync(); }
+    });
+
+    [TestMethod]
+    public void ClipboardRejectionCancelsChordRepeatsButOrdinaryInputAndReleasesContinue() => OnUi(async () =>
+    {
+        var remote = new RdpUiFakeSession { ClipboardEnabled = true };
+        remote.SetFrame(4, 2);
+        var desktop = new RdpDesktopSurface(); desktop.SetSession(remote);
+        var window = new Window { Width = 400, Height = 300, Content = desktop };
+        window.Show();
+        try
+        {
+            desktop.Focus(); await Pump(); await desktop.InputDrained;
+            int calls = 0;
+            remote.ClipboardHandler = (_, _) => { calls++; return Task.FromResult(false); };
+            window.KeyPress(Key.LeftCtrl, RawInputModifiers.Control, PhysicalKey.ControlLeft, null);
+            window.KeyPress(Key.V, RawInputModifiers.Control, PhysicalKey.V, "v");
+            window.KeyPress(Key.V, RawInputModifiers.Control, PhysicalKey.V, "v");
+            window.KeyRelease(Key.V, RawInputModifiers.Control, PhysicalKey.V, "v");
+            window.KeyRelease(Key.LeftCtrl, RawInputModifiers.None, PhysicalKey.ControlLeft, null);
+            window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.None);
+            await desktop.InputDrained.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.AreEqual(1, calls);
+            Assert.DoesNotContain(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x2f, remote.Inputs);
+            Assert.Contains(x => x.Kind == RdpInputKind.KeyUp && x.ScanCode == 0x1d, remote.Inputs);
+            Assert.Contains(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x1e, remote.Inputs);
+            window.KeyPress(Key.Insert, RawInputModifiers.Shift, PhysicalKey.Insert, null);
+            window.KeyRelease(Key.Insert, RawInputModifiers.Shift, PhysicalKey.Insert, null);
+            await desktop.InputDrained.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.AreEqual(2, calls);
+            Assert.DoesNotContain(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x152, remote.Inputs);
+            Assert.AreEqual(RdpSessionState.Connected, remote.Status.State);
+        }
+        finally { window.Close(); await remote.DisposeAsync(); }
+    });
+
+    [TestMethod]
+    public void ClipboardReadFailureCancelsInsteadOfAdvertisingEmptyAndTimeoutPauses() => OnUi(async () =>
+    {
+        var remote = new RdpUiFakeSession(); remote.SetFrame(4, 2);
+        var desktop = new RdpDesktopSurface(); desktop.SetSession(remote);
+        var window = new Window { Width = 400, Height = 300, Content = desktop }; window.Show();
+        RdpClipboardBinding? binding = null;
+        try
+        {
+            desktop.Focus(); await Pump(); await desktop.InputDrained;
+            remote.ClipboardEnabled = true;
+            binding = new RdpClipboardBinding(desktop, remote, () => Task.FromException<string?>(new IOException("busy")));
+            binding.Attach(); binding.Resume(); await desktop.InputDrained;
+            var paste = new RdpInput(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true);
+            var result = await binding.PrepareAsync(paste, CancellationToken.None);
+            Assert.AreEqual(RdpInputPreparation.CancelPaste, result);
+            Assert.DoesNotContain(x => x.Kind == RdpInputKind.ClipboardText, remote.Inputs);
+            Assert.IsFalse(remote.ClipboardUnavailable);
+            binding.Dispose();
+            var late = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            remote.ClipboardHandler = (_, _) => late.Task;
+            binding = new RdpClipboardBinding(desktop, remote, () => Task.FromResult<string?>("local"))
+                { PreparationTimeout = TimeSpan.FromMilliseconds(40) };
+            binding.Attach(); binding.Resume(); await desktop.InputDrained;
+            result = await binding.PrepareAsync(paste, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.AreEqual(RdpInputPreparation.CancelPaste, result);
+            Assert.IsTrue(remote.ClipboardUnavailable);
+            late.SetResult(true);
+            result = await binding.PrepareAsync(paste, CancellationToken.None);
+            Assert.AreEqual(RdpInputPreparation.CancelPaste, result);
+            Assert.AreEqual(RdpSessionState.Connected, remote.Status.State);
+        }
+        finally { binding?.Dispose(); window.Close(); await remote.DisposeAsync(); }
+    });
+
+    [TestMethod]
+    public void ClipboardNoTextReadIsSuccessfulAndReadTimeoutDoesNotPauseProtocol() => OnUi(async () =>
+    {
+        var remote = new RdpUiFakeSession(); remote.SetFrame(4, 2);
+        var desktop = new RdpDesktopSurface(); desktop.SetSession(remote);
+        var window = new Window { Width = 400, Height = 300, Content = desktop }; window.Show();
+        RdpClipboardBinding? binding = null;
+        try
+        {
+            desktop.Focus(); await Pump(); await desktop.InputDrained;
+            remote.ClipboardEnabled = true;
+            binding = new RdpClipboardBinding(desktop, remote, () => Task.FromResult<string?>(null));
+            binding.Attach(); binding.Resume(); await desktop.InputDrained;
+            var paste = new RdpInput(RdpInputKind.KeyDown, 0x2f, SynchronizeClipboard: true);
+            var result = await binding.PrepareAsync(paste, CancellationToken.None);
+            Assert.AreEqual(RdpInputPreparation.Send, result);
+            Assert.Contains(x => x.Kind == RdpInputKind.ClipboardText && x.Text is null, remote.Inputs);
+            binding.Dispose();
+            var late = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            binding = new RdpClipboardBinding(desktop, remote, () => late.Task)
+                { PreparationTimeout = TimeSpan.FromMilliseconds(40) };
+            binding.Attach(); binding.Resume(); await desktop.InputDrained;
+            int before = remote.Inputs.Count(x => x.Kind == RdpInputKind.ClipboardText);
+            result = await binding.PrepareAsync(paste, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.AreEqual(RdpInputPreparation.CancelPaste, result);
+            Assert.IsFalse(remote.ClipboardUnavailable);
+            late.SetResult("late"); await Pump();
+            Assert.AreEqual(before, remote.Inputs.Count(x => x.Kind == RdpInputKind.ClipboardText));
+        }
+        finally { binding?.Dispose(); window.Close(); await remote.DisposeAsync(); }
+    });
+
+    [TestMethod]
+    public void ClipboardFocusLossActivelyCancelsUnresponsiveAcknowledgement() => OnUi(async () =>
+    {
+        var remote = new RdpUiFakeSession { ClipboardEnabled = true }; remote.SetFrame(4, 2);
+        var desktop = new RdpDesktopSurface(); desktop.SetSession(remote);
+        var window = new Window { Width = 400, Height = 300, Content = desktop }; window.Show();
+        try
+        {
+            desktop.Focus(); await Pump(); await desktop.InputDrained;
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var late = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CancellationToken operation = default;
+            remote.ClipboardHandler = (_, token) => { operation = token; entered.TrySetResult(); return late.Task; };
+            window.KeyPress(Key.V, RawInputModifiers.Control, PhysicalKey.V, "v");
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            window.Content = null;
+            await desktop.InputDrained.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.IsTrue(operation.IsCancellationRequested);
+            Assert.Contains(x => x.Kind == RdpInputKind.ReleaseAll, remote.Inputs);
+            Assert.DoesNotContain(x => x.Kind == RdpInputKind.KeyDown && x.ScanCode == 0x2f, remote.Inputs);
+            Assert.IsFalse(remote.ClipboardUnavailable);
+            late.SetResult(true);
+            Assert.AreEqual(RdpSessionState.Connected, remote.Status.State);
+        }
+        finally { window.Close(); await remote.DisposeAsync(); }
+    });
+
+    [TestMethod]
     public void ClipboardResynchronizesRepeatedTextAndFocusedReplacement() => OnUi(async () =>
     {
         var remote = new RdpUiFakeSession { ClipboardEnabled = true };

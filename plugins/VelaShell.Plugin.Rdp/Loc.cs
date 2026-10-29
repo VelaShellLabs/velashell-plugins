@@ -53,6 +53,7 @@ internal sealed class Loc(string locale)
         ["Rdp_KeyboardHint"] = "Host and OS shortcuts take precedence. Rebind host shortcuts in Settings if needed; IME/Unicode input is not enabled.",
         ["Rdp_NoFrame"] = "Waiting for the remote desktop…",
         ["Rdp_SendInputError"] = "Input could not be delivered. Disconnect and reconnect the session.",
+        ["Rdp_ClipboardError"] = "Clipboard synchronization failed; this paste was cancelled. If sharing remains unavailable, reconnect the session.",
         ["Rdp_Desktop"] = "Remote desktop"
     };
 
@@ -97,6 +98,7 @@ internal sealed class Loc(string locale)
         ["Rdp_KeyboardHint"] = "宿主与操作系统快捷键优先；可在设置中改键或解绑宿主快捷键，暂未启用 IME/Unicode 输入。",
         ["Rdp_NoFrame"] = "正在等待远程桌面…",
         ["Rdp_SendInputError"] = "输入发送失败，请断开后重新连接会话。",
+        ["Rdp_ClipboardError"] = "剪贴板同步失败，本次粘贴已取消。如共享仍不可用，请重连会话。",
         ["Rdp_Desktop"] = "远程桌面"
     };
 }

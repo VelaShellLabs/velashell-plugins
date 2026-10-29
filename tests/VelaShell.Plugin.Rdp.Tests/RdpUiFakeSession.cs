@@ -6,6 +6,9 @@ namespace VelaShell.Plugin.Rdp.Tests;
 internal sealed class RdpUiFakeSession : IRdpSession, IRdpClipboardSession
 {
     public bool ClipboardEnabled { get; set; }
+    public bool ClipboardUnavailable { get; private set; }
+    public event Action? ClipboardFailed;
+    public void PauseClipboard() { ClipboardUnavailable = true; ClipboardFailed?.Invoke(); }
     public bool ClipboardFocused { get; private set; }
     public event Action<string>? RemoteTextAvailable;
     public Func<string?, CancellationToken, Task<bool>>? ClipboardHandler { get; set; }
