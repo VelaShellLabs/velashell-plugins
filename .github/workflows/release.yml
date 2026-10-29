@@ -53,6 +53,9 @@ permissions:
 jobs:
   publish:
     runs-on: windows-latest
+    env:
+      VelaDevAppDir: ''
+      VELASHELL_DEV_APP_DIR: ''
     # 供 sync-main 回写时复用,免得把标签解析逻辑抄第二遍。
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -90,16 +93,6 @@ jobs:
           # 那时它是 $null —— 而 `$null -ne 0` 为真,会把一次成功判成失败。
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           git --no-pager diff --stat
-
-      - name: Build RDP native extension
-        shell: pwsh
-        run: |
-          rustup toolchain install 1.94.1 --profile minimal --target x86_64-pc-windows-msvc
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          & ./plugins/VelaShell.Plugin.Rdp/native/Build-Native.ps1 -WorkRoot "$env:RUNNER_TEMP/rdp-$([Guid]::NewGuid().ToString('N'))"
-          "VelaRequireRdpNativeExtension=true" >> $env:GITHUB_ENV
-          "VelaDevAppDir=" >> $env:GITHUB_ENV
-          "VELASHELL_DEV_APP_DIR=" >> $env:GITHUB_ENV
 
       - name: Test
         shell: pwsh
@@ -151,16 +144,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item artifacts/vpx/*.vpx artifacts/release/
           Get-ChildItem artifacts/release | Select-Object Name, Length
-
-      - name: Verify final RDP package
-        shell: pwsh
-        run: |
-          $packages = @(Get-ChildItem artifacts/release/velashell.rdp-*.vpx)
-          if ($packages.Count -ne 1) { throw 'Expected exactly one RDP package.' }
-          $env:VELA_RDP_VERIFY_VPX = $packages[0].FullName
-          $env:VELA_RDP_EXPECTED_NATIVE = "$PWD/plugins/VelaShell.Plugin.Rdp/native/artifacts/win-x64/native/DevolutionsIronRdp.dll"
-          dotnet test tests/VelaShell.Plugin.Rdp.Tests -c Debug --no-build --filter FullyQualifiedName~FinalVpxContainsTheVerifiedNativeExtension --nologo
-          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # 共享程序集绝不能落进插件目录 —— 落了就说明 SDK 包的 exclude=Runtime 链路断了,
       # 而这种包发出去之后,现象是用户机器上的控件类型转换失败,离根因非常远。

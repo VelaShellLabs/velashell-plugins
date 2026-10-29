@@ -1,3 +1,0 @@
-# Unified diff context lines contain a mandatory leading space, even for blank lines.
-*.patch text eol=lf whitespace=-blank-at-eol
-*.rs text eol=lf

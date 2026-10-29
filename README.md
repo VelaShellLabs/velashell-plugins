@@ -3,7 +3,7 @@
 > 当前版本 **2.0.7** · SDK **2.0.0**
 
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
-Redis、MongoDB、RDP、S3、Telnet、串口、Docker 面板。
+Redis、MongoDB、S3、Telnet、串口、Docker 面板。
 
 三个仓库各管一摊,别串:
 
@@ -28,7 +28,7 @@ Redis、MongoDB、RDP、S3、Telnet、串口、Docker 面板。
 
 | 目录 | 内容 |
 | --- | --- |
-| `plugins/` | 七个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
+| `plugins/` | 六个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
 | `tests/` | 每个插件一个测试工程(MSTest + `VelaShell.PluginSdk.Testing` 替身) |
 | `build/PluginBundle.proj` | 批量出 `.vpx`;并把可分发插件收成 `plugins/` 布局(只用于 CI 体检) |
 | `scripts/Set-Version.ps1` | 把发行版本号写进仓库里所有落点(发版时由流水线自动跑) |
@@ -72,26 +72,6 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 在工具链仓库 `dotnet pack ... -p:VelaSdkVersion=1.5.0-dev -o artifacts/nuget`,
 然后打开本仓库 [`nuget.config`](nuget.config) 里那条注释掉的本地源,再
 `dotnet build -p:VelaSdkVersion=1.5.0-dev`。用完记得把本地源注释回去再提交。
-
-### RDP 内嵌桌面
-
-安装、连接表单、证书确认、构建与已知限制见 [RDP 插件 README](plugins/VelaShell.Plugin.Rdp/README.md)。
-
-`velashell.rdp` 在连接配置的 RDP 页签中复用宿主的主机、3389 端口、用户名和密码；
-可填写域、初始桌面尺寸、连接超时与本地缩放，并选择已保存的 SSH 配置作为跳板。
-桌面在宿主标签页显示，不调用 mstsc。仅接受 TLS + NLA，不自动跟随服务器重定向；
-证书由系统校验或经宿主明确确认的 SHA-256 指纹校验，指纹变化必须重新核实。
-重连时需要重新确认证书的，请关闭标签页后从连接配置重新打开。
-目前 NLA 仅支持密码 NTLM；域/UPN 语法不代表支持 Kerberos、SSO 或智能卡。
-插件为进程内运行，第三方原生解码异常与内部内存峰值不完全受托管预算约束，不提供崩溃隔离。
-
-依赖正式 `Devolutions.IronRdp 2026.10.19` 托管桥及 Windows/macOS/Linux x64、arm64
-六种桌面原生库（随插件分发，许可证文本在插件的 `Licenses/` 中）；SDK 与 Avalonia 由宿主共享。
-首版不含剪贴板、音频、磁盘/打印机重定向、RD Gateway、RemoteApp、多屏、远端动态分辨率及 IME/Unicode 输入。
-宿主/操作系统快捷键优先，需将宿主快捷键改键或解绑才能把对应组合交给远端；Ctrl+Alt+Del 使用按钮发送。
-「测试」是真实握手登录后断开，可能创建或附加 Windows 登录会话；断开不是注销，不能保证不改变远端会话状态。
-凭据仅为当前会话和显式重连留在内存，不进入普通 Storage、日志或界面模型；不可变字符串与第三方原生副本不能保证可靠擦除。
-当前未提供获授权真实 Windows 端点，远程登录、画面/输入和非 Windows 实机尚未验收；包内有原生库不代表对应平台已运行通过。
 
 ## 版本号:一趟统一列车
 
