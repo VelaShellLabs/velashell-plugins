@@ -62,6 +62,8 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -128,8 +130,8 @@ jobs:
         env:
           KEY_PEM_B64: ${{ secrets.KEY_PEM_FILE }}
 
-      # 插件是纯托管、无 RID 的构建产物(EnableDynamicLoading,按 deps.json 由插件 ALC 解析),
-      # 所以一个包吃遍五个平台,不必按 RID 分。
+      # 每个插件一份 .vpx;RDP 同包携带六个 RID 的原生库及许可证。
+      # 原生产物由上游任务测试后合并,缺少任一 RID 时项目打包门禁失败。
       - name: Build release assets
         shell: pwsh
         run: |

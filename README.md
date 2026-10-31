@@ -1,9 +1,9 @@
 # VelaShell 第一方插件
 
-> 当前版本 **2.0.7** · SDK **2.0.0**
+> 当前版本 **2.0.7** · SDK **2.1.5**
 
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
-Redis、MongoDB、S3、Telnet、串口、Docker 面板。
+Redis、MongoDB、S3、Telnet、串口、Docker 面板、RDP 远程桌面。
 
 三个仓库各管一摊,别串:
 
@@ -28,7 +28,7 @@ Redis、MongoDB、S3、Telnet、串口、Docker 面板。
 
 | 目录 | 内容 |
 | --- | --- |
-| `plugins/` | 六个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
+| `plugins/` | 七个插件,一个子目录一个 csproj(见 [plugins/README.md](plugins/README.md)) |
 | `tests/` | 每个插件一个测试工程(MSTest + `VelaShell.PluginSdk.Testing` 替身) |
 | `build/PluginBundle.proj` | 批量出 `.vpx`;并把可分发插件收成 `plugins/` 布局(只用于 CI 体检) |
 | `scripts/Set-Version.ps1` | 把发行版本号写进仓库里所有落点(发版时由流水线自动跑) |
@@ -67,6 +67,13 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 
 `PackVpx` 与打包器都来自 `VelaShell.PluginSdk.Build` 包 —— 与第三方插件用的是同一个。
 
+**RDP 有原生构建前置条件**:托管编译可独立执行,实际连接、打包及 Unix 剪贴板文件测试
+需要 FreeRDP 原生桥接库。CI 与发布复用 `rdp-native.yml`,在匹配架构的 runner 上构建、离线测试,
+再将六个 RID 的 `runtimes/` 合并进 RDP 插件,同一个 `.vpx` 携带全部原生库与许可证。
+默认打包门禁拒绝缺少任一 RID、FreeRDP/WinPR 库或许可证的载荷。
+本地构建、单 RID 开发包、平台基线与验证边界见 [RDP README](plugins/VelaShell.Plugin.Rdp/README.md)。
+原生二进制不入 Git;没有真实 RDP 服务端验收,不能据此宣称全平台认证。
+
 ### 联调一个还没发布的 SDK
 
 在工具链仓库 `dotnet pack ... -p:VelaSdkVersion=1.5.0-dev -o artifacts/nuget`,
@@ -103,7 +110,7 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 **在 GitHub 上发布 Release**(标签形如 `v1.4.0`),流水线会:
 
 1. 把版本号写进仓库(`scripts/Set-Version.ps1`),因此产物永远与标签一致;
-2. 全量测试 + 构建;
+2. 六种 OS/架构原生构建与离线测试,合并 RDP 原生库及许可证,再全量托管测试 + 构建;
 3. 打包并**逐个核对签名**(未签名或签名不自洽就直接失败,不会挂上去);
 4. 产出并挂到该 Release 的下载列表:
    - **每个插件一份 `.vpx`(已签名)** —— 从 Release 下载后即可手工安装,或推进插件商店;
