@@ -1,5 +1,3 @@
-using VelaShell.Rdp.Wire;
-
 namespace VelaShell.Rdp.Graphics;
 
 /// <summary>
@@ -36,7 +34,11 @@ internal sealed class Mppc
     internal ReadOnlySpan<byte> Decompress(ReadOnlySpan<byte> src, byte flags, out bool passthrough)
     {
         passthrough = false;
-        if ((flags & PacketAtFront) != 0) _historyPtr = 0;
+        if ((flags & PacketAtFront) != 0)
+        {
+            _historyPtr = 0;
+        }
+
         if ((flags & PacketFlushed) != 0) { _historyPtr = 0; Array.Clear(_history, 0, _historyBufferSize); }
 
         if ((flags & PacketCompressed) == 0) { passthrough = true; return default; }
@@ -49,7 +51,11 @@ internal sealed class Mppc
         var bs = new MppcBitStream(src);
         while (bs.RemainingBits >= 8)
         {
-            if (historyPtr > historyEnd) throw new RdpProtocolException("MPPC history overflow.");
+            if (historyPtr > historyEnd)
+            {
+                throw new RdpProtocolException("MPPC history overflow.");
+            }
+
             uint acc = bs.Accumulator;
 
             // Literal.
@@ -64,14 +70,20 @@ internal sealed class Mppc
                 else if ((acc & 0xF8000000) == 0xF0000000) { copyOffset = ((acc >> 19) & 0xFF) + 64; bs.Shift(13); }
                 else if ((acc & 0xF0000000) == 0xE0000000) { copyOffset = ((acc >> 17) & 0x7FF) + 320; bs.Shift(15); }
                 else if ((acc & 0xE0000000) == 0xC0000000) { copyOffset = ((acc >> 13) & 0xFFFF) + 2368; bs.Shift(19); }
-                else throw new RdpProtocolException("Invalid MPPC copy-offset.");
+                else
+                {
+                    throw new RdpProtocolException("Invalid MPPC copy-offset.");
+                }
             }
             else // RDP4
             {
                 if ((acc & 0xF0000000) == 0xF0000000) { copyOffset = (acc >> 22) & 0x3F; bs.Shift(10); }
                 else if ((acc & 0xF0000000) == 0xE0000000) { copyOffset = ((acc >> 20) & 0xFF) + 64; bs.Shift(12); }
                 else if ((acc & 0xE0000000) == 0xC0000000) { copyOffset = ((acc >> 16) & 0x1FFF) + 320; bs.Shift(16); }
-                else throw new RdpProtocolException("Invalid MPPC copy-offset.");
+                else
+                {
+                    throw new RdpProtocolException("Invalid MPPC copy-offset.");
+                }
             }
 
             // Length of match.
@@ -92,12 +104,26 @@ internal sealed class Mppc
             else if ((acc & 0xFFF80000) == 0xFFF00000 && _compressionLevel != 0) { length = ((acc >> 6) & 0x1FFF) + 8192; bs.Shift(26); }
             else if ((acc & 0xFFFC0000) == 0xFFF80000 && _compressionLevel != 0) { length = ((acc >> 4) & 0x3FFF) + 16384; bs.Shift(28); }
             else if ((acc & 0xFFFE0000) == 0xFFFC0000 && _compressionLevel != 0) { length = ((acc >> 2) & 0x7FFF) + 32768; bs.Shift(30); }
-            else throw new RdpProtocolException("Invalid MPPC length-of-match.");
+            else
+            {
+                throw new RdpProtocolException("Invalid MPPC length-of-match.");
+            }
 
-            if (historyPtr + (int)length - 1 > historyEnd) throw new RdpProtocolException("MPPC match overflows history.");
+            if (historyPtr + (int)length - 1 > historyEnd)
+            {
+                throw new RdpProtocolException("MPPC match overflows history.");
+            }
+
             int srcIdx = (historyPtr - (int)copyOffset) & offsetMask;
-            if (srcIdx < 0 || srcIdx + (int)length > _historyBufferSize) throw new RdpProtocolException("MPPC copy-offset out of bounds.");
-            for (uint i = 0; i < length; i++) _history[historyPtr++] = _history[srcIdx++];
+            if (srcIdx < 0 || srcIdx + (int)length > _historyBufferSize)
+            {
+                throw new RdpProtocolException("MPPC copy-offset out of bounds.");
+            }
+
+            for (uint i = 0; i < length; i++)
+            {
+                _history[historyPtr++] = _history[srcIdx++];
+            }
         }
 
         _historyPtr = historyPtr;
@@ -129,7 +155,11 @@ internal ref struct MppcBitStream
             int bytePos = _position >> 3;
             int bitOff = _position & 7;
             ulong acc = 0;
-            for (int i = 0; i < 5; i++) acc = (acc << 8) | (bytePos + i < _data.Length ? _data[bytePos + i] : 0u);
+            for (int i = 0; i < 5; i++)
+            {
+                acc = (acc << 8) | (bytePos + i < _data.Length ? _data[bytePos + i] : 0u);
+            }
+
             return (uint)((acc >> (8 - bitOff)) & 0xFFFFFFFF);
         }
     }

@@ -16,7 +16,7 @@ public sealed class CredSspAsn1Tests
     public void TsRequestRoundTripsNegoTokenAndVersion()
     {
         byte[] nego = [1, 2, 3, 4, 5];
-        var (version, token, pub, error) = CredSsp.RoundTripForTest(6, nego, null, null, null);
+        (uint version, byte[]? token, byte[]? pub, uint? error) = CredSsp.RoundTripForTest(6, nego, null, null, null);
         Assert.AreEqual(6u, version);
         Assert.IsNotNull(token);
         CollectionAssert.AreEqual(nego, token);
@@ -29,7 +29,7 @@ public sealed class CredSspAsn1Tests
     {
         byte[] pubKeyAuth = [9, 8, 7, 6];
         byte[] nonce = new byte[32];
-        var (version, token, pub, error) = CredSsp.RoundTripForTest(6, [0xAA], null, pubKeyAuth, nonce);
+        (uint version, byte[]? token, byte[]? pub, uint? error) = CredSsp.RoundTripForTest(6, [0xAA], null, pubKeyAuth, nonce);
         Assert.AreEqual(6u, version);
         CollectionAssert.AreEqual(new byte[] { 0xAA }, token);
         Assert.IsNotNull(pub);
@@ -42,13 +42,13 @@ public sealed class CredSspAsn1Tests
     {
         byte[] der = CredSsp.BuildCredentialsForTest("CORP", "alice", "secret");
         // TSCredentials ::= SEQUENCE { credType [0] INTEGER, credentials [1] OCTET STRING }
-        var outer = new AsnReader(der, AsnEncodingRules.DER).ReadSequence();
+        AsnReader outer = new AsnReader(der, AsnEncodingRules.DER).ReadSequence();
         int credType = (int)outer.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0)).ReadInteger();
         Assert.AreEqual(1, credType);
         byte[] inner = outer.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 1)).ReadOctetString();
 
         // TSPasswordCreds ::= SEQUENCE { domainName [0], userName [1], password [2] } (each UTF-16LE OCTET STRING)
-        var creds = new AsnReader(inner, AsnEncodingRules.DER).ReadSequence();
+        AsnReader creds = new AsnReader(inner, AsnEncodingRules.DER).ReadSequence();
         byte[] domain = creds.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0)).ReadOctetString();
         byte[] user = creds.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 1)).ReadOctetString();
         byte[] pass = creds.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 2)).ReadOctetString();

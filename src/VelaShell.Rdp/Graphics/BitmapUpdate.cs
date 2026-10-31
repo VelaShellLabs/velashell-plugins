@@ -30,10 +30,10 @@ internal static class BitmapUpdate
             if (compressed && (flags & NoCompressionHeader) == 0)
             {
                 // TS_CD_HEADER: cbCompFirstRowSize(2)=0, cbCompMainBodySize(2), cbScanWidth(2), cbUncompressedSize(2)
-                r.U16LE();
+                _ = r.U16LE();
                 int mainBody = r.U16LE();
-                r.U16LE();
-                r.U16LE();
+                _ = r.U16LE();
+                _ = r.U16LE();
                 data = r.Take(mainBody);
             }
             else

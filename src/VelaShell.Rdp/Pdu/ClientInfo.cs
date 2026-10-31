@@ -43,7 +43,11 @@ internal static class ClientInfo
         uint flags = InfoMouse | InfoDisableCtrlAltDel | InfoUnicode | InfoMaximizeShell |
                      InfoLogonNotify | InfoEnableWindowsKey | InfoNoAudioPlayback |
                      InfoCompression | CompressionType64K;
-        if (autoLogon && password.Length > 0) flags |= InfoAutoLogon;
+        if (autoLogon && password.Length > 0)
+        {
+            flags |= InfoAutoLogon;
+        }
+
         _ = InfoRail;
 
         w.U32LE(0);                       // CodePage

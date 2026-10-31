@@ -1,7 +1,6 @@
 using System.Threading.Channels;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Mcs;
-using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Rdp;
 
@@ -33,7 +32,7 @@ public sealed class RdpManagedSession : IRdpSession
     public event Action? FrameAvailable;
     public event Action<Exception?>? Disconnected;
 
-    private readonly object _clipGate = new();
+    private readonly Lock _clipGate = new();
     private Action<RdpClipboardEvent>? _clipboardHandlers;
     private RdpClipboardEvent? _lastReady;
     private RdpClipboardEvent? _lastFormats;
@@ -46,19 +45,40 @@ public sealed class RdpManagedSession : IRdpSession
             lock (_clipGate)
             {
                 _clipboardHandlers += value;
-                if (_lastReady is { } ready) SafeClip(value, ready);
-                if (_lastFormats is { } formats) SafeClip(value, formats);
+                if (_lastReady is { } ready)
+                {
+                    SafeClip(value, ready);
+                }
+
+                if (_lastFormats is { } formats)
+                {
+                    SafeClip(value, formats);
+                }
             }
         }
-        remove { lock (_clipGate) _clipboardHandlers -= value; }
+        remove
+        {
+            lock (_clipGate)
+            {
+                _clipboardHandlers -= value;
+            }
+        }
     }
 
     private void RaiseClipboard(RdpClipboardEvent ev)
     {
         lock (_clipGate)
         {
-            if (ev.Kind == 2) _lastReady = ev;
-            if (ev.Kind is 3 or 9) _lastFormats = ev;
+            if (ev.Kind == 2)
+            {
+                _lastReady = ev;
+            }
+
+            if (ev.Kind is 3 or 9)
+            {
+                _lastFormats = ev;
+            }
+
             SafeClip(_clipboardHandlers, ev);
         }
     }
@@ -87,8 +107,16 @@ public sealed class RdpManagedSession : IRdpSession
     {
         ArgumentNullException.ThrowIfNull(options);
         var channels = new List<ChannelDef>();
-        if (options.Clipboard) channels.Add(new ChannelDef("cliprdr", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
-        if (options.Drives.Count > 0) channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
+        if (options.Clipboard)
+        {
+            channels.Add(new ChannelDef("cliprdr", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
+        }
+
+        if (options.Drives.Count > 0)
+        {
+            channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
+        }
+
         channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
@@ -96,8 +124,16 @@ public sealed class RdpManagedSession : IRdpSession
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions));
         session.EnableDynamicChannels();
-        if (options.Clipboard) session.EnableClipboard();
-        if (options.Drives.Count > 0) session.EnableDrives(options.Drives);
+        if (options.Clipboard)
+        {
+            session.EnableClipboard();
+        }
+
+        if (options.Drives.Count > 0)
+        {
+            session.EnableDrives(options.Drives);
+        }
+
         try
         {
             await session._connection.ConnectAsync(ct).ConfigureAwait(false);
@@ -138,14 +174,27 @@ public sealed class RdpManagedSession : IRdpSession
 
     private void OnChannelData(ChannelPayload payload)
     {
-        if (payload.ChannelName == "cliprdr") _cliprdrQueue?.Writer.TryWrite(payload.Data);
-        else if (payload.ChannelName == "rdpdr") _rdpdrQueue?.Writer.TryWrite(payload.Data);
-        else if (payload.ChannelName == "drdynvc") _drdynvcQueue?.Writer.TryWrite(payload.Data);
+        if (payload.ChannelName == "cliprdr")
+        {
+            _ = (_cliprdrQueue?.Writer.TryWrite(payload.Data));
+        }
+        else if (payload.ChannelName == "rdpdr")
+        {
+            _ = (_rdpdrQueue?.Writer.TryWrite(payload.Data));
+        }
+        else if (payload.ChannelName == "drdynvc")
+        {
+            _ = (_drdynvcQueue?.Writer.TryWrite(payload.Data));
+        }
     }
 
     private async Task DrainRdpdrAsync()
     {
-        if (_rdpdrQueue is null || _rdpdr is null) return;
+        if (_rdpdrQueue is null || _rdpdr is null)
+        {
+            return;
+        }
+
         try
         {
             await foreach (byte[] pdu in _rdpdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
@@ -160,7 +209,11 @@ public sealed class RdpManagedSession : IRdpSession
 
     private async Task DrainDrdynvcAsync()
     {
-        if (_drdynvcQueue is null || _drdynvc is null) return;
+        if (_drdynvcQueue is null || _drdynvc is null)
+        {
+            return;
+        }
+
         try
         {
             await foreach (byte[] pdu in _drdynvcQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
@@ -179,7 +232,11 @@ public sealed class RdpManagedSession : IRdpSession
 
     private async Task DrainCliprdrAsync()
     {
-        if (_cliprdrQueue is null || _cliprdr is null) return;
+        if (_cliprdrQueue is null || _cliprdr is null)
+        {
+            return;
+        }
+
         try
         {
             await foreach (byte[] pdu in _cliprdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
@@ -194,13 +251,17 @@ public sealed class RdpManagedSession : IRdpSession
 
     private void OnFrameUpdated()
     {
-        Interlocked.Exchange(ref _dirty, 1);
+        _ = Interlocked.Exchange(ref _dirty, 1);
         try { FrameAvailable?.Invoke(); } catch { /* never unwind into the pump */ }
     }
 
     public RdpFrame? TakeFrame()
     {
-        if (Interlocked.Exchange(ref _dirty, 0) == 0) return null;
+        if (Interlocked.Exchange(ref _dirty, 0) == 0)
+        {
+            return null;
+        }
+
         (byte[] bgra, int width, int height) = _connection.SnapshotFrame();
         return new RdpFrame(width, height, bgra);
     }
@@ -246,18 +307,22 @@ public sealed class RdpManagedSession : IRdpSession
     private async Task Guard(Func<Task> action)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (!IsConnected) throw new InvalidOperationException("The RDP session is not connected.");
+        if (!IsConnected)
+        {
+            throw new InvalidOperationException("The RDP session is not connected.");
+        }
+
         await action().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) { if (_pump is { } p) await p.ConfigureAwait(false); return; }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) { if (_pump is { } p) { await p.ConfigureAwait(false); } return; }
         _stop.Cancel();
         Volatile.Write(ref _isConnected, 0);
-        _cliprdrQueue?.Writer.TryComplete();
-        _rdpdrQueue?.Writer.TryComplete();
-        _drdynvcQueue?.Writer.TryComplete();
+        _ = (_cliprdrQueue?.Writer.TryComplete());
+        _ = (_rdpdrQueue?.Writer.TryComplete());
+        _ = (_drdynvcQueue?.Writer.TryComplete());
         if (_pump is { } pump) { try { await pump.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_cliprdrWorker is { } worker) { try { await worker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_rdpdrWorker is { } driveWorker) { try { await driveWorker.ConfigureAwait(false); } catch { /* ignore */ } }
@@ -267,6 +332,9 @@ public sealed class RdpManagedSession : IRdpSession
         _stop.Dispose();
         FrameAvailable = null;
         Disconnected = null;
-        lock (_clipGate) _clipboardHandlers = null;
+        lock (_clipGate)
+        {
+            _clipboardHandlers = null;
+        }
     }
 }

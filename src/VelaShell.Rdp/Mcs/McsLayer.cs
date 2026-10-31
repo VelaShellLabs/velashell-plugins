@@ -38,7 +38,10 @@ internal sealed class McsLayer(RdpTransport transport)
         // Map requested channel names to the ids the server assigned, in request order.
         var map = new Dictionary<string, ushort>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < channels.Count && i < Server.ChannelIds.Count; i++)
+        {
             map[channels[i].Name] = Server.ChannelIds[i];
+        }
+
         Channels = map;
 
         // Erect Domain, Attach User.
@@ -49,7 +52,10 @@ internal sealed class McsLayer(RdpTransport transport)
         // Join the user channel, the I/O channel and every virtual channel.
         await JoinChannelAsync(UserId, ct).ConfigureAwait(false);
         await JoinChannelAsync(Server.IoChannelId, ct).ConfigureAwait(false);
-        foreach (ushort id in Server.ChannelIds) await JoinChannelAsync(id, ct).ConfigureAwait(false);
+        foreach (ushort id in Server.ChannelIds)
+        {
+            await JoinChannelAsync(id, ct).ConfigureAwait(false);
+        }
     }
 
     // ---- Send Data ----
@@ -72,12 +78,19 @@ internal sealed class McsLayer(RdpTransport transport)
         ReadOnlySpan<byte> mcs = StripX224(x224Tpdu);
         var r = new ByteReader(mcs);
         byte choice = (byte)(r.U8() >> 2);
-        if (choice == DisconnectUltimatum) return null;
+        if (choice == DisconnectUltimatum)
+        {
+            return null;
+        }
+
         if (choice != SendDataIndication)
+        {
             throw new RdpProtocolException($"Unexpected MCS PDU choice {choice}.");
+        }
+
         ushort initiator = Per.ReadInteger16(ref r, 1001);
         ushort channelId = Per.ReadInteger16(ref r, 0);
-        r.U8();                                 // dataPriority + segmentation
+        _ = r.U8();                                 // dataPriority + segmentation
         int length = Per.ReadLength(ref r);
         _ = initiator;
         ReadOnlySpan<byte> payload = r.Take(length);
@@ -106,7 +119,11 @@ internal sealed class McsLayer(RdpTransport transport)
     private static void WriteDomainParameters(ByteWriter w, uint[] values)
     {
         var inner = new ByteWriter(32);
-        foreach (uint value in values) Ber.WriteInteger(inner, value);
+        foreach (uint value in values)
+        {
+            Ber.WriteInteger(inner, value);
+        }
+
         Ber.WriteSequenceTag(w, inner.Length);
         w.Bytes(inner.Span);
     }
@@ -114,9 +131,12 @@ internal sealed class McsLayer(RdpTransport transport)
     private static byte[] ParseConnectResponse(ReadOnlySpan<byte> mcsPayload)
     {
         var r = new ByteReader(mcsPayload);
-        Ber.ReadApplicationTag(ref r, 102);              // Connect-Response
+        _ = Ber.ReadApplicationTag(ref r, 102);              // Connect-Response
         if (Ber.ReadEnumerated(ref r) != 0)
+        {
             throw new RdpProtocolException("MCS Connect-Response rejected the connection.");
+        }
+
         Ber.SkipInteger(ref r);                          // calledConnectId
         int domainLen = Ber.ReadSequenceTag(ref r);      // domainParameters
         r.Skip(domainLen);
@@ -139,8 +159,16 @@ internal sealed class McsLayer(RdpTransport transport)
         RdpFramePdu pdu = await _transport.ReadPduAsync(ct).ConfigureAwait(false);
         var r = new ByteReader(StripX224Data(pdu));
         byte first = r.U8();
-        if ((byte)(first >> 2) != AttachUserConfirm) throw new RdpProtocolException("Expected MCS Attach User Confirm.");
-        if (Per.ReadEnumerated(ref r, 16) != 0) throw new RdpProtocolException("MCS Attach User rejected.");
+        if ((byte)(first >> 2) != AttachUserConfirm)
+        {
+            throw new RdpProtocolException("Expected MCS Attach User Confirm.");
+        }
+
+        if (Per.ReadEnumerated(ref r, 16) != 0)
+        {
+            throw new RdpProtocolException("MCS Attach User rejected.");
+        }
+
         return (first & 0x02) != 0 ? Per.ReadInteger16(ref r, 1001) : (ushort)0;
     }
 
@@ -155,11 +183,22 @@ internal sealed class McsLayer(RdpTransport transport)
         RdpFramePdu pdu = await _transport.ReadPduAsync(ct).ConfigureAwait(false);
         var r = new ByteReader(StripX224Data(pdu));
         byte first = r.U8();
-        if ((byte)(first >> 2) != ChannelJoinConfirm) throw new RdpProtocolException("Expected MCS Channel Join Confirm.");
-        if (Per.ReadEnumerated(ref r, 16) != 0) throw new RdpProtocolException($"MCS channel join {channelId} rejected.");
-        Per.ReadInteger16(ref r, 1001);               // initiator
+        if ((byte)(first >> 2) != ChannelJoinConfirm)
+        {
+            throw new RdpProtocolException("Expected MCS Channel Join Confirm.");
+        }
+
+        if (Per.ReadEnumerated(ref r, 16) != 0)
+        {
+            throw new RdpProtocolException($"MCS channel join {channelId} rejected.");
+        }
+
+        _ = Per.ReadInteger16(ref r, 1001);               // initiator
         ushort requested = Per.ReadInteger16(ref r, 0);
-        if (requested != channelId) throw new RdpProtocolException("MCS channel join mismatch.");
+        if (requested != channelId)
+        {
+            throw new RdpProtocolException("MCS channel join mismatch.");
+        }
     }
 
     // ---- Framing helpers ----
@@ -168,14 +207,22 @@ internal sealed class McsLayer(RdpTransport transport)
 
     private static ReadOnlySpan<byte> StripX224Data(RdpFramePdu pdu)
     {
-        if (pdu.FastPath) throw new RdpProtocolException("Expected a slow-path MCS PDU.");
+        if (pdu.FastPath)
+        {
+            throw new RdpProtocolException("Expected a slow-path MCS PDU.");
+        }
+
         return StripX224(pdu.Data);
     }
 
     /// <summary>Strips the X.224 Data TPDU header (LI, DT, EOT) from a TPKT payload.</summary>
     private static ReadOnlySpan<byte> StripX224(ReadOnlySpan<byte> x224Tpdu)
     {
-        if (x224Tpdu.Length < 3) throw new RdpProtocolException("Short X.224 Data TPDU.");
+        if (x224Tpdu.Length < 3)
+        {
+            throw new RdpProtocolException("Short X.224 Data TPDU.");
+        }
+
         byte li = x224Tpdu[0];
         return x224Tpdu[(li + 1)..];
     }

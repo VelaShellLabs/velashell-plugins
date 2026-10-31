@@ -23,7 +23,7 @@ internal static class Capabilities
     {
         uint shareId = r.U32LE();
         ushort lenSource = r.U16LE();
-        r.U16LE();                 // lengthCombinedCapabilities
+        _ = r.U16LE();                 // lengthCombinedCapabilities
         r.Skip(lenSource);
         int width = 0, height = 0;
         if (r.Remaining >= 4)
@@ -35,7 +35,11 @@ internal static class Capabilities
                 ushort type = r.U16LE();
                 ushort length = r.U16LE();
                 int bodyLen = length - 4;
-                if (bodyLen < 0 || bodyLen > r.Remaining) break;
+                if (bodyLen < 0 || bodyLen > r.Remaining)
+                {
+                    break;
+                }
+
                 if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
                 {
                     r.Skip(8);     // preferredBitsPerPixel + receive{1,4,8}BitsPerPixel
@@ -43,10 +47,17 @@ internal static class Capabilities
                     height = r.U16LE();
                     r.Skip(bodyLen - 12);
                 }
-                else r.Skip(bodyLen);
+                else
+                {
+                    r.Skip(bodyLen);
+                }
             }
         }
-        if (width is < 200 or > 8192 || height is < 200 or > 8192) width = height = 0;
+        if (width is < 200 or > 8192 || height is < 200 or > 8192)
+        {
+            width = height = 0;
+        }
+
         return new DemandActive(shareId, width, height);
     }
 
@@ -56,15 +67,18 @@ internal static class Capabilities
         ushort count = 0;
         void Set(Action<ByteWriter> write) { write(caps); count++; }
 
-        Set(w => General(w));
+        Set(General);
         Set(w => Bitmap(w, width, height, bpp));
-        Set(w => Order(w));
-        Set(w => Pointer(w));
-        Set(w => Input(w));
-        Set(w => Brush(w));
-        Set(w => GlyphCache(w));
-        Set(w => Sound(w));
-        if (hasChannels) Set(w => VirtualChannel(w));
+        Set(Order);
+        Set(Pointer);
+        Set(Input);
+        Set(Brush);
+        Set(GlyphCache);
+        Set(Sound);
+        if (hasChannels)
+        {
+            Set(VirtualChannel);
+        }
 
         byte[] source = "MSTSC\0"u8.ToArray();
         int combined = 4 + caps.Length; // numberCapabilities(2) + pad(2) + capability sets
@@ -176,7 +190,11 @@ internal static class Capabilities
         Header(w, 16, 52);
         // 10 glyph cache entries (cacheEntries, cacheMaximumCellSize)
         ushort[] entries = [254, 4, 254, 4, 254, 8, 254, 8, 254, 16, 254, 32, 254, 64, 254, 128, 254, 256, 64, 2048];
-        foreach (ushort value in entries) w.U16LE(value);
+        foreach (ushort value in entries)
+        {
+            w.U16LE(value);
+        }
+
         w.U32LE(0);             // FragCache
         w.U16LE(0);             // GlyphSupportLevel = NONE
         w.U16LE(0);             // pad2octets

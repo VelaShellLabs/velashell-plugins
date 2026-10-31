@@ -50,7 +50,10 @@ internal sealed class DriveFile
         bool exists = File.Exists(full) || Directory.Exists(full);
         bool existingDir = Directory.Exists(full);
 
-        if (exists) RejectReparse(full);
+        if (exists)
+        {
+            RejectReparse(full);
+        }
 
         var file = new DriveFile(basePath, full, existingDir || (wantDirectory && !File.Exists(full)))
         {
@@ -62,20 +65,36 @@ internal sealed class DriveFile
             switch (disposition)
             {
                 case FileOpen:
-                    if (!existingDir) throw new DriveStatusException(existingDir || exists ? NtStatus.NotADirectory : NtStatus.NoSuchFile);
+                    if (!existingDir)
+                    {
+                        throw new DriveStatusException(existingDir || exists ? NtStatus.NotADirectory : NtStatus.NoSuchFile);
+                    }
+
                     file.Information = FileOpened;
                     break;
                 case FileCreate:
-                    if (existingDir) throw new DriveStatusException(NtStatus.ObjectNameCollision);
-                    Directory.CreateDirectory(full);
+                    if (existingDir)
+                    {
+                        throw new DriveStatusException(NtStatus.ObjectNameCollision);
+                    }
+
+                    _ = Directory.CreateDirectory(full);
                     file.Information = FileSuperseded;
                     break;
                 case FileOpenIf:
-                    if (!existingDir) Directory.CreateDirectory(full);
+                    if (!existingDir)
+                    {
+                        _ = Directory.CreateDirectory(full);
+                    }
+
                     file.Information = existingDir ? FileOpened : FileSuperseded;
                     break;
                 default:
-                    if (!existingDir) Directory.CreateDirectory(full);
+                    if (!existingDir)
+                    {
+                        _ = Directory.CreateDirectory(full);
+                    }
+
                     file.Information = FileSuperseded;
                     break;
             }
@@ -83,8 +102,15 @@ internal sealed class DriveFile
         }
 
         // Regular file.
-        if (disposition == FileOpen && !exists) throw new DriveStatusException(NtStatus.NoSuchFile);
-        if (disposition == FileCreate && exists) throw new DriveStatusException(NtStatus.ObjectNameCollision);
+        if (disposition == FileOpen && !exists)
+        {
+            throw new DriveStatusException(NtStatus.NoSuchFile);
+        }
+
+        if (disposition == FileCreate && exists)
+        {
+            throw new DriveStatusException(NtStatus.ObjectNameCollision);
+        }
 
         FileMode mode = disposition switch
         {
@@ -122,15 +148,23 @@ internal sealed class DriveFile
     internal byte[] Read(ulong offset, uint length)
     {
         _stream ??= OpenForContent(FileAccess.Read);
-        if (offset > (ulong)_stream.Length) return [];
-        _stream.Seek((long)offset, SeekOrigin.Begin);
+        if (offset > (ulong)_stream.Length)
+        {
+            return [];
+        }
+
+        _ = _stream.Seek((long)offset, SeekOrigin.Begin);
         int toRead = (int)Math.Min(length, (ulong)_stream.Length - offset);
         byte[] buffer = new byte[toRead];
         int read = 0;
         while (read < toRead)
         {
             int next = _stream.Read(buffer, read, toRead - read);
-            if (next == 0) break;
+            if (next == 0)
+            {
+                break;
+            }
+
             read += next;
         }
         return read == toRead ? buffer : buffer[..read];
@@ -139,7 +173,7 @@ internal sealed class DriveFile
     internal uint Write(ulong offset, ReadOnlySpan<byte> data)
     {
         _stream ??= OpenForContent(FileAccess.ReadWrite);
-        _stream.Seek((long)offset, SeekOrigin.Begin);
+        _ = _stream.Seek((long)offset, SeekOrigin.Begin);
         _stream.Write(data);
         _stream.Flush();
         return (uint)data.Length;
@@ -147,7 +181,11 @@ internal sealed class DriveFile
 
     private FileStream OpenForContent(FileAccess access)
     {
-        if (IsDirectory) throw new DriveStatusException(NtStatus.FileIsADirectory);
+        if (IsDirectory)
+        {
+            throw new DriveStatusException(NtStatus.FileIsADirectory);
+        }
+
         return new FileStream(FullPath, FileMode.Open, access, FileShare.ReadWrite | FileShare.Delete);
     }
 
@@ -155,11 +193,21 @@ internal sealed class DriveFile
     {
         _stream?.Dispose();
         _stream = null;
-        if (!_deleteOnClose) return;
+        if (!_deleteOnClose)
+        {
+            return;
+        }
+
         try
         {
-            if (Directory.Exists(FullPath)) Directory.Delete(FullPath, recursive: false);
-            else if (File.Exists(FullPath)) File.Delete(FullPath);
+            if (Directory.Exists(FullPath))
+            {
+                Directory.Delete(FullPath, recursive: false);
+            }
+            else if (File.Exists(FullPath))
+            {
+                File.Delete(FullPath);
+            }
         }
         catch { /* best-effort delete-on-close */ }
     }
@@ -169,7 +217,10 @@ internal sealed class DriveFile
     internal void Rename(string newRdpPath)
     {
         string target = ResolvePath(_basePath, newRdpPath);
-        if (IsDirectory) Directory.Move(FullPath, target);
+        if (IsDirectory)
+        {
+            Directory.Move(FullPath, target);
+        }
         else { _stream?.Dispose(); _stream = null; File.Move(FullPath, target, overwrite: true); }
     }
 
@@ -178,7 +229,11 @@ internal sealed class DriveFile
     internal void QueryInformation(uint infoClass, ByteWriter output)
     {
         FileSystemInfo info = IsDirectory ? new DirectoryInfo(FullPath) : new FileInfo(FullPath);
-        if (!info.Exists) throw new DriveStatusException(NtStatus.NoSuchFile);
+        if (!info.Exists)
+        {
+            throw new DriveStatusException(NtStatus.NoSuchFile);
+        }
+
         long size = info is FileInfo fi ? fi.Length : 0;
         uint attributes = (uint)info.Attributes;
 
@@ -214,12 +269,18 @@ internal sealed class DriveFile
     {
         string spec = pattern.TrimStart('\\');
         string search = spec.Length == 0 ? "*" : Path.GetFileName(spec.Replace('\\', Path.DirectorySeparatorChar));
-        if (search.Length == 0) search = "*";
+        if (search.Length == 0)
+        {
+            search = "*";
+        }
+
         var entries = new List<string> { ".", ".." };
         try
         {
             foreach (string path in Directory.EnumerateFileSystemEntries(FullPath, search))
+            {
                 entries.Add(Path.GetFileName(path));
+            }
         }
         catch (DirectoryNotFoundException) { throw new DriveStatusException(NtStatus.NoSuchFile); }
         _enumeration = entries;
@@ -229,7 +290,11 @@ internal sealed class DriveFile
     /// <summary>Writes one directory entry; returns false (and resets) when enumeration is exhausted.</summary>
     internal bool QueryDirectory(uint infoClass, ByteWriter output)
     {
-        if (_enumeration is null || _enumIndex >= _enumeration.Count) return false;
+        if (_enumeration is null || _enumIndex >= _enumeration.Count)
+        {
+            return false;
+        }
+
         string name = _enumeration[_enumIndex++];
         string path = Path.Combine(FullPath, name);
         FileSystemInfo info = name is "." or ".." || Directory.Exists(path) ? new DirectoryInfo(name is "." or ".." ? FullPath : path) : new FileInfo(path);
@@ -316,7 +381,10 @@ internal sealed class DriveFile
         string prefix = baseFull + Path.DirectorySeparatorChar;
         if (!full.Equals(baseFull, StringComparison.OrdinalIgnoreCase) &&
             !full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
             throw new DriveStatusException(NtStatus.AccessDenied);
+        }
+
         return full;
     }
 
@@ -324,7 +392,13 @@ internal sealed class DriveFile
     {
         for (string? current = Path.GetFullPath(path); current is not null; current = Path.GetDirectoryName(current))
         {
-            try { if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new DriveStatusException(NtStatus.AccessDenied); }
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new DriveStatusException(NtStatus.AccessDenied);
+                }
+            }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }
         }

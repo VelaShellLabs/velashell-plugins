@@ -19,18 +19,25 @@ internal static class Licensing
     {
         var r = new ByteReader(mcsPayload);
         ushort flags = r.U16LE();         // basic security header flags
-        r.U16LE();                        // flagsHi
+        _ = r.U16LE();                        // flagsHi
         if ((flags & SecurityFlags.License) == 0)
+        {
             throw new RdpProtocolException("Expected a licensing PDU.");
+        }
+
         byte msgType = r.U8();
-        r.U8();                           // flags/version
-        r.U16LE();                        // wMsgSize
+        _ = r.U8();                           // flags/version
+        _ = r.U16LE();                        // wMsgSize
         if (msgType == ErrorAlert)
         {
             uint errorCode = r.U32LE();
-            r.U32LE();                    // dwStateTransition
+            _ = r.U32LE();                    // dwStateTransition
             // Valid client, or the server has no licensing configured: proceed.
-            if (errorCode is StatusValidClient or ErrorNoLicenseServer or ErrorNoLicense) return true;
+            if (errorCode is StatusValidClient or ErrorNoLicenseServer or ErrorNoLicense)
+            {
+                return true;
+            }
+
             return true; // Any licence error alert ends the phase; capabilities follow.
         }
         throw new RdpProtocolException($"RDP licensing negotiation (msg 0x{msgType:X2}) is not supported.");

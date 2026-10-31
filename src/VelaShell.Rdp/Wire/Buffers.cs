@@ -11,75 +11,77 @@ namespace VelaShell.Rdp.Wire;
 internal sealed class ByteWriter
 {
     private byte[] _buffer;
-    private int _length;
 
-    internal ByteWriter(int capacity = 256) => _buffer = new byte[Math.Max(16, capacity)];
+    internal ByteWriter(int capacity = 256)
+    {
+        _buffer = new byte[Math.Max(16, capacity)];
+    }
 
-    internal int Length => _length;
+    internal int Length { get; private set; }
 
     internal void U8(byte value)
     {
         Ensure(1);
-        _buffer[_length++] = value;
+        _buffer[Length++] = value;
     }
 
     internal void U16BE(ushort value)
     {
         Ensure(2);
-        BinaryPrimitives.WriteUInt16BigEndian(_buffer.AsSpan(_length), value);
-        _length += 2;
+        BinaryPrimitives.WriteUInt16BigEndian(_buffer.AsSpan(Length), value);
+        Length += 2;
     }
 
     internal void U16LE(ushort value)
     {
         Ensure(2);
-        BinaryPrimitives.WriteUInt16LittleEndian(_buffer.AsSpan(_length), value);
-        _length += 2;
+        BinaryPrimitives.WriteUInt16LittleEndian(_buffer.AsSpan(Length), value);
+        Length += 2;
     }
 
     internal void U32BE(uint value)
     {
         Ensure(4);
-        BinaryPrimitives.WriteUInt32BigEndian(_buffer.AsSpan(_length), value);
-        _length += 4;
+        BinaryPrimitives.WriteUInt32BigEndian(_buffer.AsSpan(Length), value);
+        Length += 4;
     }
 
     internal void U32LE(uint value)
     {
         Ensure(4);
-        BinaryPrimitives.WriteUInt32LittleEndian(_buffer.AsSpan(_length), value);
-        _length += 4;
+        BinaryPrimitives.WriteUInt32LittleEndian(_buffer.AsSpan(Length), value);
+        Length += 4;
     }
 
     internal void Bytes(ReadOnlySpan<byte> value)
     {
         Ensure(value.Length);
-        value.CopyTo(_buffer.AsSpan(_length));
-        _length += value.Length;
+        value.CopyTo(_buffer.AsSpan(Length));
+        Length += value.Length;
     }
 
     internal void Zeros(int count)
     {
         Ensure(count);
-        _buffer.AsSpan(_length, count).Clear();
-        _length += count;
+        _buffer.AsSpan(Length, count).Clear();
+        Length += count;
     }
 
     /// <summary>Writes a fixed-length UTF-16LE field, truncating/padding to <paramref name="byteCount"/> bytes.</summary>
     internal void Unicode(string value, int byteCount)
     {
         Ensure(byteCount);
-        Span<byte> target = _buffer.AsSpan(_length, byteCount);
+        Span<byte> target = _buffer.AsSpan(Length, byteCount);
         target.Clear();
         int written = Encoding.Unicode.GetBytes(value.AsSpan(0, Math.Min(value.Length, byteCount / 2)), target);
         _ = written;
-        _length += byteCount;
+        Length += byteCount;
     }
 
     /// <summary>Reserves two bytes for a length placeholder and returns its offset for <see cref="PatchU16LE"/>.</summary>
     internal int Reserve16()
     {
-        int offset = _length;
+        int offset = Length;
         U16LE(0);
         return offset;
     }
@@ -90,15 +92,23 @@ internal sealed class ByteWriter
     internal void PatchU16BE(int offset, ushort value) =>
         BinaryPrimitives.WriteUInt16BigEndian(_buffer.AsSpan(offset), value);
 
-    internal byte[] ToArray() => _buffer.AsSpan(0, _length).ToArray();
+    internal byte[] ToArray() => _buffer.AsSpan(0, Length).ToArray();
 
-    internal ReadOnlySpan<byte> Span => _buffer.AsSpan(0, _length);
+    internal ReadOnlySpan<byte> Span => _buffer.AsSpan(0, Length);
 
     private void Ensure(int count)
     {
-        if (_length + count <= _buffer.Length) return;
+        if (Length + count <= _buffer.Length)
+        {
+            return;
+        }
+
         int capacity = _buffer.Length * 2;
-        while (capacity < _length + count) capacity *= 2;
+        while (capacity < Length + count)
+        {
+            capacity *= 2;
+        }
+
         Array.Resize(ref _buffer, capacity);
     }
 }
@@ -111,10 +121,9 @@ internal sealed class ByteWriter
 internal ref struct ByteReader(ReadOnlySpan<byte> data)
 {
     private readonly ReadOnlySpan<byte> _data = data;
-    private int _position;
 
-    internal readonly int Remaining => _data.Length - _position;
-    internal readonly int Position => _position;
+    internal readonly int Remaining => _data.Length - Position;
+    internal int Position { get; private set; }
 
     internal byte U8() => Take(1)[0];
 
@@ -125,9 +134,13 @@ internal ref struct ByteReader(ReadOnlySpan<byte> data)
 
     internal ReadOnlySpan<byte> Take(int count)
     {
-        if (count < 0 || count > Remaining) throw new RdpProtocolException("Truncated RDP PDU.");
-        ReadOnlySpan<byte> slice = _data.Slice(_position, count);
-        _position += count;
+        if (count < 0 || count > Remaining)
+        {
+            throw new RdpProtocolException("Truncated RDP PDU.");
+        }
+
+        ReadOnlySpan<byte> slice = _data.Slice(Position, count);
+        Position += count;
         return slice;
     }
 
@@ -135,8 +148,12 @@ internal ref struct ByteReader(ReadOnlySpan<byte> data)
 
     internal readonly ReadOnlySpan<byte> Peek(int count)
     {
-        if (count < 0 || count > Remaining) throw new RdpProtocolException("Truncated RDP PDU.");
-        return _data.Slice(_position, count);
+        if (count < 0 || count > Remaining)
+        {
+            throw new RdpProtocolException("Truncated RDP PDU.");
+        }
+
+        return _data.Slice(Position, count);
     }
 
     internal ReadOnlySpan<byte> Rest() => Take(Remaining);

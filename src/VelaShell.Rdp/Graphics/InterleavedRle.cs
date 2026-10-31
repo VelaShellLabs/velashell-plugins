@@ -1,5 +1,3 @@
-using VelaShell.Rdp.Wire;
-
 namespace VelaShell.Rdp.Graphics;
 
 /// <summary>
@@ -46,17 +44,27 @@ internal static class InterleavedRle
             if (code is RegularBgRun or MegaMegaBgRun)
             {
                 int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
-                if (advance == 0) throw new RdpProtocolException("Invalid RLE run length.");
+                if (advance == 0)
+                {
+                    throw new RdpProtocolException("Invalid RLE run length.");
+                }
+
                 s += advance;
                 if (firstLine)
                 {
                     if (insertFgPel) { WritePixel(dst, ref d, bpp, fgPel, dstEnd); runLength--; }
-                    for (int i = 0; i < runLength; i++) WritePixel(dst, ref d, bpp, BlackPixel, dstEnd);
+                    for (int i = 0; i < runLength; i++)
+                    {
+                        WritePixel(dst, ref d, bpp, BlackPixel, dstEnd);
+                    }
                 }
                 else
                 {
                     if (insertFgPel) { WritePixel(dst, ref d, bpp, ReadPixel(dst, d - rowDelta, bpp) ^ fgPel, dstEnd); runLength--; }
-                    for (int i = 0; i < runLength; i++) WritePixel(dst, ref d, bpp, ReadPixel(dst, d - rowDelta, bpp), dstEnd);
+                    for (int i = 0; i < runLength; i++)
+                    {
+                        WritePixel(dst, ref d, bpp, ReadPixel(dst, d - rowDelta, bpp), dstEnd);
+                    }
                 }
                 insertFgPel = true;
                 continue;
@@ -70,69 +78,126 @@ internal static class InterleavedRle
                 case MegaMegaFgRun:
                 case LiteSetFgFgRun:
                 case MegaMegaSetFgRun:
-                {
-                    int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
-                    if (advance == 0) throw new RdpProtocolException("Invalid RLE run length.");
-                    s += advance;
-                    if (code is LiteSetFgFgRun or MegaMegaSetFgRun) fgPel = ReadSrc(src, ref s, bpp, srcEnd);
-                    if (firstLine) for (int i = 0; i < runLength; i++) WritePixel(dst, ref d, bpp, fgPel, dstEnd);
-                    else for (int i = 0; i < runLength; i++) WritePixel(dst, ref d, bpp, ReadPixel(dst, d - rowDelta, bpp) ^ fgPel, dstEnd);
-                    break;
-                }
+                    {
+                        int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
+                        if (advance == 0)
+                        {
+                            throw new RdpProtocolException("Invalid RLE run length.");
+                        }
+
+                        s += advance;
+                        if (code is LiteSetFgFgRun or MegaMegaSetFgRun)
+                        {
+                            fgPel = ReadSrc(src, ref s, bpp, srcEnd);
+                        }
+
+                        if (firstLine)
+                        {
+                            for (int i = 0; i < runLength; i++)
+                            {
+                                WritePixel(dst, ref d, bpp, fgPel, dstEnd);
+                            }
+                        }
+                        else
+                        {
+                            for (int i = 0; i < runLength; i++)
+                            {
+                                WritePixel(dst, ref d, bpp, ReadPixel(dst, d - rowDelta, bpp) ^ fgPel, dstEnd);
+                            }
+                        }
+
+                        break;
+                    }
                 case LiteDitheredRun:
                 case MegaMegaDitheredRun:
-                {
-                    int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
-                    if (advance == 0) throw new RdpProtocolException("Invalid RLE run length.");
-                    s += advance;
-                    uint pixelA = ReadSrc(src, ref s, bpp, srcEnd);
-                    uint pixelB = ReadSrc(src, ref s, bpp, srcEnd);
-                    for (int i = 0; i < runLength; i++) { WritePixel(dst, ref d, bpp, pixelA, dstEnd); WritePixel(dst, ref d, bpp, pixelB, dstEnd); }
-                    break;
-                }
+                    {
+                        int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
+                        if (advance == 0)
+                        {
+                            throw new RdpProtocolException("Invalid RLE run length.");
+                        }
+
+                        s += advance;
+                        uint pixelA = ReadSrc(src, ref s, bpp, srcEnd);
+                        uint pixelB = ReadSrc(src, ref s, bpp, srcEnd);
+                        for (int i = 0; i < runLength; i++) { WritePixel(dst, ref d, bpp, pixelA, dstEnd); WritePixel(dst, ref d, bpp, pixelB, dstEnd); }
+                        break;
+                    }
                 case RegularColorRun:
                 case MegaMegaColorRun:
-                {
-                    int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
-                    if (advance == 0) throw new RdpProtocolException("Invalid RLE run length.");
-                    s += advance;
-                    uint pixelA = ReadSrc(src, ref s, bpp, srcEnd);
-                    for (int i = 0; i < runLength; i++) WritePixel(dst, ref d, bpp, pixelA, dstEnd);
-                    break;
-                }
+                    {
+                        int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
+                        if (advance == 0)
+                        {
+                            throw new RdpProtocolException("Invalid RLE run length.");
+                        }
+
+                        s += advance;
+                        uint pixelA = ReadSrc(src, ref s, bpp, srcEnd);
+                        for (int i = 0; i < runLength; i++)
+                        {
+                            WritePixel(dst, ref d, bpp, pixelA, dstEnd);
+                        }
+
+                        break;
+                    }
                 case RegularFgBgImage:
                 case MegaMegaFgBgImage:
                 case LiteSetFgFgBgImage:
                 case MegaMegaSetFgBgImage:
-                {
-                    int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
-                    if (advance == 0) throw new RdpProtocolException("Invalid RLE run length.");
-                    s += advance;
-                    if (code is LiteSetFgFgBgImage or MegaMegaSetFgBgImage) fgPel = ReadSrc(src, ref s, bpp, srcEnd);
-                    while (runLength > 8)
                     {
-                        if (s >= srcEnd) throw new RdpProtocolException("RLE source underrun.");
-                        byte bitmask = src[s++];
-                        WriteFgBg(dst, ref d, rowDelta, bpp, bitmask, fgPel, 8, firstLine, white, dstEnd);
-                        runLength -= 8;
+                        int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
+                        if (advance == 0)
+                        {
+                            throw new RdpProtocolException("Invalid RLE run length.");
+                        }
+
+                        s += advance;
+                        if (code is LiteSetFgFgBgImage or MegaMegaSetFgBgImage)
+                        {
+                            fgPel = ReadSrc(src, ref s, bpp, srcEnd);
+                        }
+
+                        while (runLength > 8)
+                        {
+                            if (s >= srcEnd)
+                            {
+                                throw new RdpProtocolException("RLE source underrun.");
+                            }
+
+                            byte bitmask = src[s++];
+                            WriteFgBg(dst, ref d, rowDelta, bpp, bitmask, fgPel, 8, firstLine, white, dstEnd);
+                            runLength -= 8;
+                        }
+                        if (runLength > 0)
+                        {
+                            if (s >= srcEnd)
+                            {
+                                throw new RdpProtocolException("RLE source underrun.");
+                            }
+
+                            byte bitmask = src[s++];
+                            WriteFgBg(dst, ref d, rowDelta, bpp, bitmask, fgPel, runLength, firstLine, white, dstEnd);
+                        }
+                        break;
                     }
-                    if (runLength > 0)
-                    {
-                        if (s >= srcEnd) throw new RdpProtocolException("RLE source underrun.");
-                        byte bitmask = src[s++];
-                        WriteFgBg(dst, ref d, rowDelta, bpp, bitmask, fgPel, runLength, firstLine, white, dstEnd);
-                    }
-                    break;
-                }
                 case RegularColorImage:
                 case MegaMegaColorImage:
-                {
-                    int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
-                    if (advance == 0) throw new RdpProtocolException("Invalid RLE run length.");
-                    s += advance;
-                    for (int i = 0; i < runLength; i++) WritePixel(dst, ref d, bpp, ReadSrc(src, ref s, bpp, srcEnd), dstEnd);
-                    break;
-                }
+                    {
+                        int runLength = ExtractRunLength(code, src, s, srcEnd, out int advance);
+                        if (advance == 0)
+                        {
+                            throw new RdpProtocolException("Invalid RLE run length.");
+                        }
+
+                        s += advance;
+                        for (int i = 0; i < runLength; i++)
+                        {
+                            WritePixel(dst, ref d, bpp, ReadSrc(src, ref s, bpp, srcEnd), dstEnd);
+                        }
+
+                        break;
+                    }
                 case SpecialFgBg1:
                     s += 1;
                     WriteFgBg(dst, ref d, rowDelta, bpp, MaskSpecialFgBg1, fgPel, 8, firstLine, white, dstEnd);
@@ -157,7 +222,11 @@ internal static class InterleavedRle
 
     private static uint ReadSrc(ReadOnlySpan<byte> src, ref int s, int bpp, int srcEnd)
     {
-        if (s + bpp > srcEnd) throw new RdpProtocolException("RLE source underrun.");
+        if (s + bpp > srcEnd)
+        {
+            throw new RdpProtocolException("RLE source underrun.");
+        }
+
         uint v = bpp switch
         {
             1 => src[s],
@@ -177,10 +246,22 @@ internal static class InterleavedRle
 
     private static void WritePixel(Span<byte> dst, ref int d, int bpp, uint pel, int dstEnd)
     {
-        if (d + bpp > dstEnd) throw new RdpProtocolException("RLE bitmap overran destination.");
+        if (d + bpp > dstEnd)
+        {
+            throw new RdpProtocolException("RLE bitmap overran destination.");
+        }
+
         dst[d] = (byte)pel;
-        if (bpp >= 2) dst[d + 1] = (byte)(pel >> 8);
-        if (bpp >= 3) dst[d + 2] = (byte)(pel >> 16);
+        if (bpp >= 2)
+        {
+            dst[d + 1] = (byte)(pel >> 8);
+        }
+
+        if (bpp >= 3)
+        {
+            dst[d + 2] = (byte)(pel >> 16);
+        }
+
         d += bpp;
     }
 
@@ -201,8 +282,16 @@ internal static class InterleavedRle
 
     private static int ExtractCodeId(byte header)
     {
-        if ((header & 0xC0) != 0xC0) return header >> 5;        // regular
-        if ((header & 0xF0) == 0xF0) return header;             // mega / special
+        if ((header & 0xC0) != 0xC0)
+        {
+            return header >> 5;        // regular
+        }
+
+        if ((header & 0xF0) == 0xF0)
+        {
+            return header;             // mega / special
+        }
+
         return header >> 4;                                     // lite
     }
 
@@ -215,12 +304,20 @@ internal static class InterleavedRle
             case RegularFgBgImage:
                 run = src[pos] & MaskRegularRunLength;
                 if (run == 0) { if (pos + 2 > end) { advance = 0; return 0; } run = src[pos + 1] + 1; advance++; }
-                else run *= 8;
+                else
+                {
+                    run *= 8;
+                }
+
                 return run;
             case LiteSetFgFgBgImage:
                 run = src[pos] & MaskLiteRunLength;
                 if (run == 0) { if (pos + 2 > end) { advance = 0; return 0; } run = src[pos + 1] + 1; advance++; }
-                else run *= 8;
+                else
+                {
+                    run *= 8;
+                }
+
                 return run;
             case RegularBgRun:
             case RegularFgRun:

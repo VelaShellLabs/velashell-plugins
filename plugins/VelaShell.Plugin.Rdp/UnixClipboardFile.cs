@@ -18,11 +18,21 @@ internal static partial class UnixClipboardFile
 
     internal static int Open(string path)
     {
-        if (string.IsNullOrEmpty(path) || path[0] != '/') return -1;
-        if (OperatingSystem.IsWindows()) return -1;
+        if (string.IsNullOrEmpty(path) || path[0] != '/')
+        {
+            return -1;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return -1;
+        }
 
         int fd = open(path, OperatingSystem.IsMacOS() ? MacFlags : LinuxFlags);
-        if (fd < 0) return -1;
+        if (fd < 0)
+        {
+            return -1;
+        }
 
         byte[] stat = new byte[256];
         int rc = OperatingSystem.IsMacOS() ? fstatMac(fd, stat) : fstatLinux(fd, stat);
@@ -32,7 +42,7 @@ internal static partial class UnixClipboardFile
             : BitConverter.ToUInt32(stat, 24);
         if (rc != 0 || (mode & SIfmt) != SIfreg)
         {
-            close(fd);
+            _ = close(fd);
             return -1;
         }
         return fd;

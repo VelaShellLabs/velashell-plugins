@@ -62,7 +62,7 @@ internal static class RdpConnector
 
     private static ProtocolCertificateTrustException CertificateTrust(RdpCertificateRejectedException ex, Loc loc)
     {
-        using X509Certificate2 certificate = X509Certificate2.CreateFromPem(Encoding.UTF8.GetString(ex.Pem));
+        using var certificate = X509Certificate2.CreateFromPem(Encoding.UTF8.GetString(ex.Pem));
         return new ProtocolCertificateTrustException(loc["Certificate"], certificate.Subject, certificate.Issuer,
             certificate.NotAfter, certificate.GetCertHashString(HashAlgorithmName.SHA256), loc["Certificate"]);
     }

@@ -17,7 +17,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     private readonly Action<RdpWorkspaceDocument> _closed;
     private readonly CancellationTokenSource _lifetime;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _disposeGate = new();
+    private readonly Lock _disposeGate = new();
     private WorkspaceConnectRequest? _request;
     private IRdpSession? _session;
     private Action<Exception?>? _disconnectedHandler;
@@ -41,20 +41,28 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
         AttachSession(session);
     }
-    public WorkspaceStatus Status { get { lock (_disposeGate) return _status; } }
+    public WorkspaceStatus Status { get { lock (_disposeGate) { return _status; } } }
     public event EventHandler<WorkspaceStatus>? StatusChanged;
     public object CreateView()
     {
         Dispatcher.UIThread.VerifyAccess();
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
-        if (_root is not null) return _root;
+        if (_root is not null)
+        {
+            return _root;
+        }
+
         _root = new ContentControl();
         BindView();
         return _root;
     }
     private void BindView()
     {
-        if (_root is null || _session is null || _disposed != 0) return;
+        if (_root is null || _session is null || _disposed != 0)
+        {
+            return;
+        }
+
         _view = new(_session, _context, _settings, _loc) { Reconnect = ReconnectAsync };
         _view.SetConnected(Status.State == ProtocolSessionState.Connected);
         _root.Content = _view;
@@ -64,9 +72,15 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         lock (_disposeGate)
         {
             _loc = loc;
-            if (_status.State == ProtocolSessionState.Faulted) SetStatus(_status with { Message = loc["Disconnected"] });
+            if (_status.State == ProtocolSessionState.Faulted)
+            {
+                SetStatus(_status with { Message = loc["Disconnected"] });
+            }
         }
-        if (_root is not null) Dispatcher.UIThread.Post(() => { if (_disposed == 0) _view?.ApplyLocale(loc); });
+        if (_root is not null)
+        {
+            Dispatcher.UIThread.Post(() => { if (_disposed == 0) { _view?.ApplyLocale(loc); } });
+        }
     }
     private void AttachSession(IRdpSession session)
     {
@@ -80,18 +94,32 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     }
     private void OnDisconnected(IRdpSession session, Exception? failure)
     {
-        if (_disposed != 0) return;
-        SetStatus(new(ProtocolSessionState.Faulted, _loc["Disconnected"]), session);
-        if (_root is not null) Dispatcher.UIThread.Post(() =>
+        if (_disposed != 0)
         {
-            if (_disposed == 0 && ReferenceEquals(_session, session)) _view?.SetConnected(false);
+            return;
+        }
+
+        SetStatus(new(ProtocolSessionState.Faulted, _loc["Disconnected"]), session);
+        if (_root is not null)
+        {
+            Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed == 0 && ReferenceEquals(_session, session))
+            {
+                _view?.SetConnected(false);
+            }
         });
+        }
     }
     private void SetStatus(WorkspaceStatus status, IRdpSession? source = null)
     {
         lock (_disposeGate)
         {
-            if (source is not null && !ReferenceEquals(_session, source)) return;
+            if (source is not null && !ReferenceEquals(_session, source))
+            {
+                return;
+            }
+
             _status = status;
         }
         try { StatusChanged?.Invoke(this, status); }
@@ -110,36 +138,49 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             IRdpSession session = await _factory(_request!, _settings, _loc, linked.Token).ConfigureAwait(false);
             await CloseConnectionAsync().ConfigureAwait(false);
             AttachSession(session);
-            if (_root is not null) await Dispatcher.UIThread.InvokeAsync(BindView);
+            if (_root is not null)
+            {
+                await Dispatcher.UIThread.InvokeAsync(BindView);
+            }
         }
-        finally { _gate.Release(); }
+        finally { _ = _gate.Release(); }
     }
     private async Task CloseConnectionAsync()
     {
         IRdpSession? session;
         lock (_disposeGate) { session = _session; _session = null; }
-        if (session is not null) session.Disconnected -= _disconnectedHandler;
+        session?.Disconnected -= _disconnectedHandler;
         _disconnectedHandler = null;
         // Abort the transport before draining clipboard/input tasks that may be awaiting a server reply.
-        if (session is not null) await session.DisposeAsync().ConfigureAwait(false);
+        if (session is not null)
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+        }
+
         if (_view is not null)
         {
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 RdpWorkspaceView? view = _view;
                 _view = null;
-                if (_root is not null) _root.Content = null;
-                if (view is not null) await view.DisposeAsync();
+                _root?.Content = null;
+                if (view is not null)
+                {
+                    await view.DisposeAsync();
+                }
             });
         }
     }
     public ValueTask DisposeAsync()
     {
-        lock (_disposeGate) return new(_disposeTask ??= DisposeCoreAsync());
+        lock (_disposeGate)
+        {
+            return new(_disposeTask ??= DisposeCoreAsync());
+        }
     }
     private async Task DisposeCoreAsync()
     {
-        Interlocked.Exchange(ref _disposed, 1);
+        _ = Interlocked.Exchange(ref _disposed, 1);
         _lifetime.Cancel();
         await _gate.WaitAsync().ConfigureAwait(false);
         try { await CloseConnectionAsync().ConfigureAwait(false); }
@@ -149,7 +190,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             SetStatus(new(ProtocolSessionState.Closed, _loc["Closed"]));
             StatusChanged = null;
             _closed(this);
-            _gate.Release();
+            _ = _gate.Release();
             _lifetime.Dispose();
         }
     }

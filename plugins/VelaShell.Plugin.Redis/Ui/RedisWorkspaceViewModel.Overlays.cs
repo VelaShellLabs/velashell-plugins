@@ -71,7 +71,7 @@ public sealed class RedisNewKeyForm : ObservableObject
         get;
         internal set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             SubmitCommand.RaiseCanExecuteChanged();
         }
     }
@@ -82,7 +82,7 @@ public sealed class RedisNewKeyForm : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             SubmitCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -96,7 +96,7 @@ public sealed class RedisNewKeyForm : ObservableObject
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             foreach (RedisChoice choice in Types)
             {
                 choice.IsOn = string.Equals(choice.Value, field, StringComparison.Ordinal);
@@ -137,7 +137,7 @@ public sealed class RedisNewKeyForm : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(TtlPreview));
         }
     } = string.Empty;
@@ -167,7 +167,7 @@ public sealed class RedisNewKeyForm : ObservableObject
         get;
         internal set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasNotice));
         }
     } = string.Empty;
@@ -255,7 +255,7 @@ public sealed class RedisTransferForm : ObservableObject
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(Title));
             RaisePropertyChanged(nameof(SubmitLabel));
             RaisePropertyChanged(nameof(ShowsScope));
@@ -284,7 +284,7 @@ public sealed class RedisTransferForm : ObservableObject
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             foreach (RedisChoice choice in Formats)
             {
                 choice.IsOn = string.Equals(choice.Value, field, StringComparison.Ordinal);
@@ -298,7 +298,7 @@ public sealed class RedisTransferForm : ObservableObject
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             foreach (RedisChoice choice in Scopes)
             {
                 choice.IsOn = (choice.Value is "selected") == field;
@@ -315,7 +315,7 @@ public sealed class RedisTransferForm : ObservableObject
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             SubmitCommand.RaiseCanExecuteChanged();
         }
     } = string.Empty;
@@ -326,7 +326,7 @@ public sealed class RedisTransferForm : ObservableObject
         get;
         internal set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasNotice));
         }
     } = string.Empty;
@@ -340,7 +340,7 @@ public sealed class RedisTransferForm : ObservableObject
         get;
         internal set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             SubmitCommand.RaiseCanExecuteChanged();
         }
     }

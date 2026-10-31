@@ -39,7 +39,11 @@ internal static class Per
     internal static byte ReadEnumerated(ref ByteReader r, byte count)
     {
         byte value = r.U8();
-        if (value >= count) throw new RdpProtocolException("PER enumerated value out of range.");
+        if (value >= count)
+        {
+            throw new RdpProtocolException("PER enumerated value out of range.");
+        }
+
         return value;
     }
 
@@ -80,7 +84,11 @@ internal static class Per
     internal static ushort ReadInteger16(ref ByteReader r, ushort min)
     {
         int value = r.U16BE() + min;
-        if (value > ushort.MaxValue) throw new RdpProtocolException("PER integer16 overflow.");
+        if (value > ushort.MaxValue)
+        {
+            throw new RdpProtocolException("PER integer16 overflow.");
+        }
+
         return (ushort)value;
     }
 
@@ -98,13 +106,19 @@ internal static class Per
     internal static void ReadObjectIdentifier(ref ByteReader r, ReadOnlySpan<byte> expected)
     {
         int length = ReadLength(ref r);
-        if (length != 5) throw new RdpProtocolException("Unexpected PER object identifier length.");
+        if (length != 5)
+        {
+            throw new RdpProtocolException("Unexpected PER object identifier length.");
+        }
+
         ReadOnlySpan<byte> body = r.Take(5);
         byte t0 = (byte)((body[0] >> 4) & 0x0F);
         byte t1 = (byte)(body[0] & 0x0F);
         if (t0 != expected[0] || t1 != expected[1] || body[1] != expected[2] ||
             body[2] != expected[3] || body[3] != expected[4] || body[4] != expected[5])
+        {
             throw new RdpProtocolException("Unexpected GCC object identifier.");
+        }
     }
 
     internal static void WriteOctetString(ByteWriter w, ReadOnlySpan<byte> data, int min)

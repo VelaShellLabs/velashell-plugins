@@ -85,12 +85,12 @@ internal static class ShareControl
     internal static DataHeader ReadDataHeader(ref ByteReader r)
     {
         uint shareId = r.U32LE();
-        r.U8();                       // pad1
-        r.U8();                       // streamId
+        _ = r.U8();                       // pad1
+        _ = r.U8();                       // streamId
         ushort uncompressed = r.U16LE();
         byte type = r.U8();
         byte compressedType = r.U8();
-        r.U16LE();                    // compressedLength
+        _ = r.U16LE();                    // compressedLength
         return new DataHeader(shareId, (ShareDataType)type, uncompressed, compressedType);
     }
 }

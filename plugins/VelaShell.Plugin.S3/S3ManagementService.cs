@@ -928,53 +928,25 @@ public sealed class S3ManagementService : IS3ManagementService
 
     private static async Task RemoveConfigAsync(IAmazonS3 client, string bucket, S3ConfigKind kind, string? id, CancellationToken ct)
     {
-        switch (kind)
+        Task deletion = kind switch
         {
-            case S3ConfigKind.Lifecycle:
-                await client.DeleteLifecycleConfigurationAsync(new DeleteLifecycleConfigurationRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Policy:
-                await client.DeleteBucketPolicyAsync(new DeleteBucketPolicyRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.PublicAccessBlock:
-                await client.DeletePublicAccessBlockAsync(new DeletePublicAccessBlockRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.OwnershipControls:
-                await client.DeleteBucketOwnershipControlsAsync(new DeleteBucketOwnershipControlsRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Cors:
-                await client.DeleteCORSConfigurationAsync(new DeleteCORSConfigurationRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Encryption:
-                await client.DeleteBucketEncryptionAsync(new DeleteBucketEncryptionRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Tagging:
-                await client.DeleteBucketTaggingAsync(new DeleteBucketTaggingRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Replication:
-                await client.DeleteBucketReplicationAsync(new DeleteBucketReplicationRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Website:
-                await client.DeleteBucketWebsiteAsync(new DeleteBucketWebsiteRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Inventory:
-                await client.DeleteBucketInventoryConfigurationAsync(new DeleteBucketInventoryConfigurationRequest { BucketName = bucket, InventoryId = id }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Analytics:
-                await client.DeleteBucketAnalyticsConfigurationAsync(new DeleteBucketAnalyticsConfigurationRequest { BucketName = bucket, AnalyticsId = id }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.Metrics:
-                await client.DeleteBucketMetricsConfigurationAsync(new DeleteBucketMetricsConfigurationRequest { BucketName = bucket, MetricsId = id }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.IntelligentTiering:
-                await client.DeleteBucketIntelligentTieringConfigurationAsync(new DeleteBucketIntelligentTieringConfigurationRequest { BucketName = bucket, IntelligentTieringId = id }, ct).ConfigureAwait(false);
-                break;
-            case S3ConfigKind.MetadataConfiguration:
-                await client.DeleteBucketMetadataConfigurationAsync(new DeleteBucketMetadataConfigurationRequest { BucketName = bucket }, ct).ConfigureAwait(false);
-                break;
-            default:
-                throw new VelaS3UnsupportedOperationException($"S3 bucket configuration {kind} cannot be deleted.");
-        }
+            S3ConfigKind.Lifecycle => client.DeleteLifecycleConfigurationAsync(new DeleteLifecycleConfigurationRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Policy => client.DeleteBucketPolicyAsync(new DeleteBucketPolicyRequest { BucketName = bucket }, ct),
+            S3ConfigKind.PublicAccessBlock => client.DeletePublicAccessBlockAsync(new DeletePublicAccessBlockRequest { BucketName = bucket }, ct),
+            S3ConfigKind.OwnershipControls => client.DeleteBucketOwnershipControlsAsync(new DeleteBucketOwnershipControlsRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Cors => client.DeleteCORSConfigurationAsync(new DeleteCORSConfigurationRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Encryption => client.DeleteBucketEncryptionAsync(new DeleteBucketEncryptionRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Tagging => client.DeleteBucketTaggingAsync(new DeleteBucketTaggingRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Replication => client.DeleteBucketReplicationAsync(new DeleteBucketReplicationRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Website => client.DeleteBucketWebsiteAsync(new DeleteBucketWebsiteRequest { BucketName = bucket }, ct),
+            S3ConfigKind.Inventory => client.DeleteBucketInventoryConfigurationAsync(new DeleteBucketInventoryConfigurationRequest { BucketName = bucket, InventoryId = id }, ct),
+            S3ConfigKind.Analytics => client.DeleteBucketAnalyticsConfigurationAsync(new DeleteBucketAnalyticsConfigurationRequest { BucketName = bucket, AnalyticsId = id }, ct),
+            S3ConfigKind.Metrics => client.DeleteBucketMetricsConfigurationAsync(new DeleteBucketMetricsConfigurationRequest { BucketName = bucket, MetricsId = id }, ct),
+            S3ConfigKind.IntelligentTiering => client.DeleteBucketIntelligentTieringConfigurationAsync(new DeleteBucketIntelligentTieringConfigurationRequest { BucketName = bucket, IntelligentTieringId = id }, ct),
+            S3ConfigKind.MetadataConfiguration => client.DeleteBucketMetadataConfigurationAsync(new DeleteBucketMetadataConfigurationRequest { BucketName = bucket }, ct),
+            _ => throw new VelaS3UnsupportedOperationException($"S3 bucket configuration {kind} cannot be deleted."),
+        };
+        await deletion.ConfigureAwait(false);
     }
 
     // ---- 小工具 -------------------------------------------------------------

@@ -1,3 +1,4 @@
+using System.Net.Security;
 using System.Net.Sockets;
 using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Input;
@@ -34,7 +35,7 @@ internal sealed class RdpConnection : IAsyncDisposable
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly Dictionary<ushort, string> _channelsById = [];
     private readonly Dictionary<ushort, MemoryStream> _vcReassembly = [];
-    private readonly object _frameLock = new();
+    private readonly Lock _frameLock = new();
     private const int ChannelChunkSize = 1600;
     private const uint ChannelFlagFirst = 0x01, ChannelFlagLast = 0x02;
 
@@ -68,13 +69,13 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         if (selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx))
         {
-            var ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+            SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
             _transport.UpgradeStream(ssl);
             await CredSsp.AuthenticateAsync(ssl, _options.CertificateHost, _options.Domain, _options.Username, _options.Password, ct).ConfigureAwait(false);
         }
         else if (selected.HasFlag(SecurityProtocol.Ssl))
         {
-            var ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+            SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
             _transport.UpgradeStream(ssl);
         }
         else
@@ -88,7 +89,10 @@ internal sealed class RdpConnection : IAsyncDisposable
         _mcs = new McsLayer(_transport);
         await _mcs.ConnectAsync(gcc, _options.Channels, ct).ConfigureAwait(false);
         _ioChannel = _mcs.Server.IoChannelId;
-        foreach ((string name, ushort id) in _mcs.Channels) _channelsById[id] = name;
+        foreach ((string name, ushort id) in _mcs.Channels)
+        {
+            _channelsById[id] = name;
+        }
 
         // Client Info on the I/O channel.
         await SendOnIoAsync(ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true), ct).ConfigureAwait(false);
@@ -103,8 +107,15 @@ internal sealed class RdpConnection : IAsyncDisposable
         while (true)
         {
             byte[] payload = await ReadIoPayloadAsync(ct).ConfigureAwait(false);
-            if (LooksLikeShareControl(payload)) return payload;   // server skipped or finished licensing
-            if (Licensing.Process(payload)) return await ReadIoPayloadAsync(ct).ConfigureAwait(false);
+            if (LooksLikeShareControl(payload))
+            {
+                return payload;   // server skipped or finished licensing
+            }
+
+            if (Licensing.Process(payload))
+            {
+                return await ReadIoPayloadAsync(ct).ConfigureAwait(false);
+            }
         }
     }
 
@@ -112,7 +123,11 @@ internal sealed class RdpConnection : IAsyncDisposable
     {
         var r = new ByteReader(payload);
         ShareControl.ControlHeader header = ShareControl.ReadControlHeader(ref r);
-        if (header.Type != ShareControlType.DemandActive) throw new RdpProtocolException("Expected Demand Active PDU.");
+        if (header.Type != ShareControlType.DemandActive)
+        {
+            throw new RdpProtocolException("Expected Demand Active PDU.");
+        }
+
         Capabilities.DemandActive active = Capabilities.ReadDemandActive(ref r);
         _shareId = active.ShareId;
         // Adopt the resolution the server actually settled on (initial negotiation, or the result of
@@ -128,7 +143,10 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // The server paints a full-screen bitmap update right after the font list, which raises
         // FrameUpdated; resize the backing store here so that update lands in the new dimensions.
-        lock (_frameLock) Framebuffer = new Framebuffer(_width, _height);
+        lock (_frameLock)
+        {
+            Framebuffer = new Framebuffer(_width, _height);
+        }
     }
 
     // ---- Active-phase pump ----
@@ -143,10 +161,20 @@ internal sealed class RdpConnection : IAsyncDisposable
             return true;
         }
         McsData? data = McsLayer.ParseSendDataIndication(pdu.Data);
-        if (data is not { } indication) return false;     // disconnect ultimatum
-        if (indication.ChannelId == _ioChannel) await ProcessIoAsync(indication.Payload, ct).ConfigureAwait(false);
+        if (data is not { } indication)
+        {
+            return false;     // disconnect ultimatum
+        }
+
+        if (indication.ChannelId == _ioChannel)
+        {
+            await ProcessIoAsync(indication.Payload, ct).ConfigureAwait(false);
+        }
         else if (_channelsById.TryGetValue(indication.ChannelId, out string? name))
+        {
             ReassembleChannel(indication.ChannelId, name, indication.Payload);
+        }
+
         return true;
     }
 
@@ -179,13 +207,21 @@ internal sealed class RdpConnection : IAsyncDisposable
                 ushort updateType = r.U16LE();
                 if (updateType == 0x0001)
                 {
-                    lock (_frameLock) BitmapUpdate.Apply(ref r, Framebuffer);
+                    lock (_frameLock)
+                    {
+                        _ = BitmapUpdate.Apply(ref r, Framebuffer);
+                    }
+
                     FrameUpdated?.Invoke();
                 }
                 break;
             case ShareDataType.SetErrorInfo:
                 uint errorInfo = r.U32LE();
-                if (errorInfo != 0) ErrorInfoReceived?.Invoke(errorInfo);
+                if (errorInfo != 0)
+                {
+                    ErrorInfoReceived?.Invoke(errorInfo);
+                }
+
                 break;
         }
     }
@@ -201,7 +237,11 @@ internal sealed class RdpConnection : IAsyncDisposable
             int fragmentation = (updateHeader >> 4) & 0x03;
             int compression = (updateHeader >> 6) & 0x03;
             byte compressionFlags = 0;
-            if ((compression & 0x02) != 0) compressionFlags = r.U8(); // FASTPATH_OUTPUT_COMPRESSION_USED
+            if ((compression & 0x02) != 0)
+            {
+                compressionFlags = r.U8(); // FASTPATH_OUTPUT_COMPRESSION_USED
+            }
+
             int size = r.U16LE();
             ReadOnlySpan<byte> updateData = r.Take(size);
             updateData = Decompress(updateData, compressionFlags);
@@ -220,7 +260,11 @@ internal sealed class RdpConnection : IAsyncDisposable
                     _fragment.Write(updateData);
                     break;
                 case 3: // NEXT
-                    if (_fragment.Length + updateData.Length <= MaxFragment) _fragment.Write(updateData);
+                    if (_fragment.Length + updateData.Length <= MaxFragment)
+                    {
+                        _fragment.Write(updateData);
+                    }
+
                     break;
                 case 1: // LAST
                     if (_fragment.Length + updateData.Length <= MaxFragment)
@@ -232,13 +276,20 @@ internal sealed class RdpConnection : IAsyncDisposable
                     break;
             }
         }
-        if (painted) FrameUpdated?.Invoke();
+        if (painted)
+        {
+            FrameUpdated?.Invoke();
+        }
     }
 
     /// <summary>Applies MPPC bulk decompression when the flags mark the payload compressed; otherwise passthrough.</summary>
     private ReadOnlySpan<byte> Decompress(ReadOnlySpan<byte> data, byte compressionFlags)
     {
-        if ((compressionFlags & Graphics.Mppc.PacketCompressed) == 0) return data;
+        if ((compressionFlags & Graphics.Mppc.PacketCompressed) == 0)
+        {
+            return data;
+        }
+
         _mppc ??= new Graphics.Mppc((compressionFlags & Graphics.Mppc.CompressionTypeMask) == 1 ? 1 : 0);
         ReadOnlySpan<byte> result = _mppc.Decompress(data, compressionFlags, out bool passthrough);
         // Valid until the next Decompress call; the caller consumes it before then.
@@ -247,16 +298,28 @@ internal sealed class RdpConnection : IAsyncDisposable
 
     private bool ApplyFastPathUpdate(int code, ReadOnlySpan<byte> updateData)
     {
-        if (code != 0x1) return false; // FASTPATH_UPDATETYPE_BITMAP only; others (orders/palette/pointer) ignored
+        if (code != 0x1)
+        {
+            return false; // FASTPATH_UPDATETYPE_BITMAP only; others (orders/palette/pointer) ignored
+        }
+
         var rr = new ByteReader(updateData);
-        rr.U16LE(); // updateType (UPDATETYPE_BITMAP)
-        lock (_frameLock) BitmapUpdate.Apply(ref rr, Framebuffer);
+        _ = rr.U16LE(); // updateType (UPDATETYPE_BITMAP)
+        lock (_frameLock)
+        {
+            _ = BitmapUpdate.Apply(ref rr, Framebuffer);
+        }
+
         return true;
     }
 
     private static bool LooksLikeShareControl(ReadOnlySpan<byte> payload)
     {
-        if (payload.Length < 6) return false;
+        if (payload.Length < 6)
+        {
+            return false;
+        }
+
         int pduType = payload[2] | (payload[3] << 8);
         int type = pduType & 0x0F;
         return (pduType & 0x0010) != 0 && type is 0x1 or 0x3 or 0x6 or 0x7 or 0xA;
@@ -279,7 +342,11 @@ internal sealed class RdpConnection : IAsyncDisposable
     internal Task SendVirtualChannelAsync(string name, byte[] data, CancellationToken ct)
     {
         ushort channelId = ChannelId(name);
-        if (channelId == 0) throw new RdpProtocolException($"Virtual channel '{name}' was not joined.");
+        if (channelId == 0)
+        {
+            throw new RdpProtocolException($"Virtual channel '{name}' was not joined.");
+        }
+
         return Guarded(async () =>
         {
             int offset = 0;
@@ -310,12 +377,16 @@ internal sealed class RdpConnection : IAsyncDisposable
             buffer = new MemoryStream();
             _vcReassembly[channelId] = buffer;
         }
-        if (totalLength > 32 * 1024 * 1024) throw new RdpProtocolException("Virtual channel PDU too large.");
+        if (totalLength > 32 * 1024 * 1024)
+        {
+            throw new RdpProtocolException("Virtual channel PDU too large.");
+        }
+
         buffer.Write(chunk);
         if ((flags & ChannelFlagLast) != 0)
         {
             byte[] complete = buffer.ToArray();
-            _vcReassembly.Remove(channelId);
+            _ = _vcReassembly.Remove(channelId);
             ChannelData?.Invoke(new ChannelPayload(name, complete));
         }
     }
@@ -342,7 +413,7 @@ internal sealed class RdpConnection : IAsyncDisposable
     {
         await _writeGate.WaitAsync(ct).ConfigureAwait(false);
         try { await action().ConfigureAwait(false); }
-        finally { _writeGate.Release(); }
+        finally { _ = _writeGate.Release(); }
     }
 
     private async Task<byte[]> ReadIoPayloadAsync(CancellationToken ct)
@@ -350,10 +421,21 @@ internal sealed class RdpConnection : IAsyncDisposable
         while (true)
         {
             RdpFramePdu pdu = await _transport.ReadPduAsync(ct).ConfigureAwait(false);
-            if (pdu.FastPath) continue; // no fast-path output before the active phase
+            if (pdu.FastPath)
+            {
+                continue; // no fast-path output before the active phase
+            }
+
             McsData? data = McsLayer.ParseSendDataIndication(pdu.Data);
-            if (data is not { } indication) throw new RdpProtocolException("Server disconnected during connection.");
-            if (indication.ChannelId == _ioChannel) return indication.Payload;
+            if (data is not { } indication)
+            {
+                throw new RdpProtocolException("Server disconnected during connection.");
+            }
+
+            if (indication.ChannelId == _ioChannel)
+            {
+                return indication.Payload;
+            }
         }
     }
 

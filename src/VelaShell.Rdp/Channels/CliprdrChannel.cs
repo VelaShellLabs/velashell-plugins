@@ -51,42 +51,42 @@ internal sealed class CliprdrChannel(Func<byte[], Task> send, Action<RdpClipboar
             case FormatListResponse:
                 break; // our offered list was acknowledged
             case FormatDataRequest:
-            {
-                uint formatId = data.Length >= 4 ? BitConverter.ToUInt32(data[..4]) : 0;
-                _raise(new RdpClipboardEvent(4, formatId, 0, []));
-                break;
-            }
+                {
+                    uint formatId = data.Length >= 4 ? BitConverter.ToUInt32(data[..4]) : 0;
+                    _raise(new RdpClipboardEvent(4, formatId, 0, []));
+                    break;
+                }
             case FormatDataResponse:
-            {
-                bool ok = (msgFlags & ResponseOk) != 0;
-                _raise(new RdpClipboardEvent(5, ok ? 1u : 0u, _requestedFormat, ok ? data.ToArray() : []));
-                break;
-            }
+                {
+                    bool ok = (msgFlags & ResponseOk) != 0;
+                    _raise(new RdpClipboardEvent(5, ok ? 1u : 0u, _requestedFormat, ok ? data.ToArray() : []));
+                    break;
+                }
             case FileContentsRequest:
-            {
-                var rr = new ByteReader(data);
-                uint streamId = rr.U32LE();
-                uint listIndex = rr.U32LE();
-                uint dwFlags = rr.U32LE();
-                uint posLow = rr.U32LE();
-                uint posHigh = rr.U32LE();
-                uint cbRequested = rr.U32LE();
-                var payload = new ByteWriter(16);
-                payload.U32LE(dwFlags);
-                payload.U32LE(posLow);
-                payload.U32LE(posHigh);
-                payload.U32LE(cbRequested);
-                _raise(new RdpClipboardEvent(6, streamId, listIndex, payload.ToArray()));
-                break;
-            }
+                {
+                    var rr = new ByteReader(data);
+                    uint streamId = rr.U32LE();
+                    uint listIndex = rr.U32LE();
+                    uint dwFlags = rr.U32LE();
+                    uint posLow = rr.U32LE();
+                    uint posHigh = rr.U32LE();
+                    uint cbRequested = rr.U32LE();
+                    var payload = new ByteWriter(16);
+                    payload.U32LE(dwFlags);
+                    payload.U32LE(posLow);
+                    payload.U32LE(posHigh);
+                    payload.U32LE(cbRequested);
+                    _raise(new RdpClipboardEvent(6, streamId, listIndex, payload.ToArray()));
+                    break;
+                }
             case FileContentsResponse:
-            {
-                var rr = new ByteReader(data);
-                uint streamId = rr.U32LE();
-                bool ok = (msgFlags & ResponseOk) != 0;
-                _raise(new RdpClipboardEvent(7, streamId, ok ? 1u : 0u, ok ? rr.Rest().ToArray() : []));
-                break;
-            }
+                {
+                    var rr = new ByteReader(data);
+                    uint streamId = rr.U32LE();
+                    bool ok = (msgFlags & ResponseOk) != 0;
+                    _raise(new RdpClipboardEvent(7, streamId, ok ? 1u : 0u, ok ? rr.Rest().ToArray() : []));
+                    break;
+                }
         }
     }
 
@@ -98,7 +98,11 @@ internal sealed class CliprdrChannel(Func<byte[], Task> send, Action<RdpClipboar
         foreach (string line in formats.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] parts = line.Split('\t', 2);
-            if (parts.Length < 1 || !uint.TryParse(parts[0], out uint id)) continue;
+            if (parts.Length < 1 || !uint.TryParse(parts[0], out uint id))
+            {
+                continue;
+            }
+
             string name = parts.Length > 1 ? parts[1] : "";
             body.U32LE(id);
             body.Bytes(Encoding.Unicode.GetBytes(name));
@@ -134,7 +138,11 @@ internal sealed class CliprdrChannel(Func<byte[], Task> send, Action<RdpClipboar
     {
         var body = new ByteWriter(data.Length + 4);
         body.U32LE(stream);
-        if (success) body.Bytes(data);
+        if (success)
+        {
+            body.Bytes(data);
+        }
+
         return _send(Header(FileContentsResponse, success ? ResponseOk : ResponseFail, body.Span));
     }
 
@@ -174,11 +182,15 @@ internal sealed class CliprdrChannel(Func<byte[], Task> send, Action<RdpClipboar
             while (r.Remaining >= 2)
             {
                 ushort unit = r.U16LE();
-                if (unit == 0) break;
-                name.Append((char)unit);
+                if (unit == 0)
+                {
+                    break;
+                }
+
+                _ = name.Append((char)unit);
             }
             string clean = name.ToString().Replace("\t", "").Replace("\r", "").Replace("\n", "");
-            sb.Append(id).Append('\t').Append(clean).Append('\n');
+            _ = sb.Append(id).Append('\t').Append(clean).Append('\n');
         }
         return sb.ToString();
     }

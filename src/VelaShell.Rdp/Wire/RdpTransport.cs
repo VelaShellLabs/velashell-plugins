@@ -1,5 +1,3 @@
-using System.Net.Sockets;
-
 namespace VelaShell.Rdp.Wire;
 
 /// <summary>Security protocols from the X.224 negotiation (MS-RDPBCGR 2.2.1.1.1).</summary>
@@ -24,10 +22,8 @@ internal readonly record struct RdpFramePdu(bool FastPath, byte FastPathHeader, 
 /// </summary>
 internal sealed class RdpTransport(Stream stream)
 {
-    private Stream _stream = stream;
-
-    internal Stream Stream => _stream;
-    internal void UpgradeStream(Stream secure) => _stream = secure;
+    internal Stream Stream { get; private set; } = stream;
+    internal void UpgradeStream(Stream secure) => Stream = secure;
 
     // ---- Slow path (TPKT) ----
 
@@ -41,8 +37,8 @@ internal sealed class RdpTransport(Stream stream)
         frame[2] = (byte)(total >> 8);
         frame[3] = (byte)(total & 0xFF);
         x224Tpdu.Span.CopyTo(frame.AsSpan(4));
-        await _stream.WriteAsync(frame, ct).ConfigureAwait(false);
-        await _stream.FlushAsync(ct).ConfigureAwait(false);
+        await Stream.WriteAsync(frame, ct).ConfigureAwait(false);
+        await Stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -68,7 +64,11 @@ internal sealed class RdpTransport(Stream stream)
             // TPKT: version(1)=3, reserved(1), length(2 BE)
             byte[] rest = await ReadExactlyAsync(3, ct).ConfigureAwait(false);
             int length = (rest[1] << 8) | rest[2];
-            if (length < 4 || length > 0x10_0000) throw new RdpProtocolException("Invalid TPKT length.");
+            if (length is < 4 or > 0x10_0000)
+            {
+                throw new RdpProtocolException("Invalid TPKT length.");
+            }
+
             byte[] payload = await ReadExactlyAsync(length - 4, ct).ConfigureAwait(false);
             return new RdpFramePdu(false, 0, payload);
         }
@@ -87,7 +87,11 @@ internal sealed class RdpTransport(Stream stream)
         {
             total = len1;
         }
-        if (total < consumed || total > 0x10_0000) throw new RdpProtocolException("Invalid fast-path length.");
+        if (total < consumed || total > 0x10_0000)
+        {
+            throw new RdpProtocolException("Invalid fast-path length.");
+        }
+
         byte[] body = await ReadExactlyAsync(total - consumed, ct).ConfigureAwait(false);
         return new RdpFramePdu(true, header, body);
     }
@@ -96,21 +100,45 @@ internal sealed class RdpTransport(Stream stream)
     internal async Task<(SecurityProtocol Protocol, byte NegFlags)> ReadConnectionConfirmAsync(CancellationToken ct)
     {
         RdpFramePdu pdu = await ReadPduAsync(ct).ConfigureAwait(false);
-        if (pdu.FastPath) throw new RdpProtocolException("Expected X.224 Connection Confirm.");
+        if (pdu.FastPath)
+        {
+            throw new RdpProtocolException("Expected X.224 Connection Confirm.");
+        }
+
         var r = new ByteReader(pdu.Data);
         byte li = r.U8();
-        if (li < 6) throw new RdpProtocolException("Short X.224 Connection Confirm.");
+        if (li < 6)
+        {
+            throw new RdpProtocolException("Short X.224 Connection Confirm.");
+        }
+
         byte code = r.U8();
-        if ((code & 0xF0) != 0xD0) throw new RdpProtocolException("Expected X.224 CC TPDU.");
+        if ((code & 0xF0) != 0xD0)
+        {
+            throw new RdpProtocolException("Expected X.224 CC TPDU.");
+        }
+
         r.Skip(5); // DST-REF(2), SRC-REF(2), class(1)
         int variable = li - 6;
-        if (variable <= 0) return (SecurityProtocol.Rdp, 0);
+        if (variable <= 0)
+        {
+            return (SecurityProtocol.Rdp, 0);
+        }
+
         byte type = r.U8();
         byte flags = r.U8();
         ushort negLen = r.U16LE();
         uint data = r.U32LE();
-        if (type == 0x03) throw new RdpNegotiationFailureException(data);
-        if (type != 0x02) throw new RdpProtocolException("Unexpected X.224 negotiation type.");
+        if (type == 0x03)
+        {
+            throw new RdpNegotiationFailureException(data);
+        }
+
+        if (type != 0x02)
+        {
+            throw new RdpProtocolException("Unexpected X.224 negotiation type.");
+        }
+
         _ = negLen;
         return ((SecurityProtocol)data, flags);
     }
@@ -118,8 +146,8 @@ internal sealed class RdpTransport(Stream stream)
     /// <summary>Writes an already-framed PDU (e.g. a fast-path input PDU) directly to the stream.</summary>
     internal async Task SendRawAsync(ReadOnlyMemory<byte> frame, CancellationToken ct)
     {
-        await _stream.WriteAsync(frame, ct).ConfigureAwait(false);
-        await _stream.FlushAsync(ct).ConfigureAwait(false);
+        await Stream.WriteAsync(frame, ct).ConfigureAwait(false);
+        await Stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
     internal async Task<byte[]> ReadExactlyAsync(int count, CancellationToken ct)
@@ -128,8 +156,12 @@ internal sealed class RdpTransport(Stream stream)
         int read = 0;
         while (read < count)
         {
-            int next = await _stream.ReadAsync(buffer.AsMemory(read), ct).ConfigureAwait(false);
-            if (next == 0) throw new RdpProtocolException("The RDP server closed the connection.");
+            int next = await Stream.ReadAsync(buffer.AsMemory(read), ct).ConfigureAwait(false);
+            if (next == 0)
+            {
+                throw new RdpProtocolException("The RDP server closed the connection.");
+            }
+
             read += next;
         }
         return buffer;
@@ -144,7 +176,11 @@ internal sealed class RdpTransport(Stream stream)
         // Optional routing cookie, terminated with CR LF.
         if (!string.IsNullOrEmpty(cookieUser))
         {
-            foreach (char c in $"Cookie: mstshash={cookieUser}") w.U8((byte)c);
+            foreach (char c in $"Cookie: mstshash={cookieUser}")
+            {
+                w.U8((byte)c);
+            }
+
             w.U8(0x0D);
             w.U8(0x0A);
         }

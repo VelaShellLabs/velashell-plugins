@@ -36,11 +36,23 @@ internal static class Ber
     internal static int ReadLength(ref ByteReader r)
     {
         byte first = r.U8();
-        if ((first & 0x80) == 0) return first;
+        if ((first & 0x80) == 0)
+        {
+            return first;
+        }
+
         int count = first & 0x7F;
-        if (count is < 1 or > 4) throw new RdpProtocolException("Unsupported BER length form.");
+        if (count is < 1 or > 4)
+        {
+            throw new RdpProtocolException("Unsupported BER length form.");
+        }
+
         int length = 0;
-        for (int i = 0; i < count; i++) length = (length << 8) | r.U8();
+        for (int i = 0; i < count; i++)
+        {
+            length = (length << 8) | r.U8();
+        }
+
         return length;
     }
 
@@ -69,8 +81,15 @@ internal static class Ber
         if (tag > 30)
         {
             byte first = r.U8();
-            if (first != (ClassApplication | Constructed | 0x1F)) throw new RdpProtocolException("Unexpected BER application tag.");
-            if (r.U8() != tag) throw new RdpProtocolException("Unexpected BER application tag id.");
+            if (first != (ClassApplication | Constructed | 0x1F))
+            {
+                throw new RdpProtocolException("Unexpected BER application tag.");
+            }
+
+            if (r.U8() != tag)
+            {
+                throw new RdpProtocolException("Unexpected BER application tag id.");
+            }
         }
         else if (r.U8() != (ClassApplication | Constructed | (0x1F & tag)))
         {
@@ -87,7 +106,11 @@ internal static class Ber
 
     internal static int ReadSequenceTag(ref ByteReader r)
     {
-        if (r.U8() != (Constructed | TagSequence)) throw new RdpProtocolException("Expected BER sequence.");
+        if (r.U8() != (Constructed | TagSequence))
+        {
+            throw new RdpProtocolException("Expected BER sequence.");
+        }
+
         return ReadLength(ref r);
     }
 
@@ -119,11 +142,23 @@ internal static class Ber
 
     internal static uint ReadInteger(ref ByteReader r)
     {
-        if (r.U8() != TagInteger) throw new RdpProtocolException("Expected BER integer.");
+        if (r.U8() != TagInteger)
+        {
+            throw new RdpProtocolException("Expected BER integer.");
+        }
+
         int length = ReadLength(ref r);
-        if (length is < 1 or > 4) throw new RdpProtocolException("Unsupported BER integer length.");
+        if (length is < 1 or > 4)
+        {
+            throw new RdpProtocolException("Unsupported BER integer length.");
+        }
+
         uint value = 0;
-        for (int i = 0; i < length; i++) value = (value << 8) | r.U8();
+        for (int i = 0; i < length; i++)
+        {
+            value = (value << 8) | r.U8();
+        }
+
         return value;
     }
 
@@ -148,15 +183,27 @@ internal static class Ber
 
     internal static ReadOnlySpan<byte> ReadOctetString(ref ByteReader r)
     {
-        if (r.U8() != TagOctetString) throw new RdpProtocolException("Expected BER octet string.");
+        if (r.U8() != TagOctetString)
+        {
+            throw new RdpProtocolException("Expected BER octet string.");
+        }
+
         int length = ReadLength(ref r);
         return r.Take(length);
     }
 
     internal static byte ReadEnumerated(ref ByteReader r)
     {
-        if (r.U8() != TagEnumerated) throw new RdpProtocolException("Expected BER enumerated.");
-        if (ReadLength(ref r) != 1) throw new RdpProtocolException("Unexpected BER enumerated length.");
+        if (r.U8() != TagEnumerated)
+        {
+            throw new RdpProtocolException("Expected BER enumerated.");
+        }
+
+        if (ReadLength(ref r) != 1)
+        {
+            throw new RdpProtocolException("Unexpected BER enumerated length.");
+        }
+
         return r.U8();
     }
 
