@@ -45,14 +45,18 @@ internal static class CredSsp
             throw new RdpProtocolException($"NLA negotiation failed to start ({status}).");
         }
 
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, null, null), ct).ConfigureAwait(false);
+        // The 32-byte clientNonce goes in EVERY client TSRequest from the first one on, as FreeRDP and mstsc
+        // send it (FreeRDP generates it at NLA start and encodes it whenever non-empty). Sending it only
+        // with pubKeyAuth worked against FreeRDP's server, but a Windows server answered the first message
+        // with a TLS-level SEC_E_INTERNAL_ERROR ("the Local Security Authority cannot be contacted").
+        await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, null, nonce), ct).ConfigureAwait(false);
 
         // Leg 2: server NTLM CHALLENGE (or an error, e.g. when the server refuses NTLM outright).
         TsRequest challenge = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
         ThrowIfServerRejected(challenge);
         uint peerVersion = challenge.Version;
 
-        // Leg 3: client NTLM AUTHENTICATE + pubKeyAuth (+ clientNonce for v5+).
+        // Leg 3: client NTLM AUTHENTICATE + pubKeyAuth (+ the same clientNonce; v5+ servers bind it into the hash).
         token = auth.GetOutgoingBlob(challenge.NegoToken ?? [], out status);
         if (status != NegotiateAuthenticationStatusCode.Completed)
         {
@@ -62,8 +66,7 @@ internal static class CredSsp
         byte[] pubKeyAuth = peerVersion < 5
             ? Seal(auth, publicKey)
             : Seal(auth, BindingHash(ClientServerHashMagic, nonce, publicKey));
-        byte[]? sentNonce = peerVersion < 5 ? null : nonce;
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, pubKeyAuth, sentNonce), ct).ConfigureAwait(false);
+        await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, pubKeyAuth, nonce), ct).ConfigureAwait(false);
 
         // Leg 4: server public-key echo — verify before sending credentials.
         TsRequest echo = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
@@ -79,7 +82,7 @@ internal static class CredSsp
 
         // Leg 5: send the credentials, sealed.
         byte[] credentials = Seal(auth, BuildTsCredentials(domain, username, password));
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, null, credentials, null, null), ct).ConfigureAwait(false);
+        await WriteAsync(tls, BuildTsRequest(ClientVersion, null, credentials, null, nonce), ct).ConfigureAwait(false);
     }
 
     /// <summary>A TSRequest carrying a non-zero errorCode means the server refused the logon.</summary>

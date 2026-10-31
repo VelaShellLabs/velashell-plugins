@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Net.Sockets;
+using System.Security.Authentication;
 
 namespace VelaShell.Rdp;
 
@@ -39,15 +40,29 @@ public enum RdpConnectStage
 /// </summary>
 public sealed class RdpConnectionException : Exception
 {
-    internal RdpConnectionException(RdpConnectStage stage, Exception inner)
-        : base($"RDP connection failed during {stage}: {Describe(inner)}", inner)
+    internal RdpConnectionException(RdpConnectStage stage, Exception inner, SslProtocols? tls = null)
+        : base($"RDP connection failed during {stage}: {WithTls(Describe(inner), tls)}", inner)
     {
         Stage = stage;
-        Detail = Describe(inner);
+        TlsProtocol = tls;
+        Detail = WithTls(Describe(inner), tls);
     }
 
     /// <summary>The connection step that failed.</summary>
     public RdpConnectStage Stage { get; }
+
+    /// <summary>The TLS version negotiated before the failure; <see langword="null" /> if TLS never completed.</summary>
+    public SslProtocols? TlsProtocol { get; }
+
+    // Servers differ in how they handle TLS versions (FreeRDP keeps /tls:enforce:1.2 for "buggy TLS
+    // version negotiation"), so a failure after the handshake names the version that was in use.
+    private static string WithTls(string detail, SslProtocols? tls) => tls switch
+    {
+        SslProtocols.Tls13 => detail + " [TLS 1.3]",
+        SslProtocols.Tls12 => detail + " [TLS 1.2]",
+        { } other => $"{detail} [{other}]",
+        null => detail
+    };
 
     /// <summary>The cause chain as one line, e.g. "The decryption operation failed → The specified data could not be decrypted (0x80090330)".</summary>
     public string Detail { get; }

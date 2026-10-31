@@ -59,6 +59,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     /// <summary>The connection step in progress; reported when an attempt fails.</summary>
     internal RdpConnectStage Stage { get; private set; }
 
+    /// <summary>The TLS version negotiated with the server, once the handshake has completed.</summary>
+    internal System.Security.Authentication.SslProtocols? TlsProtocol { get; private set; }
+
     internal async Task ConnectAsync(CancellationToken ct)
     {
         Stage = RdpConnectStage.Tcp;
@@ -76,6 +79,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         {
             Stage = RdpConnectStage.Tls;
             SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+            TlsProtocol = ssl.SslProtocol;
             _transport.UpgradeStream(ssl);
             Stage = RdpConnectStage.Nla;
             await CredSsp.AuthenticateAsync(ssl, _options.CertificateHost, _options.Domain, _options.Username, _options.Password, ct).ConfigureAwait(false);
@@ -84,6 +88,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         {
             Stage = RdpConnectStage.Tls;
             SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+            TlsProtocol = ssl.SslProtocol;
             _transport.UpgradeStream(ssl);
         }
         else

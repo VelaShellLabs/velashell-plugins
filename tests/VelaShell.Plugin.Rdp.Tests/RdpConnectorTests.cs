@@ -56,6 +56,20 @@ public sealed class RdpConnectorTests
     }
 
     [TestMethod]
+    public void FailuresAfterTheHandshakeNameTheNegotiatedTlsVersion()
+    {
+        // The reported Windows failure: SEC_E_INTERNAL_ERROR right after the first NLA message.
+        var tls = new IOException("The decryption operation failed, see inner exception.",
+            new Win32Exception(unchecked((int)0x80090304), "The Local Security Authority cannot be contacted"));
+        var failure = new RdpConnectionException(RdpConnectStage.Nla, tls, System.Security.Authentication.SslProtocols.Tls13);
+        Assert.AreEqual(System.Security.Authentication.SslProtocols.Tls13, failure.TlsProtocol);
+        Assert.EndsWith("[TLS 1.3]", failure.Detail);
+        Assert.Contains("0x80090304", failure.Detail);
+        Assert.Contains("[TLS 1.3]", RdpConnector.Translate(failure, new Loc("en")).Message);
+        Assert.DoesNotContain("[TLS", new RdpConnectionException(RdpConnectStage.Tcp, new IOException("refused")).Detail);
+    }
+
+    [TestMethod]
     public void EveryStageHasALocalizedName()
     {
         foreach (string locale in new[] { "en", "zh-Hans", "zh-Hant", "ja", "ko" })
