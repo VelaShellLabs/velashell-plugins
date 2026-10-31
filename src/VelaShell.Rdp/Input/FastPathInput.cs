@@ -17,8 +17,16 @@ internal static class FastPathInput
     internal static byte[] Scancode(uint scanCode, bool down)
     {
         byte flags = 0;
-        if (!down) flags |= KbdFlagsRelease;
-        if ((scanCode & 0x100) != 0) flags |= KbdFlagsExtended;
+        if (!down)
+        {
+            flags |= KbdFlagsRelease;
+        }
+
+        if ((scanCode & 0x100) != 0)
+        {
+            flags |= KbdFlagsExtended;
+        }
+
         var e = new ByteWriter(4);
         e.U8((byte)((EventScancode << 5) | flags));
         e.U8((byte)(scanCode & 0xFF));

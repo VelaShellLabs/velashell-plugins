@@ -12,7 +12,7 @@ public sealed class RdpWorkspaceTests
     [TestMethod]
     public async Task LazyManifestMatchesRegistrationAndLocaleKeepsProvider()
     {
-        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "rdp-plugin.json")));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "rdp-plugin.json")));
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         context.HostInfo.Locale = "en";
         var plugin = new RdpPlugin();
@@ -61,7 +61,11 @@ public sealed class RdpWorkspaceTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var provider = new RdpWorkspaceProvider(context, new("en"), async (_, _, _, ct) =>
         {
-            if (Interlocked.Increment(ref attempts) == 1) return session;
+            if (Interlocked.Increment(ref attempts) == 1)
+            {
+                return session;
+            }
+
             entered.SetResult();
             await Task.Delay(Timeout.Infinite, ct);
             return new FakeRdpSession();
@@ -70,7 +74,7 @@ public sealed class RdpWorkspaceTests
         Task<IWorkspaceDocument> opening = provider.OpenAsync(RdpSettingsTests.Request());
         await entered.Task;
         await provider.DisposeAsync();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => opening);
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => opening);
         Assert.AreEqual(1, session.DisposeCount);
         Assert.AreEqual(ProtocolSessionState.Closed, document.Status.State);
     }

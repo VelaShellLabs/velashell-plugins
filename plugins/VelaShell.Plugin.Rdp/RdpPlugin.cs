@@ -24,27 +24,43 @@ public sealed class RdpPlugin : IVelaPlugin
     }
     private static WorkspaceDescriptor Describe(Loc loc) => new()
     {
-        Id = "velashell.rdp", DisplayName = "RDP", DefaultPort = 3389,
+        Id = "velashell.rdp",
+        DisplayName = "RDP",
+        DefaultPort = 3389,
         Icon = PluginIcon.Stroked("M3 4h18v12H3z M8 20h8 M12 16v4"),
-        HostLabel = loc["Host"], HostPlaceholder = "rdp.example.com",
-        UsernameLabel = loc["User"], PasswordLabel = loc["Password"],
+        HostLabel = loc["Host"],
+        HostPlaceholder = "rdp.example.com",
+        UsernameLabel = loc["User"],
+        PasswordLabel = loc["Password"],
         Fields = RdpSettings.Declare(loc),
         Features = WorkspaceFeatures.CertificateTrust | WorkspaceFeatures.SshTunnel,
         TrustedThumbprintSettingKey = RdpSettings.TrustedThumbprintKey
     };
     private void OnLocaleChanged(string locale)
     {
-        if (_context is not { } context || _provider is not { } provider) return;
+        if (_context is not { } context || _provider is not { } provider)
+        {
+            return;
+        }
+
         provider.Loc = new(locale);
         _registration = context.Workspaces.Register(Describe(provider.Loc), provider);
     }
     /// <inheritdoc />
     public async Task DeactivateAsync(CancellationToken cancellationToken)
     {
-        if (_context is { } context) context.Events.LocaleChanged -= OnLocaleChanged;
+        if (_context is { } context)
+        {
+            context.Events.LocaleChanged -= OnLocaleChanged;
+        }
+
         _registration?.Dispose();
         _registration = null;
-        if (_provider is { } provider) await provider.DisposeAsync().ConfigureAwait(false);
+        if (_provider is { } provider)
+        {
+            await provider.DisposeAsync().ConfigureAwait(false);
+        }
+
         _provider = null;
         _context = null;
     }

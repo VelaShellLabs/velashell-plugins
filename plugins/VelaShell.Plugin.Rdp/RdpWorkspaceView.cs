@@ -10,7 +10,6 @@ namespace VelaShell.Plugin.Rdp;
 
 internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
 {
-    private readonly RdpDesktopControl _desktop;
     private readonly RdpClipboardBridge _clipboard;
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
     private readonly Button _send = new();
@@ -30,18 +29,20 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     /// <summary>Reconnects the workspace; supplied by the owning document. Null hides the in-view button.</summary>
     internal Func<CancellationToken, Task>? Reconnect { get; set; }
 
-    internal RdpDesktopControl Desktop => _desktop;
+    internal RdpDesktopControl Desktop { get; }
     public RdpWorkspaceView(IRdpSession session, IPluginContext context, RdpSettings settings, Loc loc)
     {
         _settings = settings;
         _loc = loc;
-        RowDefinitions = new RowDefinitions("36,*,24");
+        RowDefinitions = [with("36,*,24")];
         this[!BackgroundProperty] = new DynamicResourceExtension("VelaBgPage");
-        _desktop = new(session, settings.Width, settings.Height);
-        _desktop.DesktopSizeChanged = UpdateStatus;
-        _clipboard = new(session, context, _desktop, settings.Clipboard);
-        _desktop.PublishClipboard = () => _clipboard.PublishLocalAsync();
-        _desktop.OperationFailed = () => { _failed = true; UpdateStatus(); };
+        Desktop = new(session, settings.Width, settings.Height)
+        {
+            DesktopSizeChanged = UpdateStatus
+        };
+        _clipboard = new(session, context, Desktop, settings.Clipboard);
+        Desktop.PublishClipboard = () => _clipboard.PublishLocalAsync();
+        Desktop.OperationFailed = () => { _failed = true; UpdateStatus(); };
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(8, 0), VerticalAlignment = VerticalAlignment.Center };
         foreach (Button button in new[] { _send, _receive, _attention, _fit, _actual })
         {
@@ -53,11 +54,11 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             toolbar.Children.Add(button);
         }
         _send.IsEnabled = _receive.IsEnabled = settings.Clipboard;
-        _send.Click += (_, _) => _desktop.Queue(() => _clipboard.PublishLocalAsync());
-        _receive.Click += (_, _) => _desktop.Queue(() => _clipboard.ReceiveRemoteAsync());
-        _attention.Click += (_, _) => { _desktop.SendSecureAttention(); _desktop.Focus(); };
-        _fit.Click += (_, _) => _desktop.Fit = true;
-        _actual.Click += (_, _) => _desktop.Fit = false;
+        _send.Click += (_, _) => Desktop.Queue(() => _clipboard.PublishLocalAsync());
+        _receive.Click += (_, _) => Desktop.Queue(() => _clipboard.ReceiveRemoteAsync());
+        _attention.Click += (_, _) => { Desktop.SendSecureAttention(); _ = Desktop.Focus(); };
+        _fit.Click += (_, _) => Desktop.Fit = true;
+        _actual.Click += (_, _) => Desktop.Fit = false;
         var header = new Border { Child = toolbar, BorderThickness = new Thickness(0, 0, 0, 1) };
         header[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSurface");
         header[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaBorderPrimary");
@@ -68,7 +69,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _status[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize11");
         var scroller = new ScrollViewer
         {
-            Content = _desktop,
+            Content = Desktop,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -113,7 +114,11 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
 
     private async void OnReconnectClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_reconnecting || Reconnect is not { } reconnect) return;
+        if (_reconnecting || Reconnect is not { } reconnect)
+        {
+            return;
+        }
+
         _reconnecting = true;
         _reconnect.IsEnabled = false;
         _overlayText.Text = _loc["Reconnecting"];
@@ -141,7 +146,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     internal void SetConnected(bool connected)
     {
         _connected = connected;
-        _desktop.IsEnabled = connected;
+        Desktop.IsEnabled = connected;
         _send.IsEnabled = _receive.IsEnabled = connected && _settings.Clipboard;
         _attention.IsEnabled = connected;
         _fit.IsEnabled = _actual.IsEnabled = connected;
@@ -156,10 +161,10 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     }
     private void UpdateStatus() => _status.Text = !_connected ? _loc["Disconnected"]
         : _failed ? _loc["InputFailed"]
-        : _loc["Connected"] + " · " + _loc.Format("Resolution", _desktop.DesktopWidth, _desktop.DesktopHeight);
+        : _loc["Connected"] + " · " + _loc.Format("Resolution", Desktop.DesktopWidth, Desktop.DesktopHeight);
     public async ValueTask DisposeAsync()
     {
         try { await _clipboard.DisposeAsync(); }
-        finally { await _desktop.DisposeAsync(); Children.Clear(); }
+        finally { await Desktop.DisposeAsync(); Children.Clear(); }
     }
 }

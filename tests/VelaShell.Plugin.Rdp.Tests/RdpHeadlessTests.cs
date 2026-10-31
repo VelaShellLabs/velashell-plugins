@@ -7,6 +7,7 @@ using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using VelaShell.Plugin.Rdp.Tests;
 using VelaShell.PluginSdk.Testing;
+using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 
 [assembly: AvaloniaTestApplication(typeof(RdpHeadlessApp))]
@@ -56,7 +57,7 @@ public sealed class RdpHeadlessTests
             sessions.Add(created);
             return Task.FromResult<IRdpSession>(created);
         });
-        var document = await provider.OpenAsync(RdpSettingsTests.Request());
+        IWorkspaceDocument document = await provider.OpenAsync(RdpSettingsTests.Request());
         var root = (ContentControl)document.CreateView();
         var initial = (RdpWorkspaceView)root.Content!;
         var window = new Window { Width = 800, Height = 600, Content = root };
@@ -132,10 +133,11 @@ public sealed class RdpHeadlessTests
     {
         if (RdpManagedInteropTests.Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
         byte[] pin = await RdpManagedInteropTests.LearnPinAsync(target);
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)), ("width", "1024"), ("height", "768"))
-            with { Host = target.Host, Port = target.Port, Username = RdpManagedInteropTests.User, Password = RdpManagedInteropTests.Pass };
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)), ("width", "1024"), ("height", "768"))
+            with
+        { Host = target.Host, Port = target.Port, Username = RdpManagedInteropTests.User, Password = RdpManagedInteropTests.Pass };
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
 
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
@@ -153,7 +155,7 @@ public sealed class RdpHeadlessTests
             WriteableBitmap? frame = window.CaptureRenderedFrame();
             Assert.IsNotNull(frame, "Headless capture returned no frame.");
             string? dump = Environment.GetEnvironmentVariable("VELA_RDP_TEST_DUMP");
-            if (!string.IsNullOrEmpty(dump)) { Directory.CreateDirectory(dump); frame.Save(Path.Combine(dump, "managed-rdp-inapp.png")); }
+            if (!string.IsNullOrEmpty(dump)) { _ = Directory.CreateDirectory(dump); frame.Save(Path.Combine(dump, "managed-rdp-inapp.png"), PngBitmapEncoderOptions.Default); }
 
             // Dynamic resolution: the view asked the server to match the remote to its viewport,
             // so the desktop control reports the viewport size, not the initial 1024×768 setting.
@@ -167,7 +169,7 @@ public sealed class RdpHeadlessTests
 
     private static void Run(Func<Task> action)
     {
-        HeadlessUnitTestSession session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(RdpHeadlessApp).Assembly);
-        session.Dispatch(async () => { await action(); return true; }, CancellationToken.None).GetAwaiter().GetResult();
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(RdpHeadlessApp).Assembly);
+        _ = session.Dispatch(async () => { await action(); return true; }, CancellationToken.None).GetAwaiter().GetResult();
     }
 }

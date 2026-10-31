@@ -1,13 +1,13 @@
 using System.Buffers.Binary;
-using System.Text;
 using System.Runtime.InteropServices;
+using System.Text;
 using Avalonia;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using VelaShell.PluginSdk.Testing;
 using VelaShell.Rdp;
@@ -22,9 +22,9 @@ public sealed class RdpClipboardTests
     {
         byte[] text = RdpClipboardCodec.EncodeText("中文🙂\nnext");
         Assert.AreEqual("中文🙂\r\nnext", RdpClipboardCodec.DecodeText(text));
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeText([1]));
-        Assert.Throws<DecoderFallbackException>(() => RdpClipboardCodec.DecodeText([0, 0xD8]));
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.EncodeText("a\0b"));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeText([1]));
+        _ = Assert.Throws<DecoderFallbackException>(() => RdpClipboardCodec.DecodeText([0, 0xD8]));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.EncodeText("a\0b"));
     }
 
     [TestMethod]
@@ -32,12 +32,12 @@ public sealed class RdpClipboardTests
     {
         RdpClipboardFile[] files = [new("目录", true, 0), new("目录\\文件.txt", false, 0x100000005)];
         byte[] data = RdpClipboardCodec.EncodeFiles(files);
-        var decoded = RdpClipboardCodec.DecodeFiles(data);
+        IReadOnlyList<RdpClipboardFile> decoded = RdpClipboardCodec.DecodeFiles(data);
         CollectionAssert.AreEqual(files, decoded.ToArray());
         Assert.AreEqual(4 + 592 * 2, data.Length);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(data[..^1]));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(data[..^1]));
         BinaryPrimitives.WriteUInt32LittleEndian(data, uint.MaxValue);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(data));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(data));
     }
 
     [TestMethod]
@@ -57,9 +57,9 @@ public sealed class RdpClipboardTests
     public void RejectsCaseCollisionsAndFileAsParent()
     {
         byte[] duplicates = RdpClipboardCodec.EncodeFiles([new("File", false, 0), new("file", false, 0)]);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(duplicates));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(duplicates));
         byte[] conflict = RdpClipboardCodec.EncodeFiles([new("a", false, 0), new("a\\b", false, 0)]);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(conflict));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(conflict));
     }
 
     [TestMethod]
@@ -71,9 +71,9 @@ public sealed class RdpClipboardTests
         Assert.AreEqual(1, decoded.Width);
         Assert.AreEqual(2, decoded.Height);
         CollectionAssert.AreEqual(pixels, decoded.Bgra);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(encoded[..^1]));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(encoded[..^1]));
         BinaryPrimitives.WriteInt32LittleEndian(encoded.AsSpan(4), int.MaxValue);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(encoded));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(encoded));
     }
 
     [TestMethod]
@@ -88,16 +88,16 @@ public sealed class RdpClipboardTests
         data[40] = 9; data[41] = 8; data[42] = 7;
         CollectionAssert.AreEqual(new byte[] { 9, 8, 7, 255 }, RdpClipboardCodec.DecodeDib(data).Bgra);
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(16), 3);
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(data));
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.ValidateImageSize(8192, 8192));
-        Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.ValidatePng(new byte[33]));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(data));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.ValidateImageSize(8192, 8192));
+        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.ValidatePng(new byte[33]));
     }
 
     [TestMethod]
     public async Task LocalSnapshotUsesChunksAndRejectsInvalidRanges()
     {
         string root = Path.Combine(Path.GetTempPath(), "vela-rdp-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "child"));
+        _ = Directory.CreateDirectory(Path.Combine(root, "child"));
         byte[] bytes = Enumerable.Range(0, RdpClipboardFiles.ChunkSize + 11).Select(i => (byte)i).ToArray();
         try
         {
@@ -107,9 +107,9 @@ public sealed class RdpClipboardTests
             byte[] first = await snapshot.ReadAsync((uint)index, 0, RdpClipboardFiles.ChunkSize, default);
             byte[] last = await snapshot.ReadAsync((uint)index, (ulong)first.Length, 100, default);
             CollectionAssert.AreEqual(bytes, first.Concat(last).ToArray());
-            await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync((uint)index, (ulong)bytes.Length + 1, 1, default));
-            await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync(0, 0, 1, default));
-            await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync((uint)index, 0, RdpClipboardFiles.ChunkSize + 1, default));
+            _ = await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync((uint)index, (ulong)bytes.Length + 1, 1, default));
+            _ = await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync(0, 0, 1, default));
+            _ = await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync((uint)index, 0, RdpClipboardFiles.ChunkSize + 1, default));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -152,7 +152,11 @@ public sealed class RdpClipboardTests
         window.Show();
         using var bitmap = new WriteableBitmap(new PixelSize(2, 1), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
         byte[] pixels = [1, 2, 3, 255, 4, 5, 6, 255];
-        using (ILockedFramebuffer buffer = bitmap.Lock()) Marshal.Copy(pixels, 0, buffer.Address, pixels.Length);
+        using (ILockedFramebuffer buffer = bitmap.Lock())
+        {
+            Marshal.Copy(pixels, 0, buffer.Address, pixels.Length);
+        }
+
         var transfer = new DataTransfer();
         var item = new DataTransferItem();
         using var sourcePng = new MemoryStream();
@@ -177,7 +181,11 @@ public sealed class RdpClipboardTests
         await UntilAsync(async () =>
         {
             using Bitmap? received = await window.Clipboard.TryGetBitmapAsync();
-            if (received is null) return false;
+            if (received is null)
+            {
+                return false;
+            }
+
             using var copy = new WriteableBitmap(new PixelSize(2, 1), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
             using ILockedFramebuffer buffer = copy.Lock();
             received.CopyPixels(buffer);
@@ -217,7 +225,7 @@ public sealed class RdpClipboardTests
         string file = Directory.GetFiles(Path.Combine(context.DataDirectory, "rdp-clipboard"), "data.bin", SearchOption.AllDirectories).Single();
         byte[] downloaded = await File.ReadAllBytesAsync(file);
         CollectionAssert.AreEqual(transport.FileData, downloaded);
-        var items = await window.Clipboard.TryGetFilesAsync();
+        IStorageItem[]? items = await window.Clipboard.TryGetFilesAsync();
         Assert.HasCount(1, items!);
         int offers = transport.Offers.Count;
         await bridge.PublishLocalAsync();
@@ -238,7 +246,7 @@ public sealed class RdpClipboardTests
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
-        await Assert.ThrowsAsync<IOException>(() => bridge.ReceiveRemoteAsync());
+        _ = await Assert.ThrowsAsync<IOException>(() => bridge.ReceiveRemoteAsync());
         Assert.IsEmpty(Directory.GetFileSystemEntries(Path.Combine(context.DataDirectory, "rdp-clipboard")));
         window.Close();
     });
@@ -264,7 +272,7 @@ public sealed class RdpClipboardTests
         StringAssert.Contains(transport.Offers[0], "FileGroupDescriptorW");
         transport.Emit(4, RdpClipboardCodec.FileGroup);
         await Until(() => transport.Responses.Count > 0);
-        var entries = RdpClipboardCodec.DecodeFiles(transport.Responses[0].Data);
+        IReadOnlyList<RdpClipboardFile> entries = RdpClipboardCodec.DecodeFiles(transport.Responses[0].Data);
         Assert.AreEqual("local.bin", entries[0].Name);
         byte[] request = new byte[16];
         BinaryPrimitives.WriteUInt32LittleEndian(request, 1);
@@ -340,12 +348,15 @@ public sealed class RdpClipboardTests
     private static async Task UntilAsync(Func<Task<bool>> predicate)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while (!await predicate()) await Task.Delay(10, timeout.Token);
+        while (!await predicate())
+        {
+            await Task.Delay(10, timeout.Token);
+        }
     }
     private static void Run(Func<Task> action)
     {
         var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(RdpHeadlessApp).Assembly);
-        session.Dispatch(async () => { await action(); return true; }, default).GetAwaiter().GetResult();
+        _ = session.Dispatch(async () => { await action(); return true; }, default).GetAwaiter().GetResult();
     }
 
     private sealed class ClipboardTransport : IRdpClipboardTransport
@@ -368,7 +379,11 @@ public sealed class RdpClipboardTests
         public Task RequestFormatAsync(uint format, CancellationToken cancellationToken)
         {
             FormatRequests++;
-            if (!DelayResponses) Emit(5, 1, format, RemotePayload ?? (format == 13 ? RdpClipboardCodec.EncodeText(RemoteText) : RdpClipboardCodec.EncodeFiles(RemoteFiles)));
+            if (!DelayResponses)
+            {
+                Emit(5, 1, format, RemotePayload ?? (format == 13 ? RdpClipboardCodec.EncodeText(RemoteText) : RdpClipboardCodec.EncodeFiles(RemoteFiles)));
+            }
+
             return Task.CompletedTask;
         }
         public Task RespondFormatAsync(byte[] data, bool success, CancellationToken cancellationToken)
@@ -376,7 +391,11 @@ public sealed class RdpClipboardTests
         public Task RequestFileAsync(uint stream, uint index, uint flags, ulong offset, uint length, CancellationToken cancellationToken)
         {
             FileRequests.Add((index, offset, length));
-            if (ChangeDuringFileRead) Emit(9);
+            if (ChangeDuringFileRead)
+            {
+                Emit(9);
+            }
+
             Emit(7, stream, 1, FileData.AsSpan((int)offset, (int)length).ToArray());
             return Task.CompletedTask;
         }

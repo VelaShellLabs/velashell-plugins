@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Mcs;
 using VelaShell.Rdp.Security;
@@ -20,7 +22,11 @@ public sealed class RdpManagedInteropTests
     internal static (string Host, int Port)? Target()
     {
         string? raw = Environment.GetEnvironmentVariable("VELA_RDP_TEST_TARGET");
-        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
         string[] parts = raw.Split(':');
         return (parts[0], parts.Length > 1 ? int.Parse(parts[1]) : 3389);
     }
@@ -41,7 +47,7 @@ public sealed class RdpManagedInteropTests
         Assert.IsTrue(protocol.HasFlag(SecurityProtocol.Ssl) || protocol.HasFlag(SecurityProtocol.Hybrid),
             $"Server selected {protocol}");
 
-        var rejected = await Assert.ThrowsExactlyAsync<RdpCertificateRejectedException>(() =>
+        RdpCertificateRejectedException rejected = await Assert.ThrowsExactlyAsync<RdpCertificateRejectedException>(() =>
             RdpTls.AuthenticateAsync(tcp.GetStream(), target.Host, pin: null, default));
         using var leaf = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(
             System.Text.Encoding.UTF8.GetString(rejected.Pem));
@@ -59,9 +65,9 @@ public sealed class RdpManagedInteropTests
         await probe.ConnectAsync(target.Host, target.Port);
         var t1 = new RdpTransport(probe.GetStream());
         await t1.SendTpktAsync(RdpTransport.BuildConnectionRequest(User, SecurityProtocol.Ssl), default);
-        await t1.ReadConnectionConfirmAsync(default);
+        _ = await t1.ReadConnectionConfirmAsync(default);
         byte[] pin = [];
-        try { await RdpTls.AuthenticateAsync(probe.GetStream(), target.Host, null, default); }
+        try { _ = await RdpTls.AuthenticateAsync(probe.GetStream(), target.Host, null, default); }
         catch (RdpCertificateRejectedException ex)
         {
             using var leaf = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(
@@ -75,7 +81,7 @@ public sealed class RdpManagedInteropTests
         await tcp.ConnectAsync(target.Host, target.Port);
         var t2 = new RdpTransport(tcp.GetStream());
         await t2.SendTpktAsync(RdpTransport.BuildConnectionRequest(User, SecurityProtocol.Ssl), default);
-        await t2.ReadConnectionConfirmAsync(default);
+        _ = await t2.ReadConnectionConfirmAsync(default);
         SslStream ssl = await RdpTls.AuthenticateAsync(tcp.GetStream(), target.Host, pin, default);
         Console.WriteLine($"TLS OK: {ssl.SslProtocol}, cipher {ssl.NegotiatedCipherSuite}");
         Assert.IsTrue(ssl.IsAuthenticated);
@@ -88,8 +94,8 @@ public sealed class RdpManagedInteropTests
         await probe.ConnectAsync(target.Host, target.Port);
         var t = new RdpTransport(probe.GetStream());
         await t.SendTpktAsync(RdpTransport.BuildConnectionRequest(User, SecurityProtocol.Ssl), default);
-        await t.ReadConnectionConfirmAsync(default);
-        try { await RdpTls.AuthenticateAsync(probe.GetStream(), target.Host, null, default); }
+        _ = await t.ReadConnectionConfirmAsync(default);
+        try { _ = await RdpTls.AuthenticateAsync(probe.GetStream(), target.Host, null, default); }
         catch (RdpCertificateRejectedException ex)
         {
             using var leaf = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(
@@ -127,12 +133,18 @@ public sealed class RdpManagedInteropTests
         });
 
         // Pump for a fixed window so the desktop paints substantially, not just the first partial update.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
         while (DateTime.UtcNow < deadline)
+        {
             await Task.Delay(250, CancellationToken.None);
+        }
 
         Console.WriteLine($"Frames: {frames}, errorInfo: 0x{errorInfo:X8}, pumpFaulted={pump.IsFaulted}");
-        if (pump.IsFaulted) Console.WriteLine("Pump exception: " + pump.Exception?.GetBaseException());
+        if (pump.IsFaulted)
+        {
+            Console.WriteLine("Pump exception: " + pump.Exception?.GetBaseException());
+        }
+
         Assert.IsTrue(frames > 0, "No desktop frame was received.");
 
         byte[] bgra = conn.Framebuffer.Bgra;
@@ -168,11 +180,11 @@ public sealed class RdpManagedInteropTests
         byte[] pin = await LearnPinAsync(target);
         Assert.AreEqual(32, pin.Length);
 
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("width", "1024"), ("height", "768")) with
         { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
@@ -180,11 +192,15 @@ public sealed class RdpManagedInteropTests
             int frames = 0;
             session.FrameAvailable += () => Interlocked.Increment(ref frames);
             RdpFrame? latest = null;
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
             while (DateTime.UtcNow < deadline)
             {
                 RdpFrame? f = session.TakeFrame();
-                if (f is not null) latest = f;
+                if (f is not null)
+                {
+                    latest = f;
+                }
+
                 await Task.Delay(150, CancellationToken.None);
             }
             Console.WriteLine($"Interface frames={frames}, connected={session.IsConnected}, last={latest?.Width}x{latest?.Height}");
@@ -207,11 +223,11 @@ public sealed class RdpManagedInteropTests
         byte[] pin = await LearnPinAsync(target);
         Assert.AreEqual(32, pin.Length);
 
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("width", "1024"), ("height", "768")) with
         { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
@@ -219,12 +235,20 @@ public sealed class RdpManagedInteropTests
             RdpFrame? latest = null;
             async Task<(int W, int H)> PumpUntil(Func<int, int, bool> done, int seconds)
             {
-                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(seconds);
+                DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(seconds);
                 while (DateTime.UtcNow < deadline)
                 {
                     RdpFrame? f = session.TakeFrame();
-                    if (f is not null) latest = f;
-                    if (latest is { } cur && done(cur.Width, cur.Height)) break;
+                    if (f is not null)
+                    {
+                        latest = f;
+                    }
+
+                    if (latest is { } cur && done(cur.Width, cur.Height))
+                    {
+                        break;
+                    }
+
                     await Task.Delay(150, CancellationToken.None);
                 }
                 return (latest?.Width ?? 0, latest?.Height ?? 0);
@@ -247,7 +271,7 @@ public sealed class RdpManagedInteropTests
 
             // Restore the baseline so this test leaves the shared xrdp session as it found it.
             await session.RequestResizeAsync(1024, 768, default);
-            await PumpUntil((w, h) => w == 1024 && h == 768, 12);
+            _ = await PumpUntil((w, h) => w == 1024 && h == 768, 12);
         }
         finally { await session.DisposeAsync(); }
     }
@@ -259,11 +283,11 @@ public sealed class RdpManagedInteropTests
         byte[] pin = await LearnPinAsync(target);
         Assert.AreEqual(32, pin.Length);
 
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("clipboard", "true"), ("width", "1024"), ("height", "768")) with
         { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
         Assert.IsTrue(settings.Clipboard);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
@@ -271,10 +295,10 @@ public sealed class RdpManagedInteropTests
         {
             var kinds = new System.Collections.Concurrent.ConcurrentBag<uint>();
             session.ClipboardEvent += ev => kinds.Add(ev.Kind);
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(8);
             while (DateTime.UtcNow < deadline && !kinds.Any(k => k == 2u))
             {
-                session.TakeFrame();
+                _ = session.TakeFrame();
                 await Task.Delay(150, CancellationToken.None);
             }
             Console.WriteLine($"Clipboard event kinds seen: {string.Join(",", kinds.Distinct().Order())}");
@@ -295,8 +319,9 @@ public sealed class RdpManagedInteropTests
         SetRemoteClipboard(display, tag);
 
         byte[] pin = await LearnPinAsync(target);
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
-            ("clipboard", "true")) with { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+            ("clipboard", "true")) with
+        { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
         IRdpSession session = await RdpConnector.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
         try
@@ -306,11 +331,11 @@ public sealed class RdpManagedInteropTests
             byte[]? textData = null;
             session.ClipboardEvent += ev =>
             {
-                if (ev.Kind == 3) { formatList = System.Text.Encoding.UTF8.GetString(ev.Data); gate.Release(); }
-                else if (ev.Kind == 5 && ev.A != 0) { textData = ev.Data; gate.Release(); }
+                if (ev.Kind == 3) { formatList = System.Text.Encoding.UTF8.GetString(ev.Data); _ = gate.Release(); }
+                else if (ev.Kind == 5 && ev.A != 0) { textData = ev.Data; _ = gate.Release(); }
             };
 
-            var pump = Task.Run(async () => { while (session.IsConnected) { session.TakeFrame(); await Task.Delay(100); } });
+            var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
             Assert.IsTrue(await gate.WaitAsync(TimeSpan.FromSeconds(10)), "No clipboard format list from the server.");
             Console.WriteLine($"Format list:\n{formatList}");
             Assert.IsNotNull(formatList);
@@ -330,13 +355,15 @@ public sealed class RdpManagedInteropTests
     {
         var psi = new System.Diagnostics.ProcessStartInfo("wsl.exe")
         {
-            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
         };
         psi.ArgumentList.Add("-d"); psi.ArgumentList.Add("Debian"); psi.ArgumentList.Add("-u"); psi.ArgumentList.Add("root");
         psi.ArgumentList.Add("--"); psi.ArgumentList.Add("bash"); psi.ArgumentList.Add("-lc");
         psi.ArgumentList.Add($"su - {User} -c 'export DISPLAY={display}; export XAUTHORITY=/home/{User}/.Xauthority; printf %s \"{text}\" | xclip -selection clipboard; sleep 0.4'");
-        using var p = System.Diagnostics.Process.Start(psi)!;
-        p.WaitForExit(8000);
+        using Process p = System.Diagnostics.Process.Start(psi)!;
+        _ = p.WaitForExit(8000);
     }
 
     [TestMethod]
@@ -347,11 +374,12 @@ public sealed class RdpManagedInteropTests
         if (string.IsNullOrEmpty(display)) { Assert.Inconclusive("VELA_RDP_TEST_XDISPLAY not set."); return; }
 
         byte[] pin = await LearnPinAsync(target);
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)), ("clipboard", "true"))
-            with { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)), ("clipboard", "true"))
+            with
+        { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
         IRdpSession session = await RdpConnector.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
-        var pump = Task.Run(async () => { while (session.IsConnected) { session.TakeFrame(); await Task.Delay(100); } });
+        var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
         try
         {
             var ready = new SemaphoreSlim(0);
@@ -360,16 +388,19 @@ public sealed class RdpManagedInteropTests
             byte[]? imageData = null;
             session.ClipboardEvent += ev =>
             {
-                if (ev.Kind == 2) ready.Release();
+                if (ev.Kind == 2)
+                {
+                    _ = ready.Release();
+                }
                 else if (ev.Kind == 3 && System.Text.Encoding.UTF8.GetString(ev.Data).Split('\n').Any(l => l.StartsWith("8\t") || l.StartsWith("17\t")))
-                { formats = System.Text.Encoding.UTF8.GetString(ev.Data); gate.Release(); }
-                else if (ev.Kind == 5 && ev.A != 0) { imageData = ev.Data; gate.Release(); }
+                { formats = System.Text.Encoding.UTF8.GetString(ev.Data); _ = gate.Release(); }
+                else if (ev.Kind == 5 && ev.A != 0) { imageData = ev.Data; _ = gate.Release(); }
             };
-            await ready.WaitAsync(TimeSpan.FromSeconds(8));
+            _ = await ready.WaitAsync(TimeSpan.FromSeconds(8));
             // Copy an image on the remote AFTER the handshake so the server notifies us of the change.
             // xrdp's chansrv maps the X11 image/bmp target to CF_DIB (it does not convert image/png).
             string bmpB64 = Convert.ToBase64String(MakeBmp(8, 8, 0x20, 0x80, 0xC0));
-            RunInSession(display, $"echo '{bmpB64}' | base64 -d > /tmp/vimg.bmp; (xclip -selection clipboard -t image/bmp -i /tmp/vimg.bmp &) ; sleep 0.2");
+            _ = RunInSession(display, $"echo '{bmpB64}' | base64 -d > /tmp/vimg.bmp; (xclip -selection clipboard -t image/bmp -i /tmp/vimg.bmp &) ; sleep 0.2");
             if (!await gate.WaitAsync(TimeSpan.FromSeconds(12)))
             { Assert.Inconclusive("xrdp did not offer a DIB image format for an image/png clipboard (server-side limitation)."); return; }
             Console.WriteLine($"Image format list:\n{formats}");
@@ -397,23 +428,24 @@ public sealed class RdpManagedInteropTests
         if (string.IsNullOrEmpty(display)) { Assert.Inconclusive("VELA_RDP_TEST_XDISPLAY not set."); return; }
 
         string shareDir = Path.Combine(Path.GetTempPath(), "vrdp-share-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(shareDir);
+        _ = Directory.CreateDirectory(shareDir);
         string tag = "DriveRoundTrip-" + Guid.NewGuid().ToString("N")[..8];
         await File.WriteAllTextAsync(Path.Combine(shareDir, "hello.txt"), tag);
 
         byte[] pin = await LearnPinAsync(target);
-        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
-            ("drives", $"vshare={shareDir}")) with { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+            ("drives", $"vshare={shareDir}")) with
+        { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
         Assert.AreEqual(1, settings.Drives.Count);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
-        var pump = Task.Run(async () => { while (session.IsConnected) { session.TakeFrame(); await Task.Delay(100); } });
+        var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
         try
         {
             string listing = "", content = "";
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
             while (DateTime.UtcNow < deadline)
             {
                 await Task.Delay(1000, CancellationToken.None);
@@ -421,7 +453,10 @@ public sealed class RdpManagedInteropTests
                 if (!string.IsNullOrWhiteSpace(listing))
                 {
                     content = RunInSession(display, "cat ~/thinclient_drives/vshare/hello.txt 2>&1");
-                    if (content.Contains(tag)) break;
+                    if (content.Contains(tag))
+                    {
+                        break;
+                    }
                 }
             }
             Console.WriteLine($"thinclient_drives listing: '{listing.Trim()}'");
@@ -430,7 +465,7 @@ public sealed class RdpManagedInteropTests
 
             // Write-back: remote creates a file, the managed client must materialize it locally.
             string writeTag = "RemoteWrote-" + Guid.NewGuid().ToString("N")[..6];
-            RunInSession(display, $"cd ~/thinclient_drives/vshare && printf %s '{writeTag}' > from-remote.txt 2>&1");
+            _ = RunInSession(display, $"cd ~/thinclient_drives/vshare && printf %s '{writeTag}' > from-remote.txt 2>&1");
             await Task.Delay(1500, CancellationToken.None);
             string localWritten = File.Exists(Path.Combine(shareDir, "from-remote.txt"))
                 ? await File.ReadAllTextAsync(Path.Combine(shareDir, "from-remote.txt")) : "";
@@ -459,11 +494,14 @@ public sealed class RdpManagedInteropTests
         System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(bmp.AsSpan(28), 24);
         System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bmp.AsSpan(34), pixels);
         for (int y = 0; y < height; y++)
+        {
             for (int x = 0; x < width; x++)
             {
                 int p = 54 + y * rowSize + x * 3;
                 bmp[p] = b; bmp[p + 1] = g; bmp[p + 2] = r;
             }
+        }
+
         return bmp;
     }
 
@@ -474,9 +512,9 @@ public sealed class RdpManagedInteropTests
         psi.ArgumentList.Add("-d"); psi.ArgumentList.Add("Debian"); psi.ArgumentList.Add("-u"); psi.ArgumentList.Add("root");
         psi.ArgumentList.Add("--"); psi.ArgumentList.Add("bash"); psi.ArgumentList.Add("-lc");
         psi.ArgumentList.Add($"su - {User} -c 'export DISPLAY={display}; export XAUTHORITY=/home/{User}/.Xauthority; {command}'");
-        using var p = System.Diagnostics.Process.Start(psi)!;
+        using Process p = System.Diagnostics.Process.Start(psi)!;
         string output = p.StandardOutput.ReadToEnd();
-        p.WaitForExit(8000);
+        _ = p.WaitForExit(8000);
         return output;
     }
 
@@ -484,7 +522,10 @@ public sealed class RdpManagedInteropTests
     {
         var seen = new HashSet<int>();
         for (int i = 0; i + 4 <= bgra.Length && seen.Count <= 64; i += 4)
-            seen.Add(bgra[i] | (bgra[i + 1] << 8) | (bgra[i + 2] << 16));
+        {
+            _ = seen.Add(bgra[i] | (bgra[i + 1] << 8) | (bgra[i + 2] << 16));
+        }
+
         return seen.Count;
     }
 
@@ -493,23 +534,30 @@ public sealed class RdpManagedInteropTests
         byte[] bgra = fb.Bgra;
         long hash = 1469598103934665603L;
         for (int y = y0; y < y0 + h && y < fb.Height; y++)
+        {
             for (int x = x0; x < x0 + w && x < fb.Width; x++)
             {
                 int p = (y * fb.Width + x) * 4;
                 hash = (hash ^ bgra[p] ^ ((long)bgra[p + 1] << 8) ^ ((long)bgra[p + 2] << 16)) * 1099511628211L;
             }
+        }
+
         return hash;
     }
 
     private static void WriteBmp(byte[] bgra, int width, int height, string name)
     {
         string? dir = Environment.GetEnvironmentVariable("VELA_RDP_TEST_DUMP");
-        if (string.IsNullOrEmpty(dir)) return;
-        Directory.CreateDirectory(dir);
+        if (string.IsNullOrEmpty(dir))
+        {
+            return;
+        }
+
+        _ = Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, name);
         int rowSize = (width * 3 + 3) & ~3;
         int imageSize = rowSize * height;
-        using var fs = File.Create(path);
+        using FileStream fs = File.Create(path);
         using var w = new BinaryWriter(fs);
         w.Write((ushort)0x4D42);
         w.Write(54 + imageSize);

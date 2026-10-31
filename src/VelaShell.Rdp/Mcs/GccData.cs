@@ -30,10 +30,10 @@ internal static class GccData
     internal static byte[] BuildClientData(int width, int height, int bpp, uint serverSelectedProtocol,
         string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels)
     {
-        var core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout);
-        var security = BuildSecurity();
-        var net = BuildNet(channels);
-        var cluster = BuildCluster(serverSelectedProtocol);
+        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout);
+        byte[] security = BuildSecurity();
+        byte[] net = BuildNet(channels);
+        byte[] cluster = BuildCluster(serverSelectedProtocol);
 
         var blocks = new ByteWriter(core.Length + security.Length + net.Length + cluster.Length);
         blocks.Bytes(core);
@@ -69,7 +69,11 @@ internal static class GccData
         w.U16LE(0x000F);                            // supportedColorDepths (32/24/16/15)
         // earlyCapabilityFlags: ERRINFO PDU + optional 32bpp session
         ushort early = 0x0001;                      // RNS_UD_CS_SUPPORT_ERRINFO_PDU
-        if (bpp == 32) early |= 0x0002;             // RNS_UD_CS_WANT_32BPP_SESSION
+        if (bpp == 32)
+        {
+            early |= 0x0002;             // RNS_UD_CS_WANT_32BPP_SESSION
+        }
+
         w.U16LE(early);
         w.Zeros(64);                                // clientDigProductId
         w.U8(0);                                    // connectionType
@@ -100,7 +104,7 @@ internal static class GccData
         foreach (ChannelDef channel in channels)
         {
             name.Clear();
-            Encoding.ASCII.GetBytes(channel.Name.AsSpan(0, Math.Min(channel.Name.Length, 8)), name);
+            _ = Encoding.ASCII.GetBytes(channel.Name.AsSpan(0, Math.Min(channel.Name.Length, 8)), name);
             w.Bytes(name);
             w.U32LE(channel.Options);
         }
@@ -158,18 +162,18 @@ internal static class GccData
     {
         var r = new ByteReader(data);
         // ConnectData: choice + T.124 OID + connectPDU length.
-        Per.ReadChoice(ref r);
+        _ = Per.ReadChoice(ref r);
         Per.ReadObjectIdentifier(ref r, GccConnectOid);
-        Per.ReadLength(ref r);
+        _ = Per.ReadLength(ref r);
         // ConnectGCCPDU: conferenceCreateResponse.
-        Per.ReadChoice(ref r);
-        Per.ReadInteger16(ref r, 1001);                 // nodeID (UserID)
-        Per.ReadInteger(ref r);                         // tag (INTEGER)
-        Per.ReadEnumerated(ref r, 16);                  // result (ENUMERATED, MCS_Result)
-        Per.ReadNumberOfSets(ref r);                    // number of user data sets
-        r.U8();                                         // UserData value present + h221NonStandard (0xC0)
-        Per.ReadOctetString(ref r, 4);                  // h221 key "McDn"
-        Per.ReadLength(ref r);                           // server data block length
+        _ = Per.ReadChoice(ref r);
+        _ = Per.ReadInteger16(ref r, 1001);                 // nodeID (UserID)
+        _ = Per.ReadInteger(ref r);                         // tag (INTEGER)
+        _ = Per.ReadEnumerated(ref r, 16);                  // result (ENUMERATED, MCS_Result)
+        _ = Per.ReadNumberOfSets(ref r);                    // number of user data sets
+        _ = r.U8();                                         // UserData value present + h221NonStandard (0xC0)
+        _ = Per.ReadOctetString(ref r, 4);                  // h221 key "McDn"
+        _ = Per.ReadLength(ref r);                           // server data block length
 
         ushort ioChannel = 0;
         var channelIds = new List<ushort>();
@@ -179,7 +183,11 @@ internal static class GccData
             int blockStart = r.Position;
             ushort type = r.U16LE();
             ushort length = r.U16LE();
-            if (length < 4) throw new RdpProtocolException("Invalid GCC server block length.");
+            if (length < 4)
+            {
+                throw new RdpProtocolException("Invalid GCC server block length.");
+            }
+
             int bodyLen = length - 4;
             ByteReader body = new(r.Peek(Math.Min(bodyLen, r.Remaining)));
             switch (type)
@@ -193,13 +201,24 @@ internal static class GccData
                 case ScNet:
                     ioChannel = body.U16LE();
                     ushort count = body.U16LE();
-                    for (int i = 0; i < count; i++) channelIds.Add(body.U16LE());
+                    for (int i = 0; i < count; i++)
+                    {
+                        channelIds.Add(body.U16LE());
+                    }
+
                     break;
             }
             r.Skip(bodyLen);
-            if (r.Position <= blockStart) throw new RdpProtocolException("GCC server block made no progress.");
+            if (r.Position <= blockStart)
+            {
+                throw new RdpProtocolException("GCC server block made no progress.");
+            }
         }
-        if (ioChannel == 0) throw new RdpProtocolException("Server GCC response missing I/O channel.");
+        if (ioChannel == 0)
+        {
+            throw new RdpProtocolException("Server GCC response missing I/O channel.");
+        }
+
         _ = requestedChannelCount;
         return new GccServerData
         {

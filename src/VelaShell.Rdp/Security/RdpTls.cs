@@ -21,17 +21,24 @@ internal static class RdpTls
 
         bool Validate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
         {
-            if (certificate is null) return false;
-            using var leaf = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
+            if (certificate is null)
+            {
+                return false;
+            }
+
+            using X509Certificate2 leaf = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
             capturedPem = System.Text.Encoding.UTF8.GetBytes(leaf.ExportCertificatePem());
             if (pin is not null)
             {
                 // A pin replaces every other check with an exact leaf-identity comparison.
                 Span<byte> digest = stackalloc byte[32];
-                SHA256.HashData(leaf.RawData, digest);
+                _ = SHA256.HashData(leaf.RawData, digest);
                 return CryptographicOperations.FixedTimeEquals(digest, pin);
             }
-            if (errors != SslPolicyErrors.None) return false;
+            if (errors != SslPolicyErrors.None)
+            {
+                return false;
+            }
             // Match the native Windows chain policy's server-auth requirement: if the leaf
             // declares an EKU it must include serverAuth (no EKU means valid for all uses).
             foreach (X509Extension extension in leaf.Extensions)
@@ -40,8 +47,14 @@ internal static class RdpTls
                 {
                     bool serverAuth = false;
                     foreach (Oid oid in eku.EnhancedKeyUsages)
+                    {
                         if (oid.Value == ServerAuthOid) { serverAuth = true; break; }
-                    if (!serverAuth) return false;
+                    }
+
+                    if (!serverAuth)
+                    {
+                        return false;
+                    }
                 }
             }
             return true;

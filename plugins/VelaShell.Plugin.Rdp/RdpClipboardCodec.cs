@@ -61,14 +61,14 @@ internal static class RdpClipboardCodec
             }
             BinaryPrimitives.WriteUInt32LittleEndian(entry[64..], (uint)((ulong)file.Length >> 32));
             BinaryPrimitives.WriteUInt32LittleEndian(entry[68..], (uint)file.Length);
-            StrictUnicode.GetBytes(file.Name, entry[72..]);
+            _ = StrictUnicode.GetBytes(file.Name, entry[72..]);
         }
         return data;
     }
 
     internal static IReadOnlyList<RdpClipboardFile> DecodeFiles(byte[] data)
     {
-        if (data.Length < 4 || data.Length > MaxPayload)
+        if (data.Length is < 4 or > MaxPayload)
         {
             throw new InvalidDataException("Invalid file descriptor payload.");
         }
@@ -78,7 +78,7 @@ internal static class RdpClipboardCodec
             throw new InvalidDataException("Invalid file descriptor count.");
         }
         List<RdpClipboardFile> files = [];
-        HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> names = [with(StringComparer.OrdinalIgnoreCase)];
         for (int i = 0; i < count; i++)
         {
             ReadOnlySpan<byte> entry = data.AsSpan(4 + i * DescriptorSize, DescriptorSize);
@@ -170,7 +170,7 @@ internal static class RdpClipboardCodec
 
     internal static RdpClipboardImage DecodeDib(byte[] data)
     {
-        if (data.Length < 40 || data.Length > MaxPayload)
+        if (data.Length is < 40 or > MaxPayload)
         {
             throw new InvalidDataException("Invalid clipboard DIB.");
         }
@@ -211,7 +211,7 @@ internal static class RdpClipboardCodec
         }
         start = checked(start + (int)colors * 4);
         int stride = checked((width * bits + 31) / 32 * 4);
-        if ((long)start + (long)stride * height > data.Length)
+        if (start + (long)stride * height > data.Length)
         {
             throw new InvalidDataException("Truncated clipboard image.");
         }

@@ -37,15 +37,22 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     internal async Task ProcessAsync(byte[] pdu)
     {
         var r = new ByteReader(pdu);
-        if (r.Remaining < 4) return;
+        if (r.Remaining < 4)
+        {
+            return;
+        }
+
         ushort component = r.U16LE();
         ushort packetId = r.U16LE();
-        if (component != CtypCore) return;
+        if (component != CtypCore)
+        {
+            return;
+        }
 
         switch (packetId)
         {
             case PakidServerAnnounce:
-                r.U16LE(); r.U16LE();              // server version major/minor
+                _ = r.U16LE(); _ = r.U16LE();              // server version major/minor
                 _clientId = r.Remaining >= 4 ? r.U32LE() : 0;
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
                 await _send(BuildClientName()).ConfigureAwait(false);
@@ -62,7 +69,11 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 break;
             case PakidDeviceIoRequest:
                 byte[]? completion = HandleIoRequest(ref r);
-                if (completion is not null) await _send(completion).ConfigureAwait(false);
+                if (completion is not null)
+                {
+                    await _send(completion).ConfigureAwait(false);
+                }
+
                 break;
         }
     }
@@ -71,7 +82,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
     private byte[] BuildClientAnnounceReply()
     {
-        var w = Header(PakidClientIdConfirm);
+        ByteWriter w = Header(PakidClientIdConfirm);
         w.U16LE(VersionMajor);
         w.U16LE(VersionMinor);
         w.U32LE(_clientId);
@@ -80,7 +91,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
     private static byte[] BuildClientName()
     {
-        var w = Header(PakidClientName);
+        ByteWriter w = Header(PakidClientName);
         byte[] name = Encoding.Unicode.GetBytes("VELASHELL\0");
         w.U32LE(1);                 // unicodeFlag
         w.U32LE(0);                 // codePage
@@ -91,7 +102,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
     private static byte[] BuildCapabilityResponse()
     {
-        var w = Header(PakidClientCapability);
+        ByteWriter w = Header(PakidClientCapability);
         w.U16LE(2);                 // numCapabilities (general + drive)
         w.U16LE(0);                 // pad
 
@@ -120,18 +131,27 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private byte[] BuildDeviceListAnnounce()
     {
         _devices.Clear();
-        var w = Header(PakidDeviceListAnnounce);
+        ByteWriter w = Header(PakidDeviceListAnnounce);
         w.U32LE((uint)_mappings.Count);
         uint deviceId = 1;
+        // One 8-byte PreferredDosName buffer reused for every device: a stackalloc inside the loop
+        // would grow the frame per mapping (CA2014). It is cleared at the top of each iteration.
+        Span<byte> dos = stackalloc byte[8];
         foreach (DriveMapping mapping in _mappings)
         {
             _devices[deviceId] = mapping;
             w.U32LE(DeviceTypeFilesystem);
             w.U32LE(deviceId);
-            Span<byte> dos = stackalloc byte[8];
             dos.Clear();
             int n = Encoding.ASCII.GetBytes(mapping.Name.AsSpan(0, Math.Min(8, mapping.Name.Length)), dos);
-            for (int i = 0; i < n; i++) if (dos[i] > 0x7F) dos[i] = (byte)'_';
+            for (int i = 0; i < n; i++)
+            {
+                if (dos[i] > 0x7F)
+                {
+                    dos[i] = (byte)'_';
+                }
+            }
+
             w.Bytes(dos);
             byte[] data = Encoding.ASCII.GetBytes(mapping.Name + "\0");
             w.U32LE((uint)data.Length);
@@ -167,7 +187,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             catch (IOException) { status = NtStatus.Unsuccessful; }
         }
 
-        var w = Header(PakidDeviceIoCompletion);
+        ByteWriter w = Header(PakidDeviceIoCompletion);
         w.U32LE(deviceId);
         w.U32LE(completionId);
         w.U32LE(status);
@@ -180,71 +200,75 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         switch (major)
         {
             case IrpCreate:
-            {
-                uint desiredAccess = r.U32LE();
-                r.U32LE(); r.U32LE();           // AllocationSize (u64)
-                uint fileAttributes = r.U32LE();
-                r.U32LE();                      // SharedAccess
-                uint disposition = r.U32LE();
-                uint options = r.U32LE();
-                int pathLength = (int)r.U32LE();
-                string path = DecodeUnicode(r.Take(pathLength));
-                try
                 {
-                    DriveFile file = DriveFile.Create(mapping.LocalPath, path, desiredAccess, disposition, options, fileAttributes);
-                    uint newId = _fileSequence++;
-                    _files[newId] = file;
-                    body.U32LE(newId);
-                    body.U8(file.Information);
-                    return NtStatus.Success;
+                    uint desiredAccess = r.U32LE();
+                    _ = r.U32LE(); _ = r.U32LE();           // AllocationSize (u64)
+                    uint fileAttributes = r.U32LE();
+                    _ = r.U32LE();                      // SharedAccess
+                    uint disposition = r.U32LE();
+                    uint options = r.U32LE();
+                    int pathLength = (int)r.U32LE();
+                    string path = DecodeUnicode(r.Take(pathLength));
+                    try
+                    {
+                        var file = DriveFile.Create(mapping.LocalPath, path, desiredAccess, disposition, options, fileAttributes);
+                        uint newId = _fileSequence++;
+                        _files[newId] = file;
+                        body.U32LE(newId);
+                        body.U8(file.Information);
+                        return NtStatus.Success;
+                    }
+                    catch (DriveStatusException ex) { body.U32LE(0); body.U8(0); return ex.Status; }
                 }
-                catch (DriveStatusException ex) { body.U32LE(0); body.U8(0); return ex.Status; }
-            }
             case IrpClose:
-                if (_files.Remove(fileId, out DriveFile? closing)) closing.Close();
+                if (_files.Remove(fileId, out DriveFile? closing))
+                {
+                    closing.Close();
+                }
+
                 body.Zeros(4);
                 return NtStatus.Success;
             case IrpRead:
-            {
-                uint length = r.U32LE();
-                ulong offset = r.U32LE() | ((ulong)r.U32LE() << 32);
-                r.Skip(20);
-                if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); return NtStatus.Unsuccessful; }
-                byte[] data = length == 0 ? [] : file.Read(offset, length);
-                body.U32LE((uint)data.Length);
-                body.Bytes(data);
-                return NtStatus.Success;
-            }
+                {
+                    uint length = r.U32LE();
+                    ulong offset = r.U32LE() | ((ulong)r.U32LE() << 32);
+                    r.Skip(20);
+                    if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); return NtStatus.Unsuccessful; }
+                    byte[] data = length == 0 ? [] : file.Read(offset, length);
+                    body.U32LE((uint)data.Length);
+                    body.Bytes(data);
+                    return NtStatus.Success;
+                }
             case IrpWrite:
-            {
-                uint length = r.U32LE();
-                ulong offset = r.U32LE() | ((ulong)r.U32LE() << 32);
-                r.Skip(20);
-                ReadOnlySpan<byte> data = r.Take((int)length);
-                if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); body.U8(0); return NtStatus.Unsuccessful; }
-                uint written = file.Write(offset, data);
-                body.U32LE(written);
-                body.U8(0);
-                return NtStatus.Success;
-            }
+                {
+                    uint length = r.U32LE();
+                    ulong offset = r.U32LE() | ((ulong)r.U32LE() << 32);
+                    r.Skip(20);
+                    ReadOnlySpan<byte> data = r.Take((int)length);
+                    if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); body.U8(0); return NtStatus.Unsuccessful; }
+                    uint written = file.Write(offset, data);
+                    body.U32LE(written);
+                    body.U8(0);
+                    return NtStatus.Success;
+                }
             case IrpQueryInformation:
-            {
-                uint infoClass = r.U32LE();
-                if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); return NtStatus.Unsuccessful; }
-                file.QueryInformation(infoClass, body);
-                return NtStatus.Success;
-            }
+                {
+                    uint infoClass = r.U32LE();
+                    if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); return NtStatus.Unsuccessful; }
+                    file.QueryInformation(infoClass, body);
+                    return NtStatus.Success;
+                }
             case IrpSetInformation:
-            {
-                uint infoClass = r.U32LE();
-                uint length = r.U32LE();
-                r.Skip(24);
-                ReadOnlySpan<byte> buffer = r.Take((int)length);
-                if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(length); return NtStatus.Unsuccessful; }
-                SetInformation(file, infoClass, buffer);
-                body.U32LE(length);
-                return NtStatus.Success;
-            }
+                {
+                    uint infoClass = r.U32LE();
+                    uint length = r.U32LE();
+                    r.Skip(24);
+                    ReadOnlySpan<byte> buffer = r.Take((int)length);
+                    if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(length); return NtStatus.Unsuccessful; }
+                    SetInformation(file, infoClass, buffer);
+                    body.U32LE(length);
+                    return NtStatus.Success;
+                }
             case IrpQueryVolumeInformation:
                 return QueryVolume(mapping, r.U32LE(), body);
             case IrpDirectoryControl:
@@ -269,8 +293,16 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         r.Skip(23);
         string path = DecodeUnicode(r.Take(pathLength));
         if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); return NtStatus.Unsuccessful; }
-        if (initialQuery != 0) file.BeginEnumeration(path);
-        if (file.QueryDirectory(infoClass, body)) return NtStatus.Success;
+        if (initialQuery != 0)
+        {
+            file.BeginEnumeration(path);
+        }
+
+        if (file.QueryDirectory(infoClass, body))
+        {
+            return NtStatus.Success;
+        }
+
         body.U32LE(0);
         body.U8(0);
         return NtStatus.NoMoreFiles;
@@ -284,16 +316,16 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 file.MarkForDeletion();
                 break;
             case DriveFile.FileRenameInformation:
-            {
-                var br = new ByteReader(buffer);
-                br.U8();                        // ReplaceIfExists
-                br.U8();                        // RootDirectory
-                int nameLength = (int)br.U32LE();
-                string target = DecodeUnicode(br.Take(nameLength));
-                file.Rename(target);
-                break;
-            }
-            // FileBasicInformation / FileEndOfFileInformation / FileAllocationInformation: accepted, no-op.
+                {
+                    var br = new ByteReader(buffer);
+                    _ = br.U8();                        // ReplaceIfExists
+                    _ = br.U8();                        // RootDirectory
+                    int nameLength = (int)br.U32LE();
+                    string target = DecodeUnicode(br.Take(nameLength));
+                    file.Rename(target);
+                    break;
+                }
+                // FileBasicInformation / FileEndOfFileInformation / FileAllocationInformation: accepted, no-op.
         }
     }
 
@@ -310,16 +342,16 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         switch (infoClass)
         {
             case 1: // FileFsVolumeInformation
-            {
-                byte[] label = Encoding.Unicode.GetBytes(mapping.Name + "\0");
-                body.U32LE((uint)(17 + label.Length));
-                body.U32LE(0); body.U32LE(0);           // VolumeCreationTime
-                body.U32LE((uint)(freeClusters & 0xFFFF)); // VolumeSerialNumber
-                body.U32LE((uint)label.Length);
-                body.U8(0);                             // SupportsObjects
-                body.Bytes(label);
-                return NtStatus.Success;
-            }
+                {
+                    byte[] label = Encoding.Unicode.GetBytes(mapping.Name + "\0");
+                    body.U32LE((uint)(17 + label.Length));
+                    body.U32LE(0); body.U32LE(0);           // VolumeCreationTime
+                    body.U32LE((uint)(freeClusters & 0xFFFF)); // VolumeSerialNumber
+                    body.U32LE((uint)label.Length);
+                    body.U8(0);                             // SupportsObjects
+                    body.Bytes(label);
+                    return NtStatus.Success;
+                }
             case 3: // FileFsSizeInformation
                 body.U32LE(24);
                 body.U32LE((uint)totalClusters); body.U32LE((uint)(totalClusters >> 32));
@@ -328,15 +360,15 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 body.U32LE(bytesPerSector);
                 return NtStatus.Success;
             case 5: // FileFsAttributeInformation
-            {
-                byte[] fsName = Encoding.Unicode.GetBytes("NTFS\0");
-                body.U32LE((uint)(12 + fsName.Length));
-                body.U32LE(0x00000007);                 // CASE_SENSITIVE | CASE_PRESERVED | UNICODE_ON_DISK
-                body.U32LE(260);                        // MaximumComponentNameLength
-                body.U32LE((uint)fsName.Length);
-                body.Bytes(fsName);
-                return NtStatus.Success;
-            }
+                {
+                    byte[] fsName = Encoding.Unicode.GetBytes("NTFS\0");
+                    body.U32LE((uint)(12 + fsName.Length));
+                    body.U32LE(0x00000007);                 // CASE_SENSITIVE | CASE_PRESERVED | UNICODE_ON_DISK
+                    body.U32LE(260);                        // MaximumComponentNameLength
+                    body.U32LE((uint)fsName.Length);
+                    body.Bytes(fsName);
+                    return NtStatus.Success;
+                }
             case 7: // FileFsFullSizeInformation
                 body.U32LE(32);
                 body.U32LE((uint)totalClusters); body.U32LE((uint)(totalClusters >> 32));

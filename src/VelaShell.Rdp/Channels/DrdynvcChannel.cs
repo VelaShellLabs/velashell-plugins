@@ -20,7 +20,7 @@ internal sealed class DrdynvcChannel
 
     private readonly Func<byte[], CancellationToken, Task> _send;
     private readonly CancellationToken _ct;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     private bool _displayOpen;      // the server created the Display Control channel
     private uint _displayChannelId;
@@ -45,7 +45,9 @@ internal sealed class DrdynvcChannel
     {
         byte[]? reply = Parse(pdu);
         if (reply is not null)
+        {
             await _send(reply, _ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -61,7 +63,11 @@ internal sealed class DrdynvcChannel
         lock (_lock)
         {
             if (!_displayReady) { _pending = (width, height); return; }
-            if (_lastSent is { } last && last.Width == width && last.Height == height) return;
+            if (_lastSent is { } last && last.Width == width && last.Height == height)
+            {
+                return;
+            }
+
             _lastSent = (width, height);
             frame = BuildMonitorLayout(_displayChannelId, width, height);
         }
@@ -71,7 +77,11 @@ internal sealed class DrdynvcChannel
     /// <summary>Parses one PDU and returns the bytes to send back, or null when nothing is owed.</summary>
     private byte[]? Parse(byte[] pdu)
     {
-        if (pdu.Length == 0) return null;
+        if (pdu.Length == 0)
+        {
+            return null;
+        }
+
         var r = new ByteReader(pdu);
         byte head = r.U8();
         int cmd = (head >> 4) & 0x0F;
@@ -90,12 +100,15 @@ internal sealed class DrdynvcChannel
 
     private static byte[] BuildCapabilitiesResponse(ref ByteReader r)
     {
-        r.U8();                                 // pad
+        _ = r.U8();                                 // pad
         ushort version = r.Remaining >= 2 ? r.U16LE() : (ushort)1;
-        if (version is < 1 or > 3) version = 3;
+        if (version is < 1 or > 3)
+        {
+            version = 3;
+        }
         // [Cmd=CAPABILITIES|Sp=0|cbId=0][pad][Version].
         var w = new ByteWriter(4);
-        w.U8((byte)(CmdCapabilities << 4));
+        w.U8(CmdCapabilities << 4);
         w.U8(0);
         w.U16LE(version);
         return w.ToArray();
@@ -103,31 +116,46 @@ internal sealed class DrdynvcChannel
 
     private byte[]? HandleCreate(ref ByteReader r, int cbId)
     {
-        if (r.Remaining < CbIdBytes(cbId)) return null;
+        if (r.Remaining < CbIdBytes(cbId))
+        {
+            return null;
+        }
+
         uint channelId = ReadVariable(ref r, cbId);
         string name = ReadAsciiZ(ref r);
         bool accept = string.Equals(name, DisplayControlName, StringComparison.Ordinal);
         lock (_lock)
         {
             if (accept && !_displayOpen) { _displayOpen = true; _displayChannelId = channelId; }
-            else if (accept) accept = channelId == _displayChannelId; // tolerate a duplicate create
+            else if (accept)
+            {
+                accept = channelId == _displayChannelId; // tolerate a duplicate create
+            }
         }
         // Echo the channel id at the same width; CreationStatus 0 accepts, non-zero declines.
         var w = new ByteWriter(8);
         w.U8((byte)((CmdCreate << 4) | cbId));
         WriteVariable(w, channelId, cbId);
-        w.U32LE(accept ? 0u : unchecked((uint)0x80004001)); // E_NOTIMPL for unsupported channels
+        w.U32LE(accept ? 0u : unchecked(0x80004001)); // E_NOTIMPL for unsupported channels
         return w.ToArray();
     }
 
     private byte[]? HandleData(ref ByteReader r, int cbId, int sp, bool first)
     {
-        if (r.Remaining < CbIdBytes(cbId)) return null;
+        if (r.Remaining < CbIdBytes(cbId))
+        {
+            return null;
+        }
+
         uint channelId = ReadVariable(ref r, cbId);
         int total = -1;
         if (first)
         {
-            if (r.Remaining < CbIdBytes(sp)) return null;
+            if (r.Remaining < CbIdBytes(sp))
+            {
+                return null;
+            }
+
             total = (int)ReadVariable(ref r, sp);
         }
         ReadOnlySpan<byte> data = r.Rest();
@@ -150,20 +178,35 @@ internal sealed class DrdynvcChannel
         {
             if (buffer.Length + data.Length > _reassembleTotal) { _reassemble = null; return null; }
             buffer.Write(data);
-            if (buffer.Length < _reassembleTotal) return null;
+            if (buffer.Length < _reassembleTotal)
+            {
+                return null;
+            }
+
             message = buffer.ToArray();
             _reassemble = null;
         }
-        else message = data.ToArray();
+        else
+        {
+            message = data.ToArray();
+        }
 
         bool isDisplay;
-        lock (_lock) isDisplay = _displayOpen && channelId == _displayChannelId;
+        lock (_lock)
+        {
+            isDisplay = _displayOpen && channelId == _displayChannelId;
+        }
+
         return isDisplay ? OnDisplayControl(message) : null;
     }
 
     private byte[]? HandleClose(ref ByteReader r, int cbId)
     {
-        if (r.Remaining < CbIdBytes(cbId)) return null;
+        if (r.Remaining < CbIdBytes(cbId))
+        {
+            return null;
+        }
+
         uint channelId = ReadVariable(ref r, cbId);
         lock (_lock)
         {
@@ -181,16 +224,28 @@ internal sealed class DrdynvcChannel
     private byte[]? OnDisplayControl(byte[] message)
     {
         var r = new ByteReader(message);
-        if (r.Remaining < 8) return null;
+        if (r.Remaining < 8)
+        {
+            return null;
+        }
+
         uint type = r.U32LE();
-        r.U32LE();                              // Length
-        if (type != DispCaps || r.Remaining < 4) return null;
+        _ = r.U32LE();                              // Length
+        if (type != DispCaps || r.Remaining < 4)
+        {
+            return null;
+        }
+
         uint maxMonitors = r.U32LE();
         lock (_lock)
         {
             _maxMonitors = maxMonitors == 0 ? 1 : maxMonitors;
             _displayReady = true;
-            if (_pending is not { } p) return null;
+            if (_pending is not { } p)
+            {
+                return null;
+            }
+
             _pending = null;
             _lastSent = p;
             return BuildMonitorLayout(_displayChannelId, p.Width, p.Height);
@@ -249,7 +304,11 @@ internal sealed class DrdynvcChannel
     {
         ReadOnlySpan<byte> rest = r.Rest();
         int end = rest.IndexOf((byte)0);
-        if (end < 0) end = rest.Length;
+        if (end < 0)
+        {
+            end = rest.Length;
+        }
+
         return Encoding.ASCII.GetString(rest[..end]);
     }
 }

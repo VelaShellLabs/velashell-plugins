@@ -5,7 +5,6 @@ using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Rdp.Security;
 
@@ -41,7 +40,10 @@ internal static class CredSsp
         // Leg 1: client NTLM NEGOTIATE.
         byte[]? token = auth.GetOutgoingBlob(ReadOnlySpan<byte>.Empty, out NegotiateAuthenticationStatusCode status);
         if (status is not (NegotiateAuthenticationStatusCode.ContinueNeeded or NegotiateAuthenticationStatusCode.Completed))
+        {
             throw new RdpProtocolException($"NLA negotiation failed to start ({status}).");
+        }
+
         await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, null, null), ct).ConfigureAwait(false);
 
         // Leg 2: server NTLM CHALLENGE.
@@ -51,7 +53,9 @@ internal static class CredSsp
         // Leg 3: client NTLM AUTHENTICATE + pubKeyAuth (+ clientNonce for v5+).
         token = auth.GetOutgoingBlob(challenge.NegoToken ?? [], out status);
         if (status != NegotiateAuthenticationStatusCode.Completed)
+        {
             throw new ProtocolAuthFailure($"NLA authentication did not complete ({status}).");
+        }
 
         byte[] pubKeyAuth = peerVersion < 5
             ? Seal(auth, publicKey)
@@ -62,8 +66,15 @@ internal static class CredSsp
         // Leg 4: server public-key echo — verify before sending credentials.
         TsRequest echo = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
         if (echo.ErrorCode is { } error && error != 0)
+        {
             throw new ProtocolAuthFailure($"The server rejected NLA (0x{error:X8}).");
-        if (echo.PubKeyAuth is null) throw new RdpProtocolException("NLA public-key echo missing.");
+        }
+
+        if (echo.PubKeyAuth is null)
+        {
+            throw new RdpProtocolException("NLA public-key echo missing.");
+        }
+
         byte[] serverEcho = Unseal(auth, echo.PubKeyAuth);
         VerifyServerEcho(peerVersion, serverEcho, publicKey, nonce);
 
@@ -78,15 +89,25 @@ internal static class CredSsp
         {
             // The server returns the public key with the first byte incremented (little-endian +1).
             byte[] expected = (byte[])publicKey.Clone();
-            for (int i = 0; i < expected.Length; i++) { if (++expected[i] != 0) break; }
+            for (int i = 0; i < expected.Length; i++)
+            {
+                if (++expected[i] != 0)
+                {
+                    break;
+                }
+            }
             if (!CryptographicOperations.FixedTimeEquals(serverEcho, expected))
+            {
                 throw new ProtocolAuthFailure("The server's public-key echo did not match (possible MITM).");
+            }
         }
         else
         {
             byte[] expected = BindingHash(ServerClientHashMagic, nonce, publicKey);
             if (!CryptographicOperations.FixedTimeEquals(serverEcho, expected))
+            {
                 throw new ProtocolAuthFailure("The server's public-key hash did not match (possible MITM).");
+            }
         }
     }
 
@@ -102,9 +123,13 @@ internal static class CredSsp
     private static byte[] ServerPublicKey(SslStream tls)
     {
         X509Certificate remote = tls.RemoteCertificate ?? throw new RdpProtocolException("No server certificate for NLA.");
-        using var cert = X509CertificateLoader.LoadCertificate(remote.GetRawCertData());
+        using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(remote.GetRawCertData());
         using RSA? rsa = cert.GetRSAPublicKey();
-        if (rsa is null) throw new RdpProtocolException("NLA requires an RSA server certificate.");
+        if (rsa is null)
+        {
+            throw new RdpProtocolException("NLA requires an RSA server certificate.");
+        }
+
         return rsa.ExportRSAPublicKey();   // matches OpenSSL i2d_PublicKey (PKCS#1 RSAPublicKey)
     }
 
@@ -112,7 +137,11 @@ internal static class CredSsp
     {
         var output = new ArrayBufferWriter<byte>();
         NegotiateAuthenticationStatusCode status = auth.Wrap(data, output, requestEncryption: true, out _);
-        if (status != NegotiateAuthenticationStatusCode.Completed) throw new RdpProtocolException($"NLA wrap failed ({status}).");
+        if (status != NegotiateAuthenticationStatusCode.Completed)
+        {
+            throw new RdpProtocolException($"NLA wrap failed ({status}).");
+        }
+
         return output.WrittenSpan.ToArray();
     }
 
@@ -120,7 +149,11 @@ internal static class CredSsp
     {
         var output = new ArrayBufferWriter<byte>();
         NegotiateAuthenticationStatusCode status = auth.Unwrap(data, output, out _);
-        if (status != NegotiateAuthenticationStatusCode.Completed) throw new RdpProtocolException($"NLA unwrap failed ({status}).");
+        if (status != NegotiateAuthenticationStatusCode.Completed)
+        {
+            throw new RdpProtocolException($"NLA unwrap failed ({status}).");
+        }
+
         return output.WrittenSpan.ToArray();
     }
 
@@ -147,21 +180,44 @@ internal static class CredSsp
         var w = new AsnWriter(AsnEncodingRules.DER);
         using (w.PushSequence())
         {
-            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0))) w.WriteInteger(version);
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                w.WriteInteger(version);
+            }
+
             if (negoToken is not null)
             {
                 using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
                 using (w.PushSequence())           // NegoData ::= SEQUENCE OF
                 using (w.PushSequence())           // SEQUENCE { negoToken [0] OCTET STRING }
                 using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+                {
                     w.WriteOctetString(negoToken);
+                }
             }
             if (authInfo is not null)
-                using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 2))) w.WriteOctetString(authInfo);
+            {
+                using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 2)))
+                {
+                    w.WriteOctetString(authInfo);
+                }
+            }
+
             if (pubKeyAuth is not null)
-                using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 3))) w.WriteOctetString(pubKeyAuth);
+            {
+                using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 3)))
+                {
+                    w.WriteOctetString(pubKeyAuth);
+                }
+            }
+
             if (clientNonce is not null)
-                using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 5))) w.WriteOctetString(clientNonce);
+            {
+                using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 5)))
+                {
+                    w.WriteOctetString(clientNonce);
+                }
+            }
         }
         return w.Encode();
     }
@@ -176,7 +232,7 @@ internal static class CredSsp
         while (seq.HasData)
         {
             Asn1Tag tag = seq.PeekTag();
-            if (tag.TagClass != TagClass.ContextSpecific) { seq.ReadEncodedValue(); continue; }
+            if (tag.TagClass != TagClass.ContextSpecific) { _ = seq.ReadEncodedValue(); continue; }
             AsnReader inner = seq.ReadSequence(tag);
             switch (tag.TagValue)
             {
@@ -193,7 +249,7 @@ internal static class CredSsp
                     }
                     break;
                 case 2:
-                    inner.ReadOctetString(); // authInfo (server never sends to client)
+                    _ = inner.ReadOctetString(); // authInfo (server never sends to client)
                     break;
                 case 3:
                     pubKeyAuth = inner.ReadOctetString();
@@ -202,7 +258,7 @@ internal static class CredSsp
                     errorCode = (uint)inner.ReadInteger();
                     break;
                 case 5:
-                    inner.ReadOctetString(); // clientNonce echoed (unused on the client)
+                    _ = inner.ReadOctetString(); // clientNonce echoed (unused on the client)
                     break;
             }
         }
@@ -214,17 +270,35 @@ internal static class CredSsp
         var creds = new AsnWriter(AsnEncodingRules.DER);
         using (creds.PushSequence())   // TSPasswordCreds
         {
-            using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0))) creds.WriteOctetString(Encoding.Unicode.GetBytes(domain));
-            using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1))) creds.WriteOctetString(Encoding.Unicode.GetBytes(username));
-            using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 2))) creds.WriteOctetString(Encoding.Unicode.GetBytes(password));
+            using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                creds.WriteOctetString(Encoding.Unicode.GetBytes(domain));
+            }
+
+            using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
+            {
+                creds.WriteOctetString(Encoding.Unicode.GetBytes(username));
+            }
+
+            using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 2)))
+            {
+                creds.WriteOctetString(Encoding.Unicode.GetBytes(password));
+            }
         }
         byte[] passwordCreds = creds.Encode();
 
         var w = new AsnWriter(AsnEncodingRules.DER);
         using (w.PushSequence())       // TSCredentials
         {
-            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0))) w.WriteInteger(1); // credType = password
-            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1))) w.WriteOctetString(passwordCreds);
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                w.WriteInteger(1); // credType = password
+            }
+
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
+            {
+                w.WriteOctetString(passwordCreds);
+            }
         }
         return w.Encode();
     }
@@ -241,7 +315,11 @@ internal static class CredSsp
     private static async Task<byte[]> ReadDerAsync(SslStream tls, CancellationToken ct)
     {
         byte[] header = await ReadExactAsync(tls, 2, ct).ConfigureAwait(false);
-        if (header[0] != 0x30) throw new RdpProtocolException("Expected a DER SEQUENCE in the NLA exchange.");
+        if (header[0] != 0x30)
+        {
+            throw new RdpProtocolException("Expected a DER SEQUENCE in the NLA exchange.");
+        }
+
         var prefix = new List<byte> { header[0], header[1] };
         int contentLength;
         if ((header[1] & 0x80) == 0)
@@ -251,11 +329,18 @@ internal static class CredSsp
         else
         {
             int count = header[1] & 0x7F;
-            if (count is < 1 or > 4) throw new RdpProtocolException("Unsupported DER length in NLA exchange.");
+            if (count is < 1 or > 4)
+            {
+                throw new RdpProtocolException("Unsupported DER length in NLA exchange.");
+            }
+
             byte[] lengthBytes = await ReadExactAsync(tls, count, ct).ConfigureAwait(false);
             prefix.AddRange(lengthBytes);
             contentLength = 0;
-            foreach (byte b in lengthBytes) contentLength = (contentLength << 8) | b;
+            foreach (byte b in lengthBytes)
+            {
+                contentLength = (contentLength << 8) | b;
+            }
         }
         byte[] content = await ReadExactAsync(tls, contentLength, ct).ConfigureAwait(false);
         byte[] element = new byte[prefix.Count + content.Length];
@@ -271,7 +356,11 @@ internal static class CredSsp
         while (read < count)
         {
             int next = await tls.ReadAsync(buffer.AsMemory(read), ct).ConfigureAwait(false);
-            if (next == 0) throw new RdpProtocolException("The server closed the connection during NLA.");
+            if (next == 0)
+            {
+                throw new RdpProtocolException("The server closed the connection during NLA.");
+            }
+
             read += next;
         }
         return buffer;

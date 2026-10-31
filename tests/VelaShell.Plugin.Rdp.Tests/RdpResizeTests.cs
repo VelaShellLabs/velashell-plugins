@@ -16,7 +16,7 @@ public sealed class RdpResizeTests
     private const string DisplayControl = "Microsoft::Windows::RDS::DisplayControl";
 
     private static byte[] CreateRequest(uint channelId, string name) =>
-        [(byte)((0x01 << 4) | 0x00), (byte)channelId, .. Encoding.ASCII.GetBytes(name), 0x00];
+        [((0x01 << 4) | 0x00), (byte)channelId, .. Encoding.ASCII.GetBytes(name), 0x00];
 
     private static byte[] DisplayCapsData(uint channelId, uint maxMonitors)
     {
@@ -26,7 +26,7 @@ public sealed class RdpResizeTests
         caps.U32LE(maxMonitors);
         caps.U32LE(0);          // MaxMonitorAreaFactorA
         caps.U32LE(0);          // MaxMonitorAreaFactorB
-        return [(byte)((0x03 << 4) | 0x00), (byte)channelId, .. caps.Span];
+        return [((0x03 << 4) | 0x00), (byte)channelId, .. caps.Span];
     }
 
     [TestMethod]
@@ -48,13 +48,13 @@ public sealed class RdpResizeTests
         // Create response accepts the channel: Cmd=CREATE, same id, CreationStatus 0.
         var create = new ByteReader(sent[1]);
         Assert.AreEqual((byte)((0x01 << 4) | 0x00), create.U8());
-        Assert.AreEqual(3u, (uint)create.U8());
+        Assert.AreEqual(3u, create.U8());
         Assert.AreEqual(0u, create.U32LE());
 
         // Monitor layout rides a DATA PDU on the display-control channel.
         var layout = new ByteReader(sent[2]);
         Assert.AreEqual((byte)((0x03 << 4) | 0x00), layout.U8()); // Cmd=DATA, cbId=0
-        Assert.AreEqual(3u, (uint)layout.U8());                   // channel id
+        Assert.AreEqual(3u, layout.U8());                   // channel id
         Assert.AreEqual(0x00000002u, layout.U32LE());             // Header.Type = MONITOR_LAYOUT
         Assert.AreEqual(56u, layout.U32LE());                     // Header.Length
         Assert.AreEqual(40u, layout.U32LE());                     // MonitorLayoutSize
@@ -94,7 +94,7 @@ public sealed class RdpResizeTests
         Assert.HasCount(1, sent);
         var reply = new ByteReader(sent[0]);
         Assert.AreEqual((byte)((0x01 << 4) | 0x00), reply.U8());
-        Assert.AreEqual(5u, (uint)reply.U8());
+        Assert.AreEqual(5u, reply.U8());
         Assert.AreEqual(0x80004001u, reply.U32LE()); // E_NOTIMPL — the renderer keeps to classic bitmaps
     }
 
