@@ -90,16 +90,28 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
         // Then custom folders. The host renders text settings as a single-line box, so entries are
         // separated by ';' — newlines are still accepted for values saved by earlier versions.
-        foreach (string line in request.GetString("drives").Split([';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        // Errors name the entry and show the format with an example: "RDP setting invalid: drives"
+        // told the user neither which entry was wrong nor how to write it.
+        string example = CustomFolderExamples().Single;
+        foreach (string entry in request.GetString("drives").Split([';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            int equal = line.IndexOf('=');
-            if (equal < 1) { Invalid("drives"); continue; }
-            string name = line[..equal].Trim();
-            string path = line[(equal + 1)..].Trim();
-            if (name.Length > 8 || drives.Count >= LocalDisks.MaxDisks || !name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') || !names.Add(name)
+            if (drives.Count >= LocalDisks.MaxDisks)
+            {
+                throw new ProtocolConnectionException(loc.Format("DrivesTooMany", LocalDisks.MaxDisks));
+            }
+
+            int equal = entry.IndexOf('=');
+            string name = equal < 1 ? "" : entry[..equal].Trim();
+            string path = equal < 1 ? "" : entry[(equal + 1)..].Trim();
+            if (name.Length is < 1 or > 8 || !name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
                 || path.Any(char.IsControl) || !Path.IsPathFullyQualified(path) || !Directory.Exists(path))
             {
-                Invalid("drives");
+                throw new ProtocolConnectionException(loc.Format("DrivesInvalidEntry", entry, example));
+            }
+
+            if (!names.Add(name))
+            {
+                throw new ProtocolConnectionException(loc.Format("DrivesDuplicateName", name));
             }
 
             drives.Add(new(name, Path.GetFullPath(path)));
@@ -136,12 +148,15 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             });
         }
 
+        // The hint stays visible under the box (the placeholder vanishes as soon as anything is typed),
+        // so it carries the format plus concrete examples for this OS.
+        (string single, string several) = CustomFolderExamples();
         fields.Add(new()
         {
             Key = "drives",
             Label = loc["Drives"],
-            Hint = loc["DrivesHint"],
-            Placeholder = OperatingSystem.IsWindows() ? @"work=C:\Work;docs=D:\Docs" : "work=/home/me/work;docs=/srv/docs",
+            Hint = loc.Format("DrivesHint", single, several),
+            Placeholder = several,
             DefaultValue = "",
             Page = DrivesPage
         });
@@ -149,6 +164,12 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         fields.Add(new() { Key = TrustedThumbprintKey, Label = loc["Pin"], IsHidden = true });
         return fields;
     }
+
+    /// <summary>OS-appropriate custom-folder examples for the hint, the placeholder and error messages.</summary>
+    internal static (string Single, string Several) CustomFolderExamples() =>
+        OperatingSystem.IsWindows() ? (@"work=C:\Work", @"work=C:\Work;docs=D:\Docs")
+        : OperatingSystem.IsMacOS() ? ("work=/Users/me/Work", "work=/Users/me/Work;docs=/Users/me/Documents")
+        : ("work=/home/me/work", "work=/home/me/work;docs=/srv/docs");
 
     /// <summary>The checkbox label, Explorer-style: "Local Disk (C:)", "Removable Disk (E:)", "Root (/)".</summary>
     internal static string DiskLabel(Loc loc, LocalDisk disk) => disk.Kind switch

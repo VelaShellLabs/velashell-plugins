@@ -70,7 +70,9 @@ arguments.
   1–8 ASCII letters, digits or underscores and must not clash with a ticked disk's name (`C`, `E`,
   `root`, `home`, …). The remote desktop gets **read/write** access to ticked disks and custom
   folders under `\\tsclient\<name>`. Paths are confined to the mapping; traversal and symlinks are
-  rejected.
+  rejected. The field's hint (always visible, unlike the placeholder) shows the format with
+  examples for the current OS, and a wrong entry fails the connection with a message that quotes
+  that entry and the expected format — or names the clashing name, or the 32-mapping limit.
 
 Security negotiates TLS (and NLA when the server requires it). TLS uses OS trust/name/validity
 verification, or an explicitly approved exact SHA-256 leaf-certificate pin that replaces
