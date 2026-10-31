@@ -143,6 +143,7 @@ public sealed class RdpManagedSession : IRdpSession
         {
             RdpConnectStage stage = session._connection.Stage;
             System.Security.Authentication.SslProtocols? tls = session._connection.TlsProtocol;
+            string? tlsTrace = session._connection.TlsTrace;
             await session.DisposeAsync().ConfigureAwait(false);
             // Cancellation, certificate trust and rejected credentials each mean something specific to
             // the caller; everything else gets the failing stage and a readable cause chain.
@@ -151,7 +152,7 @@ public sealed class RdpManagedSession : IRdpSession
                 throw;
             }
 
-            throw new RdpConnectionException(stage, ex, tls);
+            throw new RdpConnectionException(stage, ex, tls, tlsTrace);
         }
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.

@@ -40,11 +40,13 @@ public enum RdpConnectStage
 /// </summary>
 public sealed class RdpConnectionException : Exception
 {
-    internal RdpConnectionException(RdpConnectStage stage, Exception inner, SslProtocols? tls = null)
-        : base($"RDP connection failed during {stage}: {WithTls(Describe(inner), tls)}", inner)
+    internal RdpConnectionException(RdpConnectStage stage, Exception inner, SslProtocols? tls = null, string? tlsTrace = null)
+        : base($"RDP connection failed during {stage}: {WithTls(Describe(inner), tls)}"
+            + (tlsTrace is null ? "" : $" — {tlsTrace}"), inner)
     {
         Stage = stage;
         TlsProtocol = tls;
+        TlsTrace = tlsTrace;
         Detail = WithTls(Describe(inner), tls);
     }
 
@@ -53,6 +55,13 @@ public sealed class RdpConnectionException : Exception
 
     /// <summary>The TLS version negotiated before the failure; <see langword="null" /> if TLS never completed.</summary>
     public SslProtocols? TlsProtocol { get; }
+
+    /// <summary>
+    /// For failures after the TLS handshake: the cipher suite and the framing of the TLS records the server
+    /// sent since (e.g. "…; server sent: Alert 26 B"), which separates a server-side abort from a local
+    /// decryption problem. Part of <see cref="Exception.Message" /> (and so of logs), not of <see cref="Detail" />.
+    /// </summary>
+    public string? TlsTrace { get; }
 
     // Servers differ in how they handle TLS versions (FreeRDP keeps /tls:enforce:1.2 for "buggy TLS
     // version negotiation"), so a failure after the handshake names the version that was in use.

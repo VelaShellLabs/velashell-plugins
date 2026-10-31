@@ -62,6 +62,17 @@ internal sealed class RdpConnection : IAsyncDisposable
     /// <summary>The TLS version negotiated with the server, once the handshake has completed.</summary>
     internal System.Security.Authentication.SslProtocols? TlsProtocol { get; private set; }
 
+    private TlsRecordTap? _tlsTap;
+    private TlsCipherSuite? _tlsCipher;
+
+    /// <summary>
+    /// For failure reports after the handshake: the cipher suite and the framing of the records the server
+    /// sent since (e.g. "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384; server sent: Alert 26 B").
+    /// </summary>
+    internal string? TlsTrace => _tlsCipher is { } cipher && _tlsTap?.DescribeSinceHandshake() is { } records
+        ? $"{cipher}; server sent: {records}"
+        : null;
+
     internal async Task ConnectAsync(CancellationToken ct)
     {
         Stage = RdpConnectStage.Tcp;
@@ -77,19 +88,13 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         if (selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx))
         {
-            Stage = RdpConnectStage.Tls;
-            SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
-            TlsProtocol = ssl.SslProtocol;
-            _transport.UpgradeStream(ssl);
+            SslStream ssl = await StartTlsAsync(ct).ConfigureAwait(false);
             Stage = RdpConnectStage.Nla;
             await CredSsp.AuthenticateAsync(ssl, _options.CertificateHost, _options.Domain, _options.Username, _options.Password, ct).ConfigureAwait(false);
         }
         else if (selected.HasFlag(SecurityProtocol.Ssl))
         {
-            Stage = RdpConnectStage.Tls;
-            SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
-            TlsProtocol = ssl.SslProtocol;
-            _transport.UpgradeStream(ssl);
+            await StartTlsAsync(ct).ConfigureAwait(false);
         }
         else
         {
@@ -117,6 +122,19 @@ internal sealed class RdpConnection : IAsyncDisposable
         byte[] demandActive = await ReceiveLicensingThenDemandActiveAsync(ct).ConfigureAwait(false);
         Stage = RdpConnectStage.Capabilities;
         await HandleDemandActiveAsync(demandActive, ct).ConfigureAwait(false);
+        _tlsTap?.Stop();
+    }
+
+    private async Task<SslStream> StartTlsAsync(CancellationToken ct)
+    {
+        Stage = RdpConnectStage.Tls;
+        _tlsTap = new TlsRecordTap(_transport.Stream);
+        SslStream ssl = await RdpTls.AuthenticateAsync(_tlsTap, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+        _tlsTap.MarkHandshakeComplete();
+        TlsProtocol = ssl.SslProtocol;
+        _tlsCipher = ssl.NegotiatedCipherSuite;
+        _transport.UpgradeStream(ssl);
+        return ssl;
     }
 
     private async Task<byte[]> ReceiveLicensingThenDemandActiveAsync(CancellationToken ct)
