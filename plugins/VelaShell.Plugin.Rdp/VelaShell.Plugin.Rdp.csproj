@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Pure-managed RDP remote desktop workspace.</Description>
+    <VelaPluginId>velashell.rdp</VelaPluginId>
+    <!-- The [LibraryImport] source generator (UnixClipboardFile libc interop) emits unsafe code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- The pure-managed RDP engine, released standalone (MIT). Its DLL rides in this plugin's .vpx. -->
+    <ProjectReference Include="..\..\src\VelaShell.Rdp\VelaShell.Rdp.csproj" />
+    <InternalsVisibleTo Include="VelaShell.Plugin.Rdp.Tests" />
+  </ItemGroup>
+</Project>
