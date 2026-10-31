@@ -31,6 +31,39 @@ public sealed class RdpWorkspaceTests
         Assert.IsEmpty(context.RecordingWorkspaces.Registered);
     }
     [TestMethod]
+    public async Task NewDisksReRegisterTheSameProviderOnTheDriveMappingPage()
+    {
+        using var context = new TestPluginContext { PluginId = "velashell.rdp" };
+        context.HostInfo.Locale = "en";
+        IReadOnlyList<LocalDisk> disks = [new("C", "C", @"C:\", LocalDiskKind.Fixed)];
+        // A long interval keeps the background timer out of the test; RefreshDisks is driven directly,
+        // because the recording registry is not thread-safe.
+        var plugin = new RdpPlugin(() => disks, TimeSpan.FromHours(1));
+        await plugin.ActivateAsync(context, default);
+        WorkspaceDescriptor first = context.RecordingWorkspaces.Registered.Single();
+        ProtocolSettingPage page = first.Pages.Single();
+        Assert.AreEqual(RdpSettings.DrivesPage, page.Key);
+        Assert.AreEqual("Drive mapping", page.Label);
+        Assert.IsTrue(first.Fields.Any(field => field.Key == "drive:C" && field.Page == page.Key));
+        Assert.IsFalse(first.Fields.Any(field => field.Key == "drive:E"));
+        IWorkspaceProvider? provider = context.RecordingWorkspaces.GetProvider(first.Id);
+
+        plugin.RefreshDisks();   // unchanged set: no re-registration
+        Assert.AreSame(first, context.RecordingWorkspaces.Registered.Single());
+
+        disks = [.. disks, new("E", "E", @"E:\", LocalDiskKind.Removable)];
+        plugin.RefreshDisks();   // a USB disk appeared
+        WorkspaceDescriptor second = context.RecordingWorkspaces.Registered.Single();
+        Assert.AreNotSame(first, second);
+        Assert.IsTrue(second.Fields.Any(field => field.Key == "drive:E" && field.Label == "Removable Disk (E:)"));
+        Assert.AreSame(provider, context.RecordingWorkspaces.GetProvider(second.Id));
+
+        await plugin.DeactivateAsync(default);
+        Assert.IsEmpty(context.RecordingWorkspaces.Registered);
+        plugin.RefreshDisks();   // after deactivation the watcher must not re-register
+        Assert.IsEmpty(context.RecordingWorkspaces.Registered);
+    }
+    [TestMethod]
     public async Task ReconnectReplacesSessionAndDisposeWorksWithoutCreatingView()
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };

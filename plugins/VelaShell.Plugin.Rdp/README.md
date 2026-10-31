@@ -57,10 +57,20 @@ arguments.
 - Received files remain in `<plugin DataDirectory>/rdp-clipboard`. Limits: 16 MiB per clipboard
   payload; images also require dimensions ≤8192 and decoded pixels ≤16 MiB; 4096 file descriptors,
   1 GiB per transfer and 4 GiB retained cache. Unsafe names and symbolic links are rejected.
-- **Shared folders** defaults to empty. Add one `name=absolute-path` per line, e.g.
-  `work=C:\Work\Share` or `work=/home/alice/share`. At most 32 mappings; names are 1–8 ASCII
-  letters, digits or underscores. The remote desktop gets **read/write** access under
-  `\\tsclient\work`. Paths are confined to the mapping; traversal and symlinks are rejected.
+- **Drive mapping** is its own page of the connection dialog, mstsc-style. It lists one checkbox per
+  local disk — on Windows every drive letter, labelled by type ("Local Disk (C:)", "Removable Disk
+  (E:)", "Network Drive (Z:)", "CD/DVD Drive (F:)"); on Linux/macOS the root (`/`), the home folder
+  (`~`) and mounts under `/media`, `/run/media`, `/mnt` or `/Volumes`. All are **unchecked by
+  default**. Disks are enumerated without touching media (no volume query), and a ≥5 s watcher
+  re-registers the form when the set of disks changes, so a USB disk plugged in later appears the
+  next time the dialog opens. A ticked disk that is absent at connect time is skipped, not an error.
+- **Custom folders** (same page) take `name=absolute-path` entries separated by semicolons, e.g.
+  `work=C:\Work\Share;docs=D:\Docs` — the host renders the field single-line, so `;` is the
+  separator (newlines from older saved values still work). At most 32 mappings in total; names are
+  1–8 ASCII letters, digits or underscores and must not clash with a ticked disk's name (`C`, `E`,
+  `root`, `home`, …). The remote desktop gets **read/write** access to ticked disks and custom
+  folders under `\\tsclient\<name>`. Paths are confined to the mapping; traversal and symlinks are
+  rejected.
 
 Security negotiates TLS (and NLA when the server requires it). TLS uses OS trust/name/validity
 verification, or an explicitly approved exact SHA-256 leaf-certificate pin that replaces
