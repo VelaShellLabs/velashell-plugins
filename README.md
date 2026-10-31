@@ -5,13 +5,13 @@
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
 Redis、MongoDB、S3、Telnet、串口、Docker 面板、RDP 远程桌面。
 
-三个仓库各管一摊,别串:
+几个仓库各管一摊,别串:
 
 | 仓库 | 管什么 |
 | --- | --- |
 | [joesdu/VelaShell](https://github.com/joesdu/VelaShell) | 主程序(宿主) |
-| [VelaShellLabs/velashell-plugin-sdk](https://github.com/VelaShellLabs/velashell-plugin-sdk) | 契约程序集与测试替身:`VelaShell.PluginSdk`、`VelaShell.PluginSdk.Testing` |
-| [VelaShellLabs/velashell-plugin-cli](https://github.com/VelaShellLabs/velashell-plugin-cli) | 构建包与命令行:`VelaShell.PluginSdk.Build`、`vela-plugin` |
+| [VelaShellLabs/velashell-plugin-sdk](https://github.com/VelaShellLabs/velashell-plugin-sdk) | 契约程序集、测试替身与构建包(同版本、同一次发布):`VelaShell.PluginSdk`、`VelaShell.PluginSdk.Testing`、`VelaShell.PluginSdk.Build` |
+| [VelaShellLabs/velashell-plugin-cli](https://github.com/VelaShellLabs/velashell-plugin-cli) | 命令行:`vela-plugin` |
 | [VelaShellLabs/velashell-plugin-templates](https://github.com/VelaShellLabs/velashell-plugin-templates) | `dotnet new` 模板:`VelaShell.Plugin.Templates` |
 | **本仓库** | 第一方插件本身(AI 插件除外,见下) |
 
@@ -41,7 +41,7 @@ dotnet build VelaShell.Plugins.slnx
 dotnet test  VelaShell.Plugins.slnx -c Debug
 ```
 
-本仓库不出 NuGet 包、不做强名称签名(那是工具链仓库的事),本地构建不需要任何密钥,
+本仓库不出 NuGet 包、不做强名称签名(那是 SDK 仓库的事),本地构建不需要任何密钥,
 `-c Debug` 也只是跑测试的习惯而非硬性要求。唯一用到密钥的地方是给 `.vpx` 签名
 (见下面的[签名密钥](#签名密钥)),不传就是未签名包,本地开发够用。
 
@@ -67,11 +67,14 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 
 `PackVpx` 与打包器都来自 `VelaShell.PluginSdk.Build` 包 —— 与第三方插件用的是同一个。
 
-### 联调一个还没发布的 SDK
+### 要用 SDK 里还没发布的契约
 
-在工具链仓库 `dotnet pack ... -p:VelaSdkVersion=1.5.0-dev -o artifacts/nuget`,
-然后打开本仓库 [`nuget.config`](nuget.config) 里那条注释掉的本地源,再
-`dotnet build -p:VelaSdkVersion=1.5.0-dev`。用完记得把本地源注释回去再提交。
+等 SDK 发版。SDK 的版本是 `Directory.Packages.props` 里 `VelaShell.PluginSdk.Build` 与
+`VelaShell.PluginSdk.Testing` 两行的字面量(同一个号),包只从 nuget.org 来 —— 本仓库没有
+`nuget.config`、没有本地源,也没有能用 `-p:` 覆盖的 SDK 版本属性。包发布之后把这两行一起抬上去,
+再按 `VELAP1000` / `VELAP1001` 的报错把测试工程的 `Avalonia*` 跟上。在那之前用到新面的插件编译不过
+是预期内的;不要在 sdk 仓库 `dotnet pack` 本地包来凑(本地包未签名、版本号也不归下游定,
+见 sdk 仓库的 AGENTS.md)。
 
 ## 版本号:一趟统一列车
 
@@ -155,10 +158,10 @@ dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=
 
 ## 与宿主的硬约束
 
-**Avalonia 版本必须与宿主一致**。这个版本号的权威在工具链仓库:
+**Avalonia 版本必须与宿主一致**。这个版本号的权威在 velashell-plugin-sdk:
 `VelaShell.PluginSdk.Build` 用精确区间 `[x.y.z]` 锁给插件工程,
 `VelaShell.PluginSdk` 再把同一个值经 `buildTransitive` 导出成
-`VelaSdkPinnedAvaloniaVersion`。本仓库的 `VelaAvaloniaVersion` 只服务于测试工程
+`VelaSdkPinnedAvaloniaVersion`。本仓库 `Directory.Packages.props` 里的 `Avalonia*` 只服务于测试工程
 (测试宿主要扮演装载方),由 `Directory.Build.targets` 的 `VerifyAvaloniaMatchesSdk`
 在构建期与 SDK 锁的值核对 —— 漂了当场报 `VELAP1000`,而不是等用户装上插件才炸。
 

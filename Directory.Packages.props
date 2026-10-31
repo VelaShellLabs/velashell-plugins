@@ -1,7 +1,7 @@
 <Project>
   <!--
     中央包版本管理(CPM)。本仓库所有工程的 NuGet 版本号只在这一处出现 ——
-    六个插件 + 六个测试工程,谁也不许在 csproj 里写 Version=。
+    插件、测试工程与 src/ 下的库,谁也不许在 csproj 里写 Version=。
 
     为什么值得:插件之间会共用同一个包(AWSSDK.S3 在 S3 插件与它的测试里各一份、
     Avalonia 在测试工程里五处),版本散在各 csproj 时"改了一处忘了另一处"没有任何
@@ -13,7 +13,7 @@
     <!-- 传递依赖被直接引用时报错,免得哪天某个包不再传递它就悄悄断了。 -->
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-  <ItemGroup Label="VelaShell 插件 SDK(源码在 VelaShellLabs/velashell-plugin-sdk 与 velashell-plugin-cli)">
+  <ItemGroup Label="VelaShell 插件 SDK(源码在 VelaShellLabs/velashell-plugin-sdk,.Build 与 .Testing 同版本、同一次发布)">
     <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
          plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
          所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
