@@ -18,6 +18,8 @@ public sealed class RdpManagedSession : IRdpSession
     private int _isConnected;
     private int _disposed;
     private uint _errorInfo;
+    private int _logonInfo = -1;
+    private int _reachedLogon;
     private CliprdrChannel? _cliprdr;
     private Channel<byte[]>? _cliprdrQueue;
     private Task? _cliprdrWorker;
@@ -29,6 +31,17 @@ public sealed class RdpManagedSession : IRdpSession
     private Task? _drdynvcWorker;
 
     public bool IsConnected => Volatile.Read(ref _isConnected) != 0;
+
+    /// <summary>
+    /// Whether the server sent a logon notification (Save Session Info) — the credentials were accepted and a
+    /// Windows session started. A disconnect after this is the server ending an established session, not an
+    /// authentication or protocol failure. <see cref="LogonInfoType"/> carries the notification type if any.
+    /// </summary>
+    public bool ReachedLogon => Volatile.Read(ref _reachedLogon) != 0;
+
+    /// <summary>The Save Session Info infoType the server sent (0/1 logon, 2 plain-notify, 3 extended), or null.</summary>
+    public uint? LogonInfoType => Volatile.Read(ref _logonInfo) is var v && v >= 0 ? (uint)v : null;
+
     public event Action? FrameAvailable;
     public event Action<Exception?>? Disconnected;
 
@@ -93,6 +106,7 @@ public sealed class RdpManagedSession : IRdpSession
         _connection = connection;
         _connection.FrameUpdated += OnFrameUpdated;
         _connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
+        _connection.LogonInfoReceived += type => { Volatile.Write(ref _logonInfo, (int)type); Volatile.Write(ref _reachedLogon, 1); };
         _connection.ChannelData += OnChannelData;
     }
 

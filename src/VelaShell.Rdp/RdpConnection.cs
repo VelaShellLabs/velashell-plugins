@@ -49,6 +49,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     internal event Action<ChannelPayload>? ChannelData;
     internal event Action<uint>? ErrorInfoReceived;
 
+    /// <summary>The server's Save Session Info infoType (0/1 = a user logged on; 2 = plain notify; 3 = extended).</summary>
+    internal event Action<uint>? LogonInfoReceived;
+
     internal RdpConnection(RdpConnectOptions options)
     {
         _options = options;
@@ -269,6 +272,12 @@ internal sealed class RdpConnection : IAsyncDisposable
                     ErrorInfoReceived?.Invoke(errorInfo);
                 }
 
+                break;
+            case ShareDataType.SaveSessionInfo:
+                // The server announces the logon result (MS-RDPBCGR 2.2.10.1). A logon notification means the
+                // credentials were accepted and a session started — so a logoff right after it is the server
+                // terminating an established session (policy), not a credentials or protocol failure.
+                LogonInfoReceived?.Invoke(r.U32LE());
                 break;
         }
     }

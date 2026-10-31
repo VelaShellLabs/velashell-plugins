@@ -102,7 +102,12 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         string? reason = RdpConnector.DisconnectReason(failure, _loc);
         if (reason is not null)
         {
-            _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure!.Message}");
+            // Whether a Windows session actually started before the drop bisects the cause: logon reached =>
+            // the server ended an established session (policy); not reached => it never got that far.
+            string logon = session is RdpManagedSession managed
+                ? managed.ReachedLogon ? $"; a Windows logon was reached (Save Session Info type {managed.LogonInfoType})" : "; no Windows logon was reached"
+                : "";
+            _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure!.Message}{logon}");
         }
 
         SetStatus(new(ProtocolSessionState.Faulted, reason ?? _loc["Disconnected"]), session);
