@@ -114,14 +114,18 @@ public sealed class RdpConnectionException : Exception
 /// </summary>
 public sealed class RdpNlaRefusedException : Exception
 {
-    internal RdpNlaRefusedException(uint? status, Exception? inner, string? tlsTrace = null, bool serverRequiresNla = false)
-        : base(Compose(status, inner, tlsTrace, serverRequiresNla), inner)
+    internal RdpNlaRefusedException(uint? status, Exception? inner, string? tlsTrace = null, bool serverRequiresNla = false, string? auth = null)
+        : base(Compose(status, inner, tlsTrace, serverRequiresNla, auth), inner)
     {
         Status = status;
         TlsTrace = tlsTrace;
         ServerRequiresNla = serverRequiresNla;
+        Auth = auth;
         Detail = status is { } code ? $"0x{code:X8}" : inner is null ? "aborted" : RdpConnectionException.Describe(inner);
     }
+
+    /// <summary>Which NLA provider ran and what first token it sent (for diagnosing a refusal), if recorded.</summary>
+    public string? Auth { get; }
 
     /// <summary>The error code the server returned, or <see langword="null" /> when it aborted the TLS session instead.</summary>
     public uint? Status { get; }
@@ -135,14 +139,18 @@ public sealed class RdpNlaRefusedException : Exception
     /// <summary>The cipher suite and the TLS records the server sent after the handshake, when known.</summary>
     public string? TlsTrace { get; }
 
-    internal RdpNlaRefusedException WithTlsTrace(string? tlsTrace) => new(Status, InnerException, tlsTrace, ServerRequiresNla);
+    internal RdpNlaRefusedException WithTlsTrace(string? tlsTrace) => new(Status, InnerException, tlsTrace, ServerRequiresNla, Auth);
 
-    internal RdpNlaRefusedException RequiredByServer() => new(Status, InnerException, TlsTrace, serverRequiresNla: true);
+    internal RdpNlaRefusedException RequiredByServer() => new(Status, InnerException, TlsTrace, serverRequiresNla: true, Auth);
 
-    private static string Compose(uint? status, Exception? inner, string? tlsTrace, bool serverRequiresNla)
+    private static string Compose(uint? status, Exception? inner, string? tlsTrace, bool serverRequiresNla, string? auth)
     {
         string reason = status is { } code ? $"0x{code:X8}" : inner is null ? "aborted" : RdpConnectionException.Describe(inner);
         string message = $"The server refused NLA before any credentials were sent ({reason}).";
+        if (auth is not null)
+        {
+            message += $" [{auth}]";
+        }
         if (serverRequiresNla)
         {
             message += " A TLS-only connection was refused too: the server requires NLA.";

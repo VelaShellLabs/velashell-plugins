@@ -41,7 +41,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             if (session is RdpManagedSession { NlaRefusal: { } refusal })
             {
                 _context.Log.Warn($"RDP {request.Host}:{request.Port}: the server refused NLA before any credentials were sent " +
-                    $"({refusal.Detail}); connected with TLS security instead (security layer: Auto).");
+                    $"({refusal.Detail}{(refusal.Auth is { } a ? "; " + a : "")}); connected with TLS security instead (security layer: Auto).");
             }
             return session;
         }

@@ -34,6 +34,7 @@ internal static class CredSsp
         // until the context is established; only then is pubKeyAuth attached. The 32-byte clientNonce rides on
         // every client TSRequest (v5+), as FreeRDP and mstsc send it.
         byte[] outToken = auth.Step([]);
+        string authInfo = DescribeAuth(auth, outToken);
         await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, null, nonce), ct).ConfigureAwait(false);
 
         uint peerVersion = 0;
@@ -50,7 +51,7 @@ internal static class CredSsp
             }
             catch (Exception ex) when (!sawReply && ex is IOException or RdpProtocolException)
             {
-                throw new RdpNlaRefusedException(null, ex);
+                throw new RdpNlaRefusedException(null, ex, auth: authInfo);
             }
 
             TsRequest reply = ParseTsRequest(replyBytes);
@@ -58,7 +59,7 @@ internal static class CredSsp
             {
                 throw sawReply
                     ? new RdpAuthenticationException($"The server rejected NLA (0x{refused:X8}).", refused)
-                    : new RdpNlaRefusedException(refused, null);
+                    : new RdpNlaRefusedException(refused, null, auth: authInfo);
             }
 
             peerVersion = reply.Version;
@@ -98,6 +99,21 @@ internal static class CredSsp
     }
 
     private static byte[]? Nz(byte[] token) => token.Length == 0 ? null : token;
+
+    /// <summary>
+    /// Names the NLA provider and the shape of its first token, so a refusal's log line says whether the build
+    /// sent native SPNEGO (what Windows' own client sends) or bare NTLM — the exact thing a server may reject.
+    /// </summary>
+    private static string DescribeAuth(INlaSecurityContext auth, byte[] token)
+    {
+        string provider = auth is SspiNegotiate ? "native SSPI" : "managed NTLM";
+        string shape = token.Length == 0 ? "empty"
+            : token.Length >= 8 && token.AsSpan(0, 7).SequenceEqual("NTLMSSP"u8) ? "bare NTLM"
+            : token[0] == 0x60 ? "SPNEGO"
+            : token[0] == 0xA1 ? "SPNEGO-resp"
+            : $"0x{token[0]:X2}";
+        return $"NLA via {provider}, first token {shape} {token.Length}B";
+    }
 
     private static void VerifyServerEcho(uint peerVersion, byte[] serverEcho, byte[] publicKey, byte[] nonce)
     {
