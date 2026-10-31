@@ -12,7 +12,7 @@ namespace VelaShell.Rdp;
 internal sealed record RdpConnectOptions(
     string Host, int Port, string Username, string Password, string Domain,
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
-    IReadOnlyList<ChannelDef> Channels);
+    IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto);
 
 /// <summary>Raised when a virtual channel delivers data to the managed session.</summary>
 internal readonly record struct ChannelPayload(string ChannelName, byte[] Data);
@@ -62,6 +62,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     /// <summary>The TLS version negotiated with the server, once the handshake has completed.</summary>
     internal System.Security.Authentication.SslProtocols? TlsProtocol { get; private set; }
 
+    /// <summary>The security layer the server selected (<see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>).</summary>
+    internal RdpSecurity Security { get; private set; }
+
     private TlsRecordTap? _tlsTap;
     private TlsCipherSuite? _tlsCipher;
 
@@ -80,13 +83,22 @@ internal sealed class RdpConnection : IAsyncDisposable
         await _tcp.ConnectAsync(_options.Host, _options.Port, ct).ConfigureAwait(false);
         _transport = new RdpTransport(_tcp.GetStream());
 
-        // X.224 negotiation: offer TLS and NLA; let the server pick.
+        // X.224 negotiation: offer TLS and NLA and let the server pick (NLA-only offers both too, as the spec
+        // asks for PROTOCOL_SSL alongside PROTOCOL_HYBRID, and then insists on NLA), or TLS only.
         Stage = RdpConnectStage.Negotiation;
-        SecurityProtocol requested = SecurityProtocol.Ssl | SecurityProtocol.Hybrid;
+        SecurityProtocol requested = _options.Security == RdpSecurity.Tls
+            ? SecurityProtocol.Ssl
+            : SecurityProtocol.Ssl | SecurityProtocol.Hybrid;
         await _transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(_options.Username, requested), ct).ConfigureAwait(false);
         (SecurityProtocol selected, _) = await _transport.ReadConnectionConfirmAsync(ct).ConfigureAwait(false);
+        bool nla = selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx);
+        if (!nla && _options.Security == RdpSecurity.Nla)
+        {
+            throw new RdpProtocolException("The server did not select NLA, and the security layer is set to NLA only.");
+        }
+        Security = nla ? RdpSecurity.Nla : RdpSecurity.Tls;
 
-        if (selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx))
+        if (nla)
         {
             SslStream ssl = await StartTlsAsync(ct).ConfigureAwait(false);
             Stage = RdpConnectStage.Nla;

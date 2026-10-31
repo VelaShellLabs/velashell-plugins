@@ -125,6 +125,35 @@ public sealed class RdpNlaInteropTests
             Console.WriteLine("Wrong-password result: " + Chain(ex));
         }
         Assert.IsNotNull(failure, "A wrong password must not connect.");
+        // Still a credentials error under the default Auto security layer: a rejected password is never
+        // retried with TLS (the retry is only for servers that refuse NLA before credentials are sent).
         Assert.IsInstanceOfType<ProtocolAuthenticationException>(failure, Chain(failure));
+    }
+
+    [TestMethod]
+    public async Task TlsOnlyIsRefusedByAServerThatRequiresNla()
+    {
+        if (NlaTarget() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_NLA_TARGET not set."); return; }
+        var options = new RdpClientOptions
+        {
+            Host = target.Host,
+            Port = target.Port,
+            Username = RdpManagedInteropTests.User,
+            Password = RdpManagedInteropTests.Pass,
+            CertificatePin = await LearnPinAsync(target),
+            Security = RdpSecurity.Tls
+        };
+        RdpConnectionException? failure = null;
+        try
+        {
+            await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(options);
+        }
+        catch (RdpConnectionException ex)
+        {
+            failure = ex;
+            Console.WriteLine("TLS-only result: " + Chain(ex));
+        }
+        Assert.IsNotNull(failure, "An NLA-only server must refuse a TLS-only client.");
+        Assert.AreEqual(RdpNegotiationFailure.HybridRequiredByServer, failure.NegotiationFailure);
     }
 }

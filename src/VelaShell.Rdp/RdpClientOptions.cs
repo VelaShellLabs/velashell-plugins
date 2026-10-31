@@ -42,4 +42,7 @@ public sealed record RdpClientOptions
 
     /// <summary>Folders shared to the remote desktop with read/write access (rdpdr); empty by default.</summary>
     public IReadOnlyList<DriveMapping> Drives { get; init; } = [];
+
+    /// <summary>Which security layer to offer; <see cref="RdpSecurity.Auto"/> by default.</summary>
+    public RdpSecurity Security { get; init; } = RdpSecurity.Auto;
 }

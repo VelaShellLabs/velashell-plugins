@@ -74,10 +74,17 @@ arguments.
   examples for the current OS, and a wrong entry fails the connection with a message that quotes
   that entry and the expected format — or names the clashing name, or the 32-mapping limit.
 
-Security negotiates TLS (and NLA when the server requires it). TLS uses OS trust/name/validity
-verification, or an explicitly approved exact SHA-256 leaf-certificate pin that replaces
-CA/name/expiry checks. Legacy RDP transport security is disabled. SSH tunnelling preserves the
-original server identity for certificate checks.
+The advanced **security layer** setting (`security`) picks what is offered: `auto` (default) offers
+TLS and NLA and lets the server choose; `nla` insists on NLA; `tls` offers TLS only, so the server
+checks the password from the client info itself. In `auto`, a server that refuses NLA before any
+credentials are sent — it answers the first CredSSP message (the NTLM NEGOTIATE) with errorCode
+0x80090302 or a TLS abort, i.e. it does not accept incoming NTLM — is retried once with TLS only;
+if that is refused too (`HYBRID_REQUIRED_BY_SERVER`) the error explains the server-side fix. A wrong
+password is never retried. TLS uses OS trust/name/validity verification, or an explicitly approved
+exact SHA-256 leaf-certificate pin that replaces CA/name/expiry checks, identically in every mode.
+Legacy RDP transport security is disabled. SSH tunnelling preserves the original server identity
+for certificate checks. Failures name the stage and cause chain (SChannel/socket codes, negotiated
+TLS version); the plugin log adds the cipher suite and the TLS record headers the server sent.
 
 No audio, multiple monitors or drawing-order acceleration (RemoteFX/GFX) are negotiated: the
 server renders via classic RLE bitmap updates with MPPC bulk compression. Dynamic resolution uses
@@ -104,6 +111,8 @@ Unit tests cover the settings, clipboard codec, headless UI and the CredSSP/NLA 
 Live interoperability tests (gated on `VELA_RDP_TEST_TARGET`, skipped in CI) exercise the full
 stack against a real server — connection, TLS and leaf-pin trust, desktop rendering, keyboard and
 mouse input, text and image clipboard round-trips, and drive-redirection read and write. NLA is
-validated offline (no NLA test server available); a live Windows-server NLA check is still
-outstanding. Interleaved-RLE decode, MCS/GCC, capability exchange and the channel wire formats
-follow MS-RDPBCGR / the published specs.
+verified live against the FreeRDP shadow server (`VELA_RDP_TEST_NLA_TARGET`): logon, wrong
+password without fallback, TLS-only refused by an NLA-only server. The security-layer fallback is
+covered by in-process fake-server tests (`FakeRdpServer`). A successful NLA logon against a real
+Windows server is still outstanding. Interleaved-RLE decode, MCS/GCC, capability exchange and the
+channel wire formats follow MS-RDPBCGR / the published specs.

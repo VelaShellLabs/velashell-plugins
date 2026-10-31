@@ -103,10 +103,52 @@ public sealed class RdpManagedSession : IRdpSession
     /// rejects the credentials during NLA (with its status code), <see cref="OperationCanceledException"/>
     /// when <paramref name="ct"/> fires, otherwise an <see cref="RdpConnectionException"/> naming the
     /// failing <see cref="RdpConnectStage"/> and the cause chain (including TLS/socket error codes).
+    /// <para>
+    /// With <see cref="RdpSecurity.Auto"/>, a server that refuses NLA before any credentials are sent is retried
+    /// once offering TLS only (see <see cref="NlaRefusal"/>); <see cref="RdpNlaRefusedException"/> is thrown when
+    /// that is refused too because the server requires NLA, or when <see cref="RdpSecurity.Nla"/> was requested.
+    /// </para>
     /// </summary>
     public static async Task<RdpManagedSession> ConnectAsync(RdpClientOptions options, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (options.Security != RdpSecurity.Auto)
+        {
+            return await ConnectOnceAsync(options, options.Security, ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            return await ConnectOnceAsync(options, RdpSecurity.Auto, ct).ConfigureAwait(false);
+        }
+        catch (RdpNlaRefusedException refused)
+        {
+            // Nothing secret was sent. Offer TLS only — same certificate validation — so a server whose
+            // "require NLA" setting is off can still log the user on itself.
+            try
+            {
+                RdpManagedSession session = await ConnectOnceAsync(options, RdpSecurity.Tls, ct).ConfigureAwait(false);
+                session.NlaRefusal = refused;
+                return session;
+            }
+            catch (RdpConnectionException tls) when (tls.NegotiationFailure == RdpNegotiationFailure.HybridRequiredByServer)
+            {
+                throw refused.RequiredByServer();
+            }
+        }
+    }
+
+    /// <summary>The security layer in use: <see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>.</summary>
+    public RdpSecurity Security => _connection.Security;
+
+    /// <summary>
+    /// Set when <see cref="RdpSecurity.Auto"/> fell back to TLS because the server refused NLA before any
+    /// credentials were sent; carries the server's reason. <see langword="null" /> otherwise.
+    /// </summary>
+    public RdpNlaRefusedException? NlaRefusal { get; private set; }
+
+    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
+    {
         var channels = new List<ChannelDef>();
         if (options.Clipboard)
         {
@@ -121,7 +163,7 @@ public sealed class RdpManagedSession : IRdpSession
         channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
-            string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels);
+            string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security);
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions));
         session.EnableDynamicChannels();
@@ -150,6 +192,11 @@ public sealed class RdpManagedSession : IRdpSession
             if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException)
             {
                 throw;
+            }
+
+            if (ex is RdpNlaRefusedException refused)
+            {
+                throw refused.WithTlsTrace(tlsTrace);
             }
 
             throw new RdpConnectionException(stage, ex, tls, tlsTrace);

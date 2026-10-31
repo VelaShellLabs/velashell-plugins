@@ -30,7 +30,8 @@ internal static class RdpConnector
             CertificatePin = pin,
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,
-            Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))]
+            Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))],
+            Security = settings.Security
         };
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
@@ -60,6 +61,14 @@ internal static class RdpConnector
         // A credentials problem must surface as an authentication failure (not a network error), with
         // the reason the server gave.
         RdpAuthenticationException auth => new ProtocolAuthenticationException(AuthenticationMessage(auth.Status, loc), auth),
+        // Refused before any credentials were sent: a server policy, so not an authentication failure — the
+        // host must not suggest re-entering the password.
+        RdpNlaRefusedException refused => new ProtocolConnectionException(
+            loc.Format(refused.ServerRequiresNla ? "NlaRefusedRequired" : "NlaRefused", refused.Detail), refused),
+        RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.HybridRequiredByServer } failed =>
+            new ProtocolConnectionException(loc["NegotiationNlaRequired"], failed),
+        RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.SslNotAllowedByServer } failed =>
+            new ProtocolConnectionException(loc["NegotiationLegacyOnly"], failed),
         RdpConnectionException failed => new ProtocolConnectionException(
             loc.Format("ConnectFailedAt", StageName(failed.Stage, loc), failed.Detail), failed),
         _ => new ProtocolConnectionException(RdpConnectionException.Describe(ex), ex)

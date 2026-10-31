@@ -1,14 +1,18 @@
 using System.Globalization;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 
 internal sealed record RdpDrive(string Name, string Path);
 internal sealed record RdpSettings(string Domain, int Width, int Height, int TimeoutSeconds, bool Clipboard,
-    string CertificateHost, string CertificateSha256, IReadOnlyList<RdpDrive> Drives)
+    string CertificateHost, string CertificateSha256, IReadOnlyList<RdpDrive> Drives, RdpSecurity Security = RdpSecurity.Auto)
 {
     internal const string TrustedThumbprintKey = "trustedThumbprint";
+
+    /// <summary>Setting key of the security-layer choice (<c>auto</c> / <c>nla</c> / <c>tls</c>).</summary>
+    internal const string SecurityKey = "security";
 
     /// <summary>Page key of the drive-mapping page (local-disk checkboxes + custom folders).</summary>
     internal const string DrivesPage = "drives";
@@ -68,6 +72,16 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             Invalid(TrustedThumbprintKey);
         }
 
+        // Empty = a connection saved before the setting existed: Auto, which behaves as before unless the
+        // server refuses NLA up front.
+        RdpSecurity security = request.GetString(SecurityKey).Trim().ToLowerInvariant() switch
+        {
+            "" or "auto" => RdpSecurity.Auto,
+            "nla" => RdpSecurity.Nla,
+            "tls" => RdpSecurity.Tls,
+            _ => throw new ProtocolConnectionException(loc.Format("Invalid", SecurityKey))
+        };
+
         string certificateHost = request.Tunnel?.TargetHost ?? request.Host;
         if (string.IsNullOrWhiteSpace(certificateHost) || certificateHost.Any(char.IsControl))
         {
@@ -117,7 +131,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             drives.Add(new(name, Path.GetFullPath(path)));
         }
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
-            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives);
+            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security);
     }
 
     public static IReadOnlyList<ProtocolSettingField> Declare(Loc loc) => Declare(loc, LocalDisks.Enumerate());
@@ -134,6 +148,21 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             new() { Key = "width", Label = loc["Width"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1920", IsAdvanced = true },
             new() { Key = "height", Label = loc["Height"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1080", IsAdvanced = true },
             new() { Key = "timeout", Label = loc["Timeout"], Kind = ProtocolSettingKind.Integer, DefaultValue = "15", IsAdvanced = true },
+            new()
+            {
+                Key = SecurityKey,
+                Label = loc["Security"],
+                Hint = loc["SecurityHint"],
+                Kind = ProtocolSettingKind.Choice,
+                DefaultValue = "auto",
+                IsAdvanced = true,
+                Choices =
+                [
+                    new("auto", loc["SecurityAuto"]),
+                    new("nla", loc["SecurityNla"]),
+                    new("tls", loc["SecurityTls"])
+                ]
+            },
             new() { Key = "clipboard", Label = loc["Clipboard"], Hint = loc["ClipboardHint"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "false" }
         ];
         foreach (LocalDisk disk in disks)

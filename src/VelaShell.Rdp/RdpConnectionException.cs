@@ -48,10 +48,14 @@ public sealed class RdpConnectionException : Exception
         TlsProtocol = tls;
         TlsTrace = tlsTrace;
         Detail = WithTls(Describe(inner), tls);
+        NegotiationFailure = inner is Wire.RdpNegotiationFailureException refused ? (RdpNegotiationFailure)refused.Code : null;
     }
 
     /// <summary>The connection step that failed.</summary>
     public RdpConnectStage Stage { get; }
+
+    /// <summary>The server's RDP_NEG_FAILURE code when it refused the security negotiation itself.</summary>
+    public RdpNegotiationFailure? NegotiationFailure { get; }
 
     /// <summary>The TLS version negotiated before the failure; <see langword="null" /> if TLS never completed.</summary>
     public SslProtocols? TlsProtocol { get; }
@@ -97,6 +101,53 @@ public sealed class RdpConnectionException : Exception
             }
         }
         return string.Join(" → ", parts);
+    }
+}
+
+/// <summary>
+/// The server refused NLA <em>before any credentials were sent</em>: it answered the client's first CredSSP
+/// message (the start of NTLM negotiation) with an error code such as <c>0x80090302</c>
+/// (SEC_E_UNSUPPORTED_FUNCTION), or by aborting the TLS session. This is a server-side policy — typically
+/// incoming NTLM is restricted — not a wrong user name or password, so re-entering credentials cannot help.
+/// With <see cref="RdpSecurity.Auto"/> the client then retries with TLS only; this exception surfaces when
+/// that is not possible (<see cref="ServerRequiresNla"/>) or when <see cref="RdpSecurity.Nla"/> was requested.
+/// </summary>
+public sealed class RdpNlaRefusedException : Exception
+{
+    internal RdpNlaRefusedException(uint? status, Exception? inner, string? tlsTrace = null, bool serverRequiresNla = false)
+        : base(Compose(status, inner, tlsTrace, serverRequiresNla), inner)
+    {
+        Status = status;
+        TlsTrace = tlsTrace;
+        ServerRequiresNla = serverRequiresNla;
+        Detail = status is { } code ? $"0x{code:X8}" : inner is null ? "aborted" : RdpConnectionException.Describe(inner);
+    }
+
+    /// <summary>The error code the server returned, or <see langword="null" /> when it aborted the TLS session instead.</summary>
+    public uint? Status { get; }
+
+    /// <summary>The reason as one line: the hex status, or the cause chain of the aborted read.</summary>
+    public string Detail { get; }
+
+    /// <summary>A TLS-only attempt was refused too, because the server requires NLA.</summary>
+    public bool ServerRequiresNla { get; }
+
+    /// <summary>The cipher suite and the TLS records the server sent after the handshake, when known.</summary>
+    public string? TlsTrace { get; }
+
+    internal RdpNlaRefusedException WithTlsTrace(string? tlsTrace) => new(Status, InnerException, tlsTrace, ServerRequiresNla);
+
+    internal RdpNlaRefusedException RequiredByServer() => new(Status, InnerException, TlsTrace, serverRequiresNla: true);
+
+    private static string Compose(uint? status, Exception? inner, string? tlsTrace, bool serverRequiresNla)
+    {
+        string reason = status is { } code ? $"0x{code:X8}" : inner is null ? "aborted" : RdpConnectionException.Describe(inner);
+        string message = $"The server refused NLA before any credentials were sent ({reason}).";
+        if (serverRequiresNla)
+        {
+            message += " A TLS-only connection was refused too: the server requires NLA.";
+        }
+        return tlsTrace is null ? message : $"{message} — {tlsTrace}";
     }
 }
 

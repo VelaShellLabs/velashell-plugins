@@ -51,9 +51,24 @@ internal static class CredSsp
         // with a TLS-level SEC_E_INTERNAL_ERROR ("the Local Security Authority cannot be contacted").
         await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, null, nonce), ct).ConfigureAwait(false);
 
-        // Leg 2: server NTLM CHALLENGE (or an error, e.g. when the server refuses NTLM outright).
-        TsRequest challenge = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
-        ThrowIfServerRejected(challenge);
+        // Leg 2: server NTLM CHALLENGE. Nothing secret has been sent yet (the NEGOTIATE carries no user name or
+        // proof), so a refusal here is server policy, not a credentials problem. A Windows server that does not
+        // accept incoming NTLM answers either with errorCode 0x80090302 (SEC_E_UNSUPPORTED_FUNCTION) or by aborting
+        // the TLS session (seen locally as SEC_E_INTERNAL_ERROR) — for byte-identical messages.
+        byte[] firstReply;
+        try
+        {
+            firstReply = await ReadDerAsync(tls, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or RdpProtocolException)
+        {
+            throw new RdpNlaRefusedException(null, ex);
+        }
+        TsRequest challenge = ParseTsRequest(firstReply);
+        if (challenge.ErrorCode is { } refused && refused != 0)
+        {
+            throw new RdpNlaRefusedException(refused, null);
+        }
         uint peerVersion = challenge.Version;
 
         // Leg 3: client NTLM AUTHENTICATE + pubKeyAuth (+ the same clientNonce; v5+ servers bind it into the hash).
