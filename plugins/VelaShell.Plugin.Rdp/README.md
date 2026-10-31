@@ -84,7 +84,14 @@ password is never retried. TLS uses OS trust/name/validity verification, or an e
 exact SHA-256 leaf-certificate pin that replaces CA/name/expiry checks, identically in every mode.
 Legacy RDP transport security is disabled. SSH tunnelling preserves the original server identity
 for certificate checks. Failures name the stage and cause chain (SChannel/socket codes, negotiated
-TLS version); the plugin log adds the cipher suite and the TLS record headers the server sent.
+TLS version); the plugin log adds the cipher suite and the TLS record headers the server sent. A
+session dropped by the server mid-way surfaces the Set Error Info reason (signed out, taken over,
+no Remote Desktop licence, …) in the disconnect overlay instead of a blank "disconnected".
+
+Clipboard (when enabled) follows mstsc: local→remote is published on focus and before Ctrl+V, and
+remote→local **text and images** sync automatically when the remote announces a new clipboard — no
+button press. The Receive button remains only for **files**, which are pulled on demand rather than
+copied eagerly on every remote file-copy.
 
 No audio, multiple monitors or drawing-order acceleration (RemoteFX/GFX) are negotiated: the
 server renders via classic RLE bitmap updates with MPPC bulk compression. Dynamic resolution uses

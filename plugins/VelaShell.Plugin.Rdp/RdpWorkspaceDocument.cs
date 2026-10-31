@@ -99,14 +99,20 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             return;
         }
 
-        SetStatus(new(ProtocolSessionState.Faulted, _loc["Disconnected"]), session);
+        string? reason = RdpConnector.DisconnectReason(failure, _loc);
+        if (reason is not null)
+        {
+            _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure!.Message}");
+        }
+
+        SetStatus(new(ProtocolSessionState.Faulted, reason ?? _loc["Disconnected"]), session);
         if (_root is not null)
         {
             Dispatcher.UIThread.Post(() =>
         {
             if (_disposed == 0 && ReferenceEquals(_session, session))
             {
-                _view?.SetConnected(false);
+                _view?.SetConnected(false, reason);
             }
         });
         }

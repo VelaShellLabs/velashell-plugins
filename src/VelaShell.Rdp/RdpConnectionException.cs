@@ -163,3 +163,56 @@ public sealed class RdpAuthenticationException : Exception
     /// <summary>The server-reported status code, if any.</summary>
     public uint? Status { get; }
 }
+
+/// <summary>
+/// An established session ended because the server sent a Set Error Info PDU (MS-RDPBCGR 2.2.5.1) carrying a
+/// non-zero <see cref="ErrorInfo" />. Many of these are server-side policy — the server signed the user out,
+/// another connection took over the session, or no Remote Desktop licence was available — rather than a
+/// client fault. Raised on <see cref="RdpManagedSession.Disconnected" />, never thrown from connect.
+/// </summary>
+public sealed class RdpDisconnectException(uint errorInfo)
+    : Exception($"The RDP session was disconnected by the server: {RdpErrorInfo.Describe(errorInfo)} (0x{errorInfo:X8}).")
+{
+    /// <summary>The MS-RDPBCGR errorInfo code the server reported.</summary>
+    public uint ErrorInfo { get; } = errorInfo;
+
+    /// <summary>A neutral one-line description of <see cref="ErrorInfo" />.</summary>
+    public string Reason { get; } = RdpErrorInfo.Describe(errorInfo);
+}
+
+/// <summary>
+/// The Set Error Info codes a server sends before dropping a session (MS-RDPBCGR 2.2.5.1.1), with neutral
+/// descriptions for logs. The plugin layer localises the common ones; this is the fallback and the source of
+/// truth for the code names.
+/// </summary>
+public static class RdpErrorInfo
+{
+    /// <summary>A short, neutral description of an errorInfo code; a generic line for codes not listed.</summary>
+    public static string Describe(uint code) => code switch
+    {
+        0x00000001 => "the server initiated the disconnect (RPC_INITIATED_DISCONNECT)",
+        0x00000002 => "the server signed the user out (RPC_INITIATED_LOGOFF)",
+        0x00000003 => "the idle timeout was reached (IDLE_TIMEOUT)",
+        0x00000004 => "the logon timeout was reached (LOGON_TIMEOUT)",
+        0x00000005 => "another connection took over the session (DISCONNECTED_BY_OTHERCONNECTION)",
+        0x00000006 => "the server ran out of memory (OUT_OF_MEMORY)",
+        0x00000007 => "the server denied the connection (SERVER_DENIED_CONNECTION)",
+        0x00000009 => "the account has insufficient privileges (SERVER_INSUFFICIENT_PRIVILEGES)",
+        0x0000000A => "fresh credentials are required (SERVER_FRESH_CREDENTIALS_REQUIRED)",
+        0x0000000B => "the user ended the connection (DISCONNECTED_BY_USER)",
+        0x0000000C => "the user signed out (LOGOFF_BY_USER)",
+        0x00000100 => "a licensing internal error occurred (LICENSE_INTERNAL)",
+        0x00000101 => "there is no Remote Desktop licence server (LICENSE_NO_LICENSE_SERVER)",
+        0x00000102 => "there is no available Remote Desktop licence (LICENSE_NO_LICENSE)",
+        0x00000103 or 0x00000105 => "the Remote Desktop licence message was rejected (LICENSE_BAD_CLIENT_MSG)",
+        0x00000104 => "the hardware id does not match the licence (LICENSE_HWID_DOESNT_MATCH_LICENSE)",
+        0x00000106 or 0x00000107 => "the licensing protocol could not complete (LICENSE_CANT_FINISH_PROTOCOL)",
+        0x00000108 => "the licence message encryption was bad (LICENSE_BAD_CLIENT_ENCRYPTION)",
+        0x00000109 => "the licence could not be upgraded (LICENSE_CANT_UPGRADE_LICENSE)",
+        0x0000010A => "the server has no Remote Desktop licences available for new connections (LICENSE_NO_REMOTE_CONNECTIONS)",
+        _ => "the server ended the session"
+    };
+
+    /// <summary>Whether the code names a Remote Desktop licensing failure (0x00000100–0x0000010A).</summary>
+    public static bool IsLicensing(uint code) => code is >= 0x00000100 and <= 0x0000010A;
+}

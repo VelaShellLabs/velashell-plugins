@@ -25,6 +25,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private bool _connected = true;
     private bool _failed;
     private bool _reconnecting;
+    private string? _disconnectDetail;
 
     /// <summary>Reconnects the workspace; supplied by the owning document. Null hides the in-view button.</summary>
     internal Func<CancellationToken, Task>? Reconnect { get; set; }
@@ -143,9 +144,10 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _reconnect.Content = loc["ReconnectButton"];
         UpdateStatus();
     }
-    internal void SetConnected(bool connected)
+    internal void SetConnected(bool connected, string? detail = null)
     {
         _connected = connected;
+        _disconnectDetail = connected ? null : detail;
         Desktop.IsEnabled = connected;
         _send.IsEnabled = _receive.IsEnabled = connected && _settings.Clipboard;
         _attention.IsEnabled = connected;
@@ -153,13 +155,15 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _overlay.IsVisible = !connected;
         if (!connected && !_reconnecting)
         {
-            _overlayText.Text = _loc["Disconnected"];
+            // Show the server's reason (signed out, taken over, no licence …) when known, so an
+            // immediate disconnect is not a blank "disconnected".
+            _overlayText.Text = detail ?? _loc["Disconnected"];
             _reconnect.IsEnabled = Reconnect is not null;
             _reconnect.IsVisible = Reconnect is not null;
         }
         UpdateStatus();
     }
-    private void UpdateStatus() => _status.Text = !_connected ? _loc["Disconnected"]
+    private void UpdateStatus() => _status.Text = !_connected ? _disconnectDetail ?? _loc["Disconnected"]
         : _failed ? _loc["InputFailed"]
         : _loc["Connected"] + " · " + _loc.Format("Resolution", Desktop.DesktopWidth, Desktop.DesktopHeight);
     public async ValueTask DisposeAsync()

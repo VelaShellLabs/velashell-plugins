@@ -96,6 +96,34 @@ internal static class RdpConnector
 
     private static string StageName(RdpConnectStage stage, Loc loc) => loc["Stage" + stage];
 
+    /// <summary>
+    /// A readable reason for a mid-session disconnect. The server's Set Error Info code is mapped to a
+    /// localized line for the common cases (signed out, taken over, no Remote Desktop licence); other codes
+    /// fall back to the library's neutral text plus the hex code. Returns <see langword="null" /> for an
+    /// ordinary drop (no error-info, e.g. network loss), which keeps the plain "disconnected" message.
+    /// </summary>
+    internal static string? DisconnectReason(Exception? failure, Loc loc)
+    {
+        if (failure is not RdpDisconnectException disconnect)
+        {
+            return null;
+        }
+
+        string? known = disconnect.ErrorInfo switch
+        {
+            0x00000002 or 0x0000000C => loc["ByeLoggedOff"],
+            0x00000005 => loc["ByeTakenOver"],
+            0x00000001 or 0x0000000B => loc["ByeByServer"],
+            0x00000007 or 0x00000009 => loc["ByeDenied"],
+            0x00000003 or 0x00000004 => loc["ByeTimeout"],
+            _ when RdpErrorInfo.IsLicensing(disconnect.ErrorInfo) => loc["ByeLicense"],
+            _ => null
+        };
+        return known is null
+            ? loc.Format("ByeGeneric", disconnect.Reason, disconnect.ErrorInfo)
+            : loc.Format("ByeKnown", known, disconnect.ErrorInfo);
+    }
+
     private static ProtocolCertificateTrustException CertificateTrust(RdpCertificateRejectedException ex, Loc loc)
     {
         using var certificate = X509Certificate2.CreateFromPem(Encoding.UTF8.GetString(ex.Pem));

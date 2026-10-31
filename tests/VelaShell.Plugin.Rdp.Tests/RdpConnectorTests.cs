@@ -70,6 +70,42 @@ public sealed class RdpConnectorTests
     }
 
     [TestMethod]
+    [DataRow(0x0000000Cu, "ByeLoggedOff")]   // LOGOFF_BY_USER
+    [DataRow(0x00000002u, "ByeLoggedOff")]   // RPC_INITIATED_LOGOFF
+    [DataRow(0x00000005u, "ByeTakenOver")]   // DISCONNECTED_BY_OTHERCONNECTION
+    [DataRow(0x00000009u, "ByeDenied")]      // SERVER_INSUFFICIENT_PRIVILEGES
+    [DataRow(0x0000010Au, "ByeLicense")]     // LICENSE_NO_REMOTE_CONNECTIONS
+    [DataRow(0x00000102u, "ByeLicense")]     // LICENSE_NO_LICENSE
+    public void MidSessionDisconnectReasonsAreLocalizedByErrorInfo(uint code, string key)
+    {
+        var loc = new Loc("en");
+        string? reason = RdpConnector.DisconnectReason(new RdpDisconnectException(code), loc);
+        Assert.IsNotNull(reason);
+        Assert.Contains(loc[key], reason);
+        Assert.Contains($"0x{code:X8}", reason);
+    }
+
+    [TestMethod]
+    public void UnknownDisconnectCodeFallsBackToTheNeutralReasonAndCode()
+    {
+        var ex = new RdpDisconnectException(0x00000006);   // OUT_OF_MEMORY: not individually localized
+        Assert.AreEqual(0x00000006u, ex.ErrorInfo);
+        Assert.Contains("OUT_OF_MEMORY", ex.Message);
+        string? reason = RdpConnector.DisconnectReason(ex, new Loc("zh-Hans"));
+        Assert.IsNotNull(reason);
+        Assert.Contains("0x00000006", reason);
+    }
+
+    [TestMethod]
+    public void AnOrdinaryDropHasNoServerReason()
+    {
+        Assert.IsNull(RdpConnector.DisconnectReason(null, new Loc("en")));
+        Assert.IsNull(RdpConnector.DisconnectReason(new IOException("connection reset"), new Loc("en")));
+        Assert.IsTrue(RdpErrorInfo.IsLicensing(0x00000104));
+        Assert.IsFalse(RdpErrorInfo.IsLicensing(0x0000000C));
+    }
+
+    [TestMethod]
     public void EveryStageHasALocalizedName()
     {
         foreach (string locale in new[] { "en", "zh-Hans", "zh-Hant", "ja", "ko" })

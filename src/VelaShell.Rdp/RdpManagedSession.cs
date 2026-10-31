@@ -92,7 +92,7 @@ public sealed class RdpManagedSession : IRdpSession
     {
         _connection = connection;
         _connection.FrameUpdated += OnFrameUpdated;
-        _connection.ErrorInfoReceived += code => _errorInfo = code;
+        _connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
         _connection.ChannelData += OnChannelData;
     }
 
@@ -336,6 +336,10 @@ public sealed class RdpManagedSession : IRdpSession
         finally
         {
             Volatile.Write(ref _isConnected, 0);
+            // A clean end (the server dropped the session) after a Set Error Info PDU means the server told us
+            // why: surface that as the disconnect cause so the reason is not lost (e.g. signed out, licence).
+            uint errorInfo = Volatile.Read(ref _errorInfo);
+            failure ??= errorInfo != 0 ? new RdpDisconnectException(errorInfo) : null;
             if (Volatile.Read(ref _disposed) == 0) { try { Disconnected?.Invoke(failure); } catch { /* ignore */ } }
         }
     }
