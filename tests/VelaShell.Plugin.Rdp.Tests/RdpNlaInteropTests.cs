@@ -65,7 +65,14 @@ public sealed class RdpNlaInteropTests
     }
 
     [TestMethod]
-    public async Task NlaAuthenticatesAndReachesTheDesktop()
+    public Task NlaAuthenticatesAndReachesTheDesktop() => AuthenticateAndReach(forceManaged: false);
+
+    // On Windows the default path is native SSPI (SPNEGO); force the managed NTLM provider too so the
+    // cross-platform fallback keeps working. On non-Windows both runs use the managed path.
+    [TestMethod]
+    public Task ManagedNtlmAlsoAuthenticatesAndReachesTheDesktop() => AuthenticateAndReach(forceManaged: true);
+
+    private static async Task AuthenticateAndReach(bool forceManaged)
     {
         if (NlaTarget() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_NLA_TARGET not set."); return; }
         byte[] pin = await LearnPinAsync(target);
@@ -75,15 +82,20 @@ public sealed class RdpNlaInteropTests
         RdpSettings settings = RdpSettings.From(request, loc);
 
         IRdpSession session;
+        VelaShell.Rdp.Security.NlaSecurityContext.ForceManagedForTest = forceManaged;
         try
         {
             session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         }
         catch (Exception ex)
         {
-            Console.WriteLine("NLA connect failed: " + Chain(ex));
+            Console.WriteLine($"NLA connect failed (forceManaged={forceManaged}): " + Chain(ex));
             Console.WriteLine(ex.ToString());
             throw;
+        }
+        finally
+        {
+            VelaShell.Rdp.Security.NlaSecurityContext.ForceManagedForTest = false;
         }
 
         try
@@ -95,7 +107,7 @@ public sealed class RdpNlaInteropTests
                 latest = session.TakeFrame();
                 await Task.Delay(150, CancellationToken.None);
             }
-            Console.WriteLine($"NLA session connected={session.IsConnected}, frame={latest?.Width}x{latest?.Height}");
+            Console.WriteLine($"NLA session (forceManaged={forceManaged}) connected={session.IsConnected}, frame={latest?.Width}x{latest?.Height}");
             Assert.IsTrue(session.IsConnected, "The session dropped after NLA.");
             Assert.IsNotNull(latest, "No desktop frame after NLA.");
         }
