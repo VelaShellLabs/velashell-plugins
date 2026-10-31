@@ -1,0 +1,16 @@
+{
+  "id": "velashell.rdp",
+  "version": "2.0.7",
+  "displayName": "Remote Desktop",
+  "description": "Embedded FreeRDP desktop with keyboard, mouse and optional bidirectional text, image and file clipboard and explicit drive mappings.",
+  "publisher": "velashell",
+  "entry": "VelaShell.Plugin.Rdp.dll",
+  "apiLevel": 2,
+  "minSdkVersion": "2.1.5",
+  "hostMode": "inProcess",
+  "license": "MIT",
+  "homepage": "https://github.com/VelaShellLabs/velashell-plugins",
+  "permissions": ["network", "clipboard.read", "clipboard.write", "fs.local.read", "fs.local.write", "i18n.read"],
+  "contributes": { "workspaces": [{ "id": "velashell.rdp", "displayName": "RDP", "defaultPort": 3389 }] },
+  "activationEvents": ["onWorkspace:velashell.rdp"]
+}
