@@ -7,6 +7,7 @@ using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using VelaShell.Plugin.Rdp.Tests;
 using VelaShell.PluginSdk.Testing;
+using VelaShell.Rdp;
 
 [assembly: AvaloniaTestApplication(typeof(RdpHeadlessApp))]
 
@@ -137,11 +138,12 @@ public sealed class RdpHeadlessTests
         RdpSettings settings = RdpSettings.From(request, loc);
 
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
-        IRdpSession session = await VelaShell.Plugin.Rdp.Managed.RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
         {
             await using var view = new RdpWorkspaceView(session, context, settings, loc);
-            var window = new Window { Width = 1024, Height = 792, Content = view };
+            // 36px toolbar + 24px status, so a 828px window leaves a 1024×768 desktop viewport.
+            var window = new Window { Width = 1024, Height = 828, Content = view };
             window.Show();
             window.UpdateLayout();
 
@@ -153,7 +155,8 @@ public sealed class RdpHeadlessTests
             string? dump = Environment.GetEnvironmentVariable("VELA_RDP_TEST_DUMP");
             if (!string.IsNullOrEmpty(dump)) { Directory.CreateDirectory(dump); frame.Save(Path.Combine(dump, "managed-rdp-inapp.png")); }
 
-            // The desktop control must have taken real dimensions from the engine's frames.
+            // Dynamic resolution: the view asked the server to match the remote to its viewport,
+            // so the desktop control reports the viewport size, not the initial 1024×768 setting.
             Assert.AreEqual(1024, view.Desktop.DesktopWidth);
             Assert.AreEqual(768, view.Desktop.DesktopHeight);
             Assert.IsTrue(session.IsConnected, "Session dropped while rendering in the host view.");

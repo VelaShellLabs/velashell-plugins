@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using VelaShell.PluginSdk;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 
@@ -54,7 +55,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     private void BindView()
     {
         if (_root is null || _session is null || _disposed != 0) return;
-        _view = new(_session, _context, _settings, _loc);
+        _view = new(_session, _context, _settings, _loc) { Reconnect = ReconnectAsync };
         _view.SetConnected(Status.State == ProtocolSessionState.Connected);
         _root.Content = _view;
     }
@@ -103,9 +104,11 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         try
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
-            await CloseConnectionAsync().ConfigureAwait(false);
-            SetStatus(new(ProtocolSessionState.Faulted, _loc["Disconnected"]));
+            // Establish the new session before tearing down the old one, so a failed attempt leaves
+            // the current (disconnected) view in place — its in-view Reconnect button stays usable
+            // instead of the workspace going blank.
             IRdpSession session = await _factory(_request!, _settings, _loc, linked.Token).ConfigureAwait(false);
+            await CloseConnectionAsync().ConfigureAwait(false);
             AttachSession(session);
             if (_root is not null) await Dispatcher.UIThread.InvokeAsync(BindView);
         }

@@ -1,10 +1,11 @@
 # RDP remote desktop plugin
 
 `velashell.rdp` embeds a remote desktop in an Avalonia workspace using a **pure-managed C#
-RDP client** — no native code, no FreeRDP, no bundled binaries. The protocol stack lives under
-[`Managed/`](Managed/) and implements the subset of MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP /
-MS-RDPEFS this plugin needs. The plugin owns the Avalonia view and input/clipboard integration;
-no external RDP window is launched.
+RDP client** — no native code, no FreeRDP, no bundled binaries. The protocol stack is the
+standalone [`VelaShell.Rdp`](../../src/VelaShell.Rdp) library (MIT), which implements the subset of
+MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS this plugin needs. The plugin
+references that library and owns only the Avalonia view and input/clipboard integration; no
+external RDP window is launched.
 
 Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
 
@@ -18,20 +19,21 @@ toolchain, no CMake, and nothing to compile per platform — far simpler to main
 
 ## Architecture
 
-The managed engine (`Managed/RdpManagedSession`) implements the `IRdpSession` /
-`IRdpClipboardTransport` contracts, so the existing desktop view, input queue, clipboard bridge
-and codec drive it unchanged. Layers:
+The engine — the standalone `VelaShell.Rdp` library — exposes `RdpManagedSession` implementing the
+`IRdpSession` / `IRdpClipboardTransport` contracts, so the plugin's desktop view, input queue,
+clipboard bridge and codec drive it across that boundary. Layers (under `../../src/VelaShell.Rdp/`):
 
-- **Wire** — TPKT/X.224 framing, fast-path frames, ASN.1 PER/BER (`Managed/Wire/`).
+- **Wire** — TPKT/X.224 framing, fast-path frames, ASN.1 PER/BER (`Wire/`).
 - **Security** — `RdpTls` (OS trust / name / validity, or an exact SHA-256 leaf pin) and
-  `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Managed/Security/`).
-- **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Managed/Mcs/`).
-- **PDUs** — client info, licensing, capability exchange, connection finalization (`Managed/Pdu/`).
+  `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Security/`).
+- **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Mcs/`).
+- **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
 - **Graphics** — interleaved-RLE decode and a BGRA framebuffer; fragmented fast-path updates are
-  reassembled (`Managed/Graphics/`).
-- **Input** — fast-path keyboard/mouse/Unicode (`Managed/Input/`).
+  reassembled (`Graphics/`).
+- **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
 - **Channels** — clipboard (cliprdr) and drive redirection (rdpdr) over chunked static virtual
-  channels (`Managed/Channels/`).
+  channels, plus the display-control dynamic channel (drdynvc + MS-RDPEDISP) for dynamic
+  resolution (`Channels/`).
 
 ## Using the plugin
 
@@ -40,11 +42,15 @@ workspace connection. Supply the server (default port 3389), username/password a
 domain or host-managed SSH jump session. Credentials are passed through APIs, never command-line
 arguments.
 
-- Fixed desktop resolution defaults to 1280 × 720. Width: 320–8192; height: 200–8192. Connect
-  timeout: 1–120 seconds, default 15. **Fit desktop** and **100%** change local display scaling,
-  not the server resolution.
-- Keyboard, mouse, Unicode text and the **Ctrl+Alt+Delete** button send remote input. Reconnect
-  through the host session tab to renew credentials and certificate approval.
+- Desktop resolution follows the workspace tab: on connect and whenever the window resizes, the
+  plugin asks the server over the display-control channel (MS-RDPEDISP) to match the viewport, so
+  the remote renders 1:1. The width/height settings (default 1920 × 1080) are the initial size and
+  the fallback when a server declines dynamic resize. Width 320–8192; height 200–8192. Connect
+  timeout 1–120 seconds, default 15. **Fit desktop** scales a mismatched desktop into the tab
+  (smoothed); **100%** shows it 1:1 with scrollbars.
+- Keyboard, mouse, Unicode text and the **Ctrl+Alt+Delete** button send remote input. When a
+  session drops, a **Reconnect** button appears over the desktop (the host session tab reconnects
+  too); reconnecting renews credentials and certificate approval.
 - **Bidirectional clipboard** is off by default. When enabled, remote text/images are received
   automatically; **Receive clipboard** explicitly downloads remote files/directories before
   publishing local file references. **Send clipboard**, focus and Ctrl+V publish local content.
@@ -61,9 +67,10 @@ verification, or an explicitly approved exact SHA-256 leaf-certificate pin that 
 CA/name/expiry checks. Legacy RDP transport security is disabled. SSH tunnelling preserves the
 original server identity for certificate checks.
 
-No audio, multiple monitors, dynamic resolution, drawing-order acceleration (RemoteFX/GFX) or
-MPPC stream compression are negotiated: the server renders via classic RLE bitmap updates. The
-engine runs in-process and shares the host's crash boundary; it is not a sandbox.
+No audio, multiple monitors or drawing-order acceleration (RemoteFX/GFX) are negotiated: the
+server renders via classic RLE bitmap updates with MPPC bulk compression. Dynamic resolution uses
+the display-control channel only; the graphics pipeline (GFX) is declined. The engine runs
+in-process and shares the host's crash boundary; it is not a sandbox.
 
 ## Build
 

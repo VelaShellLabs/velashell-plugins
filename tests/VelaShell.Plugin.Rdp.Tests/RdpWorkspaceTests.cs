@@ -2,6 +2,7 @@ using System.Text.Json;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Testing;
 using VelaShell.PluginSdk.Workspaces;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 

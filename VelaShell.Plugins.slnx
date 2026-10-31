@@ -16,6 +16,9 @@
     <File Path="build/PluginBundle.proj" />
     <File Path="scripts/Set-Version.ps1" />
   </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/VelaShell.Rdp/VelaShell.Rdp.csproj" />
+  </Folder>
   <Folder Name="/plugins/">
     <File Path="plugins/Directory.Build.props" />
     <File Path="plugins/Directory.Build.targets" />

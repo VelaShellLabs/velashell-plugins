@@ -12,6 +12,7 @@
   <ItemGroup>
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
     <ProjectReference Include="..\..\plugins\VelaShell.Plugin.Rdp\VelaShell.Plugin.Rdp.csproj" />
+    <ProjectReference Include="..\..\src\VelaShell.Rdp\VelaShell.Rdp.csproj" />
     <None Include="..\..\plugins\VelaShell.Plugin.Rdp\plugin.json" Link="rdp-plugin.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

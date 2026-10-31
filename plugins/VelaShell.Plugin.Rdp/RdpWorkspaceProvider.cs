@@ -1,6 +1,6 @@
-using VelaShell.Plugin.Rdp.Managed;
 using VelaShell.PluginSdk;
 using VelaShell.PluginSdk.Workspaces;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 
@@ -61,8 +61,8 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         }
         finally { lock (_gate) { if (--_opens == 0 && _disposed) _drained.TrySetResult(); } }
     }
-    private static async Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
-        await RdpManagedSession.ConnectAsync(request, settings, loc, ct).ConfigureAwait(false);
+    private static Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
+        RdpConnector.ConnectAsync(request, settings, loc, ct);
 
     private void Closed(RdpWorkspaceDocument document) { lock (_gate) _documents.Remove(document); }
     public ValueTask DisposeAsync() { lock (_gate) return new(_disposeTask ??= DisposeCoreAsync()); }

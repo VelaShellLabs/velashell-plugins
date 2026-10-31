@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 
@@ -33,9 +34,14 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private int _disposed;
     private string? _preedit;
     private readonly ImeClient _ime;
+    private readonly DispatcherTimer _resizeTimer;
+    private int _requestedWidth;
+    private int _requestedHeight;
 
     internal Func<Task>? PublishClipboard { get; set; }
     internal Action? OperationFailed { get; set; }
+    /// <summary>Raised on the UI thread after a frame changes the remote desktop dimensions.</summary>
+    internal Action? DesktopSizeChanged { get; set; }
     internal int DesktopWidth { get; private set; }
     internal int DesktopHeight { get; private set; }
     internal bool Fit
@@ -47,6 +53,8 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             MinWidth = value ? 0 : DesktopWidth;
             MinHeight = value ? 0 : DesktopHeight;
             InvalidateVisual();
+            // Fit mode tracks the viewport; re-request a matching remote resolution when it turns on.
+            if (value) ScheduleResize();
         }
     }
     internal Rect DesktopViewport => RdpInput.Viewport(Bounds.Size, DesktopWidth, DesktopHeight, Fit);
@@ -58,8 +66,14 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         DesktopHeight = height;
         Focusable = true;
         ClipToBounds = true;
+        // Smooth the remote surface when "Fit" scales a resolution that differs from the viewport;
+        // at 1:1 (the common case once the desktop matches the tab) it is a no-op.
+        RenderOptions.SetBitmapInterpolationMode(this, BitmapInterpolationMode.HighQuality);
         _ime = new(this);
         TextInputMethodClientRequested += (_, e) => e.Client = _ime;
+        // Coalesce window/tab resizes: ask the server for a matching desktop only after the drag settles.
+        _resizeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _resizeTimer.Tick += (_, _) => { _resizeTimer.Stop(); MatchRemoteToViewport(); };
         _inputPump = ProcessInputAsync();
         session.FrameAvailable += OnFrame;
         OnFrame();
@@ -74,20 +88,55 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             if (_disposed != 0) return;
             RdpFrame? frame = _session.TakeFrame();
             if (frame is null) return;
-            if (_bitmap is null || frame.Width != DesktopWidth || frame.Height != DesktopHeight)
+            bool resized = _bitmap is null || frame.Width != DesktopWidth || frame.Height != DesktopHeight;
+            if (resized)
             {
                 _bitmap?.Dispose();
                 DesktopWidth = frame.Width;
                 DesktopHeight = frame.Height;
                 _bitmap = new WriteableBitmap(new(frame.Width, frame.Height), new(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
+                if (!_fit) { MinWidth = frame.Width; MinHeight = frame.Height; }
             }
-            using (ILockedFramebuffer buffer = _bitmap.Lock())
+            using (ILockedFramebuffer buffer = _bitmap!.Lock())
             {
                 for (int row = 0; row < frame.Height; row++)
                     Marshal.Copy(frame.Pixels, row * frame.Width * 4, buffer.Address + row * buffer.RowBytes, frame.Width * 4);
             }
             InvalidateVisual();
+            if (resized) DesktopSizeChanged?.Invoke();
         }, DispatcherPriority.Render);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == BoundsProperty && _fit) ScheduleResize();
+    }
+
+    private void ScheduleResize()
+    {
+        if (_disposed != 0) return;
+        _resizeTimer.Stop();
+        _resizeTimer.Start();
+    }
+
+    /// <summary>
+    /// Asks the server (via the display-control channel) to resize the desktop to the viewport in
+    /// device pixels, so Fit renders the remote 1:1 instead of scaling. A no-op when the server does
+    /// not support dynamic resolution — the desktop then keeps its size and Fit scales it to fit.
+    /// </summary>
+    private void MatchRemoteToViewport()
+    {
+        if (_disposed != 0 || !_fit) return;
+        double scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+        int width = (int)Math.Round(Bounds.Width * scale) & ~1;   // even width, as display-control requires
+        int height = (int)Math.Round(Bounds.Height * scale) & ~1;
+        if (width < 200 || height < 200) return;
+        // Ignore sub-8px jitter so a one-pixel layout settle does not drive a server reactivation.
+        if (Math.Abs(width - _requestedWidth) < 8 && Math.Abs(height - _requestedHeight) < 8) return;
+        _requestedWidth = width;
+        _requestedHeight = height;
+        Queue(() => _session.RequestResizeAsync(width, height));
     }
 
     public override void Render(DrawingContext context)
@@ -264,6 +313,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     {
         if (_disposed != 0) { await _inputPump; return; }
         ReleaseInput();
+        _resizeTimer.Stop();
         Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;
         _input.Writer.TryComplete();
