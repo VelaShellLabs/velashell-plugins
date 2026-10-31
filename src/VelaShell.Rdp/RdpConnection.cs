@@ -56,25 +56,33 @@ internal sealed class RdpConnection : IAsyncDisposable
         _height = options.Height;
     }
 
+    /// <summary>The connection step in progress; reported when an attempt fails.</summary>
+    internal RdpConnectStage Stage { get; private set; }
+
     internal async Task ConnectAsync(CancellationToken ct)
     {
+        Stage = RdpConnectStage.Tcp;
         _tcp = new TcpClient { NoDelay = true };
         await _tcp.ConnectAsync(_options.Host, _options.Port, ct).ConfigureAwait(false);
         _transport = new RdpTransport(_tcp.GetStream());
 
         // X.224 negotiation: offer TLS and NLA; let the server pick.
+        Stage = RdpConnectStage.Negotiation;
         SecurityProtocol requested = SecurityProtocol.Ssl | SecurityProtocol.Hybrid;
         await _transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(_options.Username, requested), ct).ConfigureAwait(false);
         (SecurityProtocol selected, _) = await _transport.ReadConnectionConfirmAsync(ct).ConfigureAwait(false);
 
         if (selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx))
         {
+            Stage = RdpConnectStage.Tls;
             SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
             _transport.UpgradeStream(ssl);
+            Stage = RdpConnectStage.Nla;
             await CredSsp.AuthenticateAsync(ssl, _options.CertificateHost, _options.Domain, _options.Username, _options.Password, ct).ConfigureAwait(false);
         }
         else if (selected.HasFlag(SecurityProtocol.Ssl))
         {
+            Stage = RdpConnectStage.Tls;
             SslStream ssl = await RdpTls.AuthenticateAsync(_transport.Stream, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
             _transport.UpgradeStream(ssl);
         }
@@ -84,6 +92,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         }
 
         // MCS + GCC.
+        Stage = RdpConnectStage.Mcs;
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
             (uint)selected, "VelaShell", 0x409, _options.Channels);
         _mcs = new McsLayer(_transport);
@@ -95,10 +104,13 @@ internal sealed class RdpConnection : IAsyncDisposable
         }
 
         // Client Info on the I/O channel.
+        Stage = RdpConnectStage.Login;
         await SendOnIoAsync(ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true), ct).ConfigureAwait(false);
 
         // Licensing then capability exchange.
+        Stage = RdpConnectStage.Licensing;
         byte[] demandActive = await ReceiveLicensingThenDemandActiveAsync(ct).ConfigureAwait(false);
+        Stage = RdpConnectStage.Capabilities;
         await HandleDemandActiveAsync(demandActive, ct).ConfigureAwait(false);
     }
 

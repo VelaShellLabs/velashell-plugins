@@ -1,4 +1,5 @@
 using VelaShell.PluginSdk;
+using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 
@@ -22,9 +23,28 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
     {
         _context = context;
         _loc = loc;
-        _factory = factory ?? DefaultFactory;
+        _factory = Logged(factory ?? DefaultFactory);
         _hostShutdown = context.Shutdown.Register(() => { _ = DisposeAsync().AsTask(); });
     }
+
+    /// <summary>
+    /// Logs every failed connect/reconnect with the full exception. The host only shows the message, so
+    /// without this a TLS/NLA failure leaves nothing to diagnose from (the inner SChannel error and the
+    /// stack live only on the exception). The certificate-trust prompt is the normal first-connect flow,
+    /// not a failure; exceptions never carry the password.
+    /// </summary>
+    private RdpSessionFactory Logged(RdpSessionFactory inner) => async (request, settings, loc, ct) =>
+    {
+        try
+        {
+            return await inner(request, settings, loc, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not ProtocolCertificateTrustException)
+        {
+            _context.Log.Warn($"RDP connection to {request.Host}:{request.Port} failed: {ex.Message}", ex);
+            throw;
+        }
+    };
     internal Loc Loc
     {
         get

@@ -1,5 +1,6 @@
 using System.Formats.Asn1;
 using System.Text;
+using VelaShell.Rdp;
 using VelaShell.Rdp.Security;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -71,5 +72,40 @@ public sealed class CredSspAsn1Tests
         byte[] magic = Encoding.ASCII.GetBytes("CredSSP Client-To-Server Binding Hash\0");
         byte[] expected = System.Security.Cryptography.SHA256.HashData([.. magic, .. nonce, .. key]);
         CollectionAssert.AreEqual(expected, clientToServer);
+    }
+
+    private static byte[] TsRequestWithError(System.Numerics.BigInteger errorCode)
+    {
+        var w = new AsnWriter(AsnEncodingRules.DER);
+        using (w.PushSequence())
+        {
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                w.WriteInteger(6);
+            }
+
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 4)))
+            {
+                w.WriteInteger(errorCode);
+            }
+        }
+        return w.Encode();
+    }
+
+    [TestMethod]
+    public void ServerErrorCodesParseWhetherEncodedSignedOrUnsigned()
+    {
+        // Servers encode NTSTATUS as a signed INTEGER: STATUS_LOGON_FAILURE 0xC000006D arrives as
+        // -1073741715. Converting that BigInteger straight to uint threw OverflowException and hid the
+        // server's actual answer ("wrong password") behind "Arithmetic operation resulted in an overflow".
+        (uint version, uint? signed) = CredSsp.ParseForTest(TsRequestWithError(unchecked((int)0xC000006D)));
+        Assert.AreEqual(6u, version);
+        Assert.AreEqual(0xC000006Du, signed);
+
+        // A server that encodes the same 32 bits as a positive INTEGER must give the same value.
+        (_, uint? unsigned) = CredSsp.ParseForTest(TsRequestWithError(0x8009030CU));
+        Assert.AreEqual(0x8009030Cu, unsigned);
+
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => CredSsp.ParseForTest(TsRequestWithError(System.Numerics.BigInteger.Pow(2, 40))));
     }
 }

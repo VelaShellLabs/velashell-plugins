@@ -42,9 +42,9 @@ internal static class RdpConnector
         {
             throw CertificateTrust(ex, loc);
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            throw new ProtocolConnectionException(loc["ConnectTimedOut"]);
+            throw new ProtocolConnectionException(loc["ConnectTimedOut"], ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -52,13 +52,40 @@ internal static class RdpConnector
         }
     }
 
-    private static Exception Translate(Exception ex, Loc loc) => ex switch
+    internal static Exception Translate(Exception ex, Loc loc) => ex switch
     {
         ProtocolConnectionException or ProtocolAuthenticationException
             or ProtocolCertificateTrustException or ProtocolUnsupportedException => ex,
         RdpCertificateRejectedException cert => CertificateTrust(cert, loc),
-        _ => new ProtocolConnectionException(ex.Message)
+        // A credentials problem must surface as an authentication failure (not a network error), with
+        // the reason the server gave.
+        RdpAuthenticationException auth => new ProtocolAuthenticationException(AuthenticationMessage(auth.Status, loc), auth),
+        RdpConnectionException failed => new ProtocolConnectionException(
+            loc.Format("ConnectFailedAt", StageName(failed.Stage, loc), failed.Detail), failed),
+        _ => new ProtocolConnectionException(RdpConnectionException.Describe(ex), ex)
     };
+
+    /// <summary>Turns the NTSTATUS/HRESULT a server reports for a rejected NLA logon into a readable reason.</summary>
+    internal static string AuthenticationMessage(uint? status, Loc loc)
+    {
+        string? reason = status switch
+        {
+            0xC000006D or 0xC000006A or 0xC0000064 or 0x8009030C => loc["NlaBadCredentials"],   // logon failure / wrong password / no such user / SEC_E_LOGON_DENIED
+            0xC0000071 or 0xC0000224 => loc["NlaPasswordExpired"],                             // password expired / must change
+            0xC0000234 => loc["NlaAccountLocked"],
+            0xC0000072 or 0xC0000193 => loc["NlaAccountDisabled"],                             // disabled / expired account
+            0xC000006E or 0xC000015B or 0xC000006F or 0xC0000070 or 0xC0000413 => loc["NlaNotAllowed"], // restrictions / logon type not granted / hours / workstation / auth firewall
+            _ => null
+        };
+        return (status, reason) switch
+        {
+            ({ } code, { } known) => loc.Format("NlaRejected", known, code),
+            ({ } code, null) => $"{loc["AuthFailed"]} (0x{code:X8})",
+            _ => loc["AuthFailed"]
+        };
+    }
+
+    private static string StageName(RdpConnectStage stage, Loc loc) => loc["Stage" + stage];
 
     private static ProtocolCertificateTrustException CertificateTrust(RdpCertificateRejectedException ex, Loc loc)
     {

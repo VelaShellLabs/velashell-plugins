@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Formats.Asn1;
 using System.Net;
 using System.Net.Security;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -46,15 +47,16 @@ internal static class CredSsp
 
         await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, null, null), ct).ConfigureAwait(false);
 
-        // Leg 2: server NTLM CHALLENGE.
+        // Leg 2: server NTLM CHALLENGE (or an error, e.g. when the server refuses NTLM outright).
         TsRequest challenge = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
+        ThrowIfServerRejected(challenge);
         uint peerVersion = challenge.Version;
 
         // Leg 3: client NTLM AUTHENTICATE + pubKeyAuth (+ clientNonce for v5+).
         token = auth.GetOutgoingBlob(challenge.NegoToken ?? [], out status);
         if (status != NegotiateAuthenticationStatusCode.Completed)
         {
-            throw new ProtocolAuthFailure($"NLA authentication did not complete ({status}).");
+            throw new RdpAuthenticationException($"NLA authentication did not complete ({status}).");
         }
 
         byte[] pubKeyAuth = peerVersion < 5
@@ -65,10 +67,7 @@ internal static class CredSsp
 
         // Leg 4: server public-key echo — verify before sending credentials.
         TsRequest echo = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
-        if (echo.ErrorCode is { } error && error != 0)
-        {
-            throw new ProtocolAuthFailure($"The server rejected NLA (0x{error:X8}).");
-        }
+        ThrowIfServerRejected(echo);
 
         if (echo.PubKeyAuth is null)
         {
@@ -81,6 +80,15 @@ internal static class CredSsp
         // Leg 5: send the credentials, sealed.
         byte[] credentials = Seal(auth, BuildTsCredentials(domain, username, password));
         await WriteAsync(tls, BuildTsRequest(ClientVersion, null, credentials, null, null), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A TSRequest carrying a non-zero errorCode means the server refused the logon.</summary>
+    private static void ThrowIfServerRejected(TsRequest reply)
+    {
+        if (reply.ErrorCode is { } error && error != 0)
+        {
+            throw new RdpAuthenticationException($"The server rejected NLA (0x{error:X8}).", error);
+        }
     }
 
     private static void VerifyServerEcho(uint peerVersion, byte[] serverEcho, byte[] publicKey, byte[] nonce)
@@ -98,7 +106,7 @@ internal static class CredSsp
             }
             if (!CryptographicOperations.FixedTimeEquals(serverEcho, expected))
             {
-                throw new ProtocolAuthFailure("The server's public-key echo did not match (possible MITM).");
+                throw new RdpProtocolException("The server's public-key echo did not match (possible MITM).");
             }
         }
         else
@@ -106,7 +114,7 @@ internal static class CredSsp
             byte[] expected = BindingHash(ServerClientHashMagic, nonce, publicKey);
             if (!CryptographicOperations.FixedTimeEquals(serverEcho, expected))
             {
-                throw new ProtocolAuthFailure("The server's public-key hash did not match (possible MITM).");
+                throw new RdpProtocolException("The server's public-key hash did not match (possible MITM).");
             }
         }
     }
@@ -237,7 +245,7 @@ internal static class CredSsp
             switch (tag.TagValue)
             {
                 case 0:
-                    version = (uint)inner.ReadInteger();
+                    version = ToUInt32(inner.ReadInteger());
                     break;
                 case 1:
                     AsnReader negoData = inner.ReadSequence();   // SEQUENCE OF
@@ -255,7 +263,7 @@ internal static class CredSsp
                     pubKeyAuth = inner.ReadOctetString();
                     break;
                 case 4:
-                    errorCode = (uint)inner.ReadInteger();
+                    errorCode = ToUInt32(inner.ReadInteger());
                     break;
                 case 5:
                     _ = inner.ReadOctetString(); // clientNonce echoed (unused on the client)
@@ -263,6 +271,23 @@ internal static class CredSsp
             }
         }
         return new TsRequest(version, negoToken, pubKeyAuth, errorCode);
+    }
+
+    /// <summary>
+    /// Maps an ASN.1 INTEGER onto a 32-bit code. NTSTATUS/HRESULT error codes have the top bit set, and
+    /// servers encode them as <b>signed</b> INTEGERs — STATUS_LOGON_FAILURE 0xC000006D arrives as
+    /// -1073741715 — so a direct <c>(uint)</c> conversion of the <see cref="BigInteger" /> throws
+    /// <see cref="OverflowException" />, masking the very error the server is reporting.
+    /// </summary>
+    private static uint ToUInt32(BigInteger value) =>
+        value >= int.MinValue && value <= uint.MaxValue
+            ? unchecked((uint)(long)value)
+            : throw new RdpProtocolException("An NLA integer is outside the 32-bit range.");
+
+    internal static (uint Version, uint? Error) ParseForTest(byte[] der)
+    {
+        TsRequest r = ParseTsRequest(der);
+        return (r.Version, r.ErrorCode);
     }
 
     private static byte[] BuildTsCredentials(string domain, string username, string password)
@@ -366,6 +391,3 @@ internal static class CredSsp
         return buffer;
     }
 }
-
-/// <summary>NLA rejected the supplied credentials.</summary>
-internal sealed class ProtocolAuthFailure(string message) : Exception(message);

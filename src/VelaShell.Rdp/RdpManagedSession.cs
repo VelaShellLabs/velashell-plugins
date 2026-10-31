@@ -98,10 +98,11 @@ public sealed class RdpManagedSession : IRdpSession
 
     /// <summary>
     /// Connects to an RDP server and begins pumping desktop frames. On failure the partial session
-    /// is disposed and the original exception propagates: <see cref="RdpCertificateRejectedException"/>
-    /// when the server certificate is untrusted (its SHA-256 pin is on the exception),
-    /// <see cref="OperationCanceledException"/> when <paramref name="ct"/> fires, otherwise an
-    /// <see cref="RdpProtocolException"/> or an underlying transport/TLS exception.
+    /// is disposed and throws: <see cref="RdpCertificateRejectedException"/> when the server certificate
+    /// is untrusted (its PEM is on the exception), <see cref="RdpAuthenticationException"/> when the server
+    /// rejects the credentials during NLA (with its status code), <see cref="OperationCanceledException"/>
+    /// when <paramref name="ct"/> fires, otherwise an <see cref="RdpConnectionException"/> naming the
+    /// failing <see cref="RdpConnectStage"/> and the cause chain (including TLS/socket error codes).
     /// </summary>
     public static async Task<RdpManagedSession> ConnectAsync(RdpClientOptions options, CancellationToken ct = default)
     {
@@ -138,10 +139,18 @@ public sealed class RdpManagedSession : IRdpSession
         {
             await session._connection.ConnectAsync(ct).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
+            RdpConnectStage stage = session._connection.Stage;
             await session.DisposeAsync().ConfigureAwait(false);
-            throw;
+            // Cancellation, certificate trust and rejected credentials each mean something specific to
+            // the caller; everything else gets the failing stage and a readable cause chain.
+            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException)
+            {
+                throw;
+            }
+
+            throw new RdpConnectionException(stage, ex);
         }
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
