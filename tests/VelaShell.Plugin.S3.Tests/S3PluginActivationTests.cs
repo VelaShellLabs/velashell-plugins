@@ -55,4 +55,28 @@ public sealed class S3PluginActivationTests
         // 躺在同一条标签条上。这一条写成断言,免得日后有人"顺手统一"成硬盘图标。
         Assert.AreEqual("M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z", icon.PathData);
     }
+
+    [TestMethod]
+    public async Task LocaleChanged_ReregistersInTheNewLanguage_AndTheOldHandleLeavesItInPlace()
+    {
+        using TestPluginContext context = NewContext();
+        var plugin = new S3Plugin();
+        await plugin.ActivateAsync(context, CancellationToken.None);
+        IProtocolFileSystem? fileSystem = context.RecordingProtocols.GetFileSystem("velashell.s3");
+        Assert.AreEqual("服务端点", context.RecordingProtocols.Registered.Single().HostLabel);
+
+        context.HostInfo.Locale = "en";
+        context.HostEvents.RaiseLocaleChanged("en");
+
+        // 插件先用同一个实现实例注册新描述、再 Dispose 旧句柄(先 Dispose 会让宿主把活会话全关掉)。
+        // 旧句柄此时已不是表里那一条,释放它必须是空操作 —— 与宿主 PluginProtocolRegistry 同口径
+        // (SDK 2.1.3 起替身按注册条目判定)。
+        ProtocolDescriptor descriptor = context.RecordingProtocols.Registered.Single();
+        Assert.AreEqual("Endpoint", descriptor.HostLabel);
+        Assert.AreSame(fileSystem, context.RecordingProtocols.GetFileSystem("velashell.s3"));
+
+        // 插件手里留下的是新句柄:停用时撤的就是还在表里的那一条。
+        await plugin.DeactivateAsync(CancellationToken.None);
+        Assert.IsEmpty(context.RecordingProtocols.Registered);
+    }
 }
