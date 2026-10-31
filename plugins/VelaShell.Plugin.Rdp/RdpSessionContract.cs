@@ -17,4 +17,11 @@ internal interface IRdpSession : IRdpClipboardTransport, IAsyncDisposable
     Task KeyAsync(uint code, bool down, CancellationToken ct = default);
     Task UnicodeAsync(string text, CancellationToken ct = default);
     Task MouseAsync(uint flags, uint x, uint y, CancellationToken ct = default);
+
+    /// <summary>
+    /// Requests that the remote desktop resize to <paramref name="width"/>×<paramref name="height"/>
+    /// device pixels so it matches the workspace tab. A no-op when the server does not offer the
+    /// display-control channel; the desktop then keeps its negotiated size and is scaled to fit.
+    /// </summary>
+    Task RequestResizeAsync(int width, int height, CancellationToken ct = default);
 }

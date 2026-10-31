@@ -43,15 +43,15 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
                 || path.Any(char.IsControl) || !Path.IsPathFullyQualified(path) || !Directory.Exists(path)) Invalid("drives");
             drives.Add(new(name, Path.GetFullPath(path)));
         }
-        return new(domain, Number("width", 1280, 320, 8192), Number("height", 720, 200, 8192),
+        return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
             Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives);
     }
 
     public static IReadOnlyList<ProtocolSettingField> Declare(Loc loc) =>
     [
         new() { Key = "domain", Label = loc["Domain"], DefaultValue = "" },
-        new() { Key = "width", Label = loc["Width"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1280", IsAdvanced = true },
-        new() { Key = "height", Label = loc["Height"], Kind = ProtocolSettingKind.Integer, DefaultValue = "720", IsAdvanced = true },
+        new() { Key = "width", Label = loc["Width"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1920", IsAdvanced = true },
+        new() { Key = "height", Label = loc["Height"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1080", IsAdvanced = true },
         new() { Key = "timeout", Label = loc["Timeout"], Kind = ProtocolSettingKind.Integer, DefaultValue = "15", IsAdvanced = true },
         new() { Key = "clipboard", Label = loc["Clipboard"], Hint = loc["ClipboardHint"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "false" },
         new() { Key = "drives", Label = loc["Drives"], Hint = loc["DrivesHint"], DefaultValue = "", IsAdvanced = true },

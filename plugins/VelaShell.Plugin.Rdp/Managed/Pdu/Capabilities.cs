@@ -10,16 +10,44 @@ namespace VelaShell.Plugin.Rdp.Managed.Pdu;
 /// </summary>
 internal static class Capabilities
 {
-    /// <summary>Reads a Demand Active body (after the share control header) and returns the share id.</summary>
-    internal static uint ReadDemandActiveShareId(ref ByteReader r)
+    /// <summary>The share id plus the server's active desktop size (0×0 when the caps omit a bitmap set).</summary>
+    internal readonly record struct DemandActive(uint ShareId, int Width, int Height);
+
+    /// <summary>
+    /// Reads a Demand Active body (after the share control header). Returns the share id and the
+    /// server's active desktop resolution, taken from the Bitmap Capability Set (MS-RDPBCGR 2.2.7.1.2).
+    /// A deactivation-reactivation after a display-control resize carries the new size here, so the
+    /// client adopts whatever the server settled on rather than assuming its request was honoured.
+    /// </summary>
+    internal static DemandActive ReadDemandActive(ref ByteReader r)
     {
         uint shareId = r.U32LE();
         ushort lenSource = r.U16LE();
-        ushort lenCaps = r.U16LE();
+        r.U16LE();                 // lengthCombinedCapabilities
         r.Skip(lenSource);
-        _ = lenCaps;
-        // The remaining capability sets are not needed; the client renders via bitmap updates.
-        return shareId;
+        int width = 0, height = 0;
+        if (r.Remaining >= 4)
+        {
+            ushort count = r.U16LE();
+            r.Skip(2);             // pad2octets
+            for (int i = 0; i < count && r.Remaining >= 4; i++)
+            {
+                ushort type = r.U16LE();
+                ushort length = r.U16LE();
+                int bodyLen = length - 4;
+                if (bodyLen < 0 || bodyLen > r.Remaining) break;
+                if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
+                {
+                    r.Skip(8);     // preferredBitsPerPixel + receive{1,4,8}BitsPerPixel
+                    width = r.U16LE();
+                    height = r.U16LE();
+                    r.Skip(bodyLen - 12);
+                }
+                else r.Skip(bodyLen);
+            }
+        }
+        if (width is < 200 or > 8192 || height is < 200 or > 8192) width = height = 0;
+        return new DemandActive(shareId, width, height);
     }
 
     internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels)

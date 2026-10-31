@@ -29,6 +29,8 @@ internal sealed class RdpConnection : IAsyncDisposable
     private McsLayer _mcs = null!;
     private ushort _ioChannel;
     private uint _shareId;
+    private int _width;
+    private int _height;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly Dictionary<ushort, string> _channelsById = [];
     private readonly Dictionary<ushort, MemoryStream> _vcReassembly = [];
@@ -46,7 +48,12 @@ internal sealed class RdpConnection : IAsyncDisposable
     internal event Action<ChannelPayload>? ChannelData;
     internal event Action<uint>? ErrorInfoReceived;
 
-    internal RdpConnection(RdpConnectOptions options) => _options = options;
+    internal RdpConnection(RdpConnectOptions options)
+    {
+        _options = options;
+        _width = options.Width;
+        _height = options.Height;
+    }
 
     internal async Task ConnectAsync(CancellationToken ct)
     {
@@ -106,16 +113,22 @@ internal sealed class RdpConnection : IAsyncDisposable
         var r = new ByteReader(payload);
         ShareControl.ControlHeader header = ShareControl.ReadControlHeader(ref r);
         if (header.Type != ShareControlType.DemandActive) throw new RdpProtocolException("Expected Demand Active PDU.");
-        _shareId = Capabilities.ReadDemandActiveShareId(ref r);
+        Capabilities.DemandActive active = Capabilities.ReadDemandActive(ref r);
+        _shareId = active.ShareId;
+        // Adopt the resolution the server actually settled on (initial negotiation, or the result of
+        // a display-control resize); keep the requested size only when the caps omit a bitmap set.
+        if (active.Width > 0 && active.Height > 0) { _width = active.Width; _height = active.Height; }
 
         ushort user = _mcs.UserId;
-        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _options.Width, _options.Height, _options.Bpp, _channelsById.Count > 0), ct).ConfigureAwait(false);
+        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.Synchronize(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.ControlCooperate(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.RequestControl(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.FontList(_shareId, user), ct).ConfigureAwait(false);
 
-        Framebuffer = new Framebuffer(_options.Width, _options.Height);
+        // The server paints a full-screen bitmap update right after the font list, which raises
+        // FrameUpdated; resize the backing store here so that update lands in the new dimensions.
+        lock (_frameLock) Framebuffer = new Framebuffer(_width, _height);
     }
 
     // ---- Active-phase pump ----
@@ -150,8 +163,7 @@ internal sealed class RdpConnection : IAsyncDisposable
                 ProcessDataPdu(dh.Type, ref dr);
                 break;
             case ShareControlType.DemandActive:
-                // Deactivation-reactivation: re-confirm against the new share.
-                _shareId = Capabilities.ReadDemandActiveShareId(ref r);
+                // Deactivation-reactivation: re-confirm against the new share and adopt its resolution.
                 await HandleDemandActiveAsync(payload, ct).ConfigureAwait(false);
                 break;
             case ShareControlType.Deactivate:

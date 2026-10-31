@@ -33,6 +33,9 @@ internal sealed class RdpManagedSession : IRdpSession
     private RdpdrChannel? _rdpdr;
     private Channel<byte[]>? _rdpdrQueue;
     private Task? _rdpdrWorker;
+    private DrdynvcChannel? _drdynvc;
+    private Channel<byte[]>? _drdynvcQueue;
+    private Task? _drdynvcWorker;
 
     public bool IsConnected => Volatile.Read(ref _isConnected) != 0;
     public event Action? FrameAvailable;
@@ -89,10 +92,12 @@ internal sealed class RdpManagedSession : IRdpSession
         var channels = new List<ChannelDef>();
         if (settings.Clipboard) channels.Add(new ChannelDef("cliprdr", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
         if (settings.Drives.Count > 0) channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
+        channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
         var options = new RdpConnectOptions(request.Host, request.Port, request.Username, request.Password,
             settings.Domain, settings.Width, settings.Height, Bpp: 16, pin, settings.CertificateHost, channels);
 
         var session = new RdpManagedSession(new RdpConnection(options), loc);
+        session.EnableDynamicChannels();
         if (settings.Clipboard) session.EnableClipboard();
         if (settings.Drives.Count > 0)
             session.EnableDrives([.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))]);
@@ -123,6 +128,13 @@ internal sealed class RdpManagedSession : IRdpSession
         return session;
     }
 
+    private void EnableDynamicChannels()
+    {
+        _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64) { SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite });
+        _drdynvc = new DrdynvcChannel((pdu, token) => _connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token);
+        _drdynvcWorker = DrainDrdynvcAsync();
+    }
+
     private void EnableClipboard()
     {
         _cliprdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite });
@@ -143,6 +155,7 @@ internal sealed class RdpManagedSession : IRdpSession
     {
         if (payload.ChannelName == "cliprdr") _cliprdrQueue?.Writer.TryWrite(payload.Data);
         else if (payload.ChannelName == "rdpdr") _rdpdrQueue?.Writer.TryWrite(payload.Data);
+        else if (payload.ChannelName == "drdynvc") _drdynvcQueue?.Writer.TryWrite(payload.Data);
     }
 
     private async Task DrainRdpdrAsync()
@@ -159,6 +172,25 @@ internal sealed class RdpManagedSession : IRdpSession
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
     }
+
+    private async Task DrainDrdynvcAsync()
+    {
+        if (_drdynvcQueue is null || _drdynvc is null) return;
+        try
+        {
+            await foreach (byte[] pdu in _drdynvcQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
+            {
+                try { await _drdynvc.ProcessAsync(pdu).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
+                catch { /* a malformed dynamic-channel PDU must not drop the session */ }
+            }
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+    }
+
+    /// <summary>Asks the server, via the display-control channel, to resize the desktop to match the view.</summary>
+    public Task RequestResizeAsync(int width, int height, CancellationToken cancellationToken) =>
+        _drdynvc?.RequestResizeAsync(width, height) ?? Task.CompletedTask;
 
     private async Task DrainCliprdrAsync()
     {
@@ -255,9 +287,11 @@ internal sealed class RdpManagedSession : IRdpSession
         Volatile.Write(ref _isConnected, 0);
         _cliprdrQueue?.Writer.TryComplete();
         _rdpdrQueue?.Writer.TryComplete();
+        _drdynvcQueue?.Writer.TryComplete();
         if (_pump is { } pump) { try { await pump.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_cliprdrWorker is { } worker) { try { await worker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_rdpdrWorker is { } driveWorker) { try { await driveWorker.ConfigureAwait(false); } catch { /* ignore */ } }
+        if (_drdynvcWorker is { } dvcWorker) { try { await dvcWorker.ConfigureAwait(false); } catch { /* ignore */ } }
         _rdpdr?.CloseAll();
         await _connection.DisposeAsync().ConfigureAwait(false);
         _stop.Dispose();

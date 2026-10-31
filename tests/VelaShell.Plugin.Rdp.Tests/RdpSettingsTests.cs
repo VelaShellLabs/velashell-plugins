@@ -17,8 +17,8 @@ public sealed class RdpSettingsTests
         RdpSettings settings = RdpSettings.From(Request(), new("en"));
         Assert.IsFalse(settings.Clipboard);
         Assert.IsEmpty(settings.Drives);
-        Assert.AreEqual(1280, settings.Width);
-        Assert.AreEqual(720, settings.Height);
+        Assert.AreEqual(1920, settings.Width);
+        Assert.AreEqual(1080, settings.Height);
     }
     [TestMethod]
     [DataRow("width", "319")]

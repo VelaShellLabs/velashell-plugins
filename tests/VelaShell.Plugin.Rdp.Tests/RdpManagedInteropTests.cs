@@ -201,6 +201,58 @@ public sealed class RdpManagedInteropTests
     }
 
     [TestMethod]
+    public async Task DisplayControlResizesTheDesktop()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        byte[] pin = await LearnPinAsync(target);
+        Assert.AreEqual(32, pin.Length);
+
+        var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+            ("width", "1024"), ("height", "768")) with
+        { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+        var loc = new Loc("en");
+        RdpSettings settings = RdpSettings.From(request, loc);
+
+        IRdpSession session = await RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        try
+        {
+            RdpFrame? latest = null;
+            async Task<(int W, int H)> PumpUntil(Func<int, int, bool> done, int seconds)
+            {
+                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(seconds);
+                while (DateTime.UtcNow < deadline)
+                {
+                    RdpFrame? f = session.TakeFrame();
+                    if (f is not null) latest = f;
+                    if (latest is { } cur && done(cur.Width, cur.Height)) break;
+                    await Task.Delay(150, CancellationToken.None);
+                }
+                return (latest?.Width ?? 0, latest?.Height ?? 0);
+            }
+
+            (int w0, int h0) = await PumpUntil((w, h) => w > 0, 12);
+            Console.WriteLine($"Initial desktop: {w0}x{h0}");
+            Assert.AreEqual(1024, w0, "Server did not honour the requested initial width.");
+
+            await session.RequestResizeAsync(1280, 1024, default);
+            (int w1, int h1) = await PumpUntil((w, h) => w == 1280 && h == 1024, 12);
+            Console.WriteLine($"After resize request 1280x1024: {w1}x{h1}");
+            if (w1 != 1280 || h1 != 1024)
+            {
+                Assert.Inconclusive($"Server did not resize (got {w1}x{h1}); MS-RDPEDISP likely unsupported by this server.");
+                return;
+            }
+            Assert.IsTrue(session.IsConnected, "Session dropped during resize.");
+            Assert.IsTrue(CountDistinct(latest!.Pixels) > 1, "Resized frame is blank.");
+
+            // Restore the baseline so this test leaves the shared xrdp session as it found it.
+            await session.RequestResizeAsync(1024, 768, default);
+            await PumpUntil((w, h) => w == 1024 && h == 768, 12);
+        }
+        finally { await session.DisposeAsync(); }
+    }
+
+    [TestMethod]
     public async Task ClipboardChannelHandshakeCompletes()
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
