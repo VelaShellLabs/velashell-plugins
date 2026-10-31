@@ -1,10 +1,10 @@
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using VelaShell.Plugin.Rdp.Managed;
-using VelaShell.Plugin.Rdp.Managed.Mcs;
-using VelaShell.Plugin.Rdp.Managed.Security;
-using VelaShell.Plugin.Rdp.Managed.Wire;
+using VelaShell.Rdp;
+using VelaShell.Rdp.Mcs;
+using VelaShell.Rdp.Security;
+using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
@@ -174,7 +174,7 @@ public sealed class RdpManagedInteropTests
         var loc = new Loc("en");
         RdpSettings settings = RdpSettings.From(request, loc);
 
-        IRdpSession session = await RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
         {
             int frames = 0;
@@ -213,7 +213,7 @@ public sealed class RdpManagedInteropTests
         var loc = new Loc("en");
         RdpSettings settings = RdpSettings.From(request, loc);
 
-        IRdpSession session = await RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
         {
             RdpFrame? latest = null;
@@ -266,7 +266,7 @@ public sealed class RdpManagedInteropTests
         RdpSettings settings = RdpSettings.From(request, loc);
         Assert.IsTrue(settings.Clipboard);
 
-        IRdpSession session = await RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
         {
             var kinds = new System.Collections.Concurrent.ConcurrentBag<uint>();
@@ -298,7 +298,7 @@ public sealed class RdpManagedInteropTests
         var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("clipboard", "true")) with { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
-        IRdpSession session = await RdpManagedSession.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
         try
         {
             var gate = new SemaphoreSlim(0);
@@ -350,7 +350,7 @@ public sealed class RdpManagedInteropTests
         var request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)), ("clipboard", "true"))
             with { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
-        IRdpSession session = await RdpManagedSession.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
         var pump = Task.Run(async () => { while (session.IsConnected) { session.TakeFrame(); await Task.Delay(100); } });
         try
         {
@@ -408,7 +408,7 @@ public sealed class RdpManagedInteropTests
         RdpSettings settings = RdpSettings.From(request, loc);
         Assert.AreEqual(1, settings.Drives.Count);
 
-        IRdpSession session = await RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         var pump = Task.Run(async () => { while (session.IsConnected) { session.TakeFrame(); await Task.Delay(100); } });
         try
         {
@@ -488,7 +488,7 @@ public sealed class RdpManagedInteropTests
         return seen.Count;
     }
 
-    private static long RegionHash(VelaShell.Plugin.Rdp.Managed.Graphics.Framebuffer fb, int x0, int y0, int w, int h)
+    private static long RegionHash(VelaShell.Rdp.Graphics.Framebuffer fb, int x0, int y0, int w, int h)
     {
         byte[] bgra = fb.Bgra;
         long hash = 1469598103934665603L;

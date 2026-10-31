@@ -7,6 +7,7 @@ using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using VelaShell.Plugin.Rdp.Tests;
 using VelaShell.PluginSdk.Testing;
+using VelaShell.Rdp;
 
 [assembly: AvaloniaTestApplication(typeof(RdpHeadlessApp))]
 
@@ -137,7 +138,7 @@ public sealed class RdpHeadlessTests
         RdpSettings settings = RdpSettings.From(request, loc);
 
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
-        IRdpSession session = await VelaShell.Plugin.Rdp.Managed.RdpManagedSession.ConnectAsync(request, settings, loc, default);
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         try
         {
             await using var view = new RdpWorkspaceView(session, context, settings, loc);

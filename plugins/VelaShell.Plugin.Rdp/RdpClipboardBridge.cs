@@ -13,6 +13,7 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using VelaShell.PluginSdk;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 
