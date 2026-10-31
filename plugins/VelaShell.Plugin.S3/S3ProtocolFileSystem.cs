@@ -41,7 +41,7 @@ namespace VelaShell.Plugin.S3;
 /// <param name="protocols">协议能力(用于读取宿主当前的传输限速设置)。</param>
 /// <param name="actions">协议动作的处置器(打开面板 / 复制分享链接);为 null 时动作静默忽略。</param>
 public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3ActionHandler? actions = null)
-    : IProtocolFileSystem, IS3ClientAccessor
+    : IProtocolFileSystem, IProtocolChecksum, IS3ClientAccessor
 {
     /// <summary>本地文件流的缓冲区大小,与宿主的 SFTP 后端取同一个值。</summary>
     private const int LocalStreamBufferSize = 1024 * 1024;
@@ -321,6 +321,100 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         catch (Exception ex)
         {
             throw ToProtocol(ex);
+        }
+    }
+
+    // ---- 服务器端摘要(SDK 2.1.3 的可选面 IProtocolChecksum) ----------------
+    //
+    // 只兼实现这一个可选面。IProtocolLastWriteTime **刻意不实现**:S3 对象的 LastModified 是服务端
+    // 写入时刻,协议上没有「改修改时间」的操作;唯一的近似是「复制对象自身 + 改元数据」,那会重写对象、
+    // 换掉版本号与 ETag、触发复制 / 生命周期规则,而 LastModified 照样是复制那一刻 —— 不是同一件事。
+    // 不实现,宿主就如实报「设不了修改时间」,目录同步改按大小 / 摘要比较。
+
+    /// <summary>
+    /// 批量取对象**保存着的**校验和(HEAD + <c>x-amz-checksum-mode: ENABLED</c>),绝不为凑一个值把对象读回来算。
+    /// 哪些算、哪些算不出见 <see cref="S3StoredChecksum" />。
+    /// </summary>
+    async Task<IReadOnlyDictionary<string, string?>> IProtocolChecksum.ComputeChecksumsAsync(string sessionId,
+        RemoteChecksumAlgorithm algorithm, IReadOnlyList<string> paths, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        Guid id = Resolve(sessionId);
+        if (S3StoredChecksum.DigestLength(algorithm) is null)
+        {
+            // 整条会话都给不出(S3 不存这种校验和):宿主据此整体回退,不逐个文件重试。
+            throw new ProtocolUnsupportedException($"S3 does not store {algorithm} checksums.");
+        }
+        return await Guard(() => GetStoredChecksumsAsync(id, algorithm, paths, cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 取一批对象保存着的校验和;键是请求里的路径原样,单个对象给不出时值为 null。
+    /// <para>
+    /// S3 没有批量 HEAD,按会话的并发设置(<see cref="S3Settings.EffectiveConcurrency" />)并行发。
+    /// 单个对象不存在、是目录 / 桶 / 根、没权限、没存这种校验和 → null;认证失败、连不上、
+    /// 服务端整体不支持(501)这类会话级失败照常抛,由宿主把余下的整体回退。
+    /// </para>
+    /// </summary>
+    /// <param name="sessionId">会话标识。</param>
+    /// <param name="algorithm">请求的算法(调用方已确认 S3 能存这种校验和)。</param>
+    /// <param name="remotePaths">对象路径。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>路径 → 小写十六进制摘要(或 null)。</returns>
+    internal async Task<IReadOnlyDictionary<string, string?>> GetStoredChecksumsAsync(Guid sessionId,
+        RemoteChecksumAlgorithm algorithm, IReadOnlyList<string> remotePaths, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(remotePaths);
+        S3Session session = Resolve(sessionId);
+        var result = new ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
+        try
+        {
+            await Parallel.ForEachAsync(
+                remotePaths.Distinct(StringComparer.Ordinal),
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = session.Info.Settings.EffectiveConcurrency,
+                    CancellationToken = cancellationToken,
+                },
+                async (remotePath, token) =>
+                    result[remotePath] = await TryGetStoredChecksumAsync(session, remotePath, algorithm, token).ConfigureAwait(false))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            throw Fault(sessionId, ex, "checksum");
+        }
+        return new Dictionary<string, string?>(result, StringComparer.Ordinal);
+    }
+
+    private static async Task<string?> TryGetStoredChecksumAsync(S3Session session, string remotePath,
+        RemoteChecksumAlgorithm algorithm, CancellationToken cancellationToken)
+    {
+        var path = S3ObjectPath.Parse(remotePath);
+        if (path.IsRoot || path.Key.Length == 0)
+        {
+            // 根与桶不是对象,没有内容摘要可言。
+            return null;
+        }
+        try
+        {
+            GetObjectMetadataResponse metadata = await session.Client.GetObjectMetadataAsync(new()
+            {
+                BucketName = path.Bucket,
+                Key = path.Key,
+                // 不开这个,服务端不回 x-amz-checksum-* —— 哪怕对象存着。
+                ChecksumMode = ChecksumMode.ENABLED,
+            }, cancellationToken).ConfigureAwait(false);
+            return S3StoredChecksum.FromMetadata(metadata, algorithm);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            // HEAD 的错误没有响应体,能分的只有状态码:404(不存在,含「其实是个目录前缀」)与
+            // 403(没权限;KMS 加密的对象开着校验和模式还要 kms:Decrypt)只是这一个文件给不出。
+            Exception translated = S3Interop.Translate(ex, "checksum");
+            return translated is VelaS3PathNotFoundException or VelaS3PermissionDeniedException
+                ? null
+                : throw translated;
         }
     }
 
