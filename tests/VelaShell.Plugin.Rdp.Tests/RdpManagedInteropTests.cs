@@ -421,6 +421,64 @@ public sealed class RdpManagedInteropTests
     }
 
     [TestMethod]
+    public async Task TickedDisksIncludingADriveRootAreServed()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        string? display = Environment.GetEnvironmentVariable("VELA_RDP_TEST_XDISPLAY");
+        if (string.IsNullOrEmpty(display)) { Assert.Inconclusive("VELA_RDP_TEST_XDISPLAY not set."); return; }
+
+        // "V" stands in for a ticked disk (a temp dir, so the test can plant a file); the real system
+        // drive root is ticked too, and is only ever listed — never written.
+        string diskDir = Path.Combine(Path.GetTempPath(), "vrdp-disk-" + Guid.NewGuid().ToString("N")[..8]);
+        _ = Directory.CreateDirectory(diskDir);
+        string tag = "TickedDisk-" + Guid.NewGuid().ToString("N")[..8];
+        await File.WriteAllTextAsync(Path.Combine(diskDir, "hello.txt"), tag);
+        string root = Path.GetPathRoot(diskDir)!;
+        string rootName = OperatingSystem.IsWindows() ? root[..1].ToUpperInvariant() : "root";
+        string firstSegment = diskDir[root.Length..].Split(Path.DirectorySeparatorChar)[0];
+        LocalDisk[] disks =
+        [
+            new("V", "V", diskDir, LocalDiskKind.Removable),
+            new(OperatingSystem.IsWindows() ? rootName : "/", rootName, root, OperatingSystem.IsWindows() ? LocalDiskKind.Fixed : LocalDiskKind.Root)
+        ];
+
+        byte[] pin = await LearnPinAsync(target);
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+            ("drive:V", "true"), ("drive:" + disks[1].Id, "true")) with
+        { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+        var loc = new Loc("en");
+        var settings = RdpSettings.From(request, loc, disks);
+        CollectionAssert.AreEqual(new[] { "V", rootName }, settings.Drives.Select(drive => drive.Name).ToArray());
+
+        IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
+        var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
+        try
+        {
+            string content = "", rootListing = "";
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(1000, CancellationToken.None);
+                content = RunInSession(display, "cat ~/thinclient_drives/V/hello.txt 2>&1");
+                rootListing = RunInSession(display, $"ls ~/thinclient_drives/{rootName} 2>/dev/null");
+                if (content.Contains(tag) && rootListing.Contains(firstSegment))
+                {
+                    break;
+                }
+            }
+            Console.WriteLine($"Ticked disk read: '{content.Trim()}' (expected '{tag}')");
+            Console.WriteLine($"Drive root '{root}' listing contains '{firstSegment}': {rootListing.Contains(firstSegment)}");
+            Assert.IsTrue(content.Contains(tag), "The remote session could not read a file on the ticked disk.");
+            Assert.IsTrue(rootListing.Contains(firstSegment), $"The remote session could not list the drive root {root}.");
+        }
+        finally
+        {
+            await session.DisposeAsync();
+            try { Directory.Delete(diskDir, true); } catch { }
+        }
+    }
+
+    [TestMethod]
     public async Task DriveRedirectionServesLocalFiles()
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
