@@ -1,3 +1,5 @@
+using VelaShell.Rdp;
+
 namespace VelaShell.Plugin.Rdp.Tests;
 
 internal sealed class FakeRdpSession : IRdpSession

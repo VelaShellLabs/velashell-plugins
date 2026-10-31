@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using VelaShell.PluginSdk.Testing;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 

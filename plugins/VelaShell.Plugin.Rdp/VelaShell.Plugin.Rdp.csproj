@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- The pure-managed RDP engine, released standalone (MIT). Its DLL rides in this plugin's .vpx. -->
+    <ProjectReference Include="..\..\src\VelaShell.Rdp\VelaShell.Rdp.csproj" />
     <InternalsVisibleTo Include="VelaShell.Plugin.Rdp.Tests" />
   </ItemGroup>
 </Project>

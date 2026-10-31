@@ -1,6 +1,6 @@
 using System.Formats.Asn1;
 using System.Text;
-using VelaShell.Plugin.Rdp.Managed.Security;
+using VelaShell.Rdp.Security;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 

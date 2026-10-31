@@ -1,10 +1,11 @@
 # RDP remote desktop plugin
 
 `velashell.rdp` embeds a remote desktop in an Avalonia workspace using a **pure-managed C#
-RDP client** — no native code, no FreeRDP, no bundled binaries. The protocol stack lives under
-[`Managed/`](Managed/) and implements the subset of MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP /
-MS-RDPEFS this plugin needs. The plugin owns the Avalonia view and input/clipboard integration;
-no external RDP window is launched.
+RDP client** — no native code, no FreeRDP, no bundled binaries. The protocol stack is the
+standalone [`VelaShell.Rdp`](../../src/VelaShell.Rdp) library (MIT), which implements the subset of
+MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS this plugin needs. The plugin
+references that library and owns only the Avalonia view and input/clipboard integration; no
+external RDP window is launched.
 
 Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
 
@@ -18,20 +19,21 @@ toolchain, no CMake, and nothing to compile per platform — far simpler to main
 
 ## Architecture
 
-The managed engine (`Managed/RdpManagedSession`) implements the `IRdpSession` /
-`IRdpClipboardTransport` contracts, so the existing desktop view, input queue, clipboard bridge
-and codec drive it unchanged. Layers:
+The engine — the standalone `VelaShell.Rdp` library — exposes `RdpManagedSession` implementing the
+`IRdpSession` / `IRdpClipboardTransport` contracts, so the plugin's desktop view, input queue,
+clipboard bridge and codec drive it across that boundary. Layers (under `../../src/VelaShell.Rdp/`):
 
-- **Wire** — TPKT/X.224 framing, fast-path frames, ASN.1 PER/BER (`Managed/Wire/`).
+- **Wire** — TPKT/X.224 framing, fast-path frames, ASN.1 PER/BER (`Wire/`).
 - **Security** — `RdpTls` (OS trust / name / validity, or an exact SHA-256 leaf pin) and
-  `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Managed/Security/`).
-- **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Managed/Mcs/`).
-- **PDUs** — client info, licensing, capability exchange, connection finalization (`Managed/Pdu/`).
+  `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Security/`).
+- **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Mcs/`).
+- **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
 - **Graphics** — interleaved-RLE decode and a BGRA framebuffer; fragmented fast-path updates are
-  reassembled (`Managed/Graphics/`).
-- **Input** — fast-path keyboard/mouse/Unicode (`Managed/Input/`).
+  reassembled (`Graphics/`).
+- **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
 - **Channels** — clipboard (cliprdr) and drive redirection (rdpdr) over chunked static virtual
-  channels (`Managed/Channels/`).
+  channels, plus the display-control dynamic channel (drdynvc + MS-RDPEDISP) for dynamic
+  resolution (`Channels/`).
 
 ## Using the plugin
 

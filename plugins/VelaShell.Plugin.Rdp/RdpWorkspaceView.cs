@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using VelaShell.PluginSdk;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 

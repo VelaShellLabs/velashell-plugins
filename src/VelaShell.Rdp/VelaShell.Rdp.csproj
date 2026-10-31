@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    VelaShell.Rdp — 纯托管 .NET RDP(远程桌面协议)客户端库。
+    从 VelaShell.Plugin.Rdp 抽出的协议栈 + 会话 + 契约,UI 无关、零原生依赖,
+    也不依赖 VelaShell.PluginSdk。插件引用本库并提供 Avalonia 界面。
+    不单独出 NuGet 包(随仓库沿用 IsPackable=false),DLL 随插件 .vpx 一起分发。
+  -->
+  <PropertyGroup>
+    <RootNamespace>VelaShell.Rdp</RootNamespace>
+    <AssemblyName>VelaShell.Rdp</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Pure-managed .NET RDP (Remote Desktop Protocol) client: X.224/MCS/GCC, TLS and CredSSP/NLA, interleaved RLE and MPPC decoding, fast-path input, clipboard and drive virtual channels, and window-matching dynamic resolution (MS-RDPEDISP). No native dependencies.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- 公共 API 的 XML 文档尚未补齐,先消掉缺文档告警(CS1591)。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VelaShell.Plugin.Rdp.Tests" />
+  </ItemGroup>
+
+</Project>

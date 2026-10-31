@@ -1,7 +1,7 @@
 using System.Text;
-using VelaShell.Plugin.Rdp.Managed.Channels;
-using VelaShell.Plugin.Rdp.Managed.Pdu;
-using VelaShell.Plugin.Rdp.Managed.Wire;
+using VelaShell.Rdp.Channels;
+using VelaShell.Rdp.Pdu;
+using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
