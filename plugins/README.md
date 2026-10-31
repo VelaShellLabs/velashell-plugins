@@ -12,7 +12,7 @@ SDK 契约与 `VelaShell.PluginSdk.Build` 在
 | --- | --- | --- | --- | --- |
 | [VelaShell.Plugin.DockerPanel](VelaShell.Plugin.DockerPanel/) | `velashell.dockerpanel` | 是 | 进程内 | 远端 Docker 管理面板:容器 / 镜像 / 卷 / 网络 / Compose,含实时统计、日志、容器内文件编辑与内置终端 |
 | [VelaShell.Plugin.Mongo](VelaShell.Plugin.Mongo/) | `velashell.mongo` | 是 | 进程内 | MongoDB 工作台:Navicat 式对象树与工具栏、网格 / 树 / JSON 三视图与暂存区编辑、查询编辑器与可视化执行计划、聚合管道构建器、Schema 分析与验证规则、索引建议、GridFS、服务器监控、慢查询、用户与角色、导入 / 导出 / 数据传输 |
-| [VelaShell.Plugin.Rdp](VelaShell.Plugin.Rdp/) | `velashell.rdp` | 是 | 进程内 | FreeRDP 远程桌面:固定分辨率、键鼠与 Unicode、双向文本/图像/文件剪贴板、显式文件夹映射;含按 OS/架构构建的原生库 |
+| [VelaShell.Plugin.Rdp](VelaShell.Plugin.Rdp/) | `velashell.rdp` | 是 | 进程内 | RDP 远程桌面:纯托管 C# 协议栈(不依赖 FreeRDP、零原生),固定分辨率、键鼠与 Unicode、双向文本/图像/文件剪贴板、显式文件夹映射 |
 | [VelaShell.Plugin.Redis](VelaShell.Plugin.Redis/) | `velashell.redis` | 是 | 进程内 | Redis 客户端:键浏览、类型化查看与编辑、命令执行 |
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
 | [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
@@ -111,11 +111,9 @@ CI 那条泄漏体检原本也只认 `Avalonia*` 与 `VelaShell.PluginSdk.dll`�
 装载起来验证插件系统没问题,但它不会被收进分发布局 —— 给开发者读的范例用这一档。
 (当前七个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
 
-RDP 也使用进程内工作台:FreeRDP GDI 帧由 Avalonia 绘制,不嵌入外部 RDP 客户端窗口。
-它不是纯托管插件;CI/发布先在六个 OS/架构 runner 上构建并测试原生桥接库,
-将 `runtimes/<rid>/native/` 合并进工程后才执行 `Bundle` / `PackVpx`。
-RDP 项目的门禁要求每个目标 RID 的桥接库、FreeRDP/WinPR、FreeRDP 许可与依赖 notices。
-详见 [RDP 构建与使用](VelaShell.Plugin.Rdp/README.md)。
+RDP 也使用进程内工作台,帧由 Avalonia 绘制,不嵌入外部 RDP 客户端窗口。它是纯托管插件:
+协议栈在 `Managed/` 下,不依赖 FreeRDP、零原生,和其他插件一样由 `Bundle` / `PackVpx`
+打成单一 `.vpx`、全 RID 通用,没有原生构建前置。详见 [RDP 设计与使用](VelaShell.Plugin.Rdp/README.md)。
 
 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`
 的插件收成安装包 `plugins/` 那一层的布局:它不再作为 Release 资产上传,只在 CI 与发布流水线里

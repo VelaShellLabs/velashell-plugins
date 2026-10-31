@@ -5,19 +5,19 @@
 
     VelaShell 主程序的安装包里带着 plugins/<目录名>/ 一层 —— 拆库之前那是主仓库 publish 时
     直接 MSBuild 调用各插件工程的 GetVelaPluginPayload 现拼出来的。插件搬到本仓库之后主仓库
-    调不到了。现在发布资产是每插件一份 .vpx,Bundle 仅在 CI/发布中体检安装目录布局。
+    调不到了,于是改成:**本仓库产出一个 plugins 包(zip),主仓库发版时按 pin 的版本下载解开**。
 
     包内布局就是安装包里 plugins/ 底下的样子,一比一:
-      velashell-redis/VelaShell.Plugin.Redis.dll
-      velashell-redis/plugin.json
-      velashell-rdp/runtimes/<rid>/native/...
+      velashell-ai/VelaShell.Plugin.Ai.dll
+      velashell-ai/plugin.json
+      velashell-redis/...
+    因此主仓库那边只是"解压到发布目录的 plugins/",不需要再懂插件的任何事。
 
-    托管程序集不按 RID 分。RDP 必须先合并六个 RID 的原生库与许可证,
-    然后同包交付;RDP 项目在 GetVelaPluginPayload/PackVpx 前校验必需文件。
-    普通托管构建不要求原生库,但不能把这类开发输出直接当成可用 RDP 发行包。
+    插件是纯托管、无 RID 的构建产物(EnableDynamicLoading,按 deps.json 由插件 ALC 解析),
+    所以一个包吃遍五个平台,不必按 RID 分。
 
-    哪个插件进包看它 csproj 的 <VelaPluginShip>。一个都收不到时直接失败,
-    不会悄悄出一个空包。
+    哪个插件进包看它 csproj 的 <VelaPluginShip>(示例插件 velashell.hello-world 设为 false,
+    只作开发范例不进产物)。一个都收不到时直接失败,不会悄悄出一个空包。
 
     用法:
       dotnet build build/PluginBundle.proj -c Release -p:BundleDir=<输出目录>
