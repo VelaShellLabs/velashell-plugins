@@ -135,6 +135,45 @@ public sealed class RdpSettingsTests
     }
 
     [TestMethod]
+    public void CustomFolderFieldShowsConcreteExamplesThatStayVisible()
+    {
+        (string single, string several) = RdpSettings.CustomFolderExamples();
+        foreach (string locale in new[] { "en", "zh-Hans", "zh-Hant", "ja", "ko" })
+        {
+            ProtocolSettingField custom = RdpSettings.Declare(new(locale), []).Single(field => field.Key == "drives");
+            // The hint is always shown under the box; the placeholder disappears once anything is typed.
+            string[] lines = custom.Hint!.Split('\n');
+            Assert.HasCount(3, lines, locale);
+            Assert.Contains(single, lines[1], locale);
+            Assert.Contains(several, lines[1], locale);
+            Assert.Contains(@"\\tsclient\work", lines[2], locale);
+            Assert.AreEqual(several, custom.Placeholder, locale);
+        }
+        // The examples themselves must be accepted by the parser on this OS (paths aside, which must exist).
+        Assert.IsTrue(single.StartsWith("work=", StringComparison.Ordinal) && Path.IsPathFullyQualified(single["work=".Length..]));
+    }
+
+    [TestMethod]
+    public void CustomFolderErrorsNameTheEntryAndShowTheFormat()
+    {
+        var loc = new Loc("zh-Hans");
+        string example = RdpSettings.CustomFolderExamples().Single;
+        var invalid = Assert.ThrowsExactly<ProtocolConnectionException>(
+            () => RdpSettings.From(Request(("drives", "docs=relative")), loc, []));
+        Assert.Contains("「docs=relative」", invalid.Message);
+        Assert.Contains(example, invalid.Message);
+
+        string work = TempDir("work");
+        var duplicate = Assert.ThrowsExactly<ProtocolConnectionException>(
+            () => RdpSettings.From(Request(("drives", $"work={work};WORK={work}")), loc, []));
+        Assert.Contains("「WORK」", duplicate.Message);
+
+        string tooMany = string.Join(';', Enumerable.Range(0, 33).Select(i => $"d{i}={work}"));
+        var limit = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request(("drives", tooMany)), loc, []));
+        Assert.Contains("32", limit.Message);
+    }
+
+    [TestMethod]
     public void UnixDiskLabelsNameRootHomeAndMounts()
     {
         var loc = new Loc("en");
