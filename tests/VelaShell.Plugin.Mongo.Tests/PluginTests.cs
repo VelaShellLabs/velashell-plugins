@@ -110,7 +110,7 @@ public sealed class PluginTests
         Assert.IsFalse(context.FakeUi.LastPanel.IsOpen);
     }
 
-    /// <summary>清单:命令贡献 + 按命令惰性激活,不贡献工作台连接类型;用到 2.0.2 的会话面与 2.0.4 的 PluginIcon,minSdkVersion 钉最高那一档。</summary>
+    /// <summary>清单:命令贡献 + 按命令惰性激活,不贡献工作台连接类型;用到 2.0.1 的会话面与 2.0.4 的 PluginIcon,minSdkVersion 钉最高那一档。</summary>
     [TestMethod]
     public void Manifest_ContributesTheCommandNotAWorkspace()
     {
