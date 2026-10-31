@@ -80,7 +80,10 @@ checks the password from the client info itself. In `auto`, a server that refuse
 credentials are sent — it answers the first CredSSP message (the NTLM NEGOTIATE) with errorCode
 0x80090302 or a TLS abort, i.e. it does not accept incoming NTLM — is retried once with TLS only;
 if that is refused too (`HYBRID_REQUIRED_BY_SERVER`) the error explains the server-side fix. A wrong
-password is never retried. TLS uses OS trust/name/validity verification, or an explicitly approved
+password is never retried. On Windows, NLA authenticates through the OS's native SSPI Negotiate
+package (SPNEGO), exactly like mstsc — a null target yields SPNEGO rather than the bare NTLM that
+hardened, NLA-required servers reject; other platforms fall back to managed NTLM. TLS uses OS
+trust/name/validity verification, or an explicitly approved
 exact SHA-256 leaf-certificate pin that replaces CA/name/expiry checks, identically in every mode.
 Legacy RDP transport security is disabled. SSH tunnelling preserves the original server identity
 for certificate checks. Failures name the stage and cause chain (SChannel/socket codes, negotiated
