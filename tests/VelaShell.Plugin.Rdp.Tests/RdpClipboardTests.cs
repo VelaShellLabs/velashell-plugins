@@ -35,6 +35,10 @@ public sealed class RdpClipboardTests
         IReadOnlyList<RdpClipboardFile> decoded = RdpClipboardCodec.DecodeFiles(data);
         CollectionAssert.AreEqual(files, decoded.ToArray());
         Assert.AreEqual(4 + 592 * 2, data.Length);
+        // Every descriptor asks the consuming Shell for its own copy-progress dialog (FD_SHOWPROGRESSUI),
+        // so a large paste shows Windows' progress instead of a seemingly hung Explorer.
+        Assert.AreEqual(0x4004u, BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(4)));
+        Assert.AreEqual(0x4044u, BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(4 + 592)));
         _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(data[..^1]));
         BinaryPrimitives.WriteUInt32LittleEndian(data, uint.MaxValue);
         _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeFiles(data));
