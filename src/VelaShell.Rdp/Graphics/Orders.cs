@@ -205,7 +205,7 @@ internal sealed class OrderDecoder
         for (int i = 0; i < cellCacheSizes.Length; i++)
         {
             int entries = cellCacheSizes[i];
-            if (entries < 0 || entries >= WaitingListIndex)
+            if (entries is < 0 or >= WaitingListIndex)
             {
                 throw new ArgumentOutOfRangeException(nameof(cellCacheSizes), entries, "A bitmap cache cell holds 0 to 32766 entries.");
             }
@@ -711,9 +711,7 @@ internal sealed class OrderDecoder
             return 0xFF000000u | ((wire & 0xFF) << 16) | (wire & 0xFF00) | ((wire >> 16) & 0xFF);
         }
 
-        Span<byte> source = stackalloc byte[2];
-        source[0] = (byte)wire;
-        source[1] = (byte)(wire >> 8);
+        Span<byte> source = [(byte)wire, (byte)(wire >> 8)];
         Span<byte> pixel = stackalloc byte[4];
         Framebuffer.ConvertRow(_sessionBpp == 8 ? source[..1] : source, pixel, _sessionBpp);
         return BinaryPrimitives.ReadUInt32LittleEndian(pixel);
