@@ -141,7 +141,7 @@ public sealed class SchemaAnalyzerTests
         Assert.AreEqual(AnalyzedViz.Lengths, SchemaAnalyzer.VizOf(items));
         Assert.AreEqual("Array<Object> · 子字段 100% 出现", SchemaAnalyzer.Describe(items, Zh).Text);
         IReadOnlyList<AnalyzedBucket> lengths = SchemaAnalyzer.Lengths(items);
-        CollectionAssert.AreEqual(new[] { "1", "2", "3", "4", "5+" }, lengths.Select(static b => b.Label).ToArray());
+        Assert.AreSequenceEqual(new[] { "1", "2", "3", "4", "5+" }, [.. lengths.Select(static b => b.Label)]);
         Assert.AreEqual(0, lengths[3].Count);
     }
 

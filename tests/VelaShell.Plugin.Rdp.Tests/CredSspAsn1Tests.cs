@@ -20,7 +20,7 @@ public sealed class CredSspAsn1Tests
         (uint version, byte[]? token, byte[]? pub, uint? error) = CredSsp.RoundTripForTest(6, nego, null, null, null);
         Assert.AreEqual(6u, version);
         Assert.IsNotNull(token);
-        CollectionAssert.AreEqual(nego, token);
+        Assert.AreSequenceEqual(nego, token);
         Assert.IsNull(pub);
         Assert.IsNull(error);
     }
@@ -32,9 +32,9 @@ public sealed class CredSspAsn1Tests
         byte[] nonce = new byte[32];
         (uint version, byte[]? token, byte[]? pub, uint? error) = CredSsp.RoundTripForTest(6, [0xAA], null, pubKeyAuth, nonce);
         Assert.AreEqual(6u, version);
-        CollectionAssert.AreEqual(new byte[] { 0xAA }, token);
+        Assert.AreSequenceEqual(new byte[] { 0xAA }, token);
         Assert.IsNotNull(pub);
-        CollectionAssert.AreEqual(pubKeyAuth, pub);
+        Assert.AreSequenceEqual(pubKeyAuth, pub);
         Assert.IsNull(error);
     }
 
@@ -61,17 +61,17 @@ public sealed class CredSspAsn1Tests
     [TestMethod]
     public void BindingHashMatchesSpecMagicAndIsDirectional()
     {
-        byte[] nonce = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        byte[] nonce = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
         byte[] key = [0xDE, 0xAD, 0xBE, 0xEF];
         byte[] clientToServer = CredSsp.BindingHashForTest(true, nonce, key);
         byte[] serverToClient = CredSsp.BindingHashForTest(false, nonce, key);
-        Assert.AreEqual(32, clientToServer.Length);
+        Assert.HasCount(32, clientToServer);
         CollectionAssert.AreNotEqual(clientToServer, serverToClient, "Client/server binding hashes must differ.");
 
         // Recompute the client→server hash independently: SHA256(magic‖nonce‖key), magic incl. trailing NUL.
         byte[] magic = Encoding.ASCII.GetBytes("CredSSP Client-To-Server Binding Hash\0");
         byte[] expected = System.Security.Cryptography.SHA256.HashData([.. magic, .. nonce, .. key]);
-        CollectionAssert.AreEqual(expected, clientToServer);
+        Assert.AreSequenceEqual(expected, clientToServer);
     }
 
     private static byte[] TsRequestWithError(System.Numerics.BigInteger errorCode)

@@ -29,7 +29,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     private int _disposed;
 
     internal RdpWorkspaceDocument(IRdpSession session, WorkspaceConnectRequest request, RdpSettings settings,
-        IPluginContext context, Loc loc, RdpSessionFactory factory, CancellationToken lifetime, Action<RdpWorkspaceDocument> closed)
+        IPluginContext context, Loc loc, RdpSessionFactory factory, Action<RdpWorkspaceDocument> closed, CancellationToken lifetime)
     {
         _session = session;
         _request = request;

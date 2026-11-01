@@ -145,7 +145,7 @@ public sealed class CollectionTests
         after["invoice"] = new BsonDocument("title", "上海云帆");
 
         List<(string Path, BsonValue? Value)> diff = DocumentDiff.Compute(before, after);
-        CollectionAssert.AreEquivalent(new[] { "customer.name", "items", "status", "invoice" }, diff.Select(static d => d.Path).ToArray());
+        Assert.AreSequenceEqual(new[] { "customer.name", "items", "status", "invoice" }, [.. diff.Select(static d => d.Path)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.IsNull(diff.Single(static d => d.Path == "status").Value, "a removed field becomes $unset");
     }
 
@@ -158,15 +158,15 @@ public sealed class CollectionTests
         string[] lines = printed.Text.Split('\n');
 
         int customer = printed.LineOf("customer");
-        StringAssert.Contains(lines[customer - 1], "customer: { name: \"张伟\", level: \"SVIP\" }");
+        Assert.Contains("customer: { name: \"张伟\", level: \"SVIP\" }", lines[customer - 1]);
         Assert.AreEqual(customer, printed.LineOf("customer.name"), "a field printed inline maps to its container's line");
-        StringAssert.Contains(lines[printed.LineOf("status") - 1], "status: \"paid\"");
+        Assert.Contains("status: \"paid\"", lines[printed.LineOf("status") - 1]);
 
         PrintedCard relaxed = CardPrinter.Print(Order(), EjsonMode.Relaxed);
-        StringAssert.Contains(relaxed.Text, "\"status\": \"paid\"");
+        Assert.Contains("\"status\": \"paid\"", relaxed.Text);
 
         PrintedCard preview = CardPrinter.Print(Order(), EjsonMode.Shell, static n => $"…{n} 项");
-        StringAssert.Contains(preview.Text, "items: [ …1 项 ]", "the read-only preview folds arrays of documents");
+        Assert.Contains("items: [ …1 项 ]", preview.Text, "the read-only preview folds arrays of documents");
         Assert.AreEqual(preview.LineOf("items"), preview.LineOf("items.0.qty"), "a change inside a folded array marks the array line");
     }
 
@@ -346,7 +346,7 @@ public sealed class CollectionTests
             await using Workbench bench = await Screens.OpenWorkbenchAsync(database);
             CollectionTabViewModel tab = await OpenTabAsync(bench, database, "orders");
             Assert.HasCount(3, tab.Rows);
-            CollectionAssert.AreEqual(new[] { "_id", "status", "customer", "qty" }, tab.Columns.Select(static c => c.Name).ToArray());
+            Assert.AreSequenceEqual(new[] { "_id", "status", "customer", "qty" }, [.. tab.Columns.Select(static c => c.Name)]);
 
             CollectionRow row = tab.Rows[0];
             CollectionCell status = row.CellOf(tab.Columns.Single(static c => c.Name == "status"))!;
@@ -356,8 +356,8 @@ public sealed class CollectionTests
             Assert.IsTrue(tab.CommitCellEdit(status));
             Assert.IsTrue(tab.IsModified, "the tab shows the orange dot while something is staged");
             Assert.AreEqual(CollectionRowState.Modified, tab.Rows[0].State);
-            StringAssert.Contains(tab.PendingText, "1");
-            StringAssert.Contains(tab.StatusText, "1 项待提交");
+            Assert.Contains("1", tab.PendingText);
+            Assert.Contains("1 项待提交", tab.StatusText);
 
             CollectionCell qty = tab.Rows[1].CellOf(tab.Columns.Single(static c => c.Name == "qty"))!;
             tab.BeginCellEdit(qty);
@@ -613,7 +613,7 @@ public sealed class CollectionTests
         tab.Inspector.Page = 1;
         await Screens.PumpAsync(20);
         _ = Screens.Capture(bench.Window, "01-collection-inspector-json");
-        StringAssert.Contains(tab.Inspector.JsonText, "SO2609-10403");
+        Assert.Contains("SO2609-10403", tab.Inspector.JsonText);
         tab.Inspector.Page = 2;
         for (int i = 0; i < 60 && tab.Stats is null; i++)
         {

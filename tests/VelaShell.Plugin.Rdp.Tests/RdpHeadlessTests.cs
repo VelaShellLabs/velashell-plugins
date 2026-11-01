@@ -40,8 +40,7 @@ public sealed class RdpHeadlessTests
         Assert.AreEqual(36d, view.RowDefinitions[0].ActualHeight);
         Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
         var toolbar = (StackPanel)((Border)view.Children[0]).Child!;
-        CollectionAssert.AreEqual(new[] { "Ctrl+Alt+Delete" },
-            toolbar.Children.OfType<Button>().Select(button => (string)button.Content!).ToArray());
+        Assert.AreSequenceEqual(new[] { "Ctrl+Alt+Delete" }, [.. toolbar.Children.OfType<Button>().Select(button => (string)button.Content!)]);
         view.ApplyLocale(new("ja"));
         Assert.IsTrue(session.IsConnected);
         session.Emit(new(2, 1, [0, 0, 0, 255, 255, 255, 255, 255]));
@@ -98,10 +97,10 @@ public sealed class RdpHeadlessTests
                 var bar = controls.OfType<ProgressBar>().Single(control => control.Name == name + "Bar");
                 var cancel = controls.OfType<Button>().Single(control => control.Name == "Cancel" + name);
                 var slot = (Control)cancel.Parent!;
-                Assert.IsTrue(bar.Bounds.Right <= cancel.Bounds.Left, $"Overlap at width {width}: {name} bar {bar.Bounds} cancel {cancel.Bounds} visible {cancel.IsVisible}");
-                Assert.IsTrue(cancel.Bounds.Right <= slot.Bounds.Width, $"Cancel clipped at width {width}");
+                Assert.IsLessThanOrEqualTo(cancel.Bounds.Left, bar.Bounds.Right, $"Overlap at width {width}: {name} bar {bar.Bounds} cancel {cancel.Bounds} visible {cancel.IsVisible}");
+                Assert.IsLessThanOrEqualTo(slot.Bounds.Width, cancel.Bounds.Right, $"Cancel clipped at width {width}");
                 // Both transfers stay inside the status bar, side by side, even when it is narrow.
-                Assert.IsTrue(slot.TranslatePoint(new Point(slot.Bounds.Width, 0), footer)!.Value.X <= footer.Bounds.Width, $"Slot past the edge at width {width}");
+                Assert.IsLessThanOrEqualTo(footer.Bounds.Width, slot.TranslatePoint(new Point(slot.Bounds.Width, 0), footer)!.Value.X, $"Slot past the edge at width {width}");
                 // Host-sized ×: a 16px button around a 10px glyph, not a chrome box around a 14px+ icon.
                 Assert.AreEqual(16d, cancel.Bounds.Width);
                 Assert.AreEqual(10d, ((Control)cancel.Content!).Bounds.Width);
@@ -172,7 +171,7 @@ public sealed class RdpHeadlessTests
         var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         desktop.Queue(() => { drained.SetResult(); return Task.CompletedTask; });
         await drained.Task;
-        CollectionAssert.AreEqual(new (uint, bool)[] { (0x2f, true), (0x2f, false) }, session.Keys);
+        Assert.AreSequenceEqual(new (uint, bool)[] { (0x2f, true), (0x2f, false) }, session.Keys);
         desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.LeftCtrl, PhysicalKey = PhysicalKey.ControlLeft });
         desktop.ReleaseInput();
         await desktop.DisposeAsync();
@@ -194,7 +193,7 @@ public sealed class RdpHeadlessTests
         var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         desktop.Queue(() => { drained.SetResult(); return Task.CompletedTask; });
         await drained.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        CollectionAssert.AreEqual(new (uint, bool)[] { (0x2f, true), (0x2f, false) }, session.Keys);
+        Assert.AreSequenceEqual(new (uint, bool)[] { (0x2f, true), (0x2f, false) }, session.Keys);
     });
 
     [TestMethod]
@@ -222,7 +221,7 @@ public sealed class RdpHeadlessTests
         Assert.IsGreaterThanOrEqualTo(0, down);
         Assert.IsGreaterThan(down, up);
         Assert.AreEqual((0x9000u, 20u, 20u), session.Mouse[down]);
-        Assert.IsTrue(session.Mouse.Skip(down + 1).Take(up - down - 1).Any(mouse => mouse == (0x0800u, 30u, 30u)));
+        Assert.Contains(mouse => mouse == (0x0800u, 30u, 30u), session.Mouse.Skip(down + 1).Take(up - down - 1));
         window.Close();
     });
 

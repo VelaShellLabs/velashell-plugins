@@ -74,8 +74,8 @@ public sealed class BsonTests
     public void Pretty_RelaxedAndCanonicalComeFromTheDriver()
     {
         var doc = new BsonDocument("n", 5);
-        StringAssert.Contains(BsonText.Pretty(doc, EjsonMode.Relaxed), "\"n\" : 5");
-        StringAssert.Contains(BsonText.Pretty(doc, EjsonMode.Canonical), "$numberInt");
+        Assert.Contains("\"n\" : 5", BsonText.Pretty(doc, EjsonMode.Relaxed));
+        Assert.Contains("$numberInt", BsonText.Pretty(doc, EjsonMode.Canonical));
     }
 
     [TestMethod]

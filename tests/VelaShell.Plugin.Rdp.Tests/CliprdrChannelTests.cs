@@ -22,7 +22,7 @@ public sealed class CliprdrChannelTests
         uint flags = BinaryPrimitives.ReadUInt32LittleEndian(sent[0].AsSpan(20));
         Assert.AreEqual(0x10u, flags & 0x10, "Versioned file requests require negotiated clipboard locks.");
         Assert.AreNotEqual(0u, flags & 0x20, "Huge-file support uses bit 0x20.");
-        CollectionAssert.AreEqual(Packet(2), sent[1]);
+        Assert.AreSequenceEqual(Packet(2), sent[1]);
     }
 
     [TestMethod]
@@ -36,14 +36,14 @@ public sealed class CliprdrChannelTests
         await channel.ProcessAsync(Capabilities(0x16));
         Assert.IsTrue(channel.SupportsClipboardLock);
         await channel.LockClipboardAsync(42, true, default);
-        CollectionAssert.AreEqual(Packet(10, 0, BitConverter.GetBytes(42u)), sent[0]);
+        Assert.AreSequenceEqual(Packet(10, 0, BitConverter.GetBytes(42u)), sent[0]);
         await channel.ProcessAsync(sent[0]);
         Assert.AreEqual(11u, received[0].Kind);
         Assert.AreEqual(42u, received[0].A);
         await channel.RequestFileAsync(7, 2, 2, 11, 8, 42);
         Assert.AreEqual(28u, BinaryPrimitives.ReadUInt32LittleEndian(sent[1].AsSpan(4)));
         await channel.ProcessAsync(sent[1]);
-        Assert.AreEqual(20, received[1].Data.Length);
+        Assert.HasCount(20, received[1].Data);
         Assert.AreEqual(42u, BinaryPrimitives.ReadUInt32LittleEndian(received[1].Data.AsSpan(16)));
         await channel.LockClipboardAsync(42, false, default);
         await channel.ProcessAsync(sent[2]);
@@ -80,7 +80,7 @@ public sealed class CliprdrChannelTests
         Assert.AreEqual(17u, result!.A);
         Assert.AreEqual(flags, result.ResponseFlags);
         Assert.AreEqual(success ? 1u : 0u, result.B);
-        Assert.AreEqual(success ? 1 : 0, result.Data.Length);
+        Assert.HasCount(success ? 1 : 0, result.Data);
     }
 
     [TestMethod]
@@ -128,7 +128,7 @@ public sealed class CliprdrChannelTests
         var channel = new CliprdrChannel(pdu => { sent.Add(pdu); return Task.CompletedTask; }, _ => { });
         Task offer = channel.OfferFormatsAsync("13\t\n49170\tPNG\n49160\tFileGroupDescriptorW\n49161\tFileContents\n");
         byte[] body = sent.Single()[8..];
-        Assert.AreEqual(72, body.Length);
+        Assert.HasCount(72, body);
         Assert.AreEqual(49170u, BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(36)));
         Assert.AreEqual((ushort)4, BinaryPrimitives.ReadUInt16LittleEndian(sent[0].AsSpan(2)));
         Assert.AreEqual("PNG", Encoding.ASCII.GetString(body, 40, 32).TrimEnd('\0'));
@@ -210,7 +210,7 @@ public sealed class CliprdrChannelTests
         wire.Release.SetResult();
         await Task.WhenAll(first, second, input).WaitAsync(TimeSpan.FromSeconds(3));
         Assert.AreNotEqual((byte)3, wire.Frames[1][0], "Keyboard input must precede the second clipboard fragment.");
-        byte[][] clipboard = wire.Frames.Where(frame => frame[0] == 3).ToArray();
+        byte[][] clipboard = [.. wire.Frames.Where(frame => frame[0] == 3)];
         for (int index = 0; index < clipboard.Length; index++)
         {
             using var source = new MemoryStream(clipboard[index]);
@@ -236,7 +236,7 @@ public sealed class CliprdrChannelTests
         Deliver(connection, 8, 3, Packet(3, 1));
         Deliver(connection, 8, 3, Packet(3, 1));
         var failure = await failed.Task.WaitAsync(TimeSpan.FromSeconds(1));
-        StringAssert.Contains(Encoding.UTF8.GetString(failure.Data), "queue capacity");
+        Assert.Contains("queue capacity", Encoding.UTF8.GetString(failure.Data));
         RdpClipboardEvent? replayed = null;
         session.ClipboardEvent += value => replayed = value;
         Assert.AreEqual(10u, replayed!.Kind);
@@ -284,7 +284,7 @@ public sealed class CliprdrChannelTests
         await channel.ProcessAsync(sent[^1]);
         Assert.AreEqual(7u, events[^1].Kind);
         Assert.AreEqual(17u, events[^1].A);
-        CollectionAssert.AreEqual(new byte[] { 0xFF, 0x80, 42 }, events[^1].Data);
+        Assert.AreSequenceEqual(new byte[] { 0xFF, 0x80, 42 }, events[^1].Data);
     }
 
     [TestMethod]
@@ -304,7 +304,7 @@ public sealed class CliprdrChannelTests
         Assert.IsNotNull(processing);
         await processing;
         Assert.AreEqual(49160u, events.Single().B);
-        CollectionAssert.AreEqual(descriptors, events[0].Data);
+        Assert.AreSequenceEqual(descriptors, events[0].Data);
         Assert.AreEqual("目录\\文件.bin", RdpClipboardCodec.DecodeFiles(events[0].Data).Single().Name);
     }
 
@@ -314,7 +314,7 @@ public sealed class CliprdrChannelTests
             ? Convert.ToString(value, 2).PadLeft(8, '0')
             : "10" + Convert.ToString(value - 128, 2).PadLeft(7, '0')));
         bits = bits.PadRight((bits.Length + 7) / 8 * 8, '0');
-        return Enumerable.Range(0, bits.Length / 8).Select(index => Convert.ToByte(bits.Substring(index * 8, 8), 2)).ToArray();
+        return [.. Enumerable.Range(0, bits.Length / 8).Select(index => Convert.ToByte(bits.Substring(index * 8, 8), 2))];
     }
 
     private static RdpConnection CreateConnection() => new(new RdpConnectOptions(

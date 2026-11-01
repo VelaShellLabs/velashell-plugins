@@ -154,7 +154,7 @@ public sealed class RdpSettingsTests
         string c = TempDir("c"), work = TempDir("work");
         LocalDisk[] disks = [new("C", "C", c, LocalDiskKind.Fixed)];
         var settings = RdpSettings.From(Request(("drive:C", "true"), ("drives", $"work={work}")), new("en"), disks);
-        CollectionAssert.AreEqual(new[] { "C", "work" }, settings.Drives.Select(drive => drive.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "C", "work" }, [.. settings.Drives.Select(drive => drive.Name)]);
         _ = Assert.ThrowsExactly<ProtocolConnectionException>(() =>
             RdpSettings.From(Request(("drive:C", "true"), ("drives", $"c={work}")), new("en"), disks));
     }

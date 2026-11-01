@@ -76,7 +76,7 @@ public sealed class RdpNlaInteropTests
     {
         if (NlaTarget() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_NLA_TARGET not set."); return; }
         byte[] pin = await LearnPinAsync(target);
-        Assert.AreEqual(32, pin.Length, "Could not learn the server's leaf certificate.");
+        Assert.HasCount(32, pin, "Could not learn the server's leaf certificate.");
         WorkspaceConnectRequest request = Request(target, pin, RdpManagedInteropTests.Pass);
         var loc = new Loc("en");
         RdpSettings settings = RdpSettings.From(request, loc);

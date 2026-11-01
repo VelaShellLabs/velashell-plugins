@@ -82,7 +82,7 @@ public sealed class GridDrillTests
         Assert.IsTrue(bench.ViewModel.ShowSystemDatabases);
         Assert.IsTrue(Lists(bench, "admin"));
         Assert.Contains("admin", bench.Session.Databases);
-        StringAssert.Contains(bench.ViewModel.SystemDatabasesTip, "隐藏");
+        Assert.Contains("隐藏", bench.ViewModel.SystemDatabasesTip);
 
         bench.ViewModel.ToggleSystemDatabasesCommand.Execute(null);
         await Screens.PumpAsync(5);
@@ -175,10 +175,10 @@ public sealed class GridDrillTests
             Assert.IsTrue(tab.DrillInto(items));
             await Screens.PumpAsync(5);
             Assert.IsTrue(tab.IsDrilled);
-            CollectionAssert.AreEqual(new[] { "sku", "qty", "attrs", "note" }, tab.GridColumns.Select(static c => c.Name).ToArray());
+            Assert.AreSequenceEqual(new[] { "sku", "qty", "attrs", "note" }, [.. tab.GridColumns.Select(static c => c.Name)]);
             Assert.HasCount(2, tab.GridRows);
-            CollectionAssert.AreEqual(new[] { "0", "1" }, tab.GridRows.Select(static r => r.NumberText).ToArray(), "rows are numbered by array index");
-            CollectionAssert.AreEqual(new[] { "文档 #1", "items" }, tab.DrillCrumbs.Select(static c => c.Label).ToArray());
+            Assert.AreSequenceEqual(new[] { "0", "1" }, [.. tab.GridRows.Select(static r => r.NumberText)], "rows are numbered by array index");
+            Assert.AreSequenceEqual(new[] { "文档 #1", "items" }, [.. tab.DrillCrumbs.Select(static c => c.Label)]);
             Assert.AreEqual("数组 · 2 项", tab.DrillSummary);
             Assert.AreSame(first, tab.SelectedRow, "the inspector keeps describing the document");
             Assert.AreEqual(2, GridOf(bench).List.ItemCount, "the grid shows the elements, not the documents");
@@ -240,7 +240,7 @@ public sealed class GridDrillTests
             Assert.IsTrue(tab.DrillInto(Cell(first, tab.Columns, "customer")));
             Assert.HasCount(1, tab.GridRows);
             Assert.AreEqual("", tab.GridRows[0].NumberText);
-            CollectionAssert.AreEqual(new[] { "name", "level" }, tab.GridColumns.Select(static c => c.Name).ToArray());
+            Assert.AreSequenceEqual(new[] { "name", "level" }, [.. tab.GridColumns.Select(static c => c.Name)]);
             Assert.AreEqual("customer.level", Cell(tab.GridRows[0], tab.GridColumns, "level").Path);
             Assert.AreEqual("对象 · 2 个字段", tab.DrillSummary);
             tab.ExitDrill();
@@ -280,7 +280,7 @@ public sealed class GridDrillTests
             Assert.IsTrue(tab.DrillInto(Cell(first, tab.Columns, "items")));
             Assert.IsTrue(tab.DrillInto(Cell(tab.GridRows[0], tab.GridColumns, "attrs")));
             Assert.AreEqual("items.0.attrs", tab.Drill!.Path);
-            CollectionAssert.AreEqual(new[] { "文档 #1", "items", "[0]", "attrs" }, tab.DrillCrumbs.Select(static c => c.Label).ToArray());
+            Assert.AreSequenceEqual(new[] { "文档 #1", "items", "[0]", "attrs" }, [.. tab.DrillCrumbs.Select(static c => c.Label)]);
             Assert.IsTrue(tab.DrillCrumbs[^1].IsLast);
 
             tab.DrillBack();
@@ -390,12 +390,12 @@ public sealed class GridDrillTests
         window.Show();
         await Screens.PumpAsync(5);
 
-        CollectionAssert.AreEqual(new[] { "_id", "items" }, grid.ColumnNames.ToArray());
+        Assert.AreSequenceEqual(new[] { "_id", "items" }, [.. grid.ColumnNames]);
         Assert.IsFalse(grid.DrillInto(0, 0), "an Int32 is not a container");
         Assert.IsTrue(grid.DrillInto(0, 1));
         Assert.AreEqual(1, grid.Depth);
         Assert.AreEqual("items", grid.CurrentPath);
-        CollectionAssert.AreEqual(new[] { "值", "sku", "qty" }, grid.ColumnNames.ToArray(), "a mixed array gets a value column for its scalars");
+        Assert.AreSequenceEqual(new[] { "值", "sku", "qty" }, [.. grid.ColumnNames], "a mixed array gets a value column for its scalars");
 
         double before = grid.WidthOf(1);
         grid.AutoFit(1);

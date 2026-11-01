@@ -76,7 +76,7 @@ public sealed class RdpSecurityTests
         // The fake ends the second connection after TLS; reaching MCS proves the retry offered TLS only and used it.
         var later = Assert.IsInstanceOfType<RdpConnectionException>(failure);
         Assert.AreEqual(RdpConnectStage.Mcs, later.Stage);
-        CollectionAssert.AreEqual(new uint[] { 3, 1 }, server.RequestedProtocols.ToArray());
+        Assert.AreSequenceEqual(new uint[] { 3, 1 }, [.. server.RequestedProtocols]);
     }
 
     [TestMethod]
@@ -89,7 +89,7 @@ public sealed class RdpSecurityTests
         var refused = Assert.IsInstanceOfType<RdpNlaRefusedException>(failure);
         Assert.IsTrue(refused.ServerRequiresNla);
         Assert.AreEqual(NtlmRefused, refused.Status);
-        CollectionAssert.AreEqual(new uint[] { 3, 1 }, server.RequestedProtocols.ToArray());
+        Assert.AreSequenceEqual(new uint[] { 3, 1 }, [.. server.RequestedProtocols]);
 
         // A server policy, not a credentials problem: shown as a connection error with the server-side fix.
         Exception shown = RdpConnector.Translate(refused, new Loc("zh-Hans"));
@@ -120,7 +120,7 @@ public sealed class RdpSecurityTests
         Assert.IsNotNull(refused.TlsTrace);
         Assert.EndsWith("server sent: Alert fatal internal_error(80)", refused.TlsTrace);
         Assert.Contains(refused.TlsTrace, refused.Message);
-        CollectionAssert.AreEqual(new uint[] { 3 }, server.RequestedProtocols.ToArray());
+        Assert.AreSequenceEqual(new uint[] { 3 }, [.. server.RequestedProtocols]);
         Assert.Contains("Set the security layer to Auto or TLS only", RdpConnector.Translate(refused, new Loc("en")).Message);
     }
 
@@ -145,7 +145,7 @@ public sealed class RdpSecurityTests
 
         var failed = Assert.IsInstanceOfType<RdpConnectionException>(failure);
         Assert.AreEqual(RdpNegotiationFailure.HybridRequiredByServer, failed.NegotiationFailure);
-        CollectionAssert.AreEqual(new uint[] { 1 }, server.RequestedProtocols.ToArray());
+        Assert.AreSequenceEqual(new uint[] { 1 }, [.. server.RequestedProtocols]);
         var loc = new Loc("en");
         Assert.AreEqual(loc["NegotiationNlaRequired"], RdpConnector.Translate(failed, loc).Message);
     }
@@ -174,6 +174,6 @@ public sealed class RdpSecurityTests
         Assert.AreEqual(ProtocolSettingKind.Choice, field.Kind);
         Assert.AreEqual("auto", field.DefaultValue);
         Assert.IsTrue(field.IsAdvanced);
-        CollectionAssert.AreEqual(new[] { "auto", "nla", "tls" }, field.Choices!.Select(c => c.Value).ToArray());
+        Assert.AreSequenceEqual(new[] { "auto", "nla", "tls" }, [.. field.Choices!.Select(c => c.Value)]);
     }
 }

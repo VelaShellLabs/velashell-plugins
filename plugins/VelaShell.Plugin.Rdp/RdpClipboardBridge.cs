@@ -264,8 +264,8 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 IStorageItem[]? items = await clipboard.TryGetFilesAsync();
                 if (items is { Length: > 0 })
                 {
-                    paths = items.Select(item => item.TryGetLocalPath()
-                        ?? throw new InvalidDataException("Only local clipboard files can be shared through RDP.")).ToArray();
+                    paths = [.. items.Select(item => item.TryGetLocalPath()
+                        ?? throw new InvalidDataException("Only local clipboard files can be shared through RDP."))];
                     return (Data: data, Paths: paths);
                 }
                 string? text = await clipboard.TryGetTextAsync();
@@ -609,7 +609,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 _remoteFiles = source;
                 _download = progress;
                 progress.Start(files.Sum(f => f.Length), "Ready");
-                publication = _virtualClipboard.PublishAsync(source, ct, localSequence);
+                publication = _virtualClipboard.PublishAsync(source, localSequence, ct);
             }
             await publication.ConfigureAwait(false);
             _receivedFileGeneration = generation;
@@ -963,7 +963,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         IStorageItem[]? files = await clipboard.TryGetFilesAsync();
         if (files is { Length: > 0 })
         {
-            return Fingerprint([], files.Select(f => f.TryGetLocalPath() ?? "").ToArray());
+            return Fingerprint([], [.. files.Select(f => f.TryGetLocalPath() ?? "")]);
         }
 
         Dictionary<uint, byte[]> data = [];
@@ -1046,7 +1046,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             _uploadCancellation = null;
         }
         if (_virtualClipboard is not null) { await _virtualClipboard.DisposeAsync().ConfigureAwait(false); }
-        await Task.WhenAll(_unlocks.ToArray()).ConfigureAwait(false);
+        await Task.WhenAll([.. _unlocks]).ConfigureAwait(false);
         _stop.Dispose();
     }
 }

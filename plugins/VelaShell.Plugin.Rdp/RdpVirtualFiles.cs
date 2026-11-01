@@ -3,7 +3,7 @@ namespace VelaShell.Plugin.Rdp;
 internal interface IRdpVirtualFileClipboard : IAsyncDisposable
 {
     bool IsCurrent { get; }
-    Task PublishAsync(RdpVirtualFiles files, CancellationToken ct, uint? expectedSequence = null);
+    Task PublishAsync(RdpVirtualFiles files, uint? expectedSequence, CancellationToken ct);
 }
 
 // No destination path belongs here: the shell which requests the streams owns destination I/O.

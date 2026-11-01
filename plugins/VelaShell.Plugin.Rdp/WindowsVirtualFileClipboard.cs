@@ -28,9 +28,9 @@ internal sealed class WindowsVirtualFileClipboard : IRdpVirtualFileClipboard
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
     }
-    public async Task PublishAsync(RdpVirtualFiles files, CancellationToken ct, uint? expectedSequence = null)
+    public async Task PublishAsync(RdpVirtualFiles files, uint? expectedSequence, CancellationToken ct)
     {
-        await RetryClipboardAsync(() => PublishOnceAsync(files, ct, expectedSequence), ct).ConfigureAwait(false);
+        await RetryClipboardAsync(() => PublishOnceAsync(files, expectedSequence, ct), ct).ConfigureAwait(false);
     }
     internal static async Task RetryClipboardAsync(Func<Task> action, CancellationToken ct)
     {
@@ -42,7 +42,7 @@ internal sealed class WindowsVirtualFileClipboard : IRdpVirtualFileClipboard
             { await Task.Delay(25 * (attempt + 1), ct).ConfigureAwait(false); }
         }
     }
-    private async Task PublishOnceAsync(RdpVirtualFiles files, CancellationToken ct, uint? expectedSequence)
+    private async Task PublishOnceAsync(RdpVirtualFiles files, uint? expectedSequence, CancellationToken ct)
     {
         await _initialized.Task.WaitAsync(ct).ConfigureAwait(false);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

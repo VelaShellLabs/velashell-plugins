@@ -107,7 +107,7 @@ public sealed class ImportTests
     public void Rules_come_from_the_json_schema_validator()
     {
         var rules = ImportRules.FromValidator(Validator, "error");
-        CollectionAssert.AreEqual(new[] { "orderNo" }, rules.Required.ToArray());
+        Assert.AreSequenceEqual(new[] { "orderNo" }, [.. rules.Required]);
         Assert.IsTrue(rules.Enums.ContainsKey("status"));
         Assert.IsTrue(rules.Enums.ContainsKey("customer.level"), "nested enums are found by path");
         Assert.AreEqual(BsonKind.Decimal128, SchemaSampler.KindFromSchema(rules.Properties["total"]));
@@ -187,9 +187,9 @@ public sealed class ImportTests
             Assert.AreEqual(';', source.Delimiter);
             using (IImportReader reader = source.Open())
             {
-                CollectionAssert.AreEqual(new[] { "名称", "等级" }, reader.Header.ToArray());
+                Assert.AreSequenceEqual(new[] { "名称", "等级" }, [.. reader.Header]);
                 Assert.IsTrue(reader.TryRead(out ImportRecord record));
-                CollectionAssert.AreEqual(new[] { "陈立", "普通" }, record.Cells);
+                Assert.AreSequenceEqual(new[] { "陈立", "普通" }, record.Cells);
                 Assert.AreEqual(2, record.Line);
             }
             Assert.AreEqual(1, source.CountRecords(CancellationToken.None));
@@ -228,11 +228,11 @@ public sealed class ImportTests
             docs.Add(BsonDocument.Parse(json));
             lines.Add(line);
         }
-        CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, docs.Select(static d => d["a"].AsInt32).ToArray());
+        Assert.AreSequenceEqual(new[] { 1, 2, 3, 4 }, [.. docs.Select(static d => d["a"].AsInt32)]);
         Assert.AreEqual("brace } inside", docs[0]["s"].AsString);
         Assert.AreEqual("escaped \" quote {", docs[1]["s"].AsString);
         Assert.AreEqual(ObjectId.Parse("66f5c2a1b04e1c3a5d7e9f01"), docs[3]["id"].AsObjectId);
-        CollectionAssert.AreEqual(new long[] { 2, 3, 5, 6 }, lines);
+        Assert.AreSequenceEqual(new long[] { 2, 3, 5, 6 }, lines);
         Assert.IsFalse(new JsonDocumentScanner(new StringReader("[]")).Skip());
     }
 
@@ -368,7 +368,7 @@ public sealed class ImportTests
             await ExportTests.WaitAsync(() => vm.Mappings.Count == 5 && !vm.Counting);
             Assert.AreEqual(BsonKind.Decimal128, (BsonKind)vm.Mappings.Single(static m => m.Source == "total").Kind.Value, "type comes from the validator");
             Assert.AreEqual(BsonKind.Date, (BsonKind)vm.Mappings.Single(static m => m.Source == "createdAt").Kind.Value);
-            StringAssert.Contains(vm.FileInfo, "1,500");
+            Assert.Contains("1,500", vm.FileInfo);
             vm.NextCommand.Execute(null);
             await ExportTests.WaitAsync(() => vm.IsStep1);
             vm.NextCommand.Execute(null);

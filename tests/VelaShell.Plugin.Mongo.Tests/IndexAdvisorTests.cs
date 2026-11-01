@@ -49,8 +49,8 @@ public sealed class IndexAdvisorTests
         EsrShape shape = EsrShape.From(
             BsonDocument.Parse("{ total: { $gte: 100 }, status: 'paid', 'customer.level': { $in: ['VIP', 'SVIP'] } }"),
             BsonDocument.Parse("{ createdAt: -1 }"))!;
-        CollectionAssert.AreEqual(new[] { "status", "customer.level" }, shape.Equality.ToArray());
-        CollectionAssert.AreEqual(new[] { "total" }, shape.Range.ToArray());
+        Assert.AreSequenceEqual(new[] { "status", "customer.level" }, [.. shape.Equality]);
+        Assert.AreSequenceEqual(new[] { "total" }, [.. shape.Range]);
         Assert.AreEqual(BsonDocument.Parse("{ status: 1, 'customer.level': 1, createdAt: -1, total: 1 }"), shape.EsrKey());
         Assert.AreEqual("E", shape.RoleOf("status"));
         Assert.AreEqual("S", shape.RoleOf("createdAt"));

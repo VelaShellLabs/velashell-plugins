@@ -61,7 +61,7 @@ public sealed class S3ChecksumTests
 
     /// <summary>没有一次 GET 打到这个桶里的对象上 —— 摘要是 HEAD 取回来的,不是下载下来算的。</summary>
     private void AssertNoObjectWasDownloaded() =>
-        Assert.IsFalse(_server.Requests.Any(r => r.StartsWith($"GET /{Bucket}/", StringComparison.Ordinal)),
+        Assert.DoesNotContain(r => r.StartsWith($"GET /{Bucket}/", StringComparison.Ordinal), _server.Requests,
             "为了凑摘要把对象读了回来:" + string.Join(" | ", _server.Requests));
 
     [TestMethod]

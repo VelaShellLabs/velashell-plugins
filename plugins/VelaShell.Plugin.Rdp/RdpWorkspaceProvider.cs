@@ -86,7 +86,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             {
                 if (!_disposed && !linked.IsCancellationRequested)
                 {
-                    document = new(session, request, settings, _context, _loc, _factory, _shutdown.Token, Closed);
+                    document = new(session, request, settings, _context, _loc, _factory, Closed, _shutdown.Token);
                     _ = _documents.Add(document);
                 }
             }

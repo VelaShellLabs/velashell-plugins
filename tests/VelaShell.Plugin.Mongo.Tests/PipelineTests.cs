@@ -47,8 +47,8 @@ public sealed class PipelineTests
         PipelineParse parse = PipelineText.Parse(DesignPipeline);
 
         Assert.IsTrue(parse.Ok, parse.ErrorKey ?? "");
-        CollectionAssert.AreEqual(new[] { "$match", "$unwind", "$group", "$sort", "$limit", "$lookup" }, parse.Stages.Select(s => s.Operator).ToArray());
-        CollectionAssert.AreEqual(new[] { true, true, true, true, true, false }, parse.Stages.Select(s => s.Enabled).ToArray());
+        Assert.AreSequenceEqual(new[] { "$match", "$unwind", "$group", "$sort", "$limit", "$lookup" }, [.. parse.Stages.Select(s => s.Operator)]);
+        Assert.AreSequenceEqual(new[] { true, true, true, true, true, false }, [.. parse.Stages.Select(s => s.Enabled)]);
         Assert.AreEqual("{\n  status: \"paid\",\n  createdAt: { $gte: ISODate(\"2026-08-27\") }\n}", parse.Stages[0].Body);
         Assert.AreEqual("{ path: \"$items\" }", parse.Stages[1].Body);
         Assert.AreEqual("10", parse.Stages[4].Body);
@@ -70,7 +70,7 @@ public sealed class PipelineTests
         PipelineParse back = PipelineText.Parse(text);
 
         Assert.IsTrue(back.Ok, back.ErrorKey ?? "");
-        CollectionAssert.AreEqual(stages, back.Stages.ToArray());
+        Assert.AreSequenceEqual(stages, [.. back.Stages]);
         // 再走一圈仍然一字不差 —— 两种模式之间来回切不会"被格式化"。
         Assert.AreEqual(text, PipelineText.Format(back.Stages));
     }
@@ -187,7 +187,7 @@ public sealed class PipelineTests
         IReadOnlyList<PipelineFieldSample> fields = PipelineFields.Sample(docs);
         string[] paths = [.. fields.Select(f => f.Path)];
 
-        CollectionAssert.AreEqual(new[] { "_id", "items", "items.sku", "items.qty", "customer", "customer.name" }, paths);
+        Assert.AreSequenceEqual(new[] { "_id", "items", "items.sku", "items.qty", "customer", "customer.name" }, paths);
         Assert.AreEqual(1.0, fields.Single(f => f.Path == "_id").Ratio);
         Assert.AreEqual(0.5, fields.Single(f => f.Path == "items.sku").Ratio);
         Assert.AreEqual(BsonKind.Array, fields.Single(f => f.Path == "items").Kind);
@@ -203,8 +203,8 @@ public sealed class PipelineTests
         CompletionSet? paths = PipelineFields.Complete(new(inString, inString.Length, false), "$group", upstream, 20, loc);
         Assert.IsNotNull(paths);
         Assert.AreEqual(inString.Length - 3, paths.ReplaceOffset);
-        CollectionAssert.AreEqual(new[] { "$items.qty", "$items.price" }, paths.Items.Select(i => i.Label).ToArray());
-        StringAssert.Contains(paths.Header ?? "", "20");
+        Assert.AreSequenceEqual(new[] { "$items.qty", "$items.price" }, [.. paths.Items.Select(i => i.Label)]);
+        Assert.Contains("20", paths.Header ?? "");
 
         const string op = "{ qty: { $su";
         CompletionSet? ops = PipelineFields.Complete(new(op, op.Length, false), "$group", upstream, 20, loc);
@@ -235,14 +235,14 @@ public sealed class PipelineTests
         string code = PipelineCode.Generate(PipelineCodeLanguage.Mongosh, "shop", "orders", stages, allowDiskUse: true);
 
         StringAssert.StartsWith(code, "use(\"shop\");");
-        StringAssert.Contains(code, "db.orders.aggregate([");
-        StringAssert.Contains(code, "ISODate(\"2026-08-27\")");
-        StringAssert.Contains(code, "], { allowDiskUse: true });");
+        Assert.Contains("db.orders.aggregate([", code);
+        Assert.Contains("ISODate(\"2026-08-27\")", code);
+        Assert.Contains("], { allowDiskUse: true });", code);
         int open = code.IndexOf('[', StringComparison.Ordinal);
         int close = code.LastIndexOf(']');
         PipelineParse back = PipelineText.Parse(code[open..(close + 1)]);
         Assert.IsTrue(back.Ok, back.ErrorKey ?? "");
-        CollectionAssert.AreEqual(stages, back.Stages.Select(s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!)).ToList());
+        Assert.AreSequenceEqual(stages, back.Stages.Select(s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!)).ToList());
     }
 
     [TestMethod]
@@ -251,31 +251,31 @@ public sealed class PipelineTests
         List<BsonDocument> stages = DesignStages();
 
         string cs = PipelineCode.Generate(PipelineCodeLanguage.CSharp, "shop", "orders", stages, allowDiskUse: true);
-        StringAssert.Contains(cs, "new BsonDocument(\"$limit\", 10)");
-        StringAssert.Contains(cs, "new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc)");
-        StringAssert.Contains(cs, "new BsonDocument(\"$sort\", new BsonDocument(\"revenue\", -1))");
-        StringAssert.Contains(cs, "new BsonArray { \"$items.qty\", \"$items.price\" }");
-        StringAssert.Contains(cs, "AllowDiskUse = true");
-        StringAssert.Contains(cs, "GetCollection<BsonDocument>(\"orders\")");
+        Assert.Contains("new BsonDocument(\"$limit\", 10)", cs);
+        Assert.Contains("new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc)", cs);
+        Assert.Contains("new BsonDocument(\"$sort\", new BsonDocument(\"revenue\", -1))", cs);
+        Assert.Contains("new BsonArray { \"$items.qty\", \"$items.price\" }", cs);
+        Assert.Contains("AllowDiskUse = true", cs);
+        Assert.Contains("GetCollection<BsonDocument>(\"orders\")", cs);
 
         string py = PipelineCode.Generate(PipelineCodeLanguage.Python, "shop", "orders", stages, allowDiskUse: true);
-        StringAssert.Contains(py, "{\"$limit\": 10}");
-        StringAssert.Contains(py, "datetime(2026, 8, 27, tzinfo=timezone.utc)");
-        StringAssert.Contains(py, "from datetime import datetime, timezone");
-        StringAssert.Contains(py, "allowDiskUse=True");
+        Assert.Contains("{\"$limit\": 10}", py);
+        Assert.Contains("datetime(2026, 8, 27, tzinfo=timezone.utc)", py);
+        Assert.Contains("from datetime import datetime, timezone", py);
+        Assert.Contains("allowDiskUse=True", py);
 
         string node = PipelineCode.Generate(PipelineCodeLanguage.Node, "shop", "orders", stages, allowDiskUse: false);
-        StringAssert.Contains(node, "{ $limit: 10 }");
-        StringAssert.Contains(node, "new Date(\"2026-08-27T00:00:00Z\")");
+        Assert.Contains("{ $limit: 10 }", node);
+        Assert.Contains("new Date(\"2026-08-27T00:00:00Z\")", node);
         Assert.IsFalse(node.Contains("allowDiskUse", StringComparison.Ordinal));
-        StringAssert.Contains(node, "const { MongoClient } = require(\"mongodb\");");
+        Assert.Contains("const { MongoClient } = require(\"mongodb\");", node);
 
         string java = PipelineCode.Generate(PipelineCodeLanguage.Java, "shop", "orders", stages, allowDiskUse: true);
-        StringAssert.Contains(java, "new Document(\"$limit\", 10)");
-        StringAssert.Contains(java, "Date.from(Instant.parse(\"2026-08-27T00:00:00Z\"))");
-        StringAssert.Contains(java, "import java.time.Instant;");
-        StringAssert.Contains(java, ".allowDiskUse(true)");
-        StringAssert.Contains(java, ".append(\"createdAt\"");
+        Assert.Contains("new Document(\"$limit\", 10)", java);
+        Assert.Contains("Date.from(Instant.parse(\"2026-08-27T00:00:00Z\"))", java);
+        Assert.Contains("import java.time.Instant;", java);
+        Assert.Contains(".allowDiskUse(true)", java);
+        Assert.Contains(".append(\"createdAt\"", java);
 
         var typed = new BsonDocument("$match", new BsonDocument
         {
@@ -285,16 +285,16 @@ public sealed class PipelineTests
             { "x", BsonNull.Value }
         });
         string typedPy = PipelineCode.Generate(PipelineCodeLanguage.Python, "shop", "orders", [typed], false);
-        StringAssert.Contains(typedPy, "ObjectId(\"66f5c2a1b04e97d2a1b2c3d4\")");
-        StringAssert.Contains(typedPy, "Decimal128(\"8740.00\")");
-        StringAssert.Contains(typedPy, "Int64(5)");
-        StringAssert.Contains(typedPy, "None");
-        StringAssert.Contains(typedPy, "from bson import ObjectId, Decimal128, Int64");
+        Assert.Contains("ObjectId(\"66f5c2a1b04e97d2a1b2c3d4\")", typedPy);
+        Assert.Contains("Decimal128(\"8740.00\")", typedPy);
+        Assert.Contains("Int64(5)", typedPy);
+        Assert.Contains("None", typedPy);
+        Assert.Contains("from bson import ObjectId, Decimal128, Int64", typedPy);
         string typedCs = PipelineCode.Generate(PipelineCodeLanguage.CSharp, "shop", "orders", [typed], false);
-        StringAssert.Contains(typedCs, "ObjectId.Parse(\"66f5c2a1b04e97d2a1b2c3d4\")");
-        StringAssert.Contains(typedCs, "Decimal128.Parse(\"8740.00\")");
-        StringAssert.Contains(typedCs, "5L");
-        StringAssert.Contains(typedCs, "BsonNull.Value");
+        Assert.Contains("ObjectId.Parse(\"66f5c2a1b04e97d2a1b2c3d4\")", typedCs);
+        Assert.Contains("Decimal128.Parse(\"8740.00\")", typedCs);
+        Assert.Contains("5L", typedCs);
+        Assert.Contains("BsonNull.Value", typedCs);
     }
 
     // ── 结果表 ──────────────────────────────────────────────────────────
@@ -315,7 +315,7 @@ public sealed class PipelineTests
         BsonDocument[] docs = [new() { { "_id", "SKU-1182" }, { "qty", 312 }, { "revenue", new BsonDecimal128(Decimal128.Parse("405288.00")) } }];
         (IReadOnlyList<PipelineColumn> columns, IReadOnlyList<PipelineRow> rows) = PipelineResults.Build(docs, ghosts, loc);
 
-        CollectionAssert.AreEqual(new[] { "_id", "qty", "revenue", "product.name" }, columns.Select(c => c.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "_id", "qty", "revenue", "product.name" }, [.. columns.Select(c => c.Name)]);
         Assert.IsTrue(columns[1].IsNumeric);
         Assert.IsTrue(columns[3].IsGhost);
         Assert.AreEqual("\"SKU-1182\"", rows[0].Cells[0].Text);
@@ -367,14 +367,14 @@ public sealed class PipelineTests
         Assert.AreEqual("pipeline:shop.orders", vm.Key);
         Assert.AreEqual("$match", vm.Stages.Single().Operator);
         Assert.IsFalse(vm.IsModified);
-        StringAssert.Contains(vm.StatusText, "管道 · 未保存");
+        Assert.Contains("管道 · 未保存", vm.StatusText);
 
         Assert.IsTrue(vm.LoadFromText(DesignPipeline));
         Assert.HasCount(6, vm.Stages);
         Assert.IsTrue(vm.IsModified);
         Assert.AreEqual("6 个阶段 · 5 个启用", vm.StageSummary);
         Assert.AreEqual("关联集合 · 已停用", vm.Stages[5].Description);
-        CollectionAssert.AreEqual(new[] { 1, 2, 3, 4, 5, 6 }, vm.Stages.Select(s => s.Index).ToArray());
+        Assert.AreSequenceEqual(new[] { 1, 2, 3, 4, 5, 6 }, [.. vm.Stages.Select(s => s.Index)]);
 
         // 执行计划:交给查询标签 explain,停用的阶段不在里面。
         vm.ExplainCommand.Execute(null);
@@ -388,17 +388,17 @@ public sealed class PipelineTests
         // 导出为代码:自己的对话框,切语言即重新生成。
         vm.ExportCodeCommand.Execute(null);
         var code = (PipelineCodeDialogViewModel)workspace.Dialogs.Single();
-        StringAssert.Contains(code.Code, "db.orders.aggregate([");
+        Assert.Contains("db.orders.aggregate([", code.Code);
         code.IsPython = true;
-        StringAssert.Contains(code.Code, "from pymongo import MongoClient");
+        Assert.Contains("from pymongo import MongoClient", code.Code);
         Assert.AreEqual("5 个启用阶段 · 停用的阶段不导出", code.Note);
         workspace.CloseDialog(code);
 
         // 卡片 → 文本:停用的阶段是注释。
         vm.IsTextMode = true;
         Assert.AreEqual(PipelineMode.Text, vm.Mode);
-        StringAssert.Contains(vm.PipelineTextValue, "// { $lookup:");
-        StringAssert.Contains(vm.PipelineTextValue, "{ $limit: 10 },");
+        Assert.Contains("// { $lookup:", vm.PipelineTextValue);
+        Assert.Contains("{ $limit: 10 },", vm.PipelineTextValue);
 
         // 文本 → 卡片:改 $limit、取消注释 $lookup、删掉 $sort。
         vm.PipelineTextValue = vm.PipelineTextValue
@@ -406,7 +406,7 @@ public sealed class PipelineTests
             .Replace("// { $lookup:", "{ $lookup:", StringComparison.Ordinal)
             .Replace("  { $sort: { revenue: -1 } },\n", "", StringComparison.Ordinal);
         Assert.IsTrue(vm.ApplyText());
-        CollectionAssert.AreEqual(new[] { "$match", "$unwind", "$group", "$limit", "$lookup" }, vm.Stages.Select(s => s.Operator).ToArray());
+        Assert.AreSequenceEqual(new[] { "$match", "$unwind", "$group", "$limit", "$lookup" }, [.. vm.Stages.Select(s => s.Operator)]);
         Assert.AreEqual("3", vm.Stages[3].Body);
         Assert.IsTrue(vm.Stages[4].IsEnabled);
 
@@ -431,7 +431,7 @@ public sealed class PipelineTests
         Assert.IsTrue(vm.Stages[0].HasError);
         Assert.AreEqual("语法错误", vm.Stages[0].ErrorBadge);
         Assert.AreEqual(1, vm.ErrorCount);
-        StringAssert.Contains(vm.StageSummary, "1 个有错");
+        Assert.Contains("1 个有错", vm.StageSummary);
         Assert.HasCount(1, vm.Stages[0].Diagnostics);
 
         // 换运算符:没动过的模板跟着换,写过的阶段体保留。
@@ -445,7 +445,7 @@ public sealed class PipelineTests
         vm.MoveStageTo(added, 0);
         Assert.AreEqual("$count", vm.Stages[0].Operator);
         vm.DuplicateStage(vm.Stages[0]);
-        CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, vm.Stages.Select(s => s.Index).ToArray());
+        Assert.AreSequenceEqual(new[] { 1, 2, 3, 4 }, [.. vm.Stages.Select(s => s.Index)]);
         vm.RemoveStage(vm.Stages[0]);
         Assert.HasCount(3, vm.Stages);
         await Task.CompletedTask;
@@ -462,7 +462,7 @@ public sealed class PipelineTests
         };
         var vm = new PipelineTabViewModel(workspace, new CollectionInfo("shop", "v_x", CollectionKind.View, []), pipeline) { AutoPreview = false };
 
-        CollectionAssert.AreEqual(new[] { "$match", "$limit" }, vm.Stages.Select(s => s.Operator).ToArray());
+        Assert.AreSequenceEqual(new[] { "$match", "$limit" }, [.. vm.Stages.Select(s => s.Operator)]);
         Assert.AreEqual("{ status: \"paid\" }", vm.Stages[0].Body);
         Assert.IsTrue(vm.Stages[0].IsExpanded);
         Assert.IsFalse(vm.IsModified);
@@ -500,7 +500,7 @@ public sealed class PipelineTests
         Assert.IsLessThanOrEqualTo(unwound, grouped);
         Assert.AreEqual(grouped, run.Stages[3].Count);
         Assert.AreEqual(Math.Min(10, grouped), run.Stages[4].Count);
-        CollectionAssert.AreEqual(new[] { "_id", "qty", "revenue" }, run.Stages[2].Documents[0].Names.ToArray());
+        Assert.AreSequenceEqual(new[] { "_id", "qty", "revenue" }, [.. run.Stages[2].Documents[0].Names]);
         // $sort 之后 revenue 降序。
         IReadOnlyList<BsonDocument> sorted = run.Stages[3].Documents;
         for (int i = 1; i < sorted.Count; i++)
@@ -528,7 +528,7 @@ public sealed class PipelineTests
 
         Assert.AreEqual(PipelineStageState.Ok, run.Stages[0].State);
         Assert.AreEqual(PipelineStageState.Error, run.Stages[1].State);
-        StringAssert.Contains(run.Stages[1].Error ?? "", "$bogus");
+        Assert.Contains("$bogus", run.Stages[1].Error ?? "");
         Assert.AreEqual(PipelineStageState.Blocked, run.Stages[2].State);
         Assert.AreEqual(PipelineStageState.Invalid, run.Stages[3].State);
         Assert.AreEqual(PipelineStageState.Blocked, run.Stages[4].State);
@@ -562,7 +562,7 @@ public sealed class PipelineTests
             await vm.RefreshPreviewAsync();
             Assert.AreEqual("2", vm.Stages[0].CountText);
             Assert.AreEqual(PipelineStageState.Ok, vm.Stages[1].Outcome.State);
-            CollectionAssert.AreEqual(new[] { "_id", "total" }, vm.Stages[1].UpstreamFields.Select(f => f.Path).ToArray());
+            Assert.AreSequenceEqual(new[] { "_id", "total" }, [.. vm.Stages[1].UpstreamFields.Select(f => f.Path)]);
 
             // 运行:结果进输出表。
             await vm.RunAsync();
@@ -570,7 +570,7 @@ public sealed class PipelineTests
             Assert.HasCount(2, vm.ResultRows);
             Assert.AreEqual("\"a\"", vm.ResultRows[0].Cells[0].Text);
             Assert.AreEqual("7", vm.ResultRows[0].Cells[1].Text);
-            StringAssert.Contains(vm.ResultSummary, "2 份文档 · 完整运行");
+            Assert.Contains("2 份文档 · 完整运行", vm.ResultSummary);
 
             // 带 $out 的管道:先过 EnsureWritable 与确认,再真写。
             vm.AddStage("$out").Body = "\"out_totals\"";
@@ -602,7 +602,7 @@ public sealed class PipelineTests
             StringAssert.StartsWith(item.Content, $"// {db}.src\n[");
             Assert.IsTrue(PipelineText.Parse(item.Content).Ok);
             Assert.IsFalse(vm.IsModified);
-            StringAssert.Contains(vm.StatusText, "管道 · totals");
+            Assert.Contains("管道 · totals", vm.StatusText);
         }
         finally
         {

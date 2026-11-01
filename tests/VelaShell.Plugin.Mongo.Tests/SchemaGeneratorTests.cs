@@ -49,7 +49,7 @@ public sealed class SchemaGeneratorTests
         BsonDocument schema = Generate()["$jsonSchema"].AsBsonDocument;
         Assert.AreEqual("object", schema["bsonType"].AsString);
         string[] required = [.. schema["required"].AsBsonArray.Select(static v => v.AsString)];
-        CollectionAssert.AreEquivalent(new[] { "orderNo", "status", "total", "qty", "createdAt", "customer", "items" }, required);
+        Assert.AreSequenceEqual(new[] { "orderNo", "status", "total", "qty", "createdAt", "customer", "items" }, required, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.IsFalse(schema["properties"].AsBsonDocument.Contains("_id"));
     }
 
@@ -59,8 +59,7 @@ public sealed class SchemaGeneratorTests
         BsonDocument properties = Generate()["$jsonSchema"]["properties"].AsBsonDocument;
         BsonDocument status = properties["status"].AsBsonDocument;
         Assert.IsFalse(status.Contains("bsonType"), "enum already pins the type");
-        CollectionAssert.AreEquivalent(new[] { "paid", "shipped", "pending", "refunded" },
-            status["enum"].AsBsonArray.Select(static v => v.AsString).ToArray());
+        Assert.AreSequenceEqual(new[] { "paid", "shipped", "pending", "refunded" }, [.. status["enum"].AsBsonArray.Select(static v => v.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.AreEqual("string", properties["orderNo"]["bsonType"].AsString, "high-cardinality strings get no enum");
     }
 
@@ -88,10 +87,10 @@ public sealed class SchemaGeneratorTests
     public void Nullable_fields_list_both_types_and_nested_documents_recurse()
     {
         BsonDocument properties = Generate()["$jsonSchema"]["properties"].AsBsonDocument;
-        CollectionAssert.AreEquivalent(new[] { "string", "null" }, properties["note"]["bsonType"].AsBsonArray.Select(static v => v.AsString).ToArray());
+        Assert.AreSequenceEqual(new[] { "string", "null" }, [.. properties["note"]["bsonType"].AsBsonArray.Select(static v => v.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         BsonDocument customer = properties["customer"].AsBsonDocument;
         Assert.AreEqual("object", customer["bsonType"].AsString);
-        CollectionAssert.AreEquivalent(new[] { "id", "level" }, customer["required"].AsBsonArray.Select(static v => v.AsString).ToArray());
+        Assert.AreSequenceEqual(new[] { "id", "level" }, [.. customer["required"].AsBsonArray.Select(static v => v.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.AreEqual("objectId", customer["properties"]["id"]["bsonType"].AsString);
         BsonDocument items = properties["items"].AsBsonDocument;
         Assert.AreEqual("array", items["bsonType"].AsString);
@@ -105,7 +104,7 @@ public sealed class SchemaGeneratorTests
         string text = JsonSchemaGenerator.Format(validator, width: 60);
         Assert.IsGreaterThan(5, text.Split('\n').Length, "a long schema spans several lines");
         Assert.IsTrue(text.Split('\n').All(static line => line.Length <= 90), "lines stay near the width");
-        StringAssert.Contains(text, "$jsonSchema: {");
+        Assert.Contains("$jsonSchema: {", text);
         BsonDocument parsed = ShellJson.ParseDocument(text);
         Assert.AreEqual(validator, parsed);
 

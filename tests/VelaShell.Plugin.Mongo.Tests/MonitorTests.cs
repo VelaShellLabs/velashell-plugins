@@ -196,7 +196,7 @@ public sealed class MonitorTests
         Assert.AreNotEqual("—", tab.Ops.Value);
         Assert.IsTrue(tab.ServerLine.StartsWith("uptime ", StringComparison.Ordinal), tab.ServerLine);
         Assert.HasCount(4, tab.OpsSeries);
-        StringAssert.Contains(tab.StatusText, "serverStatus");
+        Assert.Contains("serverStatus", tab.StatusText);
 
         BsonDocument snapshot = tab.BuildSnapshot();
         Assert.IsTrue(snapshot["serverStatus"].IsBsonDocument);

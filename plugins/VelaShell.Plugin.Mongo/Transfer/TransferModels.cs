@@ -243,7 +243,7 @@ internal static class TransferText
     public static string SafeFileName(string name)
     {
         char[] invalid = Path.GetInvalidFileNameChars();
-        char[] chars = name.Select(c => invalid.Contains(c) ? '_' : c).ToArray();
+        char[] chars = [.. name.Select(c => invalid.Contains(c) ? '_' : c)];
         string safe = new string(chars).Trim();
         return safe.Length == 0 ? "_" : safe;
     }

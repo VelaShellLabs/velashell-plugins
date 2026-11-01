@@ -28,7 +28,7 @@ public sealed class RdpVirtualFileTests
             byte[] descriptors = new byte[4 + 3 * 592];
             try { Marshal.Copy(memory, descriptors, 0, descriptors.Length); }
             finally { WindowsVirtualFileClipboard.Native.GlobalUnlock(descriptor.unionmember); }
-            CollectionAssert.AreEqual(files.Files.ToArray(), RdpClipboardCodec.DecodeFiles(descriptors).ToArray());
+            Assert.AreSequenceEqual([.. files.Files], [.. RdpClipboardCodec.DecodeFiles(descriptors)]);
             format = WindowsVirtualFileDataObject.Format(WindowsVirtualFileDataObject.ContentsFormat, TYMED.TYMED_ISTREAM, 1);
             Marshal.ThrowExceptionForHR(get(unknown, ref format, out stream));
             Assert.AreEqual(0, reads);
@@ -39,7 +39,7 @@ public sealed class RdpVirtualFileTests
             Assert.AreEqual(1, reads);
             byte[] bytes = new byte[3];
             Marshal.Copy(buffer, bytes, 0, bytes.Length);
-            CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, bytes);
+            Assert.AreSequenceEqual(new byte[] { 1, 2, 3 }, bytes);
             var seek = Method<Seek>(stream.unionmember, 5);
             Marshal.ThrowExceptionForHR(seek(stream.unionmember, 1, 0, fetched));
             Marshal.ThrowExceptionForHR(read(stream.unionmember, buffer, 3, fetched));

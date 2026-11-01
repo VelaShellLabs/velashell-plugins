@@ -33,8 +33,8 @@ public sealed class RdpClipboardTests
         RdpClipboardFile[] files = [new("目录", true, 0), new("目录\\文件.txt", false, 0x100000005)];
         byte[] data = RdpClipboardCodec.EncodeFiles(files);
         IReadOnlyList<RdpClipboardFile> decoded = RdpClipboardCodec.DecodeFiles(data);
-        CollectionAssert.AreEqual(files, decoded.ToArray());
-        Assert.AreEqual(4 + 592 * 2, data.Length);
+        Assert.AreSequenceEqual(files, [.. decoded]);
+        Assert.HasCount(4 + 592 * 2, data);
         // Every descriptor asks the consuming Shell for its own copy-progress dialog (FD_SHOWPROGRESSUI),
         // so a large paste shows Windows' progress instead of a seemingly hung Explorer.
         Assert.AreEqual(0x4004u, BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(4)));
@@ -74,7 +74,7 @@ public sealed class RdpClipboardTests
         RdpClipboardImage decoded = RdpClipboardCodec.DecodeDib(encoded);
         Assert.AreEqual(1, decoded.Width);
         Assert.AreEqual(2, decoded.Height);
-        CollectionAssert.AreEqual(pixels, decoded.Bgra);
+        Assert.AreSequenceEqual(pixels, decoded.Bgra);
         _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(encoded[..^1]));
         BinaryPrimitives.WriteInt32LittleEndian(encoded.AsSpan(4), int.MaxValue);
         _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(encoded));
@@ -90,7 +90,7 @@ public sealed class RdpClipboardTests
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(12), 1);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(14), 32);
         data[40] = 9; data[41] = 8; data[42] = 7;
-        CollectionAssert.AreEqual(new byte[] { 9, 8, 7, 255 }, RdpClipboardCodec.DecodeDib(data).Bgra);
+        Assert.AreSequenceEqual(new byte[] { 9, 8, 7, 255 }, RdpClipboardCodec.DecodeDib(data).Bgra);
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(16), 3);
         _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeDib(data));
         _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.ValidateImageSize(8192, 8192));
@@ -102,7 +102,7 @@ public sealed class RdpClipboardTests
     {
         string root = Path.Combine(Path.GetTempPath(), "vela-rdp-test-" + Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(Path.Combine(root, "child"));
-        byte[] bytes = Enumerable.Range(0, RdpClipboardFiles.ChunkSize + 11).Select(i => (byte)i).ToArray();
+        byte[] bytes = [.. Enumerable.Range(0, RdpClipboardFiles.ChunkSize + 11).Select(i => (byte)i)];
         try
         {
             await File.WriteAllBytesAsync(Path.Combine(root, "child", "data.bin"), bytes);
@@ -110,7 +110,7 @@ public sealed class RdpClipboardTests
             int index = snapshot.Entries.FindIndex(e => !e.IsDirectory);
             byte[] first = await snapshot.ReadAsync((uint)index, 0, RdpClipboardFiles.ChunkSize, default);
             byte[] last = await snapshot.ReadAsync((uint)index, (ulong)first.Length, 100, default);
-            CollectionAssert.AreEqual(bytes, first.Concat(last).ToArray());
+            Assert.AreSequenceEqual(bytes, [.. first, .. last]);
             _ = await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync((uint)index, (ulong)bytes.Length + 1, 1, default));
             _ = await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync(0, 0, 1, default));
             _ = await Assert.ThrowsAsync<InvalidDataException>(() => snapshot.ReadAsync((uint)index, 0, RdpClipboardFiles.ChunkSize + 1, default));
@@ -138,13 +138,13 @@ public sealed class RdpClipboardTests
         await UntilAsync(async () => await window.Clipboard.TryGetTextAsync() == transport.RemoteText);
         int offers = transport.Offers.Count;
         await bridge.PublishLocalAsync();
-        Assert.AreEqual(offers, transport.Offers.Count);
+        Assert.HasCount(offers, transport.Offers);
         await window.Clipboard.SetTextAsync("local 中文");
         await bridge.PublishLocalAsync();
-        Assert.AreEqual(offers + 1, transport.Offers.Count);
+        Assert.HasCount(offers + 1, transport.Offers);
         await window.Clipboard.SetTextAsync(transport.RemoteText);
         await bridge.PublishLocalAsync();
-        Assert.AreEqual(offers + 2, transport.Offers.Count);
+        Assert.HasCount(offers + 2, transport.Offers);
         window.Close();
     });
 
@@ -176,10 +176,10 @@ public sealed class RdpClipboardTests
         await using var bridge = new RdpClipboardBridge(transport, context, owner, true);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
-        StringAssert.Contains(transport.Offers[0], "PNG");
+        Assert.Contains("PNG", transport.Offers[0]);
         transport.Emit(4, RdpClipboardCodec.Dib);
         await Until(() => transport.Responses.Count > 0);
-        CollectionAssert.AreEqual(pixels, RdpClipboardCodec.DecodeDib(transport.Responses[0].Data).Bgra);
+        Assert.AreSequenceEqual(pixels, RdpClipboardCodec.DecodeDib(transport.Responses[0].Data).Bgra);
         using var png = new MemoryStream();
         bitmap.Save(png, PngBitmapEncoderOptions.Default);
         transport.RemotePayload = usePng ? png.ToArray() : RdpClipboardCodec.EncodeDib(new(2, 1, pixels));
@@ -198,12 +198,12 @@ public sealed class RdpClipboardTests
             received.CopyPixels(buffer);
             byte[] actual = new byte[8];
             Marshal.Copy(buffer.Address, actual, 0, actual.Length);
-            CollectionAssert.AreEqual(pixels, actual);
+            Assert.AreSequenceEqual(pixels, actual);
             return true;
         });
         int offers = transport.Offers.Count;
         await bridge.PublishLocalAsync();
-        Assert.AreEqual(offers, transport.Offers.Count);
+        Assert.HasCount(offers, transport.Offers);
         await window.Clipboard.ClearAsync();
         window.Close();
     });
@@ -218,7 +218,7 @@ public sealed class RdpClipboardTests
         var transport = new ClipboardTransport
         {
             RemoteFiles = [new("folder", true, 0), new("folder\\data.bin", false, RdpClipboardFiles.ChunkSize + 7)],
-            FileData = Enumerable.Range(0, RdpClipboardFiles.ChunkSize + 7).Select(i => (byte)i).ToArray()
+            FileData = [.. Enumerable.Range(0, RdpClipboardFiles.ChunkSize + 7).Select(i => (byte)i)]
         };
         var clipboard = new VirtualClipboard();
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard);
@@ -230,11 +230,11 @@ public sealed class RdpClipboardTests
         Assert.IsFalse(Directory.Exists(Path.Combine(context.DataDirectory, "rdp-clipboard")));
         int offers = transport.Offers.Count;
         await bridge.PublishLocalAsync();
-        Assert.AreEqual(offers, transport.Offers.Count);
+        Assert.HasCount(offers, transport.Offers);
         byte[] first = await clipboard.Source!.ReadAsync(1, 0, RdpClipboardFiles.ChunkSize);
         byte[] last = await clipboard.Source.ReadAsync(1, first.Length, 7);
-        CollectionAssert.AreEqual(transport.FileData, first.Concat(last).ToArray());
-        Assert.AreEqual(2, transport.FileRequests.Count);
+        Assert.AreSequenceEqual(transport.FileData, [.. first, .. last]);
+        Assert.HasCount(2, transport.FileRequests);
         Assert.IsFalse(Directory.Exists(Path.Combine(context.DataDirectory, "rdp-clipboard")));
         clipboard.LoseOwnership();
         _ = await Assert.ThrowsAsync<OperationCanceledException>(() => clipboard.Source.ReadAsync(1, 0, 1));
@@ -279,7 +279,7 @@ public sealed class RdpClipboardTests
         using var stream = new VirtualFileStream(clipboard.Source!, 0);
         byte[] first = new byte[2], last = new byte[2];
         stream.Read(first, 2, 0);
-        Task pending = Task.Run(() => stream.Read(last, 2, 0));
+        var pending = Task.Run(() => stream.Read(last, 2, 0));
         await Until(() => transport.HeldStream != 0);
         clipboard.LoseOwnership();
         await window.Clipboard.SetTextAsync("new local copy");
@@ -287,8 +287,8 @@ public sealed class RdpClipboardTests
         Assert.IsFalse(pending.IsCompleted);
         transport.Emit(7, transport.HeldStream, 1, [3, 4]);
         await pending;
-        CollectionAssert.AreEqual(new byte[] { 1, 2 }, first);
-        CollectionAssert.AreEqual(new byte[] { 3, 4 }, last);
+        Assert.AreSequenceEqual(new byte[] { 1, 2 }, first);
+        Assert.AreSequenceEqual(new byte[] { 3, 4 }, last);
         Assert.IsFalse(clipboard.Source!.Cancelled);
         Assert.HasCount(1, transport.Locks);
         Assert.IsTrue(transport.RequestedVersions.All(id => id == transport.Locks[0].Id));
@@ -360,7 +360,7 @@ public sealed class RdpClipboardTests
         await using var bridge = new RdpClipboardBridge(transport, context, owner, true);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
-        StringAssert.Contains(transport.Offers[0], "FileGroupDescriptorW");
+        Assert.Contains("FileGroupDescriptorW", transport.Offers[0]);
         transport.Emit(4, RdpClipboardCodec.FileGroup);
         await Until(() => transport.Responses.Count > 0);
         IReadOnlyList<RdpClipboardFile> entries = RdpClipboardCodec.DecodeFiles(transport.Responses[0].Data);
@@ -382,7 +382,7 @@ public sealed class RdpClipboardTests
         transport.Emit(6, 2, 0, request);
         transport.Emit(6, 3, 99, request);
         await Until(() => transport.FileResponses.Count == 3);
-        CollectionAssert.AreEqual(new byte[] { 3, 4 }, transport.FileResponses[1].Data);
+        Assert.AreSequenceEqual(new byte[] { 3, 4 }, transport.FileResponses[1].Data);
         Assert.IsFalse(transport.FileResponses[2].Success);
         Assert.AreEqual(2L, bridge.UploadProgress!.Bytes);
         Assert.AreEqual(5L, bridge.UploadProgress.Total);
@@ -400,7 +400,7 @@ public sealed class RdpClipboardTests
         await File.WriteAllBytesAsync(file, []);
         var window = new Window { Content = new Border() };
         window.Show();
-        var item = await window.StorageProvider.TryGetFileFromPathAsync(file);
+        IStorageFile? item = await window.StorageProvider.TryGetFileFromPathAsync(file);
         Assert.IsNotNull(item);
         var transfer = new DataTransfer();
         transfer.Add(DataTransferItem.CreateFile(item));
@@ -428,7 +428,7 @@ public sealed class RdpClipboardTests
         await File.WriteAllBytesAsync(file, [4, 5, 6]);
         var window = new Window { Content = new Border() };
         window.Show();
-        var item = await window.StorageProvider.TryGetFileFromPathAsync(file);
+        IStorageFile? item = await window.StorageProvider.TryGetFileFromPathAsync(file);
         Assert.IsNotNull(item);
         var transfer = new DataTransfer();
         transfer.Add(DataTransferItem.CreateFile(item));
@@ -451,7 +451,7 @@ public sealed class RdpClipboardTests
         transport.Emit(6, 1, 0, request);
         await Until(() => transport.FileResponses.Count == 1);
         Assert.IsTrue(transport.FileResponses[0].Success);
-        CollectionAssert.AreEqual(new byte[] { 4, 5, 6 }, transport.FileResponses[0].Data);
+        Assert.AreSequenceEqual(new byte[] { 4, 5, 6 }, transport.FileResponses[0].Data);
         transport.Emit(12, 42);
         transport.Emit(6, 2, 0, request);
         await Until(() => transport.FileResponses.Count == 2);
@@ -539,14 +539,14 @@ public sealed class RdpClipboardTests
         await receive.WaitAsync(TimeSpan.FromSeconds(2));
         await Until(() => clipboard.Source is not null);
         byte[] bytes = await clipboard.Source!.ReadAsync(0, 0, 1);
-        CollectionAssert.AreEqual(new byte[] { 7 }, bytes);
+        Assert.AreSequenceEqual(new byte[] { 7 }, bytes);
         await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => bridge.ReceiveRemoteAsync()));
         Assert.AreEqual(2, transport.FormatRequests);
         Assert.HasCount(1, transport.Locks);
         Assert.HasCount(1, transport.FileRequests);
         await bridge.DisposeAsync();
         Assert.HasCount(2, transport.Locks);
-        Assert.IsFalse(((CollectingLogger)context.Log).Entries.Any(e => e.Exception is not null));
+        Assert.DoesNotContain(e => e.Exception is not null, ((CollectingLogger)context.Log).Entries);
         window.Close();
     });
 
@@ -584,7 +584,7 @@ public sealed class RdpClipboardTests
         Assert.AreEqual(1, transport.FormatRequests);
         Assert.HasCount(2, transport.Locks);
         Assert.AreEqual((transport.Locks[0].Id, false), transport.Locks[1]);
-        Assert.IsFalse(((CollectingLogger)context.Log).Entries.Any(e => e.Exception is not null));
+        Assert.DoesNotContain(e => e.Exception is not null, ((CollectingLogger)context.Log).Entries);
         window.Close();
     });
 
@@ -642,7 +642,7 @@ public sealed class RdpClipboardTests
         Assert.AreEqual(1, transport.FormatRequests);
         Assert.IsEmpty(transport.Locks);
         Assert.IsNull(clipboard.Source);
-        Assert.IsTrue(((CollectingLogger)context.Log).Entries.Any(e => e.Exception is TimeoutException));
+        Assert.Contains(e => e.Exception is TimeoutException, ((CollectingLogger)context.Log).Entries);
         window.Close();
     });
 
@@ -680,7 +680,7 @@ public sealed class RdpClipboardTests
         Assert.AreEqual((transport.Locks[0].Id, false), transport.Locks[1]);
         Assert.AreEqual("Cancelled", bridge.DownloadProgress.State);
         transport.Emit(7, transport.HeldStream, 1, new byte[RdpClipboardFiles.ChunkSize]);
-        Assert.AreEqual(2, transport.FileRequests.Count);
+        Assert.HasCount(2, transport.FileRequests);
         window.Close();
     });
 
@@ -718,9 +718,9 @@ public sealed class RdpClipboardTests
         await bridge.PublishLocalAsync().WaitAsync(TimeSpan.FromSeconds(1));
         transport.Emit(7, second, 1, [2, 3, 4, 5]);
         byte[] bytes = await pending;
-        CollectionAssert.AreEqual(new byte[] { 2, 3, 4, 5 }, bytes);
+        Assert.AreSequenceEqual(new byte[] { 2, 3, 4, 5 }, bytes);
         Assert.AreEqual(4L, bridge.DownloadProgress.Bytes);
-        Assert.AreEqual(2, transport.FileRequests.Count);
+        Assert.HasCount(2, transport.FileRequests);
         Assert.IsTrue(transport.FileRequests.All(r => r == (1u, (ulong)offset, 4u)));
         Assert.IsTrue(transport.RequestedVersions.All(v => v == transport.Locks[0].Id));
         transport.Emit(7, first, 0);
@@ -769,7 +769,7 @@ public sealed class RdpClipboardTests
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
         await Until(() => clipboard.Source is not null);
-        using var lease = clipboard.Source!.Acquire();
+        using IDisposable lease = clipboard.Source!.Acquire();
         Task<byte[]> pending = clipboard.Source.ReadAsync(0, 0, 4);
         if (outcome is "cancelled" or "disconnected" or "sourceChanged")
         {
@@ -781,7 +781,7 @@ public sealed class RdpClipboardTests
         if (outcome == "exhausted") await Assert.ThrowsAsync<TimeoutException>(() => pending);
         else if (outcome is "cancelled" or "disconnected") await Assert.ThrowsAsync<OperationCanceledException>(() => pending);
         else await Assert.ThrowsAsync<IOException>(() => pending);
-        Assert.AreEqual(expectedRequests, transport.FileRequests.Count);
+        Assert.HasCount(expectedRequests, transport.FileRequests);
         Assert.AreEqual(0L, bridge.DownloadProgress!.Bytes);
         Assert.AreEqual(outcome == "exhausted" ? "TimedOut" : outcome is "cancelled" or "disconnected" ? "Cancelled" : "Failed", bridge.DownloadProgress.State);
         window.Close();
@@ -808,8 +808,8 @@ public sealed class RdpClipboardTests
         transport.Emit(7, streams[1], 1, [5, 6, 7, 8]);
         transport.Emit(7, streams[0], 1, [1, 2, 3, 4]);
         byte[] secondBytes = await second, firstBytes = await first;
-        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4 }, firstBytes);
-        CollectionAssert.AreEqual(new byte[] { 5, 6, 7, 8 }, secondBytes);
+        Assert.AreSequenceEqual(new byte[] { 1, 2, 3, 4 }, firstBytes);
+        Assert.AreSequenceEqual(new byte[] { 5, 6, 7, 8 }, secondBytes);
         Assert.AreEqual(8L, bridge.DownloadProgress!.Bytes);
         window.Close();
     });
@@ -848,10 +848,9 @@ public sealed class RdpClipboardTests
     private sealed class VirtualClipboard : IRdpVirtualFileClipboard
     {
         internal RdpVirtualFiles? Source { get; private set; }
-        private bool _owned;
-        public bool IsCurrent => _owned && Source is { Cancelled: false };
-        public Task PublishAsync(RdpVirtualFiles source, CancellationToken ct, uint? expectedSequence = null) { ct.ThrowIfCancellationRequested(); Source?.Retire(); Source = source; _owned = true; return Task.CompletedTask; }
-        internal void LoseOwnership() { _owned = false; Source?.Retire(); }
+        public bool IsCurrent { get => field && Source is { Cancelled: false }; private set; }
+        public Task PublishAsync(RdpVirtualFiles source, uint? expectedSequence, CancellationToken ct) { ct.ThrowIfCancellationRequested(); Source?.Retire(); Source = source; IsCurrent = true; return Task.CompletedTask; }
+        internal void LoseOwnership() { IsCurrent = false; Source?.Retire(); }
         public ValueTask DisposeAsync() { Source?.Dispose(); return ValueTask.CompletedTask; }
     }
 

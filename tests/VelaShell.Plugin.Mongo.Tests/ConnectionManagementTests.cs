@@ -86,7 +86,7 @@ public sealed class ConnectionManagementTests
         try
         {
             string[] rows = [.. shell.VisibleNodes.Select(static n => $"{n.Kind}:{n.Name}")];
-            CollectionAssert.AreEqual(new[] { "Connection:local-dev", "Group:生产", "Connection:orders-prod" }, rows);
+            Assert.AreSequenceEqual(new[] { "Connection:local-dev", "Group:生产", "Connection:orders-prod" }, rows);
             Assert.IsTrue(shell.Connections.All(static c => c is { State: ConnectionState.Disconnected, Session: null }));
             Assert.IsTrue(shell.VisibleNodes.Where(static n => n.Kind == NodeKind.Connection).All(static n => n.DotClass == "off"));
             Assert.IsFalse(shell.HasTabs);
@@ -171,7 +171,7 @@ public sealed class ConnectionManagementTests
             MongoProfile profile = dialog.ToProfile();
             MongoSettings settings = profile.Parsed;
             Assert.AreEqual("10.20.3.21", profile.Host);
-            CollectionAssert.AreEqual(new[] { "10.20.3.22:27017", "10.20.3.23:27017" }, settings.AdditionalHosts.ToArray());
+            Assert.AreSequenceEqual(new[] { "10.20.3.22:27017", "10.20.3.23:27017" }, [.. settings.AdditionalHosts]);
             Assert.AreEqual(MongoEnvironment.Production, settings.Environment);
             Assert.AreEqual(bastion.SavedSessionId, settings.JumpSessionId);
             Assert.IsTrue(settings.ReadOnly);
@@ -208,7 +208,7 @@ public sealed class ConnectionManagementTests
 
             dialog.Name = "TAKEN";
             await dialog.SaveCommand.ExecuteAsync();
-            StringAssert.Contains(dialog.Error, "TAKEN");
+            Assert.Contains("TAKEN", dialog.Error);
 
             dialog.Name = "fresh";
             await dialog.SaveCommand.ExecuteAsync();
@@ -238,7 +238,7 @@ public sealed class ConnectionManagementTests
             await Screens.PumpAsync(5);
 
             Assert.IsTrue(dialog.TestPassed, string.Join("; ", dialog.Steps.Select(static s => $"{s.Key}={s.State}:{s.Detail}")));
-            CollectionAssert.AreEqual(new[] { "tcp", "auth", "hello", "privileges" }, dialog.Steps.Select(static s => s.Key).ToArray());
+            Assert.AreSequenceEqual(new[] { "tcp", "auth", "hello", "privileges" }, [.. dialog.Steps.Select(static s => s.Key)]);
             Assert.IsTrue(dialog.HasMembers);
             StringAssert.StartsWith(dialog.TestSummary, "连接成功");
             _ = Screens.Capture(window, "10-connection-dialog-tested");
@@ -310,7 +310,7 @@ public sealed class ConnectionManagementTests
             var card = (ConnectionStateTabViewModel)shell.ActiveTab!;
             Assert.IsTrue(card.IsFailed);
             Assert.AreEqual("无法连接 mongo-inner-01", card.FailedTitle);
-            StringAssert.Contains(card.ErrorMessage, "127.0.0.1:1");
+            Assert.Contains("127.0.0.1:1", card.ErrorMessage);
             Assert.Contains(static t => t.Text == "无法连接 mongo-inner-01" && t.IsEffectivelyVisible, view.GetVisualDescendants().OfType<TextBlock>());
             _ = Screens.Capture(window, "22-connection-failed");
 

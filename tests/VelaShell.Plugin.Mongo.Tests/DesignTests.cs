@@ -83,7 +83,7 @@ public sealed class DesignTests
             tab.NewPartial = true;
             tab.NewPartialText = "{ price: { $gt: 10 } }";
             Assert.AreEqual("", tab.NewError);
-            StringAssert.Contains(tab.NewCommand, "createIndex(\n  { kind: 1, price: -1 },\n  { partialFilterExpression: { price: { $gt: 10 } } }\n)");
+            Assert.Contains("createIndex(\n  { kind: 1, price: -1 },\n  { partialFilterExpression: { price: { $gt: 10 } } }\n)", tab.NewCommand);
             tab.MoveKey(1, 0);
             Assert.AreEqual("price_-1_kind_1", tab.NewName, "the name follows the key order until edited by hand");
             tab.MoveKey(0, 1);
@@ -100,7 +100,7 @@ public sealed class DesignTests
             Assert.AreEqual("kind", tab.NewKeys[0].Field);
             Assert.IsTrue(tab.HasDraft);
             Assert.AreEqual("kind_1_price_-1", tab.DraftIndex!.Name);
-            CollectionAssert.AreEqual(new[] { "kind", "price" }, tab.DraftIndex.Keys.Select(static k => k.Field).ToArray());
+            Assert.AreSequenceEqual(new[] { "kind", "price" }, [.. tab.DraftIndex.Keys.Select(static k => k.Field)]);
             Assert.AreEqual("复合", tab.DraftIndex.TypeText);
             Assert.Contains(static a => a.Text == "部分", tab.DraftIndex.Attributes);
             StringAssert.StartsWith(tab.DraftIndex.SizeText, "≈ ");
@@ -142,7 +142,7 @@ public sealed class DesignTests
             Assert.Contains(static f => f.Path == "price" && f.IsHistogram, tab.SchemaFields);
             Assert.IsNotNull(tab.Generated);
             Assert.AreEqual(0, tab.GenFailCount, "a rule generated from the whole collection fits it");
-            StringAssert.Contains(tab.GeneratedText, "kind: { enum: [ \"toy\", \"book\" ] }");
+            Assert.Contains("kind: { enum: [ \"toy\", \"book\" ] }", tab.GeneratedText);
             StringAssert.StartsWith(tab.StatusText, $"设计 · {db}.items · Schema · ");
 
             tab.GenLevel = "moderate";
@@ -169,13 +169,13 @@ public sealed class DesignTests
             (string title, string badge, string body) = tab.KeywordHover("minimum")!.Value;
             Assert.AreEqual("minimum", title);
             Assert.AreEqual("数值约束", badge);
-            StringAssert.Contains(body, "抽样中有 150 份文档违反它(price)");
+            Assert.Contains("抽样中有 150 份文档违反它(price)", body);
             Assert.IsNull(tab.KeywordHover("price"), "field names are not keywords");
 
             tab.TryDocText = "{ sku: \"X\", price: 3 }";
             await tab.EvaluateTryDocAsync();
             Assert.IsTrue(tab.TryFailed);
-            StringAssert.Contains(tab.TryTitle, "仍会写入并记录警告");
+            Assert.Contains("仍会写入并记录警告", tab.TryTitle);
             StringAssert.StartsWith(tab.TryDetail, "properties.price.minimum:");
             Assert.HasCount(1, tab.TryMarks);
 
@@ -323,7 +323,7 @@ public sealed class DesignTests
         await Screens.PumpAsync(20);
         _ = Screens.Capture(bench.Window, "design-stats");
         Assert.HasCount(6, orders.StatCards);
-        StringAssert.Contains(orders.StatsRaw, "indexSizes");
+        Assert.Contains("indexSizes", orders.StatsRaw);
     });
 
     /// <summary>设计稿 08:shop.orders 的 Schema 分析(抽样 1,000)与由抽样生成的验证规则。</summary>
@@ -341,7 +341,7 @@ public sealed class DesignTests
         Assert.IsGreaterThan(8, tab.SchemaFields.Count);
         Assert.Contains(static f => f.Path == "status" && f.IsBars, tab.SchemaFields);
         Assert.Contains(static f => f.Path == "note" && f.HintWarn, tab.SchemaFields);
-        StringAssert.Contains(tab.StatusText, "个字段路径");
+        Assert.Contains("个字段路径", tab.StatusText);
     });
 
     /// <summary>
@@ -390,6 +390,6 @@ public sealed class DesignTests
         Assert.IsTrue(tab.IsModified);
         Assert.IsTrue(tab.RuleSyntaxOk);
         Assert.IsTrue(tab.TryFailed);
-        StringAssert.Contains(tab.StatusText, "validationLevel moderate · action warn");
+        Assert.Contains("validationLevel moderate · action warn", tab.StatusText);
     });
 }

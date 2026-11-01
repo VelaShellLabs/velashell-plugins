@@ -43,8 +43,8 @@ public sealed class RdpWorkspaceTests
         WorkspaceDescriptor first = context.RecordingWorkspaces.Registered.Single();
         ProtocolSettingPage page = first.Pages.Single(p => p.Key == RdpSettings.DrivesPage);
         Assert.AreEqual("Drive mapping", page.Label);
-        Assert.IsTrue(first.Fields.Any(field => field.Key == "drive:C" && field.Page == page.Key));
-        Assert.IsFalse(first.Fields.Any(field => field.Key == "drive:E"));
+        Assert.Contains(field => field.Key == "drive:C" && field.Page == page.Key, first.Fields);
+        Assert.DoesNotContain(field => field.Key == "drive:E", first.Fields);
         IWorkspaceProvider? provider = context.RecordingWorkspaces.GetProvider(first.Id);
 
         plugin.RefreshDisks();   // unchanged set: no re-registration
@@ -54,7 +54,7 @@ public sealed class RdpWorkspaceTests
         plugin.RefreshDisks();   // a USB disk appeared
         WorkspaceDescriptor second = context.RecordingWorkspaces.Registered.Single();
         Assert.AreNotSame(first, second);
-        Assert.IsTrue(second.Fields.Any(field => field.Key == "drive:E" && field.Label == "Removable Disk (E:)"));
+        Assert.Contains(field => field.Key == "drive:E" && field.Label == "Removable Disk (E:)", second.Fields);
         Assert.AreSame(provider, context.RecordingWorkspaces.GetProvider(second.Id));
 
         await plugin.DeactivateAsync(default);
