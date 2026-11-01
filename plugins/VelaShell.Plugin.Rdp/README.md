@@ -48,7 +48,21 @@ arguments.
   the fallback when a server declines dynamic resize. Width 320–8192; height 200–8192. Connect
   timeout 1–120 seconds, default 15. **Fit desktop** scales a mismatched desktop into the tab
   (smoothed); **100%** shows it 1:1 with scrollbars.
-- Keyboard, mouse, Unicode text and the **Ctrl+Alt+Delete** button send remote input. When a
+- Keyboard, mouse and Unicode text go to the remote desktop. Key combinations the local OS keeps
+  for itself (the plugin installs no global keyboard hook) live in the **remote-keys floating
+  button** (`RdpQuickBall`) on the desktop edge: drag it and it snaps to the nearer left/right edge;
+  click it and two semicircles fan out inwards over a dimmed desktop — inner ring Ctrl+Alt+Del,
+  Task Manager (Ctrl+Shift+Esc), Switch window (Alt+Tab), Type clipboard; outer ring Start (Win),
+  Run (Win+R), Desktop (Win+D), Lock (Win+L), Screenshot (PrintScreen). Esc or a click on the
+  dimmed desktop folds it; neither reaches the remote. In small views the whole fan (items too)
+  scales down to 0.6 so labels never collide. **Type clipboard** reads the local clipboard through
+  the SDK (`IClipboardApi`, never logged) and types it — runs as Unicode, line breaks as Enter, tabs
+  as Tab — for the sign-in screen, UAC and consoles where clipboard sharing does not work. Text with
+  line breaks or over 100 characters needs a second click on the same text (status-bar notice
+  explains; Enter runs commands in a console); over 2000 characters is refused.
+- Deviation from DESIGN.md: there is no 36px document header. Its only action (Ctrl+Alt+Delete)
+  moved into the floating button, so the desktop gets the full height above the 24px status bar.
+- When a
   session drops, a **Reconnect** button appears over the desktop (the host session tab reconnects
   too); reconnecting renews credentials and certificate approval.
 - **Bidirectional clipboard** is off by default. Text/images synchronize as before. On Windows,

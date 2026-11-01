@@ -20,8 +20,12 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private readonly TransferSlot _download = new("ClipboardDownload", "CancelClipboardDownload");
     private readonly TransferSlot _upload = new("ClipboardUpload", "CancelClipboardUpload");
     private readonly Border _footer;
-    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
-    private readonly Button _attention = new();
+    private readonly TextBlock _status = new() { Name = "RdpStatus", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
+    private readonly IPluginContext _context;
+    private readonly RdpQuickBall _quick;
+    private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(6) };
+    private string? _notice;
+    private string? _armedTyping;
     private readonly Button _reconnect = new();
     private readonly Border _overlay;
     private readonly TextBlock _overlayText = new() { HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center };
@@ -38,7 +42,10 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     public RdpWorkspaceView(IRdpSession session, IPluginContext context, RdpSettings settings, Loc loc)
     {
         _loc = loc;
-        RowDefinitions = [with("36,*,24")];
+        _context = context;
+        // No document header: the only toolbar action (Ctrl+Alt+Delete) moved into the floating remote-keys
+        // button, so the remote desktop gets the full height above the 24px status bar.
+        RowDefinitions = [with("*,24")];
         this[!BackgroundProperty] = new DynamicResourceExtension("VelaBgPage");
         Desktop = new(session, settings.Width, settings.Height)
         {
@@ -51,21 +58,13 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _transferTimer.Tick += (_, _) => UpdateTransfers();
         if (settings.Clipboard) { _transferTimer.Start(); }
         Desktop.OperationFailed = () => { _failed = true; UpdateStatus(); };
-        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(8, 0), VerticalAlignment = VerticalAlignment.Center };
-        // The desktop always follows the window (Fit stays on); no manual zoom toggle in the toolbar.
-        foreach (Button button in new[] { _attention })
+        _quick = new RdpQuickBall(QuickActions(), loc) { Folded = () => { _armedTyping = null; _ = Desktop.Focus(); } };
+        // Esc folds an open fan; it must not also reach the remote desktop, which has keyboard focus.
+        AddHandler(KeyDownEvent, (_, e) =>
         {
-            button.Height = 26;
-            button.Padding = new Thickness(8, 0);
-            button[!Button.ForegroundProperty] = new DynamicResourceExtension("VelaTextPrimary");
-            button[!Button.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
-            button[!Button.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize11");
-            toolbar.Children.Add(button);
-        }
-        _attention.Click += (_, _) => { Desktop.SendSecureAttention(); _ = Desktop.Focus(); };
-        var header = new Border { Child = toolbar, BorderThickness = new Thickness(0, 0, 0, 1) };
-        header[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSurface");
-        header[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaBorderPrimary");
+            if (_quick.IsExpanded && e.Key == Key.Escape) { _quick.Collapse(); e.Handled = true; }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); _notice = null; UpdateStatus(); };
         // Each transfer is one compact group — direction · size · name, a 3px bar, the state, × — like the
         // host's transfer rows. They sit right-aligned (upload outermost); the connection status takes what
         // is left and is the first thing to trim.
@@ -86,14 +85,89 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             VerticalContentAlignment = VerticalAlignment.Stretch
         };
         _overlay = BuildOverlay();
-        SetRow(scroller, 1);
-        SetRow(_overlay, 1);
-        SetRow(_footer, 2);
-        Children.Add(header);
+        SetRow(_footer, 1);
         Children.Add(scroller);
+        Children.Add(_quick);
         Children.Add(_overlay);
         Children.Add(_footer);
         ApplyLocale(loc);
+    }
+
+    internal RdpQuickBall QuickBall => _quick;
+
+    /// <summary>
+    /// What the floating button offers: combinations the local OS keeps for itself (there is no global keyboard
+    /// hook, so pressing them on the local keyboard never reaches the remote) plus typing the clipboard as text.
+    /// Inner ring: the most used; outer ring: the Windows-key shortcuts.
+    /// </summary>
+    private IEnumerable<RdpQuickAction> QuickActions()
+    {
+        const uint ctrl = 0x1d, shift = 0x2a, alt = 0x38, win = 0x15b;
+        Func<Task<bool>> Chord(params uint[] codes) => () => { Desktop.SendChord(codes); return Task.FromResult(true); };
+        yield return new("SecureAttention", "QuickSecureAttention", "Ctrl+Alt+Delete", ShieldIcon, 0, Chord(ctrl, alt, 0x153));
+        yield return new("TaskManager", "QuickTaskManager", "Ctrl+Shift+Esc", ActivityIcon, 0, Chord(ctrl, shift, 0x01));
+        yield return new("SwitchWindow", "QuickSwitchWindow", "Alt+Tab", ArrowRightLeftIcon, 0, Chord(alt, 0x0f));
+        yield return new("TypeClipboard", "QuickTypeClipboard", null, ClipboardIcon, 0, TypeClipboardAsync);
+        yield return new("Start", "QuickStart", "Win", LayoutGridIcon, 1, Chord(win));
+        yield return new("Run", "QuickRun", "Win+R", SquareTerminalIcon, 1, Chord(win, 0x13));
+        yield return new("ShowDesktop", "QuickShowDesktop", "Win+D", MonitorIcon, 1, Chord(win, 0x20));
+        yield return new("Lock", "QuickLock", "Win+L", LockIcon, 1, Chord(win, 0x26));
+        yield return new("PrintScreen", "QuickPrintScreen", "PrtSc", CameraIcon, 1, Chord(0x137));
+    }
+
+    // Lucide geometries, copied from the host's Icons.axaml where it has them (keyboard / monitor / camera are not there).
+    private const string ShieldIcon = "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z";
+    private const string ActivityIcon = "M22 12h-3.86l-2.64 7.92a.5.5 0 0 1-.94 0L9.4 4.08a.5.5 0 0 0-.94 0L5.82 12H2";
+    private const string ArrowRightLeftIcon = "M8 3 4 7l4 4 M4 7h16 M16 21l4-4-4-4 M20 17H4";
+    private const string ClipboardIcon = "M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2";
+    private const string LayoutGridIcon = "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z M15 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z M4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z M15 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z";
+    private const string SquareTerminalIcon = "M7 11l2-2-2-2 M11 13h4 M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z";
+    private const string MonitorIcon = "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M8 21h8 M12 17v4";
+    private const string LockIcon = "M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z M7 11V7a5 5 0 0 1 10 0v4";
+    private const string CameraIcon = "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z M9 13a3 3 0 1 0 6 0a3 3 0 1 0-6 0";
+
+    internal const int TypeLimit = 2000, TypeConfirmLength = 100;
+
+    /// <summary>
+    /// Reads the local clipboard through the SDK (never logged) and types it. Text over
+    /// <see cref="TypeConfirmLength"/> characters, or with line breaks (sent as Enter, so a console would run them),
+    /// needs a second click on the same text; over <see cref="TypeLimit"/> it is refused.
+    /// </summary>
+    private async Task<bool> TypeClipboardAsync()
+    {
+        string? text;
+        try { text = await _context.Clipboard.GetTextAsync(CancellationToken.None); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { ShowNotice(_loc["TypeClipboardUnavailable"]); return true; }
+        string typed = RdpDesktopControl.NormalizeTypedText(text ?? "");
+        if (typed.Length == 0) { ShowNotice(_loc["TypeClipboardEmpty"]); return true; }
+        if (typed.Length > TypeLimit) { ShowNotice(_loc.Format("TypeClipboardTooLong", typed.Length, TypeLimit)); return true; }
+        bool lines = typed.Contains('\n');
+        if ((lines || typed.Length > TypeConfirmLength) && !(_quick.IsArmed("TypeClipboard") && _armedTyping == typed))
+        {
+            _armedTyping = typed;
+            _quick.Arm("TypeClipboard");
+            ShowNotice(_loc.Format(lines ? "TypeClipboardConfirmLines" : "TypeClipboardConfirm", typed.Length));
+            return false;
+        }
+        _armedTyping = null;
+        ClearNotice();
+        Desktop.TypeText(typed);
+        return true;
+    }
+
+    private void ShowNotice(string text)
+    {
+        _notice = text;
+        _noticeTimer.Stop();
+        _noticeTimer.Start();
+        UpdateStatus();
+    }
+
+    private void ClearNotice()
+    {
+        _noticeTimer.Stop();
+        _notice = null;
+        UpdateStatus();
     }
 
     private void UpdateTransfers() => UpdateTransfers(_clipboard.DownloadProgress, _clipboard.UploadProgress);
@@ -229,19 +303,9 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
                 VerticalAlignment = VerticalAlignment.Center,
                 Content = new RdpGlyph { Data = CancelIcon, Width = 10, Height = 10 }
             };
-            // Styles, not local values, so the hover state can override the resting colours.
-            button.Styles.Add(TokenStyle(x => x.OfType<RdpGlyph>(), RdpGlyph.ForegroundProperty, "VelaTextTertiary"));
-            button.Styles.Add(TokenStyle(x => x.OfType<Button>().Class(":pointerover").Descendant().OfType<RdpGlyph>(), RdpGlyph.ForegroundProperty, "VelaTextPrimary"));
-            foreach (string state in new[] { ":pointerover", ":pressed" })
-            {
-                button.Styles.Add(TokenStyle(x => x.OfType<Button>().Class(state).Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"),
-                    ContentPresenter.BackgroundProperty, "VelaBgHover"));
-            }
+            RdpChrome.AddIconButtonStyles(button, "VelaTextTertiary", "VelaTextPrimary");
             return button;
         }
-
-        private static Style TokenStyle(Func<Selector?, Selector> selector, AvaloniaProperty property, string token) =>
-            new(selector) { Setters = { new Setter(property, new DynamicResourceExtension(token)) } };
 
         internal void Update(RdpClipboardProgress? progress, bool upload, bool connected, Loc loc)
         {
@@ -343,7 +407,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     internal void ApplyLocale(Loc loc)
     {
         _loc = loc;
-        _attention.Content = loc["SecureAttention"];
+        _quick.ApplyLocale(loc);
         _reconnect.Content = loc["ReconnectButton"];
         UpdateTransfers();
         UpdateStatus();
@@ -354,7 +418,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         if (!connected) { _clipboard.StopTransfers(); UpdateTransfers(); }
         _disconnectDetail = connected ? null : detail;
         Desktop.IsEnabled = connected;
-        _attention.IsEnabled = connected;
+        if (!connected) { _quick.Collapse(); ClearNotice(); }
+        _quick.IsVisible = connected;
         _overlay.IsVisible = !connected;
         if (!connected && !_reconnecting)
         {
@@ -367,11 +432,13 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         UpdateStatus();
     }
     private void UpdateStatus() => _status.Text = !_connected ? _disconnectDetail ?? _loc["Disconnected"]
+        : _notice is { } notice ? notice
         : _failed ? _loc["InputFailed"]
         : _loc["Connected"] + " · " + _loc.Format("Resolution", Desktop.DesktopWidth, Desktop.DesktopHeight);
     public async ValueTask DisposeAsync()
     {
         _transferTimer.Stop();
+        _noticeTimer.Stop();
         try { await _clipboard.DisposeAsync(); }
         finally { await Desktop.DisposeAsync(); Children.Clear(); }
     }

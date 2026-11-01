@@ -225,15 +225,43 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             _overflowShutdown ??= _session.DisposeAsync().AsTask();
         }
     }
-    internal void SendSecureAttention() => Queue(async () =>
+    internal void SendSecureAttention() => SendChord(0x1d, 0x38, 0x153);
+
+    /// <summary>
+    /// Presses the scan codes in order and releases them in reverse — a key combination the local OS would
+    /// otherwise keep for itself (Win+L, Ctrl+Shift+Esc, Alt+Tab …), sent through the same ordered input queue.
+    /// </summary>
+    internal void SendChord(params uint[] codes) => Queue(async () =>
     {
-        await _session.KeyAsync(0x1d, true);
-        await _session.KeyAsync(0x38, true);
-        await _session.KeyAsync(0x153, true);
-        await _session.KeyAsync(0x153, false);
-        await _session.KeyAsync(0x38, false);
-        await _session.KeyAsync(0x1d, false);
+        foreach (uint code in codes) { await _session.KeyAsync(code, true); }
+        for (int i = codes.Length - 1; i >= 0; i--) { await _session.KeyAsync(codes[i], false); }
     });
+
+    /// <summary>
+    /// Types text as keystrokes: runs of characters go as Unicode input, line breaks as Enter and tabs as Tab, so
+    /// it also works where clipboard sharing does not (the sign-in screen, UAC prompts, consoles). The caller passes
+    /// text from <see cref="NormalizeTypedText"/>.
+    /// </summary>
+    internal void TypeText(string text) => Queue(async () =>
+    {
+        int start = 0;
+        for (int i = 0; i <= text.Length; i++)
+        {
+            uint key = i < text.Length ? text[i] switch { '\n' => 0x1cu, '\t' => 0x0fu, _ => 0u } : 0u;
+            if (i < text.Length && key == 0) { continue; }
+            if (i > start) { await _session.UnicodeAsync(text[start..i]); }
+            if (key != 0)
+            {
+                await _session.KeyAsync(key, true);
+                await _session.KeyAsync(key, false);
+            }
+            start = i + 1;
+        }
+    });
+
+    /// <summary>Line breaks become '\n'; control characters other than '\n' and '\t' are dropped.</summary>
+    internal static string NormalizeTypedText(string text) =>
+        string.Concat(text.ReplaceLineEndings("\n").Where(c => !char.IsControl(c) || c is '\n' or '\t'));
 
     private void PublishOnFocus(Func<Task> publish)
     {

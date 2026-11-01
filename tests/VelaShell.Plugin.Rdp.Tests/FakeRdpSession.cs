@@ -10,6 +10,8 @@ internal sealed class FakeRdpSession : IRdpSession
     public bool IsConnected { get; private set; } = true;
     internal int DisposeCount;
     internal readonly List<(uint Code, bool Down)> Keys = [];
+    /// <summary>Keys ("1d+" / "1d-") and Unicode runs ("'text'") in the order they were sent.</summary>
+    internal readonly List<string> Input = [];
     internal readonly List<(uint Flags, uint X, uint Y)> Mouse = [];
     internal readonly List<(int Width, int Height)> Resizes = [];
     private RdpFrame? _frame;
@@ -17,8 +19,8 @@ internal sealed class FakeRdpSession : IRdpSession
     internal void Emit(RdpFrame frame) { _frame = frame; FrameAvailable?.Invoke(); }
     internal void Disconnect() { IsConnected = false; Disconnected?.Invoke(null); }
     internal void EmitClipboard(RdpClipboardEvent data) => ClipboardEvent?.Invoke(data);
-    public Task KeyAsync(uint code, bool down, CancellationToken ct = default) { Keys.Add((code, down)); return Task.CompletedTask; }
-    public Task UnicodeAsync(string text, CancellationToken ct = default) => Task.CompletedTask;
+    public Task KeyAsync(uint code, bool down, CancellationToken ct = default) { Keys.Add((code, down)); Input.Add($"{code:x}{(down ? "+" : "-")}"); return Task.CompletedTask; }
+    public Task UnicodeAsync(string text, CancellationToken ct = default) { Input.Add($"'{text}'"); return Task.CompletedTask; }
     public Task MouseAsync(uint flags, uint x, uint y, CancellationToken ct = default) { Mouse.Add((flags, x, y)); return Task.CompletedTask; }
     public Task RequestResizeAsync(int width, int height, CancellationToken ct = default) { Resizes.Add((width, height)); return Task.CompletedTask; }
     public Task OfferFormatsAsync(string formats, CancellationToken cancellationToken) => Task.CompletedTask;

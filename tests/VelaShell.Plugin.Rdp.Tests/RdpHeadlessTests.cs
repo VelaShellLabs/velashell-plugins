@@ -37,11 +37,17 @@ public sealed class RdpHeadlessTests
         var window = new Window { Width = 1000, Height = 700, Content = view };
         window.Show();
         window.UpdateLayout();
-        Assert.AreEqual(36d, view.RowDefinitions[0].ActualHeight);
-        Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
-        var toolbar = (StackPanel)((Border)view.Children[0]).Child!;
-        Assert.AreSequenceEqual(new[] { "Ctrl+Alt+Delete" }, [.. toolbar.Children.OfType<Button>().Select(button => (string)button.Content!)]);
+        // No document header any more: the desktop takes everything above the 24px status bar.
+        Assert.HasCount(2, view.RowDefinitions);
+        Assert.AreEqual(676d, view.RowDefinitions[0].ActualHeight);
+        Assert.AreEqual(24d, view.RowDefinitions[1].ActualHeight);
+        // Ctrl+Alt+Delete lives in the floating remote-keys button, docked to the right edge.
+        Button ball = Find<Button>(view, "RdpQuickBall");
+        Assert.AreEqual("Remote keys", Avalonia.Automation.AutomationProperties.GetName(ball));
+        Assert.AreEqual("Ctrl+Alt+Del", Avalonia.Automation.AutomationProperties.GetName(Find<Button>(view, "QuickSecureAttention")));
+        Assert.IsTrue(view.QuickBall.IsDockedRight);
         view.ApplyLocale(new("ja"));
+        Assert.AreEqual("リモートキー", Avalonia.Automation.AutomationProperties.GetName(ball));
         Assert.IsTrue(session.IsConnected);
         session.Emit(new(2, 1, [0, 0, 0, 255, 255, 255, 255, 255]));
         Dispatcher.UIThread.RunJobs();
@@ -60,17 +66,17 @@ public sealed class RdpHeadlessTests
         var window = new Window { Width = 800, Height = 600, Content = view };
         window.Show();
         window.UpdateLayout();
-        double desktopHeight = view.RowDefinitions[1].ActualHeight;
+        double desktopHeight = view.RowDefinitions[0].ActualHeight;
         foreach (string state in new[] { "Ready", "Preparing", "Transferring", "Retrying", "Sent", "Delivered", "Completed", "Cancelled", "Failed" })
         {
             view.UpdateTransfers(new(state, 12, 100, new string('x', 260)), new(state, 24, 100));
             window.UpdateLayout();
-            Assert.AreEqual(desktopHeight, view.RowDefinitions[1].ActualHeight);
-            Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
+            Assert.AreEqual(desktopHeight, view.RowDefinitions[0].ActualHeight);
+            Assert.AreEqual(24d, view.RowDefinitions[1].ActualHeight);
         }
         view.UpdateTransfers(null, null);
         window.UpdateLayout();
-        Assert.AreEqual(desktopHeight, view.RowDefinitions[1].ActualHeight);
+        Assert.AreEqual(desktopHeight, view.RowDefinitions[0].ActualHeight);
         session.Emit(new(2, 1, new byte[8]));
         Dispatcher.UIThread.RunJobs();
         Assert.AreEqual(2, view.Desktop.DesktopWidth);
@@ -106,7 +112,7 @@ public sealed class RdpHeadlessTests
                 Assert.AreEqual(10d, ((Control)cancel.Content!).Bounds.Width);
                 Assert.AreEqual("Cancel", Avalonia.Automation.AutomationProperties.GetName(cancel));
             }
-            Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
+            Assert.AreEqual(24d, view.RowDefinitions[1].ActualHeight);
         }
         window.Close();
     });
@@ -244,8 +250,8 @@ public sealed class RdpHeadlessTests
         try
         {
             await using var view = new RdpWorkspaceView(session, context, settings, loc);
-            // 36px toolbar + 24px status, so a 828px window leaves a 1024×768 desktop viewport.
-            var window = new Window { Width = 1024, Height = 828, Content = view };
+            // Only the 24px status bar sits below the desktop, so a 792px window leaves a 1024×768 desktop viewport.
+            var window = new Window { Width = 1024, Height = 792, Content = view };
             window.Show();
             window.UpdateLayout();
 
@@ -267,7 +273,10 @@ public sealed class RdpHeadlessTests
         finally { await session.DisposeAsync(); }
     });
 
-    private static void Run(Func<Task> action)
+    internal static T Find<T>(Visual root, string name) where T : Control =>
+        root.GetVisualDescendants().OfType<T>().Single(control => control.Name == name);
+
+    internal static void Run(Func<Task> action)
     {
         var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(RdpHeadlessApp).Assembly);
         _ = session.Dispatch(async () => { await action(); return true; }, CancellationToken.None).GetAwaiter().GetResult();
