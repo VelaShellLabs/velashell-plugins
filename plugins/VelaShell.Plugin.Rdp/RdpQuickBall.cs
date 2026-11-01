@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
+using Avalonia.Styling;
 using Avalonia.Threading;
 
 namespace VelaShell.Plugin.Rdp;
@@ -36,9 +37,10 @@ internal sealed class RdpQuickBall : Canvas
     private static readonly ITransform FoldedTransform = Transform(default, 0.3);
 
     private readonly Border _scrim;
-    private readonly Border _ball;
+    private readonly Panel _ball;
     private readonly Button _ballButton;
-    private readonly RdpGlyph _ballGlyph;
+    private readonly RdpGlyph _keysGlyph, _closeGlyph;
+    private readonly Border _accentRing, _halo;
     private readonly List<Item> _items = [];
     private readonly Transitions _ballMotion;
     private readonly Transitions _ballFade;
@@ -55,6 +57,7 @@ internal sealed class RdpQuickBall : Canvas
     {
         _loc = loc;
         ClipToBounds = true;
+        Styles.AddRange(ItemStyles());
         _scrim = new Border { Name = "RdpQuickBallScrim", IsVisible = false, Background = new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)) };
         _scrim.PointerPressed += (_, e) => { Collapse(); e.Handled = true; };
         Children.Add(_scrim);
@@ -72,27 +75,42 @@ internal sealed class RdpQuickBall : Canvas
             new DoubleTransition { Property = TopProperty, Duration = Motion, Easing = new CubicEaseOut() },
             new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(120) }
         };
-        _ballGlyph = new RdpGlyph { Data = BallIcon, Width = 18, Height = 18 };
+        // Keyboard and × share the button and cross-fade with a quarter turn when the fan opens or folds.
+        _keysGlyph = Glyph(BallIcon, 18);
+        _closeGlyph = Glyph(CloseIcon, 16);
         _ballButton = new Button
         {
-            Name = "RdpQuickBall", Focusable = false, Width = BallSize, Height = BallSize, MinWidth = 0, MinHeight = 0,
+            Name = "RdpQuickBall", Focusable = false, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(0), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(BallSize / 2),
             Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
-            Content = _ballGlyph
+            Content = new Panel { Children = { _keysGlyph, _closeGlyph } }
         };
-        RdpChrome.AddIconButtonStyles(_ballButton, "VelaTextSecondary", "VelaTextPrimary");
+        // Hover: the translucent accent fill and accent glyph (the host's accent-pill language, DESIGN.md §5.1).
+        RdpChrome.AddIconButtonStyles(_ballButton, "VelaTextPrimary", "VelaAccent", "VelaAccentDim");
         _ballButton.Click += OnBallClick;
         // Tunnel + handledEventsToo: the Button marks presses handled, but a drag still has to be seen.
         _ballButton.AddHandler(PointerPressedEvent, OnBallPressed, RoutingStrategies.Tunnel, true);
         _ballButton.AddHandler(PointerMovedEvent, OnBallMoved, RoutingStrategies.Tunnel, true);
         _ballButton.AddHandler(PointerReleasedEvent, OnBallReleased, RoutingStrategies.Tunnel, true);
-        _ball = Circle(_ballButton, BallSize);
-        _ball.Opacity = IdleOpacity;
-        _ball.Transitions = _ballMotion;
-        _ball.PointerEntered += (_, _) => { _pointerOver = true; UpdateBallOpacity(); };
-        _ball.PointerExited += (_, _) => { _pointerOver = false; UpdateBallOpacity(); };
+        var body = new Border { Name = "RdpQuickBallBody", CornerRadius = new CornerRadius(BallSize / 2), Child = _ballButton };
+        body[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSurface");
+        body[!Border.BoxShadowProperty] = new DynamicResourceExtension("VelaShadowWindow");
+        // The rings are separate layers above the button: its hover fill can never cover them (it used to
+        // overflow a bordered circle by a pixel and hide half the ring). All of them follow the user's accent.
+        _halo = Ring("RdpQuickBallHalo", 2, "VelaAccent");
+        _halo.RenderTransform = Transform(default, 1);
+        _accentRing = Ring("RdpQuickBallRing", 2, "VelaAccent");
+        _ball = new Panel
+        {
+            Width = BallSize, Height = BallSize, Opacity = IdleOpacity, Transitions = _ballMotion,
+            Children = { _halo, body, Ring(null, 1, "VelaBorderSecondary"), _accentRing }
+        };
+        _ball.PointerEntered += (_, _) => SetPointerOver(true);
+        _ball.PointerExited += (_, _) => SetPointerOver(false);
         Children.Add(_ball);
+        UpdateBall();
         SizeChanged += (_, _) => { if (IsExpanded) { Collapse(); } Place(animate: false); };
         ApplyLocale(loc);
     }
@@ -142,9 +160,7 @@ internal sealed class RdpQuickBall : Canvas
         _scrim.Width = w;
         _scrim.Height = h;
         _scrim.IsVisible = true;
-        _ballGlyph.Data = CloseIcon;
-        _ball[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaAccent");
-        UpdateBallOpacity();
+        UpdateBall();
 
         var targets = new Dictionary<string, Point>();
         var offsets = new List<(Item Item, Vector Offset)>();
@@ -191,8 +207,6 @@ internal sealed class RdpQuickBall : Canvas
         IsExpanded = false;
         _armed = null;
         _scrim.IsVisible = false;
-        _ballGlyph.Data = BallIcon;
-        _ball[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaBorderSecondary");
         foreach (Item item in _items)
         {
             item.Box.IsHitTestVisible = false;
@@ -206,7 +220,7 @@ internal sealed class RdpQuickBall : Canvas
             foreach (Item item in _items) { item.Box.IsVisible = false; }
         }, Motion);
         Place();
-        UpdateBallOpacity();
+        UpdateBall();
         Folded?.Invoke();
     }
 
@@ -228,23 +242,35 @@ internal sealed class RdpQuickBall : Canvas
     private void ShowArmed(Item item, bool armed)
     {
         item.Label.Text = armed ? _loc["QuickArmed"] : _loc[item.Action.LabelKey];
-        item.Circle[!Border.BorderBrushProperty] = new DynamicResourceExtension(armed ? "VelaAccent" : "VelaBorderSecondary");
-        item.Circle.BorderThickness = new Thickness(armed ? 2 : 1);
+        item.Face.Classes.Set("armed", armed);
     }
 
     private Item BuildItem(RdpQuickAction action)
     {
         var button = new Button
         {
-            Name = "Quick" + action.Id, Focusable = false, Width = ItemSize, Height = ItemSize, MinWidth = 0, MinHeight = 0,
+            Name = "Quick" + action.Id, Focusable = false, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(0), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(ItemSize / 2),
             Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
-            Content = new RdpGlyph { Data = Geometry.Parse(action.Icon), Width = 16, Height = 16 }
+            Content = Glyph(Geometry.Parse(action.Icon), 16)
         };
         RdpChrome.AddIconButtonStyles(button, "VelaTextPrimary", "VelaAccent");
-        Border circle = Circle(button, ItemSize);
-        circle.HorizontalAlignment = HorizontalAlignment.Center;
+        // Same layering as the ball: fill + button, then the outline and the accent ring above it. Hover and
+        // "armed" (waiting for a confirming click) are style states of the face (see ItemStyles).
+        var body = new Border { CornerRadius = new CornerRadius(ItemSize / 2), Child = button };
+        body[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSurface");
+        body[!Border.BoxShadowProperty] = new DynamicResourceExtension("VelaShadowWindow");
+        var accent = Ring(null, 2, "VelaAccent", ItemSize);
+        accent.Classes.Add("accent");
+        var circle = new Panel
+        {
+            Width = ItemSize, Height = ItemSize, HorizontalAlignment = HorizontalAlignment.Center,
+            Transitions = new Transitions { new TransformOperationsTransition { Property = RenderTransformProperty, Duration = TimeSpan.FromMilliseconds(140), Easing = new CubicEaseOut() } },
+            Children = { body, Ring(null, 1, "VelaBorderSecondary", ItemSize), accent }
+        };
+        circle.Classes.Add("quick-item");
         var label = new TextBlock { TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = BoxWidth - 10 };
         label[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("VelaTextPrimary");
         label[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
@@ -287,13 +313,80 @@ internal sealed class RdpQuickBall : Canvas
         return builder.Build();
     }
 
-    private static Border Circle(Button button, double size)
+    private static ITransform Rotation(double degrees)
     {
-        var circle = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(size / 2), BorderThickness = new Thickness(1), Child = button };
-        circle[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSurface");
-        circle[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaBorderSecondary");
-        circle[!Border.BoxShadowProperty] = new DynamicResourceExtension("VelaShadowWindow");
-        return circle;
+        var builder = TransformOperations.CreateBuilder(1);
+        builder.AppendRotate(degrees * Math.PI / 180);
+        return builder.Build();
+    }
+
+    private static RdpGlyph Glyph(Geometry data, double size) => new()
+    {
+        Data = data, Width = size, Height = size, RenderTransform = Rotation(0),
+        Transitions = new Transitions
+        {
+            new DoubleTransition { Property = OpacityProperty, Duration = Motion },
+            new TransformOperationsTransition { Property = RenderTransformProperty, Duration = TimeSpan.FromMilliseconds(260), Easing = new BackEaseOut() }
+        }
+    };
+
+    /// <summary>A hit-test-transparent circular outline drawn above a button, so its hover fill cannot cover it.</summary>
+    private static Border Ring(string? name, double thickness, string token, double size = BallSize)
+    {
+        var ring = new Border
+        {
+            Name = name, Width = size, Height = size, CornerRadius = new CornerRadius(size / 2), BorderThickness = new Thickness(thickness),
+            IsHitTestVisible = false,
+            Transitions = new Transitions
+            {
+                new DoubleTransition { Property = OpacityProperty, Duration = Motion },
+                new TransformOperationsTransition { Property = RenderTransformProperty, Duration = TimeSpan.FromMilliseconds(220), Easing = new CubicEaseOut() }
+            }
+        };
+        ring[!Border.BorderBrushProperty] = new DynamicResourceExtension(token);
+        return ring;
+    }
+
+    /// <summary>
+    /// Hover and "armed" for the fan items, as styles so they can change without code: the accent ring fades
+    /// in and the circle grows a little. Rest values are styles too, so the states can override them.
+    /// </summary>
+    private static IEnumerable<Avalonia.Styling.Style> ItemStyles()
+    {
+        static Avalonia.Styling.Style Set(Func<Avalonia.Styling.Selector?, Avalonia.Styling.Selector> selector, AvaloniaProperty property, object value) =>
+            new(selector) { Setters = { new Avalonia.Styling.Setter(property, value) } };
+        yield return Set(x => x.OfType<Panel>().Class("quick-item"), RenderTransformProperty, Transform(default, 1));
+        yield return Set(x => x.OfType<Panel>().Class("quick-item").Class(":pointerover"), RenderTransformProperty, Transform(default, 1.08));
+        yield return Set(x => x.OfType<Panel>().Class("quick-item").Child().OfType<Border>().Class("accent"), OpacityProperty, 0d);
+        yield return Set(x => x.OfType<Panel>().Class("quick-item").Class(":pointerover").Child().OfType<Border>().Class("accent"), OpacityProperty, 1d);
+        yield return Set(x => x.OfType<Panel>().Class("quick-item").Class("armed").Child().OfType<Border>().Class("accent"), OpacityProperty, 1d);
+    }
+
+    internal bool IsBallPointerOver => _pointerOver;
+
+    /// <summary>Hover state of the ball (pointer entered/left); internal so headless tests can drive it.</summary>
+    internal void SetPointerOver(bool over)
+    {
+        _pointerOver = over;
+        UpdateBall();
+    }
+
+    /// <summary>
+    /// One place for the ball's look, so every state change animates from wherever it is:
+    /// rest — dimmed keyboard; hover — full opacity, accent ring at 70%, a soft accent halo growing outwards;
+    /// open — × (rotated in), solid accent ring; open + hover — the × turns a further quarter.
+    /// </summary>
+    private void UpdateBall()
+    {
+        bool hot = _pointerOver || _dragging;
+        _ball.Opacity = IsExpanded || hot ? 1 : IdleOpacity;
+        _accentRing.Opacity = IsExpanded ? 1 : hot ? 0.7 : 0;
+        _halo.Opacity = hot ? 0.35 : 0;
+        _halo.RenderTransform = Transform(default, hot ? 1.3 : 1);
+        _keysGlyph.Opacity = IsExpanded ? 0 : 1;
+        _keysGlyph.RenderTransform = Rotation(IsExpanded ? 90 : 0);
+        _closeGlyph.Opacity = IsExpanded ? 1 : 0;
+        _closeGlyph.RenderTransform = Rotation(!IsExpanded ? -90 : hot ? 90 : 0);
     }
 
     private static double ScaleFor(double w, double h)
@@ -328,7 +421,6 @@ internal sealed class RdpQuickBall : Canvas
         if (!animate && !_dragging) { _ball.Transitions = _ballMotion; }
     }
 
-    private void UpdateBallOpacity() => _ball.Opacity = IsExpanded || _pointerOver || _dragging ? 1 : IdleOpacity;
 
     private void OnBallClick(object? sender, RoutedEventArgs e)
     {
@@ -351,7 +443,7 @@ internal sealed class RdpQuickBall : Canvas
         {
             _dragging = true;
             _ball.Transitions = _ballFade;
-            UpdateBallOpacity();
+            UpdateBall();
         }
         if (!_dragging) { return; }
         DragTo(point - _grab);
@@ -383,14 +475,14 @@ internal sealed class RdpQuickBall : Canvas
         _yFraction = Bounds.Height > 0 ? _center.Y / Bounds.Height : 0.4;
         _ball.Transitions = _ballMotion;
         Place();
-        UpdateBallOpacity();
+        UpdateBall();
     }
 
-    private sealed class Item(RdpQuickAction action, StackPanel box, Border circle, Button button, TextBlock label)
+    private sealed class Item(RdpQuickAction action, StackPanel box, Panel face, Button button, TextBlock label)
     {
         internal RdpQuickAction Action { get; } = action;
         internal StackPanel Box { get; } = box;
-        internal Border Circle { get; } = circle;
+        internal Panel Face { get; } = face;
         internal Button Button { get; } = button;
         internal TextBlock Label { get; } = label;
         internal Vector Offset { get; set; }

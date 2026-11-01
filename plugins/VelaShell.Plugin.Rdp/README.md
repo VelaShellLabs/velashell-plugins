@@ -55,7 +55,12 @@ arguments.
   Task Manager (Ctrl+Shift+Esc), Switch window (Alt+Tab), Type clipboard; outer ring Start (Win),
   Run (Win+R), Desktop (Win+D), Lock (Win+L), Screenshot (PrintScreen). Esc or a click on the
   dimmed desktop folds it; neither reaches the remote. In small views the whole fan (items too)
-  scales down to 0.6 so labels never collide. **Type clipboard** reads the local clipboard through
+  scales down to 0.6 so labels never collide. Rings are separate hit-test-transparent layers above
+  each button (a bordered circle used to let the hover fill overflow it by a pixel and hide half the
+  ring) and use `VelaAccent`, i.e. the user's accent colour: hover fades in the accent ring and a
+  halo growing outwards, the open ball cross-fades the keyboard into × with a quarter turn (that ×
+  turns once more on hover, over a `VelaAccentDim` fill), fan items grow 8% and light their ring on
+  hover. **Type clipboard** reads the local clipboard through
   the SDK (`IClipboardApi`, never logged) and types it — runs as Unicode, line breaks as Enter, tabs
   as Tab — for the sign-in screen, UAC and consoles where clipboard sharing does not work. Text with
   line breaks or over 100 characters needs a second click on the same text (status-bar notice

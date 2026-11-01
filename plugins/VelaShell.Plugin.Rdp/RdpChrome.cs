@@ -15,17 +15,17 @@ internal static class RdpChrome
 
     /// <summary>
     /// The host's icon-button behaviour on a transparent button holding an <see cref="RdpGlyph"/>: the glyph in
-    /// <paramref name="rest"/>, <c>VelaBgHover</c> behind it and the glyph in <paramref name="hover"/> while the
+    /// <paramref name="rest"/>, <paramref name="hoverFill"/> (default <c>VelaBgHover</c>) behind it and the glyph in <paramref name="hover"/> while the
     /// pointer is over or pressed. Styles rather than local values, so the hover state can override the rest state.
     /// </summary>
-    internal static void AddIconButtonStyles(Button button, string rest, string hover)
+    internal static void AddIconButtonStyles(Button button, string rest, string hover, string hoverFill = "VelaBgHover")
     {
         button.Styles.Add(TokenStyle(x => x.OfType<RdpGlyph>(), RdpGlyph.ForegroundProperty, rest));
         button.Styles.Add(TokenStyle(x => x.OfType<Button>().Class(":pointerover").Descendant().OfType<RdpGlyph>(), RdpGlyph.ForegroundProperty, hover));
         foreach (string state in new[] { ":pointerover", ":pressed" })
         {
             button.Styles.Add(TokenStyle(x => x.OfType<Button>().Class(state).Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"),
-                ContentPresenter.BackgroundProperty, "VelaBgHover"));
+                ContentPresenter.BackgroundProperty, hoverFill));
         }
     }
 }

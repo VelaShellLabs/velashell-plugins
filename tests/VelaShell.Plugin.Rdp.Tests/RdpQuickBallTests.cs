@@ -196,6 +196,65 @@ public sealed class RdpQuickBallTests
     });
 
     [TestMethod]
+    public void BallRingsSitAboveTheButtonFollowTheAccentAndAnimateBetweenStates() => Run(async () =>
+    {
+        using var context = new TestPluginContext();
+        await using var view = Open(new FakeRdpSession(), context, out Window window);
+        // A user accent like the one in the bug report (Material pink): the ring must use it, whatever it is.
+        var accent = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#E91E63"));
+        window.Resources["VelaAccent"] = accent;
+        window.UpdateLayout();
+        RdpQuickBall quick = view.QuickBall;
+        Button button = Find<Button>(view, "RdpQuickBall");
+        Border body = Find<Border>(view, "RdpQuickBallBody"), ring = Find<Border>(view, "RdpQuickBallRing"), halo = Find<Border>(view, "RdpQuickBallHalo");
+        var layers = ((Panel)body.Parent!).Children;
+        // The hover fill (the button) exactly fills the body, and both rings are separate layers above it,
+        // so the fill can no longer slide over half of the ring.
+        Assert.AreEqual(new Rect(0, 0, RdpQuickBall.BallSize, RdpQuickBall.BallSize), button.Bounds);
+        Assert.IsGreaterThan(layers.IndexOf(body), layers.IndexOf(ring));
+        Assert.IsLessThan(layers.IndexOf(body), layers.IndexOf(halo));
+        Assert.IsFalse(ring.IsHitTestVisible);
+        Assert.AreSame(accent, ring.BorderBrush);
+        Assert.AreSame(accent, halo.BorderBrush);
+
+        await Animate();
+        Assert.AreEqual(0d, ring.Opacity, 0.01);
+        Assert.AreEqual(0d, halo.Opacity, 0.01);
+        quick.SetPointerOver(true);
+        await Animate();
+        Assert.AreEqual(0.7, ring.Opacity, 0.01);
+        Assert.AreEqual(0.35, halo.Opacity, 0.01);
+        quick.Expand();
+        await Animate();
+        Assert.AreEqual(1d, ring.Opacity, 0.01);
+        var glyphs = ((Panel)button.Content!).Children;
+        Assert.AreEqual(0d, glyphs[0].Opacity, 0.01, "keyboard glyph fades out");
+        Assert.AreEqual(1d, glyphs[1].Opacity, 0.01, "× fades in");
+        quick.SetPointerOver(false);
+        quick.Collapse();
+        await Animate();
+        Assert.AreEqual(0d, ring.Opacity, 0.01);
+        Assert.AreEqual(1d, glyphs[0].Opacity, 0.01);
+
+        // Fan items: same layering; hover and "armed" light the accent ring.
+        quick.Expand();
+        Button task = Find<Button>(view, "QuickTaskManager");
+        var face = (Panel)((Border)task.Parent!).Parent!;
+        Border itemRing = face.Children.OfType<Border>().Single(b => b.Classes.Contains("accent"));
+        Assert.IsGreaterThan(face.Children.IndexOf((Border)task.Parent!), face.Children.IndexOf(itemRing));
+        await Animate();
+        Assert.AreEqual(0d, itemRing.Opacity, 0.01);
+        ((Avalonia.Controls.IPseudoClasses)face.Classes).Set(":pointerover", true);
+        await Animate();
+        Assert.AreEqual(1d, itemRing.Opacity, 0.01);
+        ((Avalonia.Controls.IPseudoClasses)face.Classes).Set(":pointerover", false);
+        quick.Arm("TaskManager");
+        await Animate();
+        Assert.AreEqual(1d, itemRing.Opacity, 0.01, "an armed item keeps its accent ring");
+        window.Close();
+    });
+
+    [TestMethod]
     public void DisconnectFoldsAndHidesTheBall() => Run(async () =>
     {
         using var context = new TestPluginContext();
