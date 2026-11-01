@@ -86,21 +86,42 @@ public sealed class PortDeviceTests
     }
 
     [TestMethod]
-    public async Task PendingReadDoesNotBlockControlOrCloseAndTimeoutIsReported()
+    public async Task LineWaitsOutliveTheDeadlineWhileControlsTimeOutAndCloseCancels()
     {
         var fake = new FakePort { Block = true };
         using var device = new PortDevice(new("COM1"), _ => fake, TimeSpan.FromMilliseconds(100));
         RdpdrIoResult opened = await device.ProcessAsync(new(0, 0, 0, CreateBody()), default);
         uint id = U32(opened.Body);
+        // A read and WaitCommEvent on a quiet line pend like on a local port: no client-imposed timeout.
         Task<RdpdrIoResult> read = device.ProcessAsync(new(id, 3, 0, Transfer(1)), default);
+        Task<RdpdrIoResult> wait = device.ProcessAsync(new(id, 14, 0, Control(PortControl.WaitOnMask, [], 4)), default);
         RdpdrIoResult control = await device.ProcessAsync(new(id, 14, 0, Control(PortControl.GetBaud, [], 4)), default);
         Assert.AreEqual(0u, control.Status);
-        RdpdrIoResult timeout = await read.WaitAsync(TimeSpan.FromSeconds(3));
+        await Task.Delay(400);
+        Assert.IsFalse(read.IsCompleted);
+        Assert.IsFalse(wait.IsCompleted);
+        // A configuration control that hangs in the driver still reports a timeout.
+        fake.BlockControl = true;
+        RdpdrIoResult timeout = await device.ProcessAsync(new(id, 14, 0, Control(PortControl.GetLine, [], 3)), default)
+            .WaitAsync(TimeSpan.FromSeconds(3));
         Assert.AreEqual(0xC00000B5u, timeout.Status);
-        Task<RdpdrIoResult> secondRead = device.ProcessAsync(new(id, 3, 0, Transfer(1)), default);
         await device.ProcessAsync(new(id, 2, 0, new byte[32]), default);
-        RdpdrIoResult cancelled = await secondRead.WaitAsync(TimeSpan.FromSeconds(3));
+        RdpdrIoResult cancelled = await read.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.AreEqual(0xC0000120u, cancelled.Status);
+        RdpdrIoResult waitCancelled = await wait.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.AreEqual(0xC0000120u, waitCancelled.Status);
+    }
+
+    [TestMethod]
+    public void ControlCodesMatchTheWindowsHeaders()
+    {
+        // ntddser.h: IOCTL_SERIAL_GET_CHARS = function 22, IOCTL_SERIAL_SET_CHARS = function 23 (SERIAL_CHARS is 6 bytes).
+        Assert.AreEqual((PortControl.GetChars, 6), PortControls.Validate(true, 0x1B0058, [], 6));
+        Assert.AreEqual((PortControl.SetChars, 0), PortControls.Validate(true, 0x1B005C, new byte[6], 0));
+        Assert.AreEqual(NtStatus.InvalidParameter, Assert.Throws<DriveStatusException>(() => PortControls.Validate(true, 0x1B0058, new byte[6], 0)).Status);
+        // ntddpar.h: PARALLEL_INIT = 0x01; 0x10 is the PARALLEL_POWER_OFF status bit, not a command.
+        Assert.AreEqual((PortControl.ParallelSetInformation, 0), PortControls.Validate(false, 0x160008, [0x01], 0));
+        Assert.AreEqual(NtStatus.InvalidParameter, Assert.Throws<DriveStatusException>(() => PortControls.Validate(false, 0x160008, [0x10], 0)).Status);
     }
 
     private static uint U32(byte[] bytes, int offset = 0) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset));
@@ -124,21 +145,26 @@ public sealed class PortDeviceTests
     private sealed class FakePort : IRedirectedPort
     {
         private readonly CancellationTokenSource _closed = new();
-        public bool Block, Disposed;
+        public bool Block, BlockControl, Disposed;
         public int Calls;
         public async Task<byte[]> ReadAsync(int length, CancellationToken cancellationToken)
         {
             Calls++;
-            if (Block)
-            {
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _closed.Token);
-                await Task.Delay(Timeout.Infinite, linked.Token);
-            }
+            if (Block) { await BlockAsync(cancellationToken); }
             return [7, 8];
         }
         public Task<int> WriteAsync(byte[] data, CancellationToken cancellationToken) { Calls++; return Task.FromResult(2); }
-        public Task<byte[]> ControlAsync(PortControl control, byte[] input, int outputLength, CancellationToken cancellationToken)
-        { Calls++; return Task.FromResult(new byte[outputLength]); }
+        public async Task<byte[]> ControlAsync(PortControl control, byte[] input, int outputLength, CancellationToken cancellationToken)
+        {
+            Calls++;
+            if ((Block && control == PortControl.WaitOnMask) || BlockControl) { await BlockAsync(cancellationToken); }
+            return new byte[outputLength];
+        }
+        private async Task BlockAsync(CancellationToken cancellationToken)
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _closed.Token);
+            await Task.Delay(Timeout.Infinite, linked.Token);
+        }
         public void Dispose() { Disposed = true; _closed.Cancel(); }
     }
 }

@@ -120,7 +120,7 @@ internal sealed class Loc(string locale)
             "仅 Windows。明确填写端口名，以分号分隔，如 COM3;LPT1。留空不共享。远程会话可读写和配置所选端口。",
             "僅 Windows。明確填寫連接埠名稱，以分號分隔，如 COM3;LPT1。留空不共用。遠端工作階段可讀寫和設定所選連接埠。",
             "Windows のみ。COM3;LPT1 のように指定します。空欄では共有しません。リモート側は指定ポートを読み書き・設定できます。",
-            "Windows 전용. COM3;LPT1처럼 세미콜론으로 구분합니다. 비워 두면 공유하지 않습니다. 원격 세션이 선택한 포트를 읽고 쓰고 구성할 수 있습니다。"],
+            "Windows 전용. COM3;LPT1처럼 세미콜론으로 구분합니다. 비워 두면 공유하지 않습니다. 원격 세션이 선택한 포트를 읽고 쓰고 구성할 수 있습니다."],
         ["Drives"] = ["Custom folders", "自定义文件夹", "自訂資料夾", "カスタム フォルダー", "사용자 지정 폴더"],
         ["DrivesHint"] = [
             "Optional. Format: name=full path of a local folder; separate several with semicolons (;).\ne.g.  {0}   or   {1}\nPick any name (1–8 letters, digits or _); the remote desktop sees it as \\\\tsclient\\work. Ticked disks and these folders can be read and written remotely.",

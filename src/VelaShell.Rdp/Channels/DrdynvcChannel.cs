@@ -19,6 +19,7 @@ internal sealed class DrdynvcChannel
     private readonly Func<byte[], CancellationToken, Task> _send;
     private readonly CancellationToken _ct;
     private readonly bool _displayEnabled;
+    private readonly Action<string>? _log;
     private readonly Lock _lock = new();
 
     private bool _displayOpen;      // the server created the Display Control channel
@@ -135,11 +136,56 @@ internal sealed class DrdynvcChannel
         if (failures.Count != 0) throw new AggregateException("Dynamic channel cleanup failed.", failures);
     }
 
-    internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct, bool displayControl = true)
+    internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct, bool displayControl = true,
+        Action<string>? log = null)
     {
         _send = send;
         _ct = ct;
         _displayEnabled = displayControl;
+        _log = log;
+    }
+
+    // A device handler failing (a send racing its own close, a driver error during cleanup, …) costs that
+    // channel only: it is closed and logged, and the desktop session and the other channels carry on.
+    // Cancellation of the whole multiplexer still propagates.
+    private bool IsShutdown(Exception ex) => ex is OperationCanceledException && _ct.IsCancellationRequested;
+
+    private async Task RunHandlerAsync(Instance instance, Func<Task> action)
+    {
+        try { await action().ConfigureAwait(false); }
+        catch (Exception ex) when (!IsShutdown(ex))
+        {
+            Log($"dynamic channel {instance.Channel.Id} handler failed ({ex.GetType().Name}); closing that channel");
+            await CloseFailedAsync(instance).ConfigureAwait(false);
+        }
+    }
+
+    private async Task CloseFailedAsync(Instance instance)
+    {
+        try { await CloseChannelAsync(instance.Channel).ConfigureAwait(false); }
+        catch (Exception ex) when (!IsShutdown(ex)) { Log($"dynamic channel {instance.Channel.Id} close failed ({ex.GetType().Name})"); }
+    }
+
+    private async Task RunCloseHandlerAsync(Instance instance, IDynamicChannelHandler handler)
+    {
+        try { await handler.OnCloseAsync().ConfigureAwait(false); }
+        catch (Exception ex) when (!IsShutdown(ex)) { Log($"dynamic channel {instance.Channel.Id} close handler failed ({ex.GetType().Name})"); }
+    }
+
+    /// <summary>
+    /// A fragment that breaks the declared framing discards the message being reassembled. A device channel
+    /// is then closed; the built-in Display Control channel stays open so resizing keeps working.
+    /// </summary>
+    private (byte[]? Reply, Func<Task>? Work) Reject(Instance instance)
+    {
+        ClearBuffer(instance);
+        return instance.Handler is null ? default : (null, () => CloseFailedAsync(instance));
+    }
+
+    private void Log(string message)
+    {
+        try { _log?.Invoke(message); }
+        catch { /* Diagnostics must not interrupt the channel worker. */ }
     }
 
     /// <summary>Handles one drdynvc PDU delivered over the static channel.</summary>
@@ -232,7 +278,8 @@ internal sealed class DrdynvcChannel
                 var w = new ByteWriter(8);
                 w.U8((byte)(0x10 | cb)); WriteVariable(w, id, cb);
                 w.U32LE(created is not null ? 0u : 0x80004001u);
-                return (w.ToArray(), created?.Handler is { } handler ? handler.OnOpenAsync : null);
+                return (w.ToArray(), created is { Handler: { } handler } opened
+                    ? () => RunHandlerAsync(opened, handler.OnOpenAsync) : null);
             }
             if (!_instances.TryGetValue(id, out Instance? instance)) return default;
             if (cmd == CmdClose)
@@ -241,17 +288,16 @@ internal sealed class DrdynvcChannel
                 _instances.Remove(id);
                 if (_displayOpen && id == _displayChannelId)
                 { _displayOpen = _displayReady = false; _lastSent = null; }
-                return (null, instance.Handler is { } handler ? handler.OnCloseAsync : null);
+                return (null, instance.Handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
             }
             if (cmd is not (CmdData or CmdDataFirst)) return default;
             if (cmd == CmdDataFirst)
             {
                 ClearBuffer(instance);
-                if (sp == 3 || r.Remaining < CbIdBytes(sp))
-                    return (null, () => CloseChannelAsync(instance.Channel));
+                if (sp == 3 || r.Remaining < CbIdBytes(sp)) return Reject(instance);
                 uint total = ReadVariable(ref r, sp);
                 if (total > instance.Limit || total < r.Remaining || total > MaxBufferedBytes - _reservedBytes)
-                    return (null, () => CloseChannelAsync(instance.Channel));
+                    return Reject(instance);
                 if (total > r.Remaining)
                 {
                     instance.Total = (int)total;
@@ -264,7 +310,7 @@ internal sealed class DrdynvcChannel
             byte[] message;
             if (instance.Buffer is { } buffer)
             {
-                if (buffer.Length + r.Remaining > instance.Total) { ClearBuffer(instance); return (null, () => CloseChannelAsync(instance.Channel)); }
+                if (buffer.Length + r.Remaining > instance.Total) return Reject(instance);
                 buffer.Write(r.Rest());
                 if (buffer.Length < instance.Total) return default;
                 message = buffer.ToArray();
@@ -272,11 +318,11 @@ internal sealed class DrdynvcChannel
             }
             else
             {
-                if (r.Remaining > instance.Limit) return (null, () => CloseChannelAsync(instance.Channel));
+                if (r.Remaining > instance.Limit) return Reject(instance);
                 message = r.Rest().ToArray();
             }
             return instance.Handler is { } receiver
-                ? (null, () => receiver.OnMessageAsync(message))
+                ? (null, () => RunHandlerAsync(instance, () => receiver.OnMessageAsync(message)))
                 : (OnDisplayControl(message), null);
         }
     }

@@ -11,7 +11,8 @@ internal enum PortControl : uint
     SetDtr = 0x1B0024, ClearDtr = 0x1B0028, SetRts = 0x1B0030, ClearRts = 0x1B0034,
     SetXoff = 0x1B0038, SetXon = 0x1B003C, GetWaitMask = 0x1B0040,
     SetWaitMask = 0x1B0044, WaitOnMask = 0x1B0048, Purge = 0x1B004C,
-    GetBaud = 0x1B0050, GetLine = 0x1B0054, SetChars = 0x1B0058, GetChars = 0x1B005C,
+    // ntddser.h: GET_CHARS is function 22 (0x58) and SET_CHARS function 23 (0x5C).
+    GetBaud = 0x1B0050, GetLine = 0x1B0054, GetChars = 0x1B0058, SetChars = 0x1B005C,
     GetHandflow = 0x1B0060, SetHandflow = 0x1B0064, GetModemStatus = 0x1B0068,
     GetCommStatus = 0x1B006C, GetProperties = 0x1B0074, GetDtrRts = 0x1B0078,
     ParallelQueryInformation = 0x160004, ParallelSetInformation = 0x160008
@@ -62,8 +63,8 @@ internal static class PortControls
             PortControl.SetHandflow => (U32() & ~0x8000007Bu) == 0 && (U32() & 3) != 3
                 && (U32(4) & ~0x800000DFu) == 0
                 && U32(8) <= PortDevice.MaxTransfer && U32(12) <= PortDevice.MaxTransfer,
-            // PARALLEL_INIT is the only writable status bit; status-query bits are not commands.
-            PortControl.ParallelSetInformation => input[0] == 0x10,
+            // PARALLEL_INIT (ntddpar.h 0x01) is the only accepted command; status-query bits are not commands.
+            PortControl.ParallelSetInformation => input[0] == 0x01,
             _ => true
         };
         if (!valid) { throw new DriveStatusException(NtStatus.InvalidParameter); }

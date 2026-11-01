@@ -1,7 +1,7 @@
 # RDP remote desktop plugin
 
 `velashell.rdp` embeds a remote desktop in an Avalonia workspace using a **pure-managed C#
-RDP client** — no FreeRDP or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop; explicitly selected COM/LPT ports use overlapped Windows I/O (MS-RDPESP). In the Drive mapping page, enter `COM3;LPT1` in COM / LPT ports; empty shares none. Port names are validated, transfers are capped at 256 KiB, controls are allowlisted, and close/disconnect or a 30-second deadline requests cancellation. Faulty drivers may delay native completion. Fake-backend tests do not access port hardware; real-server/hardware interoperability remains unverified. The protocol stack is the
+RDP client** — no FreeRDP or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop; explicitly selected COM/LPT ports use overlapped Windows I/O (MS-RDPESP). In the Drive mapping page, enter `COM3;LPT1` in COM / LPT ports; empty shares none. Port names are validated, transfers are capped at 256 KiB and controls are allowlisted. Reads, writes and `WAIT_ON_MASK` wait as on a local port (bounded by the remote application's own COMMTIMEOUTS) until they complete or a purge, close or disconnect cancels them; other controls get a 30-second deadline. Faulty drivers may delay native completion. Fake-backend tests do not access port hardware; real-server/hardware interoperability remains unverified. The protocol stack is the
 standalone [`VelaShell.Rdp`](../../src/VelaShell.Rdp) library (MIT), which implements the subset of
 MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS this plugin needs. The plugin
 references that library and owns only the Avalonia view and input/clipboard integration; no

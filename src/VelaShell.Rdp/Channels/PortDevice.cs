@@ -61,7 +61,10 @@ internal sealed class PortDevice(PortMapping mapping, Func<PortMapping, IRedirec
             }
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(_timeout);
+            // Reads, writes and WAIT_ON_MASK legitimately wait for the line (or flow control) as long as the
+            // remote application's COMMTIMEOUTS allow, exactly as on a local port; a purge, SetCommMask, close,
+            // reset or disconnect ends them. Only configuration controls, which never wait for data, get a deadline.
+            if (!WaitsForLine(major, request.Body)) { deadline.CancelAfter(_timeout); }
             try
             {
                 switch (major)
@@ -102,6 +105,9 @@ internal sealed class PortDevice(PortMapping mapping, Func<PortMapping, IRedirec
         catch (Exception ex) when (ex is ArgumentException or OverflowException or RdpProtocolException) { return Failure(major, NtStatus.InvalidParameter); }
         catch (IOException) { return Failure(major, NtStatus.Unsuccessful); }
     }
+
+    private static bool WaitsForLine(uint major, byte[] body) => major is 3 or 4
+        || (major == 14 && body.Length >= 12 && BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(8)) == (uint)PortControl.WaitOnMask);
 
     private static void ValidateCreate(byte[] body)
     {

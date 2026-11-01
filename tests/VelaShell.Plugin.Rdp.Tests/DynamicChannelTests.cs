@@ -89,6 +89,40 @@ public sealed class DynamicChannelTests
     }
 
     [TestMethod]
+    public async Task AFailingHandlerClosesOnlyItsOwnChannel()
+    {
+        var sent = new List<byte[]>(); var log = new List<string>();
+        var dvc = new DrdynvcChannel((bytes, _) => { sent.Add(bytes); return Task.CompletedTask; }, default, log: log.Add);
+        var healthy = new Handler();
+        var failing = new ThrowingHandler();
+        dvc.RegisterListener("bad", _ => failing);
+        dvc.RegisterListener("test", _ => healthy);
+        await dvc.ProcessAsync([0x10, 1, .. Encoding.ASCII.GetBytes("bad"), 0]);
+        await dvc.ProcessAsync(Create(2));
+
+        // The handler throws on its message and again while being closed: neither escapes the multiplexer.
+        await dvc.ProcessAsync([0x30, 1, 5]);
+        Assert.AreSequenceEqual(new byte[] { 0x40, 1 }, sent.Last());
+        Assert.AreEqual(1, failing.Closes);
+        Assert.HasCount(2, log);
+
+        // The channel is gone; the other channel still works.
+        await dvc.ProcessAsync([0x30, 1, 6]);
+        Assert.AreEqual(1, failing.Messages);
+        await dvc.ProcessAsync([0x30, 2, 7]);
+        Assert.AreSequenceEqual(new byte[] { 7 }, healthy.Messages.Single());
+        await dvc.CloseAsync();
+    }
+
+    private sealed class ThrowingHandler : IDynamicChannelHandler
+    {
+        internal int Messages, Closes;
+        public Task OnOpenAsync() => Task.CompletedTask;
+        public Task OnMessageAsync(byte[] bytes) { Messages++; throw new InvalidOperationException("Dynamic channel closed or message too large."); }
+        public Task OnCloseAsync() { Closes++; throw new IOException("Camera flush did not complete."); }
+    }
+
+    [TestMethod]
     public async Task OutboundFragmentsRoundTripAndOversizedTotalsAreDiscarded()
     {
         var packets = new List<byte[]>(); DynamicChannel? channel = null;

@@ -271,8 +271,13 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
     private void EnableDynamicChannels(RdpClientOptions options)
     {
-        _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _drdynvc = new DrdynvcChannel((pdu, token) => _connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token, options.DynamicResolution);
+        // Servers fragment dynamic-channel messages into ~1.6 KB PDUs, so one 1–2 MB WPD request is about a
+        // thousand queue entries, and the worker can be held behind a large outbound message (a WPD read
+        // reply, a camera frame). Overflow drops the session, so the 32 MB byte budget in OnChannelData is
+        // the real bound; the count only caps per-entry overhead for tiny PDUs.
+        _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(16384) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+        _drdynvc = new DrdynvcChannel((pdu, token) => _connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token,
+            options.DynamicResolution, LogDrive);
         if (options.Camera is { } camera)
         {
             _ = new CameraChannel(_drdynvc, camera, () => OperatingSystem.IsWindows()
