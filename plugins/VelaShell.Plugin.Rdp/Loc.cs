@@ -19,6 +19,14 @@ internal sealed class Loc(string locale)
 
     private static readonly Dictionary<string, string[]> Text = new(StringComparer.Ordinal)
     {
+        ["WpdDevices"] = ["Portable device (WPD)", "便携设备（WPD）", "可攜式裝置（WPD）", "ポータブル デバイス (WPD)", "휴대용 장치 (WPD)"],
+        ["WpdHint"] = [
+            "Allow the remote session to read and change this selected Windows portable device. Off by default; WPD only, not general USB. Removal closes its handles; reinsertion resumes only when its unique identity is verified.",
+            "允许远程会话读取和修改此 Windows 便携设备。默认关闭，仅支持 WPD，不是通用 USB。拔出后关闭句柄；仅在唯一身份核验成功时自动恢复重插设备。",
+            "允許遠端工作階段讀取及修改此 Windows 可攜式裝置。預設關閉，僅支援 WPD，並非通用 USB。拔除後關閉控制代碼；僅在唯一身分驗證成功時自動恢復重新插入的裝置。",
+            "選択した Windows ポータブル デバイスの読み取りと変更を許可します。既定はオフ。WPD のみで、汎用 USB ではありません。取り外すとハンドルを閉じ、一意の識別情報を確認できた場合のみ再接続します。",
+            "선택한 Windows 휴대용 장치의 읽기와 변경을 허용합니다. 기본값은 꺼짐이며 일반 USB가 아닌 WPD만 지원합니다. 제거 시 핸들을 닫고 고유 식별 정보를 확인한 경우에만 다시 연결합니다."],
+        ["WpdUnavailable"] = ["A selected WPD device is unavailable. Reopen device settings and select an available device.", "所选 WPD 设备不可用。请重新打开设备设置并选择可用设备。", "所選 WPD 裝置無法使用。請重新開啟裝置設定並選擇可用裝置。", "選択した WPD デバイスを利用できません。設定を開き、利用可能なデバイスを選択してください。", "선택한 WPD 장치를 사용할 수 없습니다. 설정을 다시 열고 사용 가능한 장치를 선택하세요."],
         ["TransferUpload"] = ["Local → remote", "本地 → 远程", "本機 → 遠端", "ローカル → リモート", "로컬 → 원격"],
         ["TransferDownload"] = ["Remote → local", "远程 → 本地", "遠端 → 本機", "リモート → ローカル", "원격 → 로컬"],
         ["TransferPreparing"] = ["Preparing / waiting", "准备／等待", "準備／等待", "準備／待機", "준비 / 대기"],
@@ -87,6 +95,13 @@ internal sealed class Loc(string locale)
         ["Clipboard"] = ["Bidirectional clipboard: text, images and files", "双向剪贴板：文本、图像与文件", "雙向剪貼簿：文字、影像與檔案", "双方向クリップボード：テキスト・画像・ファイル", "양방향 클립보드: 텍스트, 이미지 및 파일"],
         ["ClipboardHint"] = ["Disabled by default. Enabling allows this desktop to read and replace your clipboard, including files.", "默认关闭。启用后远程桌面可读取和替换本地剪贴板，包括文件。", "預設關閉。啟用後遠端桌面可讀取和取代本機剪貼簿，包括檔案。", "初期設定は無効です。有効にするとリモート側がファイルを含むクリップボードを読み書きできます。", "기본적으로 꺼져 있습니다. 사용하면 원격 데스크톱이 파일을 포함한 클립보드를 읽고 바꿀 수 있습니다."],
         ["DrivesPage"] = ["Drive mapping", "磁盘映射", "磁碟對應", "ドライブのマッピング", "드라이브 매핑"],
+        ["Camera"] = ["Camera", "摄像头", "攝影機", "カメラ", "카메라"],
+        ["CameraNone"] = ["Off", "关闭", "關閉", "無効", "꺼짐"],
+        ["CameraHint"] = ["Off by default. Share one Windows camera with remote apps (native MJPEG only). Capture starts only after the server activates it and requests frames.", "默认关闭。向远端应用共享一台 Windows 摄像头（仅原生 MJPEG）。服务器激活并请求帧后才开始采集。", "預設關閉。向遠端應用程式共用一台 Windows 攝影機（僅原生 MJPEG）。伺服器啟用並要求影格後才開始擷取。", "初期設定は無効です。Windows カメラを1台共有します（ネイティブ MJPEG のみ）。サーバーの有効化とフレーム要求で撮影します。", "기본적으로 꺼져 있습니다. Windows 카메라 한 대를 공유합니다(기본 MJPEG만 지원). 서버가 활성화하고 프레임을 요청하면 캡처합니다."],
+        ["CameraUnavailable"] = ["The selected camera is unavailable. Update the camera selection.", "所选摄像头不可用，请更新摄像头选择。", "所選攝影機無法使用，請更新選擇。", "選択したカメラを利用できません。選択を更新してください。", "선택한 카메라를 사용할 수 없습니다. 선택을 업데이트하세요."],
+        ["Printers"] = ["Printer", "打印机", "印表機", "プリンター", "프린터"],
+        ["PrintersHint"] = ["Off by default. Allows remote RAW print jobs on this queue. The server needs a matching driver; Easy Print/XPS is not supported.", "默认关闭。允许远端向此队列提交 RAW 打印任务。服务器须有匹配驱动；不支持 Easy Print/XPS。", "預設關閉。允許遠端向此佇列提交 RAW 列印工作。伺服器須有相符驅動程式；不支援 Easy Print/XPS。", "初期設定は無効です。このキューでリモートの RAW 印刷を許可します。サーバーに対応ドライバーが必要です。Easy Print/XPS は非対応です。", "기본적으로 꺼져 있습니다. 이 대기열로 원격 RAW 인쇄를 허용합니다. 서버에 일치하는 드라이버가 필요하며 Easy Print/XPS는 지원하지 않습니다."],
+        ["PrintersUnavailable"] = ["A selected printer is unavailable. Check local installed queues and update the printer selection.", "所选打印机不可用。请检查本地已安装队列并更新打印机选择。", "所選印表機無法使用。請檢查本機已安裝佇列並更新選擇。", "選択したプリンターを利用できません。ローカルのキューを確認して選択を更新してください。", "선택한 프린터를 사용할 수 없습니다. 설치된 로컬 대기열을 확인하고 선택을 업데이트하세요."],
         ["ExperiencePage"] = ["Experience", "体验", "體驗", "エクスペリエンス", "환경"],
         ["ExpAudio"] = ["Play remote audio", "播放远程声音", "播放遠端音效", "リモート音声を再生", "원격 오디오 재생"],
         ["ExpWallpaper"] = ["Show desktop wallpaper", "显示桌面壁纸", "顯示桌面桌布", "デスクトップの壁紙を表示", "데스크톱 배경 표시"],
@@ -99,6 +114,13 @@ internal sealed class Loc(string locale)
         ["ColorDepth16"] = ["High Color (16-bit)", "增强色(16 位)", "高彩色(16 位元)", "High Color(16 ビット)", "하이 컬러(16비트)"],
         ["ColorDepth24"] = ["True Color (24-bit)", "真彩色(24 位)", "全彩(24 位元)", "True Color(24 ビット)", "트루 컬러(24비트)"],
         ["ColorDepth32"] = ["Highest Quality (32-bit)", "最高质量(32 位)", "最高品質(32 位元)", "最高品質(32 ビット)", "최고 품질(32비트)"],
+        ["Ports"] = ["COM / LPT ports", "COM / LPT 端口", "COM / LPT 連接埠", "COM / LPT ポート", "COM / LPT 포트"],
+        ["PortsHint"] = [
+            "Windows only. Explicit names separated by semicolons, e.g. COM3;LPT1. Empty shares none. The remote session can read, write and configure selected ports.",
+            "仅 Windows。明确填写端口名，以分号分隔，如 COM3;LPT1。留空不共享。远程会话可读写和配置所选端口。",
+            "僅 Windows。明確填寫連接埠名稱，以分號分隔，如 COM3;LPT1。留空不共用。遠端工作階段可讀寫和設定所選連接埠。",
+            "Windows のみ。COM3;LPT1 のように指定します。空欄では共有しません。リモート側は指定ポートを読み書き・設定できます。",
+            "Windows 전용. COM3;LPT1처럼 세미콜론으로 구분합니다. 비워 두면 공유하지 않습니다. 원격 세션이 선택한 포트를 읽고 쓰고 구성할 수 있습니다。"],
         ["Drives"] = ["Custom folders", "自定义文件夹", "自訂資料夾", "カスタム フォルダー", "사용자 지정 폴더"],
         ["DrivesHint"] = [
             "Optional. Format: name=full path of a local folder; separate several with semicolons (;).\ne.g.  {0}   or   {1}\nPick any name (1–8 letters, digits or _); the remote desktop sees it as \\\\tsclient\\work. Ticked disks and these folders can be read and written remotely.",

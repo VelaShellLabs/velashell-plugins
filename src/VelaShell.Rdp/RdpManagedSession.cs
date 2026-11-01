@@ -39,8 +39,11 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         catch { /* Diagnostics must not interrupt the channel worker. */ }
     }
     private DrdynvcChannel? _drdynvc;
+    private WpdRedirection? _wpd;
     private Channel<byte[]>? _drdynvcQueue;
     private Task? _drdynvcWorker;
+    private long _drdynvcQueuedBytes;
+    private Exception? _dynamicChannelFailure;
 
     public bool IsConnected => Volatile.Read(ref _isConnected) != 0;
 
@@ -198,14 +201,14 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             channels.Add(new ChannelDef("cliprdr", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
         }
 
-        if (options.Drives.Count > 0)
+        if (options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
         {
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
             // Windows device redirection also needs the sound channel registered, even without playback.
             channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
-        if (options.DynamicResolution)
+        if (options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
         {
             channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
         }
@@ -223,22 +226,20 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
-        if (options.DynamicResolution)
-        {
-            session.EnableDynamicChannels();
-        }
-        if (options.Clipboard)
-        {
-            session.EnableClipboard();
-        }
-
-        if (options.Drives.Count > 0)
-        {
-            session.EnableDrives(options.Drives);
-        }
-
         try
         {
+            if (options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
+            {
+                session.EnableDynamicChannels(options);
+            }
+            if (options.Clipboard)
+            {
+                session.EnableClipboard();
+            }
+            if (options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
+            {
+                session.EnableDrives(options.Drives, options.Ports, options.Printers);
+            }
             await session._connection.ConnectAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -268,10 +269,22 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         return session;
     }
 
-    private void EnableDynamicChannels()
+    private void EnableDynamicChannels(RdpClientOptions options)
     {
-        _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64) { SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite });
-        _drdynvc = new DrdynvcChannel((pdu, token) => _connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token);
+        _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+        _drdynvc = new DrdynvcChannel((pdu, token) => _connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token, options.DynamicResolution);
+        if (options.Camera is { } camera)
+        {
+            _ = new CameraChannel(_drdynvc, camera, () => OperatingSystem.IsWindows()
+                ? new WindowsCameraBackend(camera.Id)
+                : throw new PlatformNotSupportedException("Camera redirection requires Windows."));
+        }
+        if (options.WpdDevices.Count != 0)
+        {
+            if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("WPD redirection requires Windows.");
+            _wpd = new WpdRedirection(new WindowsWpdBackend(options.WpdDevices, LogDrive));
+            _wpd.Register(_drdynvc);
+        }
         _drdynvcWorker = DrainDrdynvcAsync();
     }
 
@@ -288,10 +301,12 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         _cliprdrWorker = DrainCliprdrAsync();
     }
 
-    private void EnableDrives(IReadOnlyList<DriveMapping> mappings)
+    private void EnableDrives(IReadOnlyList<DriveMapping> mappings, IReadOnlyList<PortMapping> ports, IReadOnlyList<PrinterMapping> printers)
     {
         _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive);
+        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive,
+            ports.Select(p => (IRdpdrDevice)new PortDevice(p))
+                .Concat(printers.Select((p, i) => (IRdpdrDevice)new PrinterDevice(p, i + 1))).ToArray(), _stop.Token);
         _rdpdrWorker = DrainRdpdrAsync();
     }
 
@@ -317,10 +332,15 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
                 throw new IOException("RDP drive request queue capacity exceeded; reconnect the session.");
             }
         }
-        else if (payload.ChannelName == "drdynvc" && payload.Data.Length <= 1024 * 1024)
+        else if (payload.ChannelName == "drdynvc")
         {
-            // Only Display Control is opened and its messages are tiny; anything larger is not for us.
-            _ = (_drdynvcQueue?.Writer.TryWrite(payload.Data));
+            long queued = Interlocked.Add(ref _drdynvcQueuedBytes, payload.Data.Length);
+            if (payload.Data.Length > 1024 * 1024 || queued > 32 * 1024 * 1024
+                || _drdynvcQueue?.Writer.TryWrite(payload.Data) != true)
+            {
+                Interlocked.Add(ref _drdynvcQueuedBytes, -payload.Data.Length);
+                throw new IOException("RDP dynamic-channel queue capacity exceeded; reconnect the session.");
+            }
         }
     }
 
@@ -355,12 +375,23 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         {
             await foreach (byte[] pdu in _drdynvcQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
-                try { await _drdynvc.ProcessAsync(pdu).ConfigureAwait(false); }
-                catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
-                catch { /* a malformed dynamic-channel PDU must not drop the session */ }
+                Interlocked.Add(ref _drdynvcQueuedBytes, -pdu.Length);
+                await _drdynvc.ProcessAsync(pdu).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            _dynamicChannelFailure = new IOException("RDP dynamic-channel processing failed; reconnect the session.", ex);
+            _stop.Cancel();
+        }
+        finally
+        {
+            try { if (_wpd is not null) await _wpd.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { LogDrive($"WPD cleanup failed: {ex.GetType().Name}"); }
+            try { await _drdynvc.CloseAsync().ConfigureAwait(false); }
+            catch (Exception ex) { LogDrive($"dynamic-channel cleanup failed: {ex.GetType().Name}"); }
+        }
     }
 
     /// <summary>Asks the server, via the display-control channel, to resize the desktop to match the view.</summary>
@@ -461,7 +492,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             // A clean end (the server dropped the session) after a Set Error Info PDU means the server told us
             // why: surface that as the disconnect cause so the reason is not lost (e.g. signed out, licence).
             uint errorInfo = Volatile.Read(ref _errorInfo);
-            failure ??= errorInfo != 0 ? new RdpDisconnectException(errorInfo) : null;
+            failure ??= _dynamicChannelFailure ?? (errorInfo != 0 ? new RdpDisconnectException(errorInfo) : null);
             if (Volatile.Read(ref _disposed) == 0) { try { Disconnected?.Invoke(failure); } catch { /* ignore */ } }
         }
     }
@@ -514,7 +545,17 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         if (_cliprdrWorker is { } worker) { try { await worker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_rdpdrWorker is { } driveWorker) { try { await driveWorker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_drdynvcWorker is { } dvcWorker) { try { await dvcWorker.ConfigureAwait(false); } catch { /* ignore */ } }
+        if (_wpd is not null)
+        {
+            try { await _wpd.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { LogDrive($"WPD cleanup failed: {ex.GetType().Name}"); }
+        }
         _rdpdr?.CloseAll();
+        if (_rdpdr is { } devices)
+        {
+            try { await devices.DrainDevicesAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+            catch (TimeoutException) { LogDrive("native device cancellation still pending; resources retained until driver completion"); }
+        }
         await _connection.DisposeAsync().ConfigureAwait(false);
         _stop.Dispose();
         FrameAvailable = null;

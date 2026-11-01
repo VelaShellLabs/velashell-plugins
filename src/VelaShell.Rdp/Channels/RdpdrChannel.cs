@@ -9,7 +9,8 @@ namespace VelaShell.Rdp.Channels;
 /// Device I/O Request → I/O Completion loop that serves file operations via <see cref="DriveFile"/>.
 /// Matches FreeRDP's rdpdr/drive wire formats. Printers, ports, smart cards and audio are not offered.
 /// </summary>
-internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveMapping> mappings, Action<string>? log = null)
+internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveMapping> mappings, Action<string>? log = null,
+    IReadOnlyList<IRdpdrDevice>? additionalDevices = null, CancellationToken cancellationToken = default)
 {
     private const ushort CtypCore = 0x4472;
     private const ushort PakidServerAnnounce = 0x496E, PakidClientIdConfirm = 0x4343, PakidClientName = 0x434E;
@@ -34,6 +35,13 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private readonly Func<byte[], Task> _send = send;
     private readonly IReadOnlyList<DriveMapping> _mappings = mappings;
     private readonly Dictionary<uint, DriveMapping> _devices = [];
+    private readonly IReadOnlyList<IRdpdrDevice> _additional = additionalDevices ?? [];
+    private readonly Dictionary<uint, IRdpdrDevice> _additionalById = [];
+    private readonly object _pendingGate = new();
+    private readonly HashSet<Task> _pending = [];
+    private readonly CancellationTokenSource _deviceStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    private int _generation;
+    private bool _closed;
     private const int MaxOpenFiles = 4096;
     private readonly Dictionary<uint, DriveFile> _files = [];
     private uint _clientId;
@@ -73,6 +81,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 _clientId = r.Remaining >= 4 ? r.U32LE() : 0;
                 // Windows can restart the channel handshake after logon; announce drives again in that round.
                 _announced = false;
+                Interlocked.Increment(ref _generation);
+                foreach (IRdpdrDevice device in _additional) { device.Reset(); }
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
                 await _send(BuildClientName()).ConfigureAwait(false);
                 break;
@@ -121,7 +131,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
         _announced = true;
         await _send(BuildDeviceListAnnounce()).ConfigureAwait(false);
-        log?.Invoke($"announced devices={_mappings.Count}; serverMinor=0x{_serverMinor:X4}");
+        log?.Invoke($"announced devices={_mappings.Count + _additional.Count}; serverMinor=0x{_serverMinor:X4}");
     }
 
     private byte[] BuildClientAnnounceReply()
@@ -144,10 +154,11 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         return w.ToArray();
     }
 
-    private static byte[] BuildCapabilityResponse()
+    private byte[] BuildCapabilityResponse()
     {
+        IRdpdrDevice[] capabilities = _additional.DistinctBy(d => d.CapabilityType).ToArray();
         ByteWriter w = Header(PakidClientCapability);
-        w.U16LE(2);                 // numCapabilities (general + drive)
+        w.U16LE((ushort)(2 + capabilities.Length)); // general + drive + selected non-drive capabilities
         w.U16LE(0);                 // pad
 
         // General capability set (version 2, body 36).
@@ -169,14 +180,21 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         w.U16LE(CapDriveType);
         w.U16LE(8);
         w.U32LE(DriveCapabilityVersion02);
+        foreach (IRdpdrDevice device in capabilities)
+        {
+            w.U16LE(device.CapabilityType);
+            w.U16LE(8);
+            w.U32LE(device.CapabilityVersion);
+        }
         return w.ToArray();
     }
 
     private byte[] BuildDeviceListAnnounce()
     {
         _devices.Clear();
+        _additionalById.Clear();
         ByteWriter w = Header(PakidDeviceListAnnounce);
-        w.U32LE((uint)_mappings.Count);
+        w.U32LE((uint)(_mappings.Count + _additional.Count));
         uint deviceId = 1;
         // One 8-byte PreferredDosName buffer reused for every device: a stackalloc inside the loop
         // would grow the frame per mapping (CA2014). It is cleared at the top of each iteration.
@@ -202,6 +220,18 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             w.Bytes(data);
             deviceId++;
         }
+        foreach (IRdpdrDevice device in _additional)
+        {
+            _additionalById.Add(deviceId, device);
+            w.U32LE(device.DeviceType);
+            w.U32LE(deviceId++);
+            dos.Clear();
+            Encoding.ASCII.GetBytes(device.Name.AsSpan(0, Math.Min(7, device.Name.Length)), dos);
+            w.Bytes(dos);
+            byte[] data = device.DeviceData;
+            w.U32LE((uint)data.Length);
+            w.Bytes(data);
+        }
         return w.ToArray();
     }
 
@@ -214,6 +244,23 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         uint completionId = r.U32LE();
         uint major = r.U32LE();
         uint minor = r.U32LE();
+
+        if (_additionalById.TryGetValue(deviceId, out IRdpdrDevice? device))
+        {
+            lock (_pendingGate)
+            {
+                if (_closed || _pending.Count >= 64 || r.Remaining > 1024 * 1024 + 32)
+                {
+                    return DeviceCompletion(deviceId, completionId, PortDevice.Failure(major, NtStatus.InsufficientResources));
+                }
+                var request = new RdpdrIoRequest(fileId, major, minor, r.Rest().ToArray());
+                Task work = CompleteDeviceAsync(device, request, deviceId, completionId, _generation);
+                _pending.Add(work);
+                _ = work.ContinueWith(t => { lock (_pendingGate) { _pending.Remove(t); } }, CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+            return null;
+        }
 
         var body = new ByteWriter(64);
         uint status;
@@ -468,9 +515,62 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         return nul < 0 ? s : s[..nul];
     }
 
+    private static byte[] DeviceCompletion(uint deviceId, uint completionId, RdpdrIoResult result)
+    {
+        ByteWriter body = Header(PakidDeviceIoCompletion);
+        body.U32LE(deviceId);
+        body.U32LE(completionId);
+        body.U32LE(result.Status);
+        body.Bytes(result.Body);
+        return body.ToArray();
+    }
+
+    private async Task CompleteDeviceAsync(IRdpdrDevice device, RdpdrIoRequest request, uint deviceId, uint completionId, int generation)
+    {
+        try
+        {
+            RdpdrIoResult result;
+            try { result = await device.ProcessAsync(request, _deviceStop.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) { result = PortDevice.Failure(request.MajorFunction, 0xC0000120); }
+            catch (Exception ex)
+            {
+                log?.Invoke($"device operation failed: {ex.GetType().Name}");
+                result = PortDevice.Failure(request.MajorFunction, NtStatus.Unsuccessful);
+            }
+            if (!_deviceStop.IsCancellationRequested && generation == Volatile.Read(ref _generation))
+            {
+                await _send(DeviceCompletion(deviceId, completionId, result)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) { log?.Invoke($"device completion failed: {ex.GetType().Name}"); }
+    }
+
     internal void CloseAll()
     {
+        lock (_pendingGate)
+        {
+            if (!_closed)
+            {
+                _closed = true;
+                _deviceStop.Cancel();
+                foreach (IRdpdrDevice device in _additional) { device.Dispose(); }
+            }
+        }
         foreach (DriveFile file in _files.Values) { try { file.Close(); } catch { /* ignore */ } }
         _files.Clear();
+    }
+
+    internal async Task DrainDevicesAsync()
+    {
+        Task[] pending;
+        lock (_pendingGate) { pending = _pending.ToArray(); }
+        await Task.WhenAll(pending).ConfigureAwait(false);
+        if (_closed)
+        {
+            foreach (IAsyncDisposable device in _additional.OfType<IAsyncDisposable>())
+            {
+                await device.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

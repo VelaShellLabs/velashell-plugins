@@ -78,7 +78,31 @@ public sealed record RdpClientOptions
     /// <summary>Folders shared to the remote desktop with read/write access (rdpdr); empty by default.</summary>
     public IReadOnlyList<DriveMapping> Drives { get; init; } = [];
 
-    /// <summary>Optional drive-channel diagnostics (handshake, device results and failures; no file contents). Called on background threads.</summary>
+    private IReadOnlyList<PortMapping> _ports = [];
+
+    /// <summary>Explicit Windows COM/LPT selections; empty disables port redirection. At most 32 unique ports.</summary>
+    public IReadOnlyList<PortMapping> Ports
+    {
+        get => _ports;
+        init => _ports = Array.AsReadOnly(PortMapping.Validate(value));
+    }
+
+    private IReadOnlyList<PrinterMapping> _printers = [];
+
+    /// <summary>Explicit installed Windows printer selections; empty disables printing. Requires matching server drivers; no Easy Print/XPS.</summary>
+    public IReadOnlyList<PrinterMapping> Printers
+    {
+        get => _printers;
+        init => _printers = Array.AsReadOnly(PrinterMapping.Validate(value));
+    }
+
+    /// <summary>One explicitly selected Windows camera; null disables capture. Only native MJPEG formats are offered.</summary>
+    public Channels.RdpCameraDevice? Camera { get; init; }
+
+    /// <summary>Explicitly selected local WPD interface IDs; empty disables portable-device redirection.</summary>
+    public IReadOnlyList<string> WpdDevices { get; init; } = [];
+
+    /// <summary>Optional device-channel diagnostics (handshake, device results and failures; no file or port contents). Called on background threads.</summary>
     public Action<string>? DriveRedirectionLog { get; init; }
 
     /// <summary>Which security layer to offer; <see cref="RdpSecurity.Auto"/> by default.</summary>

@@ -1,13 +1,19 @@
 # RDP remote desktop plugin
 
 `velashell.rdp` embeds a remote desktop in an Avalonia workspace using a **pure-managed C#
-RDP client** — no FreeRDP or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop. The protocol stack is the
+RDP client** — no FreeRDP or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop; explicitly selected COM/LPT ports use overlapped Windows I/O (MS-RDPESP). In the Drive mapping page, enter `COM3;LPT1` in COM / LPT ports; empty shares none. Port names are validated, transfers are capped at 256 KiB, controls are allowlisted, and close/disconnect or a 30-second deadline requests cancellation. Faulty drivers may delay native completion. Fake-backend tests do not access port hardware; real-server/hardware interoperability remains unverified. The protocol stack is the
 standalone [`VelaShell.Rdp`](../../src/VelaShell.Rdp) library (MIT), which implements the subset of
 MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS this plugin needs. The plugin
 references that library and owns only the Avalonia view and input/clipboard integration; no
 external RDP window is launched.
 
 Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
+
+## Legacy printer redirection (Windows)
+
+On **Drive mapping**, explicitly check individual installed printer queues; all are off by default. Read-only background discovery refreshes every minute. The server needs a matching printer driver and must allow printer redirection. This is MS-RDPEPC legacy RAW printing, **not Easy Print/XPS**. File/prompt output queues and nested TS queues are excluded. Library callers use `WindowsPrinterCatalog.GetPrinters()` off the UI thread and `RdpClientOptions.Printers` (up to 16 explicit selections).
+
+CREATE starts a fixed-name RAW document on the selected queue, ordered WRITE requests complete short writes, and CLOSE finishes the document. Each queue allows four open jobs, writes up to 1 MiB and jobs up to 64 MiB. Failures/disconnect abort unfinished jobs; remote paths and arbitrary IOCTLs are rejected. Native spooler calls may block in drivers, so cleanup runs off-thread and finishes only after a blocked call returns. Fake tests exercise protocol/lifecycle; actual local validation only enumerates metadata. No real jobs were printed or live-server printing tested.
 
 ## Why managed
 
@@ -32,9 +38,10 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
   (`Orders.cs`, ported from FreeRDP), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
   region; fragmented fast-path updates are reassembled (`Graphics/`).
 - **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
-- **Channels** — clipboard (cliprdr) and drive redirection (rdpdr) over chunked static virtual
-  channels, plus the display-control dynamic channel (drdynvc + MS-RDPEDISP) for dynamic
-  resolution (`Channels/`).
+- **Channels** — clipboard (cliprdr) and selected drives, ports and legacy printers (rdpdr)
+  over chunked static virtual channels; drdynvc supports display control (MS-RDPEDISP),
+  the selected camera (MS-RDPECAM) and selected Windows portable devices (MS-RDPEPNP)
+  (`Channels/`).
 
 ## Using the plugin
 
@@ -158,6 +165,21 @@ arguments.
   rejected. The field's hint (always visible, unlike the placeholder) shows the format with
   examples for the current OS, and a wrong entry fails the connection with a message that quotes
   that entry and the expected format — or names the clashing name, or the 32-mapping limit.
+
+- **Portable devices / WPD** (Windows, same page) are individually unchecked by default.
+  Selecting a device grants remote read/change access through MS-RDPEPNP; this is not general
+  USB redirection. Background SetupAPI discovery reads metadata only. The native backend uses
+  overlapped I/O and accepts only WPD message IOCTLs `0x00404108` and `0x0040C108`, with
+  request-specific cancellation and one handle per file channel. Library callers set
+  `RdpClientOptions.WpdDevices` to IDs from `RdpWpdDevices.Enumerate()`.
+  On Windows 8+, windowless CM notifications revoke even idle removed devices and close their
+  handles. Reinsertion restores only an originally selected device with a verified unique PnP
+  instance ID, identical hardware IDs and exactly one current match, using a fresh protocol ID
+  and refreshed path. Friendly names and unselected devices never authorize sharing. Devices
+  without verifiable identity require a new explicit selection/connection. Notification
+  registration failure logs degraded I/O-only removal detection; settings edits do not alter
+  existing sessions. Tests use fake devices/notifications; physical hardware and server
+  interoperability have not been exercised.
 
 The advanced **security layer** setting (`security`) picks what is offered: `auto` (default) offers
 TLS and NLA and lets the server choose; `nla` insists on NLA; `tls` offers TLS only, so the server
