@@ -34,6 +34,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private readonly Func<byte[], Task> _send = send;
     private readonly IReadOnlyList<DriveMapping> _mappings = mappings;
     private readonly Dictionary<uint, DriveMapping> _devices = [];
+    private const int MaxOpenFiles = 4096;
     private readonly Dictionary<uint, DriveFile> _files = [];
     private uint _clientId;
     private uint _fileSequence = 1;
@@ -218,6 +219,13 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             catch (FileNotFoundException) { status = NtStatus.NoSuchFile; }
             catch (DirectoryNotFoundException) { status = NtStatus.ObjectPathNotFound; }
             catch (IOException) { status = NtStatus.Unsuccessful; }
+            // A truncated request, an unexpected argument, a stream that cannot do what was asked: still answer,
+            // so the server never waits on a completion that does not come.
+            catch (RdpProtocolException) { status = NtStatus.InvalidParameter; }
+            catch (Exception ex) when (ex is NotSupportedException or ArgumentException or OverflowException or InvalidOperationException)
+            {
+                status = NtStatus.Unsuccessful;
+            }
         }
 
         ByteWriter w = Header(PakidDeviceIoCompletion);
@@ -242,6 +250,13 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                     uint options = r.U32LE();
                     int pathLength = (int)r.U32LE();
                     string path = DecodeUnicode(r.Take(pathLength));
+                    if (_files.Count >= MaxOpenFiles)
+                    {
+                        // Each open file holds a local handle until the server closes it; bound them.
+                        body.U32LE(0); body.U8(0);
+                        return NtStatus.InsufficientResources;
+                    }
+
                     try
                     {
                         var file = DriveFile.Create(mapping.LocalPath, path, desiredAccess, disposition, options, fileAttributes);

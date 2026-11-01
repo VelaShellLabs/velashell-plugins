@@ -1,4 +1,5 @@
 using System.Net.Security;
+using System.Security.Cryptography;
 using System.Net.Sockets;
 using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Input;
@@ -14,7 +15,11 @@ internal sealed record RdpConnectOptions(
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
-    bool AudioPlayback = false);
+    bool AudioPlayback = false)
+{
+    /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
+    public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
+}
 
 /// <summary>Raised when a virtual channel delivers data to the managed session.</summary>
 internal readonly record struct ChannelPayload(string ChannelName, byte[] Data);
@@ -38,8 +43,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _channelWriteGates = new();
     private readonly CancellationTokenSource _sendStop = new();
     private readonly Dictionary<ushort, string> _channelsById = [];
-    private readonly Dictionary<ushort, MemoryStream> _vcReassembly = [];
-    private readonly Lock _frameLock = new();
+    private readonly Dictionary<ushort, (MemoryStream Buffer, uint Total)> _vcReassembly = [];
+    /// <summary>Largest complete virtual-channel message accepted (cliprdr formats/file lists, rdpdr I/O).</summary>
+    internal const uint MaxChannelMessage = 32 * 1024 * 1024;
     private const int ChannelChunkSize = 1600;
     private const uint ChannelFlagFirst = 0x01, ChannelFlagLast = 0x02;
 
@@ -48,7 +54,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     private const int MaxFragment = 16 * 1024 * 1024;
     private Graphics.Mppc? _mppc;                    // server→client bulk decompression (shared history)
 
-    internal Framebuffer Framebuffer { get; private set; } = new(1, 1);
+    // Replaced only on the pump thread (reactivation); readers take the reference once and use that surface.
+    private volatile Framebuffer _framebuffer = new(1, 1);
+    internal Framebuffer Framebuffer { get => _framebuffer; private set => _framebuffer = value; }
     internal event Action? FrameUpdated;
     internal event Action<ChannelPayload>? ChannelData;
     internal event Action<uint>? ErrorInfoReceived;
@@ -101,7 +109,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         bool nla = selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx);
         if (!nla && _options.Security == RdpSecurity.Nla)
         {
-            throw new RdpProtocolException("The server did not select NLA, and the security layer is set to NLA only.");
+            throw new RdpNlaUnavailableException();
         }
         Security = nla ? RdpSecurity.Nla : RdpSecurity.Tls;
 
@@ -134,8 +142,10 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // Client Info on the I/O channel.
         Stage = RdpConnectStage.Login;
-        await SendOnIoAsync(ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
-            (uint)_options.Performance, _options.AudioPlayback), ct).ConfigureAwait(false);
+        byte[] clientInfo = ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
+            (uint)_options.Performance, _options.AudioPlayback);
+        try { await SendOnIoAsync(clientInfo, ct).ConfigureAwait(false); }
+        finally { CryptographicOperations.ZeroMemory(clientInfo); }   // carries the password in the clear
 
         // Licensing then capability exchange.
         Stage = RdpConnectStage.Licensing;
@@ -198,10 +208,7 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // The server paints a full-screen bitmap update right after the font list, which raises
         // FrameUpdated; resize the backing store here so that update lands in the new dimensions.
-        lock (_frameLock)
-        {
-            Framebuffer = new Framebuffer(_width, _height);
-        }
+        Framebuffer = new Framebuffer(_width, _height);
     }
 
     // ---- Active-phase pump ----
@@ -262,10 +269,7 @@ internal sealed class RdpConnection : IAsyncDisposable
                 ushort updateType = r.U16LE();
                 if (updateType == 0x0001)
                 {
-                    lock (_frameLock)
-                    {
-                        _ = BitmapUpdate.Apply(ref r, Framebuffer);
-                    }
+                    _ = BitmapUpdate.Apply(ref r, Framebuffer);   // decodes outside the surface lock
 
                     FrameUpdated?.Invoke();
                 }
@@ -366,10 +370,7 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         var rr = new ByteReader(updateData);
         _ = rr.U16LE(); // updateType (UPDATETYPE_BITMAP)
-        lock (_frameLock)
-        {
-            _ = BitmapUpdate.Apply(ref rr, Framebuffer);
-        }
+        _ = BitmapUpdate.Apply(ref rr, Framebuffer);   // decodes outside the surface lock
 
         return true;
     }
@@ -445,40 +446,67 @@ internal sealed class RdpConnection : IAsyncDisposable
         finally { channelGate.Release(); }
     }
 
-    private void ReassembleChannel(ushort channelId, string name, byte[] payload)
+    internal void ReassembleChannel(ushort channelId, string name, byte[] payload)
     {
         var r = new ByteReader(payload);
         uint totalLength = r.U32LE();
         uint flags = r.U32LE();
         // CHANNEL_PACKET_* occupies bits 16–23 and shares the bulk history with graphics.
         ReadOnlySpan<byte> chunk = Decompress(r.Rest(), (byte)(flags >> 16));
-        if ((flags & ChannelFlagFirst) != 0 || !_vcReassembly.TryGetValue(channelId, out MemoryStream? buffer))
+        // The total is fixed by the FIRST chunk and the bytes actually buffered may never exceed it: checking only
+        // the declared length let a server stream chunks without FIRST/LAST into an ever-growing buffer.
+        if ((flags & ChannelFlagFirst) != 0)
         {
-            buffer = new MemoryStream();
-            _vcReassembly[channelId] = buffer;
+            if (totalLength > MaxChannelMessage)
+            {
+                throw new RdpProtocolException("Virtual channel PDU too large.");
+            }
+
+            _vcReassembly[channelId] = (new MemoryStream((int)Math.Min(totalLength, 64 * 1024)), totalLength);
         }
-        if (totalLength > 32 * 1024 * 1024)
+        else if (!_vcReassembly.ContainsKey(channelId))
         {
-            throw new RdpProtocolException("Virtual channel PDU too large.");
+            return;   // a continuation whose start never came: nothing to attach it to
+        }
+
+        (MemoryStream buffer, uint total) = _vcReassembly[channelId];
+        if (buffer.Length + chunk.Length > total)
+        {
+            _ = _vcReassembly.Remove(channelId);
+            throw new RdpProtocolException("Virtual channel data exceeds its declared length.");
         }
 
         buffer.Write(chunk);
         if ((flags & ChannelFlagLast) != 0)
         {
-            byte[] complete = buffer.ToArray();
             _ = _vcReassembly.Remove(channelId);
-            ChannelData?.Invoke(new ChannelPayload(name, complete));
+            if (buffer.Length == total)
+            {
+                ChannelData?.Invoke(new ChannelPayload(name, buffer.ToArray()));
+            }
         }
     }
 
-    /// <summary>Takes a consistent copy of the current desktop surface for presentation.</summary>
+    /// <summary>Takes a full copy of the current desktop surface (allocates W×H×4 — prefer <see cref="CopyFrame"/>).</summary>
     internal (byte[] Bgra, int Width, int Height) SnapshotFrame()
     {
-        lock (_frameLock)
+        Framebuffer fb = Framebuffer;
+        return (fb.Snapshot(), fb.Width, fb.Height);
+    }
+
+    /// <summary>
+    /// Copies what changed since the last copy into a caller surface of <paramref name="width"/>×<paramref name="height"/>.
+    /// When the desktop is no longer that size nothing is copied and the result carries the new size instead.
+    /// </summary>
+    internal RdpFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full)
+    {
+        Framebuffer fb = Framebuffer;
+        if (fb.Width != width || fb.Height != height)
         {
-            Framebuffer fb = Framebuffer;
-            return ((byte[])fb.Bgra.Clone(), fb.Width, fb.Height);
+            return new RdpFrameCopy(fb.Width, fb.Height, default, SizeChanged: true);
         }
+
+        return new RdpFrameCopy(fb.Width, fb.Height, fb.CopyTo(destination, stride, full), SizeChanged: false);
     }
 
     // ---- Framing helpers ----

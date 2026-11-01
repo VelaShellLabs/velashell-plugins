@@ -68,6 +68,7 @@ internal static class RdpConnector
         // host must not suggest re-entering the password.
         RdpNlaRefusedException refused => new ProtocolConnectionException(
             loc.Format(refused.ServerRequiresNla ? "NlaRefusedRequired" : "NlaRefused", refused.Detail), refused),
+        RdpNlaUnavailableException unavailable => new ProtocolConnectionException(loc["NlaUnavailable"], unavailable),
         RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.HybridRequiredByServer } failed =>
             new ProtocolConnectionException(loc["NegotiationNlaRequired"], failed),
         RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.SslNotAllowedByServer } failed =>

@@ -39,7 +39,7 @@ internal static class NlaSecurityContext
     /// </summary>
     internal static INlaSecurityContext Create(string domain, string username, string password, string targetHost) =>
         OperatingSystem.IsWindows() && !ForceManagedForTest
-            ? new SspiNegotiate(domain, username, password)
+            ? new SspiNegotiate(domain, username, password, targetHost)
             : new ManagedNtlm(domain, username, password, targetHost);
 }
 

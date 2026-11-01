@@ -33,6 +33,8 @@ internal sealed class DrdynvcChannel
     private uint _reassembleChannel;
     private int _reassembleTotal;
     private MemoryStream? _reassemble;
+    /// <summary>Display Control messages (caps / layout) are well under 1 KB.</summary>
+    private const int MaxDisplayMessage = 64 * 1024;
 
     internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct)
     {
@@ -148,7 +150,18 @@ internal sealed class DrdynvcChannel
         }
 
         uint channelId = ReadVariable(ref r, cbId);
-        int total = -1;
+        // Only the Display Control channel is ever opened; data for any other id is dropped before anything is
+        // buffered, and its messages are tiny, so a declared total above MaxDisplayMessage is refused outright
+        // (it used to pre-allocate whatever the server declared, up to 2 GB, for any channel id).
+        lock (_lock)
+        {
+            if (!_displayOpen || channelId != _displayChannelId)
+            {
+                return null;
+            }
+        }
+
+        long total = -1;
         if (first)
         {
             if (r.Remaining < CbIdBytes(sp))
@@ -156,7 +169,12 @@ internal sealed class DrdynvcChannel
                 return null;
             }
 
-            total = (int)ReadVariable(ref r, sp);
+            total = ReadVariable(ref r, sp);
+            if (total > MaxDisplayMessage)
+            {
+                _reassemble = null;
+                return null;
+            }
         }
         ReadOnlySpan<byte> data = r.Rest();
 
@@ -167,8 +185,8 @@ internal sealed class DrdynvcChannel
             if (total > data.Length)
             {
                 _reassembleChannel = channelId;
-                _reassembleTotal = total;
-                _reassemble = new MemoryStream(total);
+                _reassembleTotal = (int)total;
+                _reassemble = new MemoryStream();
                 _reassemble.Write(data);
                 return null;
             }

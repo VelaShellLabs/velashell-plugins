@@ -224,6 +224,11 @@ internal sealed class McsLayer(RdpTransport transport)
         }
 
         byte li = x224Tpdu[0];
+        if (li + 1 > x224Tpdu.Length)
+        {
+            throw new RdpProtocolException("X.224 header longer than its TPDU.");
+        }
+
         return x224Tpdu[(li + 1)..];
     }
 }

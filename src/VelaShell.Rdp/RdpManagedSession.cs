@@ -24,6 +24,7 @@ public sealed class RdpManagedSession : IRdpSession
     private Channel<byte[]>? _cliprdrQueue;
     private Exception? _clipboardFailure;
     private long _clipboardQueuedBytes;
+    private long _rdpdrQueuedBytes;
     private Task? _cliprdrWorker;
     private RdpdrChannel? _rdpdr;
     private Channel<byte[]>? _rdpdrQueue;
@@ -218,7 +219,7 @@ public sealed class RdpManagedSession : IRdpSession
             await session.DisposeAsync().ConfigureAwait(false);
             // Cancellation, certificate trust and rejected credentials each mean something specific to
             // the caller; everything else gets the failing stage and a readable cause chain.
-            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException)
+            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException or RdpNlaUnavailableException)
             {
                 throw;
             }
@@ -277,13 +278,17 @@ public sealed class RdpManagedSession : IRdpSession
         }
         else if (payload.ChannelName == "rdpdr")
         {
-            if (_rdpdrQueue?.Writer.TryWrite(payload.Data) != true)
+            // Bounded by bytes as well as by count: 256 queued requests of up to 32 MB each is no bound at all.
+            long queued = Interlocked.Add(ref _rdpdrQueuedBytes, payload.Data.Length);
+            if (queued > 64 * 1024 * 1024 || _rdpdrQueue?.Writer.TryWrite(payload.Data) != true)
             {
+                Interlocked.Add(ref _rdpdrQueuedBytes, -payload.Data.Length);
                 throw new IOException("RDP drive request queue capacity exceeded; reconnect the session.");
             }
         }
-        else if (payload.ChannelName == "drdynvc")
+        else if (payload.ChannelName == "drdynvc" && payload.Data.Length <= 1024 * 1024)
         {
+            // Only Display Control is opened and its messages are tiny; anything larger is not for us.
             _ = (_drdynvcQueue?.Writer.TryWrite(payload.Data));
         }
     }
@@ -299,6 +304,7 @@ public sealed class RdpManagedSession : IRdpSession
         {
             await foreach (byte[] pdu in _rdpdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
+                Interlocked.Add(ref _rdpdrQueuedBytes, -pdu.Length);
                 try { await _rdpdr.ProcessAsync(pdu).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
                 catch { /* a malformed rdpdr PDU must not drop the session */ }
@@ -373,6 +379,18 @@ public sealed class RdpManagedSession : IRdpSession
 
         (byte[] bgra, int width, int height) = _connection.SnapshotFrame();
         return new RdpFrame(width, height, bgra);
+    }
+
+    public RdpFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full = false)
+    {
+        _ = Interlocked.Exchange(ref _dirty, 0);
+        RdpFrameCopy copy = _connection.CopyFrame(destination, stride, width, height, full);
+        if (copy.SizeChanged)
+        {
+            _ = Interlocked.Exchange(ref _dirty, 1);   // still pending until the caller has a surface of the new size
+        }
+
+        return copy;
     }
 
     private async Task PumpLoopAsync()

@@ -24,7 +24,8 @@ internal static class InterleavedRle
     private const uint BlackPixel = 0x000000;
 
     /// <summary>Decompresses into <paramref name="dst"/> (bottom-up, width*height*bpp bytes).</summary>
-    internal static void Decompress(ReadOnlySpan<byte> src, Span<byte> dst, int width, int height, int bpp)
+    /// <summary>Decodes into <paramref name="dst"/>; returns how many bytes were written (a stream may end before filling it).</summary>
+    internal static int Decompress(ReadOnlySpan<byte> src, Span<byte> dst, int width, int height, int bpp)
     {
         int rowDelta = width * bpp;
         uint white = bpp switch { 1 => 0xFF, 2 => 0xFFFF, _ => 0xFFFFFF };
@@ -218,6 +219,8 @@ internal static class InterleavedRle
                     throw new RdpProtocolException($"Invalid RLE code 0x{code:X2}.");
             }
         }
+
+        return d;
     }
 
     private static uint ReadSrc(ReadOnlySpan<byte> src, ref int s, int bpp, int srcEnd)

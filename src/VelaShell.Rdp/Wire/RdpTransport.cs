@@ -176,7 +176,10 @@ internal sealed class RdpTransport(Stream stream)
         // Optional routing cookie, terminated with CR LF.
         if (!string.IsNullOrEmpty(cookieUser))
         {
-            foreach (char c in $"Cookie: mstshash={cookieUser}")
+            // Sent before TLS, in the clear: printable ASCII only (no CR/LF that would end the cookie early,
+            // no truncating casts of non-ASCII characters), and bounded.
+            string user = new([.. cookieUser.Where(c => c is >= (char)0x20 and <= (char)0x7E).Take(64)]);
+            foreach (char c in $"Cookie: mstshash={user}")
             {
                 w.U8((byte)c);
             }

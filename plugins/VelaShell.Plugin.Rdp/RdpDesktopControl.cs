@@ -97,34 +97,60 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
                 return;
             }
 
-            RdpFrame? frame = _session.TakeFrame();
-            if (frame is null)
+            PresentFrame();
+        }, DispatcherPriority.Render);
+    }
+
+    /// <summary>
+    /// Copies only what changed straight into the locked bitmap — no per-frame W×H×4 allocation and no second full
+    /// copy (a blinking caret used to cost two 8 MB copies at 1080p). A new desktop size recreates the bitmap and
+    /// takes one full copy.
+    /// </summary>
+    private unsafe void PresentFrame()
+    {
+        bool resized = false, full = false;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            RdpFrameCopy copy;
+            if (_bitmap is null)
             {
-                return;
+                copy = _session.CopyFrame([], 0, 0, 0);   // no surface yet: only learn the size
+            }
+            else
+            {
+                using ILockedFramebuffer buffer = _bitmap.Lock();
+                var target = new Span<byte>((void*)buffer.Address, buffer.RowBytes * buffer.Size.Height);
+                copy = _session.CopyFrame(target, buffer.RowBytes, buffer.Size.Width, buffer.Size.Height, full);
             }
 
-            bool resized = _bitmap is null || frame.Width != DesktopWidth || frame.Height != DesktopHeight;
-            if (resized)
+            if (copy.SizeChanged)
             {
-                _bitmap?.Dispose();
-                DesktopWidth = frame.Width;
-                DesktopHeight = frame.Height;
-                _bitmap = new WriteableBitmap(new(frame.Width, frame.Height), new(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
-                if (!Fit) { MinWidth = frame.Width; MinHeight = frame.Height; }
-            }
-            using (ILockedFramebuffer buffer = _bitmap!.Lock())
-            {
-                for (int row = 0; row < frame.Height; row++)
+                if (copy.Width <= 0 || copy.Height <= 0)
                 {
-                    Marshal.Copy(frame.Pixels, row * frame.Width * 4, buffer.Address + row * buffer.RowBytes, frame.Width * 4);
+                    return;
                 }
+
+                _bitmap?.Dispose();
+                DesktopWidth = copy.Width;
+                DesktopHeight = copy.Height;
+                _bitmap = new WriteableBitmap(new(copy.Width, copy.Height), new(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
+                if (!Fit) { MinWidth = copy.Width; MinHeight = copy.Height; }
+                resized = full = true;
+                continue;
             }
-            InvalidateVisual();
-            if (resized)
+
+            if (!copy.Changed.IsEmpty || resized)
             {
-                DesktopSizeChanged?.Invoke();
+                InvalidateVisual();
             }
-        }, DispatcherPriority.Render);
+
+            break;
+        }
+
+        if (resized)
+        {
+            DesktopSizeChanged?.Invoke();
+        }
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

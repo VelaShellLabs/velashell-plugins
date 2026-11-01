@@ -15,6 +15,9 @@ public sealed record RdpClientOptions
     public string Username { get; init; } = "";
     public string Password { get; init; } = "";
 
+    /// <summary>Never prints <see cref="Password"/> (the compiler-generated record ToString would).</summary>
+    public override string ToString() => $"{nameof(RdpClientOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Domain = {Domain} }}";
+
     /// <summary>Optional logon domain.</summary>
     public string Domain { get; init; } = "";
 

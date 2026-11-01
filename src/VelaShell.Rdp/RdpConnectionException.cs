@@ -224,3 +224,15 @@ public static class RdpErrorInfo
     /// <summary>Whether the code names a Remote Desktop licensing failure (0x00000100–0x0000010A).</summary>
     public static bool IsLicensing(uint code) => code is >= 0x00000100 and <= 0x0000010A;
 }
+
+/// <summary>
+/// <see cref="RdpSecurity.Nla"/> was required but the server's X.224 answer selected TLS without NLA. The
+/// negotiation travels in the clear, so for a server that used NLA before this is exactly what a man-in-the-middle
+/// forcing a downgrade looks like (it would then receive the password inside its own TLS) — or the server's
+/// "require NLA" setting was switched off. No credentials have been sent when this is raised.
+/// </summary>
+public sealed class RdpNlaUnavailableException : Exception
+{
+    internal RdpNlaUnavailableException()
+        : base("The server did not select NLA, and the security layer requires NLA.") { }
+}

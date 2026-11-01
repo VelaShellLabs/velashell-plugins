@@ -15,8 +15,19 @@ internal sealed class FakeRdpSession : IRdpSession
     internal readonly List<(uint Flags, uint X, uint Y)> Mouse = [];
     internal readonly List<(int Width, int Height)> Resizes = [];
     private RdpFrame? _frame;
+    private RdpFrame? _latest;
+    private bool _pending;
     public RdpFrame? TakeFrame() => Interlocked.Exchange(ref _frame, null);
-    internal void Emit(RdpFrame frame) { _frame = frame; FrameAvailable?.Invoke(); }
+    internal void Emit(RdpFrame frame) { _frame = frame; _latest = frame; _pending = true; FrameAvailable?.Invoke(); }
+    public RdpFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full = false)
+    {
+        if (_latest is not { } frame) { return new(width, height, default, false); }
+        if (frame.Width != width || frame.Height != height) { return new(frame.Width, frame.Height, default, true); }
+        if (!_pending && !full) { return new(width, height, default, false); }
+        for (int row = 0; row < height; row++) { frame.Pixels.AsSpan(row * width * 4, width * 4).CopyTo(destination.Slice(row * stride)); }
+        _pending = false;
+        return new(width, height, new(0, 0, width, height), false);
+    }
     internal void Disconnect() { IsConnected = false; Disconnected?.Invoke(null); }
     internal void EmitClipboard(RdpClipboardEvent data) => ClipboardEvent?.Invoke(data);
     public Task KeyAsync(uint code, bool down, CancellationToken ct = default) { Keys.Add((code, down)); Input.Add($"{code:x}{(down ? "+" : "-")}"); return Task.CompletedTask; }

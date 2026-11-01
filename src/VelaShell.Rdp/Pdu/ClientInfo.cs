@@ -34,7 +34,7 @@ internal static class ClientInfo
     /// </summary>
     internal static byte[] Build(string domain, string username, string password, bool autoLogon, uint performanceFlags, bool audioPlayback)
     {
-        var w = new ByteWriter(512);
+        var w = new ByteWriter(2048);   // roomy enough that the password is never copied by a buffer resize
         // Basic Security Header: SEC_INFO_PKT.
         w.U16LE(SecurityFlags.Info);
         w.U16LE(0);                       // flagsHi
@@ -69,6 +69,7 @@ internal static class ClientInfo
         w.Bytes(domainBytes);
         w.Bytes(userBytes);
         w.Bytes(passBytes);
+        System.Security.Cryptography.CryptographicOperations.ZeroMemory(passBytes);
         w.Bytes(shellBytes);
         w.Bytes(workDirBytes);
 

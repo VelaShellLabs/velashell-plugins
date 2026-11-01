@@ -13,6 +13,9 @@ internal static class Capabilities
     /// <summary>The share id plus the server's active desktop size (0×0 when the caps omit a bitmap set).</summary>
     internal readonly record struct DemandActive(uint ShareId, int Width, int Height);
 
+    /// <summary>Largest desktop area adopted from a server (8K UHD).</summary>
+    internal const long MaxDesktopPixels = 7680L * 4320;
+
     /// <summary>
     /// Reads a Demand Active body (after the share control header). Returns the share id and the
     /// server's active desktop resolution, taken from the Bitmap Capability Set (MS-RDPBCGR 2.2.7.1.2).
@@ -53,7 +56,9 @@ internal static class Capabilities
                 }
             }
         }
-        if (width is < 200 or > 8192 || height is < 200 or > 8192)
+        // A server-chosen size is adopted as the framebuffer, so bound it: 8192 per side (MS-RDPEDISP's limit) and
+        // at most an 8K UHD area (7680×4320 ≈ 133 MB of BGRA), not 8192² (268 MB). Anything else keeps our size.
+        if (width is < 200 or > 8192 || height is < 200 or > 8192 || (long)width * height > MaxDesktopPixels)
         {
             width = height = 0;
         }
