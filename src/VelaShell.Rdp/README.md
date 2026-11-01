@@ -55,7 +55,19 @@ await session.MouseAsync(0x0800, x, y);          // move
 await session.KeyAsync(scancode, down: true);    // key
 await session.RequestResizeAsync(1280, 1024, 150);   // match the remote desktop (and DPI) to your viewport
 await session.SetDisplayUpdatesAsync(false);       // view hidden: the server pauses updates (Suppress Output)
+
+session.Disconnected += cause =>
+{
+    // RdpConnectionLostException: the network dropped — connecting again normally resumes the remote session.
+    // RdpDisconnectException: the server ended it and said why (ErrorInfo). Anything else: protocol/channel failure.
+};
 ```
+
+`KeepAliveInterval` (default 30 s, `TimeSpan.Zero` to disable) keeps a quiet session alive: TCP keep-alive
+probes after that much idle time (3 unanswered probes 10 s apart end the session with
+`RdpConnectionLostException`), and while display updates are paused the paused state is re-sent at that
+interval, because a paused session is otherwise silent and NAT gateways and port forwarders expire idle
+connections. Reconnecting is left to the caller.
 
 Without a `CertificatePin`, an untrusted server certificate raises
 `RdpCertificateRejectedException`, whose `Pem` lets you show the leaf's SHA-256 and offer to pin it.

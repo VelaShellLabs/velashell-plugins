@@ -179,6 +179,18 @@ internal sealed class Loc(string locale)
         ["ReconnectButton"] = ["Reconnect", "重新连接", "重新連線", "再接続", "다시 연결"],
         ["Reconnecting"] = ["Reconnecting…", "正在重新连接…", "正在重新連線…", "再接続しています…", "다시 연결 중…"],
         ["ReconnectFailed"] = ["Reconnect failed. Try again.", "重新连接失败，请重试。", "重新連線失敗，請重試。", "再接続に失敗しました。もう一度お試しください。", "다시 연결에 실패했습니다. 다시 시도하세요."],
+        ["AutoReconnecting"] = [
+            "The network connection was lost. Reconnecting automatically (attempt {0} of {1})…",
+            "网络连接已中断，正在自动重新连接（第 {0}/{1} 次）…",
+            "網路連線已中斷，正在自動重新連線（第 {0}/{1} 次）…",
+            "ネットワーク接続が切断されました。自動的に再接続しています（{0}/{1} 回目）…",
+            "네트워크 연결이 끊어졌습니다. 자동으로 다시 연결하는 중입니다({0}/{1}번째)…"],
+        ["AutoReconnectFailed"] = [
+            "The network connection was lost and could not be restored automatically.",
+            "网络连接已中断，自动重新连接未成功。",
+            "網路連線已中斷，自動重新連線未成功。",
+            "ネットワーク接続が切断され、自動再接続できませんでした。",
+            "네트워크 연결이 끊어졌으며 자동으로 다시 연결하지 못했습니다."],
         ["Resolution"] = ["{0} × {1}", "{0} × {1}", "{0} × {1}", "{0} × {1}", "{0} × {1}"],
         ["Invalid"] = ["Invalid RDP setting: {0}", "RDP 设置无效：{0}", "RDP 設定無效：{0}", "RDP 設定が無効です：{0}", "잘못된 RDP 설정: {0}"],
         ["MissingNative"] = ["The RDP native library is missing or incompatible. Install the RDP package for {0} (ABI 1).", "缺少 RDP 原生库或版本不兼容。请安装适用于 {0} 的 RDP 插件包（ABI 1）。", "缺少 RDP 原生程式庫或版本不相容。請安裝適用於 {0} 的 RDP 外掛套件（ABI 1）。", "RDP ネイティブライブラリがないか互換性がありません。{0} 用パッケージ（ABI 1）をインストールしてください。", "RDP 네이티브 라이브러리가 없거나 호환되지 않습니다. {0}용 RDP 패키지(ABI 1)를 설치하세요."],

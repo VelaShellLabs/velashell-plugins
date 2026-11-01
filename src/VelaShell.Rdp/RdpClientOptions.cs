@@ -103,4 +103,14 @@ public sealed record RdpClientOptions
 
     /// <summary>Which security layer to offer; <see cref="RdpSecurity.Auto"/> by default.</summary>
     public RdpSecurity Security { get; init; } = RdpSecurity.Auto;
+
+    /// <summary>
+    /// How long the connection may stay silent before it is kept alive; 30 seconds by default. TCP keep-alive probes
+    /// start after this much idle time (three unanswered probes 10 seconds apart end the session with
+    /// <see cref="RdpConnectionLostException"/>), and while display updates are paused
+    /// (<see cref="IRdpSession.SetDisplayUpdatesAsync"/> with <see langword="false"/>) a small Suppress Output PDU is
+    /// re-sent at this interval, so NAT gateways, firewalls and port forwarders do not expire a quiet background
+    /// session. <see cref="TimeSpan.Zero"/> disables both.
+    /// </summary>
+    public TimeSpan KeepAliveInterval { get; init; } = TimeSpan.FromSeconds(30);
 }

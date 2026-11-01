@@ -66,6 +66,12 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         _view = new(_session, _context, _settings, _loc) { Reconnect = ReconnectAsync };
         _view.SetConnected(Status.State == ProtocolSessionState.Connected);
         _root.Content = _view;
+        // Reconnected while the tab is in the background (the host keeps an inactive tab's view out of the visual
+        // tree): pause display updates until it is shown, like the view it replaces.
+        if (TopLevel.GetTopLevel(_root) is null)
+        {
+            _view.Desktop.PauseUntilShown();
+        }
     }
     internal void SetLocale(Loc loc)
     {
@@ -87,6 +93,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         lock (_disposeGate)
         {
             _session = session;
+            _attachedAt = Environment.TickCount64;
             _disconnectedHandler = failure => OnDisconnected(session, failure);
             session.Disconnected += _disconnectedHandler;
             SetStatus(new(session.IsConnected ? ProtocolSessionState.Connected : ProtocolSessionState.Faulted), session);
@@ -99,6 +106,15 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             return;
         }
 
+        if (failure is RdpConnectionLostException lost && AutoReconnectDelays.Length > 0)
+        {
+            // The network dropped, not the server: the remote Windows session waits in the disconnected state, so
+            // reconnect on our own like mstsc instead of leaving a dead tab for the user to find.
+            _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} connection lost ({lost.Message.TrimEnd('.')}); reconnecting automatically.");
+            StartAutoReconnect(session);
+            return;
+        }
+
         string? reason = RdpConnector.DisconnectReason(failure, _loc);
         if (reason is not null)
         {
@@ -108,6 +124,10 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
                 ? managed.ReachedLogon ? $"; a Windows logon was reached (Save Session Info type {managed.LogonInfoType})" : "; no Windows logon was reached"
                 : "";
             _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure!.Message}{logon}");
+        }
+        else if (failure is not null)
+        {
+            _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure.GetType().Name}: {failure.Message}");
         }
 
         SetStatus(new(ProtocolSessionState.Faulted, reason ?? _loc["Disconnected"]), session);
@@ -136,13 +156,128 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         try { StatusChanged?.Invoke(this, status); }
         catch { /* Host observers must not prevent connection cleanup. */ }
     }
-    public async Task ReconnectAsync(CancellationToken cancellationToken = default)
+    public Task ReconnectAsync(CancellationToken cancellationToken = default) => ReconnectCoreAsync(null, cancellationToken);
+
+    /// <summary>Waits before each automatic attempt; the last one repeats until <see cref="AutoReconnectAttempts"/>.</summary>
+    internal TimeSpan[] AutoReconnectDelays { get; set; } =
+        [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30)];
+
+    /// <summary>Automatic attempts before the tab falls back to the manual Reconnect button (about 8 minutes of waiting).</summary>
+    internal int AutoReconnectAttempts { get; set; } = 20;
+
+    /// <summary>A session that lasts this long starts a fresh series of attempts the next time it drops.</summary>
+    internal TimeSpan AutoReconnectStableAfter { get; set; } = TimeSpan.FromMinutes(1);
+
+    private CancellationTokenSource? _autoCancel;
+    private Task? _autoReconnect;
+    private int _autoAttempt;
+    private long _attachedAt;
+
+    /// <summary>The running automatic reconnect, if any (tests).</summary>
+    internal Task? AutoReconnectTask { get { lock (_disposeGate) { return _autoReconnect; } } }
+
+    private void StartAutoReconnect(IRdpSession lost)
+    {
+        CancellationTokenSource? superseded;
+        lock (_disposeGate)
+        {
+            if (_disposed != 0)
+            {
+                return;
+            }
+
+            // Dropped again soon after reconnecting: continue that series instead of starting over, so a server or
+            // path that keeps failing gives up after the attempts rather than looping forever.
+            if (Environment.TickCount64 - _attachedAt >= (long)AutoReconnectStableAfter.TotalMilliseconds)
+            {
+                _ = Interlocked.Exchange(ref _autoAttempt, 0);
+            }
+
+            // A series still waiting for an older session (the user reconnected meanwhile and the new one dropped too)
+            // would only see its session replaced and stop; this one takes over. The old source is cancelled, not
+            // disposed: its loop may still be reading the token.
+            superseded = _autoCancel;
+            _autoCancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            CancellationToken token = _autoCancel.Token;
+            _autoReconnect = Task.Run(() => AutoReconnectAsync(lost, token));
+        }
+
+        superseded?.Cancel();
+    }
+
+    private async Task AutoReconnectAsync(IRdpSession lost, CancellationToken ct)
+    {
+        Exception? last = null;
+        while (!ct.IsCancellationRequested)
+        {
+            int attempt = Interlocked.Increment(ref _autoAttempt);
+            if (attempt > AutoReconnectAttempts)
+            {
+                break;
+            }
+
+            ShowDisconnected(lost, _loc.Format("AutoReconnecting", attempt, AutoReconnectAttempts));
+            try
+            {
+                await Task.Delay(AutoReconnectDelays[Math.Min(attempt, AutoReconnectDelays.Length) - 1], ct).ConfigureAwait(false);
+                if (await ReconnectCoreAsync(lost, ct).ConfigureAwait(false))
+                {
+                    _context.Log.Info($"RDP {_request?.Host}:{_request?.Port} reconnected automatically (attempt {attempt}).");
+                }
+
+                return;   // reconnected — by this attempt, or by the user / host in the meantime
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+            catch (ObjectDisposedException) when (_disposed != 0) { return; }
+            catch (Exception ex) when (ex is ProtocolAuthenticationException or ProtocolCertificateTrustException)
+            {
+                last = ex;   // the password or the certificate changed: only the user can resolve that
+                break;
+            }
+            catch (Exception ex) { last = ex; }   // the factory logged it; try again after the next delay
+        }
+
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port}: automatic reconnect gave up after {Math.Min(_autoAttempt, AutoReconnectAttempts)} attempt(s): {last?.Message}");
+        ShowDisconnected(lost, last is ProtocolAuthenticationException or ProtocolCertificateTrustException ? last.Message : _loc["AutoReconnectFailed"]);
+    }
+
+    /// <summary>The disconnected card and status for <paramref name="session"/>, unless it has been replaced since.</summary>
+    private void ShowDisconnected(IRdpSession session, string message)
+    {
+        SetStatus(new(ProtocolSessionState.Faulted, message), session);
+        if (_root is not null)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_disposed == 0 && ReferenceEquals(_session, session))
+                {
+                    _view?.SetConnected(false, message);
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// Replaces the session. With <paramref name="expected"/> (an automatic attempt) it only does so while that lost
+    /// session is still current, and returns false when the user or the host already reconnected.
+    /// </summary>
+    private async Task<bool> ReconnectCoreAsync(IRdpSession? expected, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            if (expected is not null && !ReferenceEquals(_session, expected))
+            {
+                return false;
+            }
+
             // Establish the new session before tearing down the old one, so a failed attempt leaves
             // the current (disconnected) view in place — its in-view Reconnect button stays usable
             // instead of the workspace going blank.
@@ -153,6 +288,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             {
                 await Dispatcher.UIThread.InvokeAsync(BindView);
             }
+
+            return true;
         }
         finally { _ = _gate.Release(); }
     }
@@ -193,6 +330,12 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     {
         _ = Interlocked.Exchange(ref _disposed, 1);
         _lifetime.Cancel();
+        // Cancelled with the lifetime; it gives up the gate (or never takes it) before the close below needs it.
+        if (AutoReconnectTask is { } reconnecting)
+        {
+            try { await reconnecting.ConfigureAwait(false); } catch { /* reported by the loop itself */ }
+        }
+
         await _gate.WaitAsync().ConfigureAwait(false);
         try { await CloseConnectionAsync().ConfigureAwait(false); }
         finally
@@ -202,6 +345,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             StatusChanged = null;
             _closed(this);
             _ = _gate.Release();
+            lock (_disposeGate) { _autoCancel?.Dispose(); _autoCancel = null; }
             _lifetime.Dispose();
         }
     }
