@@ -720,6 +720,13 @@ internal sealed class RdpConnection : IAsyncDisposable
             {
                 return indication.Payload;
             }
+
+            // RDPDR can start its handshake before licensing / Demand Active completes.
+            // Dropping that first Server Announce leaves the server waiting forever for our reply.
+            if (_channelsById.TryGetValue(indication.ChannelId, out string? name))
+            {
+                ReassembleChannel(indication.ChannelId, name, indication.Payload);
+            }
         }
     }
 

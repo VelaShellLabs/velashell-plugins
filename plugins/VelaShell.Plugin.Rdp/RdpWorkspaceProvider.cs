@@ -124,8 +124,8 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         }
         finally { lock (_gate) { if (--_opens == 0 && _disposed) { _ = _drained.TrySetResult(); } } }
     }
-    private static Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
-        RdpConnector.ConnectAsync(request, settings, loc, ct);
+    private Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
+        RdpConnector.ConnectAsync(request, settings, loc, ct, message => _context.Log.Info(message));
 
     private void Closed(RdpWorkspaceDocument document)
     {

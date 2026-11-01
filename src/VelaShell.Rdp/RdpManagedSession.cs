@@ -31,6 +31,13 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     private RdpdrChannel? _rdpdr;
     private Channel<byte[]>? _rdpdrQueue;
     private Task? _rdpdrWorker;
+    private Action<string>? _driveLog;
+
+    private void LogDrive(string message)
+    {
+        try { _driveLog?.Invoke($"RDPDR {message}"); }
+        catch { /* Diagnostics must not interrupt the channel worker. */ }
+    }
     private DrdynvcChannel? _drdynvc;
     private Channel<byte[]>? _drdynvcQueue;
     private Task? _drdynvcWorker;
@@ -123,7 +130,12 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             try { PointerChanged?.Invoke(pointer); } catch { /* never unwind into the pump */ }
         };
         _connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
-        _connection.LogonInfoReceived += type => { Volatile.Write(ref _logonInfo, (int)type); Volatile.Write(ref _reachedLogon, 1); };
+        _connection.LogonInfoReceived += type =>
+        {
+            Volatile.Write(ref _logonInfo, (int)type);
+            Volatile.Write(ref _reachedLogon, 1);
+            LogDrive($"server logon notification type={type}");
+        };
         _connection.ChannelData += OnChannelData;
     }
 
@@ -178,7 +190,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     /// </summary>
     public RdpNlaRefusedException? NlaRefusal { get; private set; }
 
-    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
+    internal static IReadOnlyList<ChannelDef> BuildChannels(RdpClientOptions options)
     {
         var channels = new List<ChannelDef>();
         if (options.Clipboard)
@@ -189,6 +201,8 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         if (options.Drives.Count > 0)
         {
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
+            // Windows device redirection also needs the sound channel registered, even without playback.
+            channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
         if (options.DynamicResolution)
@@ -196,12 +210,19 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
         }
 
+        return channels;
+    }
+
+    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
+    {
+        IReadOnlyList<ChannelDef> channels = BuildChannels(options);
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
             string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
             options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders);
 
-        var session = new RdpManagedSession(new RdpConnection(connectOptions));
+        var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
+        session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
         if (options.DynamicResolution)
         {
             session.EnableDynamicChannels();
@@ -240,6 +261,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
             throw new RdpConnectionException(stage, ex, tls, tlsTrace);
         }
+        session.LogDrive($"connection active; rdpdr channelId={session._connection.ChannelId("rdpdr")}");
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
         session._pump = session.PumpLoopAsync();
@@ -269,7 +291,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     private void EnableDrives(IReadOnlyList<DriveMapping> mappings)
     {
         _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings);
+        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive);
         _rdpdrWorker = DrainRdpdrAsync();
     }
 
@@ -316,7 +338,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
                 Interlocked.Add(ref _rdpdrQueuedBytes, -pdu.Length);
                 try { await _rdpdr.ProcessAsync(pdu).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
-                catch { /* a malformed rdpdr PDU must not drop the session */ }
+                catch (Exception ex) { LogDrive($"packet processing failed: {ex.GetType().Name}; bytes={pdu.Length}"); }
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }

@@ -14,7 +14,7 @@ namespace VelaShell.Plugin.Rdp;
 /// </summary>
 internal static class RdpConnector
 {
-    internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct)
+    internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct, Action<string>? driveLog = null)
     {
         byte[]? pin = settings.CertificateSha256.Length == 64 ? Convert.FromHexString(settings.CertificateSha256) : null;
         // Connect at the size and scale the view will have (the last view's, recorded when it laid out): starting at
@@ -36,6 +36,7 @@ internal static class RdpConnector
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,
             Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))],
+            DriveRedirectionLog = driveLog,
             Security = settings.Security,
             Performance = settings.Performance,
             AudioPlayback = settings.Audio
