@@ -1,4 +1,5 @@
 using System.Net.Security;
+using System.Security.Cryptography;
 using System.Net.Sockets;
 using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Input;
@@ -14,7 +15,11 @@ internal sealed record RdpConnectOptions(
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
-    bool AudioPlayback = false);
+    bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true)
+{
+    /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
+    public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
+}
 
 /// <summary>Raised when a virtual channel delivers data to the managed session.</summary>
 internal readonly record struct ChannelPayload(string ChannelName, byte[] Data);
@@ -38,8 +43,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _channelWriteGates = new();
     private readonly CancellationTokenSource _sendStop = new();
     private readonly Dictionary<ushort, string> _channelsById = [];
-    private readonly Dictionary<ushort, MemoryStream> _vcReassembly = [];
-    private readonly Lock _frameLock = new();
+    private readonly Dictionary<ushort, (MemoryStream Buffer, uint Total)> _vcReassembly = [];
+    /// <summary>Largest complete virtual-channel message accepted (cliprdr formats/file lists, rdpdr I/O).</summary>
+    internal const uint MaxChannelMessage = 32 * 1024 * 1024;
     private const int ChannelChunkSize = 1600;
     private const uint ChannelFlagFirst = 0x01, ChannelFlagLast = 0x02;
 
@@ -48,7 +54,9 @@ internal sealed class RdpConnection : IAsyncDisposable
     private const int MaxFragment = 16 * 1024 * 1024;
     private Graphics.Mppc? _mppc;                    // server→client bulk decompression (shared history)
 
-    internal Framebuffer Framebuffer { get; private set; } = new(1, 1);
+    // Replaced only on the pump thread (reactivation); readers take the reference once and use that surface.
+    private volatile Framebuffer _framebuffer = new(1, 1);
+    internal Framebuffer Framebuffer { get => _framebuffer; private set => _framebuffer = value; }
     internal event Action? FrameUpdated;
     internal event Action<ChannelPayload>? ChannelData;
     internal event Action<uint>? ErrorInfoReceived;
@@ -101,7 +109,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         bool nla = selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx);
         if (!nla && _options.Security == RdpSecurity.Nla)
         {
-            throw new RdpProtocolException("The server did not select NLA, and the security layer is set to NLA only.");
+            throw new RdpNlaUnavailableException();
         }
         Security = nla ? RdpSecurity.Nla : RdpSecurity.Tls;
 
@@ -123,7 +131,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         // MCS + GCC.
         Stage = RdpConnectStage.Mcs;
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
-            (uint)selected, "VelaShell", 0x409, _options.Channels);
+            (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor);
         _mcs = new McsLayer(_transport);
         await _mcs.ConnectAsync(gcc, _options.Channels, ct).ConfigureAwait(false);
         _ioChannel = _mcs.Server.IoChannelId;
@@ -134,8 +142,10 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // Client Info on the I/O channel.
         Stage = RdpConnectStage.Login;
-        await SendOnIoAsync(ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
-            (uint)_options.Performance, _options.AudioPlayback), ct).ConfigureAwait(false);
+        byte[] clientInfo = ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
+            (uint)_options.Performance, _options.AudioPlayback);
+        try { await SendOnIoAsync(clientInfo, ct).ConfigureAwait(false); }
+        finally { CryptographicOperations.ZeroMemory(clientInfo); }   // carries the password in the clear
 
         // Licensing then capability exchange.
         Stage = RdpConnectStage.Licensing;
@@ -185,12 +195,14 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         Capabilities.DemandActive active = Capabilities.ReadDemandActive(ref r);
         _shareId = active.ShareId;
+        ServerSupportsSuppressOutput = active.SuppressOutput;
+        ServerSupportsRefreshRect = active.RefreshRect;
         // Adopt the resolution the server actually settled on (initial negotiation, or the result of
         // a display-control resize); keep the requested size only when the caps omit a bitmap set.
         if (active.Width > 0 && active.Height > 0) { _width = active.Width; _height = active.Height; }
 
         ushort user = _mcs.UserId;
-        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0), ct).ConfigureAwait(false);
+        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0, _options.DrawingOrders), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.Synchronize(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.ControlCooperate(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.RequestControl(_shareId, user), ct).ConfigureAwait(false);
@@ -198,10 +210,7 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // The server paints a full-screen bitmap update right after the font list, which raises
         // FrameUpdated; resize the backing store here so that update lands in the new dimensions.
-        lock (_frameLock)
-        {
-            Framebuffer = new Framebuffer(_width, _height);
-        }
+        StartSurface(active.Bpp is 0 ? _options.Bpp : active.Bpp);
     }
 
     // ---- Active-phase pump ----
@@ -254,7 +263,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         }
     }
 
-    private void ProcessDataPdu(ShareDataType type, ref ByteReader r)
+    internal void ProcessDataPdu(ShareDataType type, ref ByteReader r)
     {
         switch (type)
         {
@@ -262,12 +271,26 @@ internal sealed class RdpConnection : IAsyncDisposable
                 ushort updateType = r.U16LE();
                 if (updateType == 0x0001)
                 {
-                    lock (_frameLock)
-                    {
-                        _ = BitmapUpdate.Apply(ref r, Framebuffer);
-                    }
+                    _ = BitmapUpdate.Apply(ref r, Framebuffer);   // decodes outside the surface lock
 
                     FrameUpdated?.Invoke();
+                }
+                else if (updateType == 0x0000 && _orders is not null)   // UPDATETYPE_ORDERS
+                {
+                    r.Skip(2);                                    // pad2OctetsA
+                    ushort numberOrders = r.U16LE();
+                    r.Skip(2);                                    // pad2OctetsB
+                    _orders.Process(r.Rest(), numberOrders);
+                    OrderUpdates++;
+                    FrameUpdated?.Invoke();
+                }
+                break;
+            case ShareDataType.Pointer:
+                {
+                    RdpPointer? pointer;
+                    try { pointer = _pointers.SlowPath(r.Rest()); }
+                    catch (RdpProtocolException) { pointer = null; }
+                    EmitPointer(pointer);
                 }
                 break;
             case ShareDataType.SetErrorInfo:
@@ -317,7 +340,7 @@ internal sealed class RdpConnection : IAsyncDisposable
                     break;
                 case 2: // FIRST
                     _fragmentCode = code;
-                    _fragment.SetLength(0);
+                    ResetFragment();
                     _fragment.Write(updateData);
                     break;
                 case 3: // NEXT
@@ -333,13 +356,23 @@ internal sealed class RdpConnection : IAsyncDisposable
                         _fragment.Write(updateData);
                         painted |= ApplyFastPathUpdate(_fragmentCode, _fragment.GetBuffer().AsSpan(0, (int)_fragment.Length));
                     }
-                    _fragment.SetLength(0);
+                    ResetFragment();
                     break;
             }
         }
         if (painted)
         {
             FrameUpdated?.Invoke();
+        }
+    }
+
+    /// <summary>Empties the fast-path fragment buffer; a large update (up to 16 MB) does not keep its peak capacity alive.</summary>
+    private void ResetFragment()
+    {
+        _fragment.SetLength(0);
+        if (_fragment.Capacity > 1024 * 1024)
+        {
+            _fragment.Capacity = 64 * 1024;
         }
     }
 
@@ -357,21 +390,116 @@ internal sealed class RdpConnection : IAsyncDisposable
         return passthrough ? data : result;
     }
 
-    private bool ApplyFastPathUpdate(int code, ReadOnlySpan<byte> updateData)
+    internal bool ApplyFastPathUpdate(int code, ReadOnlySpan<byte> updateData)
     {
+        if (code is >= PointerDecoder.FastPathNull and <= PointerDecoder.FastPathNew)
+        {
+            RdpPointer? pointer;
+            try { pointer = _pointers.FastPath(code, updateData); }
+            catch (RdpProtocolException) { pointer = null; }   // cosmetic: a malformed cursor never costs the session
+            EmitPointer(pointer);
+            return false;
+        }
+
+        if (code == 0x0)   // FASTPATH_UPDATETYPE_ORDERS
+        {
+            if (_orders is null)
+            {
+                return false;   // not negotiated
+            }
+
+            var orders = new ByteReader(updateData);
+            ushort numberOrders = orders.U16LE();
+            _orders.Process(orders.Rest(), numberOrders);
+            OrderUpdates++;
+            return true;
+        }
+
         if (code != 0x1)
         {
-            return false; // FASTPATH_UPDATETYPE_BITMAP only; others (orders/palette/pointer) ignored
+            return false; // FASTPATH_UPDATETYPE_BITMAP; palette (8 bpp) and surface commands are not negotiated
         }
 
         var rr = new ByteReader(updateData);
         _ = rr.U16LE(); // updateType (UPDATETYPE_BITMAP)
-        lock (_frameLock)
-        {
-            _ = BitmapUpdate.Apply(ref rr, Framebuffer);
-        }
+        _ = BitmapUpdate.Apply(ref rr, Framebuffer);   // decodes outside the surface lock
 
         return true;
+    }
+
+    // Drawing orders (when negotiated): one decoder per connection, so the bitmap cache survives a reactivation (a
+    // resize) like FreeRDP's; its primary-order state is reset then, and it draws on whatever surface is current.
+    private OrderDecoder? _orders;
+
+    /// <summary>Orders updates processed (diagnostics and interop tests).</summary>
+    internal int OrderUpdates { get; private set; }
+
+    /// <summary>Drawing operations by kind: "fill=… dst=… pat=… scr=… mem=…".</summary>
+    internal string OrderStats => $"fill={_orderSurface.Counts[0]} dst={_orderSurface.Counts[1]} pat={_orderSurface.Counts[2]} scr={_orderSurface.Counts[3]} mem={_orderSurface.Counts[4]}";
+
+    private int _ordersBpp;
+    private readonly OrderSurface _orderSurface = new();
+
+    /// <summary>A new surface at the activated size, and the drawing-order decoder pointed at it.</summary>
+    internal void StartSurface(int sessionBpp)
+    {
+        Framebuffer = new Framebuffer(_width, _height);
+        _orderSurface.Current = Framebuffer;
+        if (!_options.DrawingOrders)
+        {
+            return;
+        }
+
+        if (_orders is null || _ordersBpp != sessionBpp)
+        {
+            _orders = new OrderDecoder(sessionBpp, _orderSurface, Capabilities.BitmapCacheCells);
+            _ordersBpp = sessionBpp;
+        }
+        else
+        {
+            _orders.ResetPrimaryState();
+        }
+    }
+
+    /// <summary>Forwards drawing orders to the framebuffer of the current activation (it is replaced on a resize).</summary>
+    private sealed class OrderSurface : IOrderTarget
+    {
+        internal Framebuffer Current { get; set; } = new(1, 1);
+
+        /// <summary>Operations drawn per kind: fill, DstBlt, PatBlt, ScrBlt, MemBlt (diagnostics and interop tests).</summary>
+        internal readonly int[] Counts = new int[5];
+
+        public int Width => Current.Width;
+
+        public int Height => Current.Height;
+
+        public void FillRect(OrderRect rect, uint bgra, OrderRect? clip) { Counts[0]++; Current.FillRect(rect, bgra, clip); }
+
+        public void DstRop(OrderRect rect, byte rop3, OrderRect? clip) { Counts[1]++; Current.DstRop(rect, rop3, clip); }
+
+        public void PatBlt(OrderRect rect, byte rop3, OrderBrush brush, OrderRect? clip) { Counts[2]++; Current.PatBlt(rect, rop3, brush, clip); }
+
+        public void ScreenCopy(int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip) { Counts[3]++; Current.ScreenCopy(srcX, srcY, dest, rop3, clip); }
+
+        public void CachedBlit(CachedBitmap bitmap, int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip)
+        {
+            Counts[4]++;
+            Current.CachedBlit(bitmap, srcX, srcY, dest, rop3, clip);
+        }
+    }
+
+    /// <summary>The server's mouse pointer changed (decoded and cached by <see cref="PointerDecoder"/>).</summary>
+    internal event Action<RdpPointer>? PointerChanged;
+
+    // Matches the pointer cache sizes advertised in the Pointer capability set (colour 20, pointer 21).
+    private readonly PointerDecoder _pointers = new(21);
+
+    private void EmitPointer(RdpPointer? pointer)
+    {
+        if (pointer is not null)
+        {
+            PointerChanged?.Invoke(pointer);
+        }
     }
 
     private static bool LooksLikeShareControl(ReadOnlySpan<byte> payload)
@@ -391,11 +519,60 @@ internal sealed class RdpConnection : IAsyncDisposable
     internal Task SendScancodeAsync(uint scanCode, bool down, CancellationToken ct) =>
         SendRawAsync(FastPathInput.Scancode(scanCode, down), ct);
 
+    internal async Task SendUnicodeTextAsync(string text, CancellationToken ct)
+    {
+        foreach (byte[] pdu in FastPathInput.UnicodeText(text))
+        {
+            await SendRawAsync(pdu, ct).ConfigureAwait(false);
+        }
+    }
+
     internal Task SendUnicodeAsync(ushort code, bool down, CancellationToken ct) =>
         SendRawAsync(FastPathInput.Unicode(code, down), ct);
 
     internal Task SendMouseAsync(uint flags, uint x, uint y, CancellationToken ct) =>
         SendRawAsync(FastPathInput.Mouse(flags, x, y), ct);
+
+    /// <summary>Whether the server (General capability set) accepts TS_SUPPRESS_OUTPUT_PDU / TS_REFRESH_RECT_PDU.</summary>
+    internal bool ServerSupportsSuppressOutput { get; private set; }
+
+    internal bool ServerSupportsRefreshRect { get; private set; }
+
+    /// <summary>
+    /// TS_SUPPRESS_OUTPUT_PDU (MS-RDPBCGR 2.2.11.3.1): with <paramref name="allow"/> false the server stops sending
+    /// display updates (the view is hidden or minimized), with true it resumes for the whole desktop.
+    /// </summary>
+    internal Task SendSuppressOutputAsync(bool allow, CancellationToken ct)
+    {
+        var body = new ByteWriter(12);
+        body.U8(allow ? (byte)1 : (byte)0);
+        body.Zeros(3);
+        if (allow)
+        {
+            WriteDesktopRect(body);
+        }
+
+        return SendOnIoAsync(ShareControl.BuildDataPdu(_shareId, ShareDataType.SuppressOutput, _mcs.UserId, body.Span), ct);
+    }
+
+    /// <summary>TS_REFRESH_RECT_PDU (MS-RDPBCGR 2.2.11.2.1) for the whole desktop: asks the server to repaint it.</summary>
+    internal Task SendRefreshRectAsync(CancellationToken ct)
+    {
+        var body = new ByteWriter(12);
+        body.U8(1);              // numberOfAreas
+        body.Zeros(3);
+        WriteDesktopRect(body);
+        return SendOnIoAsync(ShareControl.BuildDataPdu(_shareId, ShareDataType.RefreshRect, _mcs.UserId, body.Span), ct);
+    }
+
+    private void WriteDesktopRect(ByteWriter body)
+    {
+        Framebuffer fb = Framebuffer;   // TS_RECTANGLE16, inclusive bounds
+        body.U16LE(0);
+        body.U16LE(0);
+        body.U16LE((ushort)Math.Max(0, fb.Width - 1));
+        body.U16LE((ushort)Math.Max(0, fb.Height - 1));
+    }
 
     internal ushort ChannelId(string name) => _mcs.Channels.TryGetValue(name, out ushort id) ? id : (ushort)0;
 
@@ -445,40 +622,67 @@ internal sealed class RdpConnection : IAsyncDisposable
         finally { channelGate.Release(); }
     }
 
-    private void ReassembleChannel(ushort channelId, string name, byte[] payload)
+    internal void ReassembleChannel(ushort channelId, string name, byte[] payload)
     {
         var r = new ByteReader(payload);
         uint totalLength = r.U32LE();
         uint flags = r.U32LE();
         // CHANNEL_PACKET_* occupies bits 16–23 and shares the bulk history with graphics.
         ReadOnlySpan<byte> chunk = Decompress(r.Rest(), (byte)(flags >> 16));
-        if ((flags & ChannelFlagFirst) != 0 || !_vcReassembly.TryGetValue(channelId, out MemoryStream? buffer))
+        // The total is fixed by the FIRST chunk and the bytes actually buffered may never exceed it: checking only
+        // the declared length let a server stream chunks without FIRST/LAST into an ever-growing buffer.
+        if ((flags & ChannelFlagFirst) != 0)
         {
-            buffer = new MemoryStream();
-            _vcReassembly[channelId] = buffer;
+            if (totalLength > MaxChannelMessage)
+            {
+                throw new RdpProtocolException("Virtual channel PDU too large.");
+            }
+
+            _vcReassembly[channelId] = (new MemoryStream((int)Math.Min(totalLength, 64 * 1024)), totalLength);
         }
-        if (totalLength > 32 * 1024 * 1024)
+        else if (!_vcReassembly.ContainsKey(channelId))
         {
-            throw new RdpProtocolException("Virtual channel PDU too large.");
+            return;   // a continuation whose start never came: nothing to attach it to
+        }
+
+        (MemoryStream buffer, uint total) = _vcReassembly[channelId];
+        if (buffer.Length + chunk.Length > total)
+        {
+            _ = _vcReassembly.Remove(channelId);
+            throw new RdpProtocolException("Virtual channel data exceeds its declared length.");
         }
 
         buffer.Write(chunk);
         if ((flags & ChannelFlagLast) != 0)
         {
-            byte[] complete = buffer.ToArray();
             _ = _vcReassembly.Remove(channelId);
-            ChannelData?.Invoke(new ChannelPayload(name, complete));
+            if (buffer.Length == total)
+            {
+                ChannelData?.Invoke(new ChannelPayload(name, buffer.ToArray()));
+            }
         }
     }
 
-    /// <summary>Takes a consistent copy of the current desktop surface for presentation.</summary>
+    /// <summary>Takes a full copy of the current desktop surface (allocates W×H×4 — prefer <see cref="CopyFrame"/>).</summary>
     internal (byte[] Bgra, int Width, int Height) SnapshotFrame()
     {
-        lock (_frameLock)
+        Framebuffer fb = Framebuffer;
+        return (fb.Snapshot(), fb.Width, fb.Height);
+    }
+
+    /// <summary>
+    /// Copies what changed since the last copy into a caller surface of <paramref name="width"/>×<paramref name="height"/>.
+    /// When the desktop is no longer that size nothing is copied and the result carries the new size instead.
+    /// </summary>
+    internal RdpFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full)
+    {
+        Framebuffer fb = Framebuffer;
+        if (fb.Width != width || fb.Height != height)
         {
-            Framebuffer fb = Framebuffer;
-            return ((byte[])fb.Bgra.Clone(), fb.Width, fb.Height);
+            return new RdpFrameCopy(fb.Width, fb.Height, default, SizeChanged: true);
         }
+
+        return new RdpFrameCopy(fb.Width, fb.Height, fb.CopyTo(destination, stride, full), SizeChanged: false);
     }
 
     // ---- Framing helpers ----
@@ -515,6 +719,13 @@ internal sealed class RdpConnection : IAsyncDisposable
             if (indication.ChannelId == _ioChannel)
             {
                 return indication.Payload;
+            }
+
+            // RDPDR can start its handshake before licensing / Demand Active completes.
+            // Dropping that first Server Announce leaves the server waiting forever for our reply.
+            if (_channelsById.TryGetValue(indication.ChannelId, out string? name))
+            {
+                ReassembleChannel(indication.ChannelId, name, indication.Payload);
             }
         }
     }

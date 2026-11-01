@@ -46,14 +46,10 @@ internal sealed class DriveFile
         uint options, uint fileAttributes)
     {
         string full = ResolvePath(basePath, rdpPath);
+        RejectLinks(basePath, full);
         bool wantDirectory = (options & FileDirectoryFile) != 0;
         bool exists = File.Exists(full) || Directory.Exists(full);
         bool existingDir = Directory.Exists(full);
-
-        if (exists)
-        {
-            RejectReparse(full);
-        }
 
         var file = new DriveFile(basePath, full, existingDir || (wantDirectory && !File.Exists(full)))
         {
@@ -145,6 +141,12 @@ internal sealed class DriveFile
         return file;
     }
 
+    /// <summary>Largest read served per request. Windows asks for ≤64 KB; a short read is legal, so larger requests are clamped.</summary>
+    internal const int MaxIo = 1024 * 1024;
+
+    /// <summary>How far past end-of-file a write may start; one write at a huge offset would otherwise allocate disk up to it.</summary>
+    internal const long MaxWriteGap = 256L * 1024 * 1024;
+
     internal byte[] Read(ulong offset, uint length)
     {
         _stream ??= OpenForContent(FileAccess.Read);
@@ -154,7 +156,7 @@ internal sealed class DriveFile
         }
 
         _ = _stream.Seek((long)offset, SeekOrigin.Begin);
-        int toRead = (int)Math.Min(length, (ulong)_stream.Length - offset);
+        int toRead = (int)Math.Min(Math.Min(length, (ulong)MaxIo), (ulong)_stream.Length - offset);
         byte[] buffer = new byte[toRead];
         int read = 0;
         while (read < toRead)
@@ -173,6 +175,16 @@ internal sealed class DriveFile
     internal uint Write(ulong offset, ReadOnlySpan<byte> data)
     {
         _stream ??= OpenForContent(FileAccess.ReadWrite);
+        if (!_stream.CanWrite)
+        {
+            throw new DriveStatusException(NtStatus.AccessDenied);
+        }
+
+        if (offset > (ulong)(_stream.Length + MaxWriteGap))
+        {
+            throw new DriveStatusException(NtStatus.DiskFull);
+        }
+
         _ = _stream.Seek((long)offset, SeekOrigin.Begin);
         _stream.Write(data);
         _stream.Flush();
@@ -217,6 +229,7 @@ internal sealed class DriveFile
     internal void Rename(string newRdpPath)
     {
         string target = ResolvePath(_basePath, newRdpPath);
+        RejectLinks(_basePath, target);
         if (IsDirectory)
         {
             Directory.Move(FullPath, target);
@@ -370,17 +383,30 @@ internal sealed class DriveFile
 
     // ---- Path confinement ----
 
+    /// <summary>
+    /// Maps a server path onto the mapping. The path is rebuilt from its components — RDP uses backslashes,
+    /// xrdp sends forward slashes, both are accepted — and any component that could step outside or alias
+    /// something else is refused: "." / "..", NUL/control characters, and on Windows alternate data streams
+    /// (':'), device names (CON, NUL, COM1 …) and trailing dots/spaces, which Windows silently strips.
+    /// The prefix check stays as a second line, case-sensitive where the file system usually is.
+    /// </summary>
     internal static string ResolvePath(string basePath, string rdpPath)
     {
-        // RDP uses backslashes, but be lenient: normalize both separators, then confine to base.
-        string relative = rdpPath.Replace('\\', Path.DirectorySeparatorChar)
-                                 .Replace('/', Path.DirectorySeparatorChar)
-                                 .Trim(Path.DirectorySeparatorChar);
-        string full = Path.GetFullPath(Path.Combine(basePath, relative));
-        string baseFull = Path.GetFullPath(basePath).TrimEnd(Path.DirectorySeparatorChar);
-        string prefix = baseFull + Path.DirectorySeparatorChar;
-        if (!full.Equals(baseFull, StringComparison.OrdinalIgnoreCase) &&
-            !full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        string root = Path.GetFullPath(basePath);
+        string full = root;
+        foreach (string component in rdpPath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!IsSafeComponent(component))
+            {
+                throw new DriveStatusException(NtStatus.AccessDenied);
+            }
+
+            full = Path.Join(full, component);   // Join copes with roots ("/", "C:\") that already end in a separator
+        }
+
+        StringComparison comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        string prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        if (!full.Equals(root, comparison) && !full.StartsWith(prefix, comparison))
         {
             throw new DriveStatusException(NtStatus.AccessDenied);
         }
@@ -388,19 +414,53 @@ internal sealed class DriveFile
         return full;
     }
 
-    private static void RejectReparse(string path)
+    private static readonly string[] DeviceNames =
+    [
+        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+        "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³",
+        "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³"
+    ];
+
+    internal static bool IsSafeComponent(string component)
     {
-        for (string? current = Path.GetFullPath(path); current is not null; current = Path.GetDirectoryName(current))
+        if (component is "." or ".." || component.Any(char.IsControl))
         {
-            try
+            return false;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
+        if (component.Contains(':') || component.EndsWith('.') || component.EndsWith(' '))
+        {
+            return false;
+        }
+
+        string stem = component.Split('.')[0].TrimEnd(' ');
+        return !DeviceNames.Contains(stem, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Refuses a path that goes through a symbolic link or junction anywhere below the mapping root (the root
+    /// itself may be a link — the user chose it). Checked for existing targets AND for the parents of a path
+    /// about to be created or renamed onto, so a link already inside the mapping cannot be used to create or
+    /// overwrite files outside it. Only name-surrogate links count: cloud placeholders (OneDrive) are reparse
+    /// points too but stay where they are.
+    /// </summary>
+    private static void RejectLinks(string basePath, string full)
+    {
+        int rootLength = Path.TrimEndingDirectorySeparator(Path.GetFullPath(basePath)).Length;
+        for (string? current = Path.TrimEndingDirectorySeparator(full);
+             current is not null && current.Length > rootLength;
+             current = Path.GetDirectoryName(current))
+        {
+            FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
+            if (info.Exists && info.LinkTarget is not null)
             {
-                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                {
-                    throw new DriveStatusException(NtStatus.AccessDenied);
-                }
+                throw new DriveStatusException(NtStatus.AccessDenied);
             }
-            catch (FileNotFoundException) { }
-            catch (DirectoryNotFoundException) { }
         }
     }
 }
@@ -419,6 +479,9 @@ internal static class NtStatus
     internal const uint ObjectNameCollision = 0xC0000035;
     internal const uint ObjectPathNotFound = 0xC000003A;
     internal const uint NotSupported = 0xC00000BB;
+    internal const uint InvalidParameter = 0xC000000D;
+    internal const uint DiskFull = 0xC000007F;
+    internal const uint InsufficientResources = 0xC000009A;
     internal const uint FileIsADirectory = 0xC00000BA;
     internal const uint NotADirectory = 0xC0000103;
     internal const uint DirectoryNotEmpty = 0xC0000101;

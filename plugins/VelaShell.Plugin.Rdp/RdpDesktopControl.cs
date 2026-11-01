@@ -36,7 +36,11 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private readonly DispatcherTimer _resizeTimer;
     private int _requestedWidth;
     private int _requestedHeight;
+    private int _requestedScale = 100;
     private Window? _window;
+    private TopLevel? _topLevel;
+    private bool _attached;
+    private bool _shown = true;
 
     internal Func<Task>? PublishClipboard { get; set; }
     internal Action? OperationFailed { get; set; }
@@ -60,7 +64,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             }
         }
     } = true;
-    internal Rect DesktopViewport => RdpInput.Viewport(Bounds.Size, DesktopWidth, DesktopHeight, Fit);
+    internal Rect DesktopViewport => RdpInput.Viewport(Bounds.Size, DesktopWidth, DesktopHeight, Fit, RenderScaling);
+
+    private double RenderScaling => TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
 
     public RdpDesktopControl(IRdpSession session, int width, int height)
     {
@@ -69,9 +75,6 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         DesktopHeight = height;
         Focusable = true;
         ClipToBounds = true;
-        // Smooth the remote surface when "Fit" scales a resolution that differs from the viewport;
-        // at 1:1 (the common case once the desktop matches the tab) it is a no-op.
-        RenderOptions.SetBitmapInterpolationMode(this, BitmapInterpolationMode.HighQuality);
         _ime = new(this);
         TextInputMethodClientRequested += (_, e) => e.Client = _ime;
         // Coalesce window/tab resizes: ask the server for a matching desktop only after the drag settles.
@@ -79,6 +82,10 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _resizeTimer.Tick += (_, _) => { _resizeTimer.Stop(); MatchRemoteToViewport(); };
         _inputPump = ProcessInputAsync();
         session.FrameAvailable += OnFrame;
+        if (session is IRdpPointerSource pointers)
+        {
+            pointers.PointerChanged += OnPointer;
+        }
         OnFrame();
     }
 
@@ -92,39 +99,133 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         Dispatcher.UIThread.Post(() =>
         {
             _ = Interlocked.Exchange(ref _framePending, 0);
-            if (_disposed != 0)
+            if (_disposed != 0 || !_shown)
             {
-                return;
+                return;   // hidden: changes keep accumulating until the view is shown again
             }
 
-            RdpFrame? frame = _session.TakeFrame();
-            if (frame is null)
+            PresentFrame();
+        }, DispatcherPriority.Input);   // not Render: that outranks input, so a frame flood could delay clicks and keys
+    }
+
+    // ---- Remote pointer ----
+
+    private RdpPointer? _pendingPointer;
+    private int _pointerPending;
+    private readonly Dictionary<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> _cursors = [];
+    private static Cursor? _noCursor;
+    private static Cursor NoCursor => _noCursor ??= new(StandardCursorType.None);   // created on first use, after platform init
+
+    /// <summary>
+    /// The server's pointer shape (I-beam over text, resize arrows, hidden while typing) replaces the local arrow over
+    /// the desktop. Raised on the receive thread: the newest shape wins and is applied once on the UI thread.
+    /// </summary>
+    private void OnPointer(RdpPointer pointer)
+    {
+        Volatile.Write(ref _pendingPointer, pointer);
+        if (Volatile.Read(ref _disposed) != 0 || Interlocked.Exchange(ref _pointerPending, 1) != 0)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            _ = Interlocked.Exchange(ref _pointerPending, 0);
+            if (_disposed == 0 && Volatile.Read(ref _pendingPointer) is { } latest)
             {
-                return;
+                ApplyPointer(latest);
+            }
+        });
+    }
+
+    internal void ApplyPointer(RdpPointer pointer)
+    {
+        Cursor = pointer.Kind switch
+        {
+            RdpPointerKind.Hidden => NoCursor,
+            RdpPointerKind.Image => CursorFor(pointer),
+            _ => null   // the platform default arrow
+        };
+    }
+
+    private Cursor? CursorFor(RdpPointer pointer)
+    {
+        if (_cursors.TryGetValue(pointer, out var cached))
+        {
+            return cached.Cursor;
+        }
+
+        if (_cursors.Count >= 32)
+        {
+            // Pointers are cached by the server too (21 slots): an evicted shape is rebuilt if it ever returns.
+            foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { if (!ReferenceEquals(cursor, Cursor)) { cursor.Dispose(); bitmap.Dispose(); } }
+            _cursors.Clear();
+        }
+
+        var image = new WriteableBitmap(new PixelSize(pointer.Width, pointer.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
+        using (ILockedFramebuffer buffer = image.Lock())
+        {
+            for (int row = 0; row < pointer.Height; row++)
+            {
+                Marshal.Copy(pointer.Bgra, row * pointer.Width * 4, buffer.Address + row * buffer.RowBytes, pointer.Width * 4);
+            }
+        }
+
+        var created = new Cursor(image, new PixelPoint(pointer.HotspotX, pointer.HotspotY));
+        _cursors[pointer] = (created, image);
+        return created;
+    }
+
+    /// <summary>
+    /// Copies only what changed straight into the locked bitmap — no per-frame W×H×4 allocation and no second full
+    /// copy (a blinking caret used to cost two 8 MB copies at 1080p). A new desktop size recreates the bitmap and
+    /// takes one full copy.
+    /// </summary>
+    private unsafe void PresentFrame()
+    {
+        bool resized = false, full = false;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            RdpFrameCopy copy;
+            if (_bitmap is null)
+            {
+                copy = _session.CopyFrame([], 0, 0, 0);   // no surface yet: only learn the size
+            }
+            else
+            {
+                using ILockedFramebuffer buffer = _bitmap.Lock();
+                var target = new Span<byte>((void*)buffer.Address, buffer.RowBytes * buffer.Size.Height);
+                copy = _session.CopyFrame(target, buffer.RowBytes, buffer.Size.Width, buffer.Size.Height, full);
             }
 
-            bool resized = _bitmap is null || frame.Width != DesktopWidth || frame.Height != DesktopHeight;
-            if (resized)
+            if (copy.SizeChanged)
             {
-                _bitmap?.Dispose();
-                DesktopWidth = frame.Width;
-                DesktopHeight = frame.Height;
-                _bitmap = new WriteableBitmap(new(frame.Width, frame.Height), new(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
-                if (!Fit) { MinWidth = frame.Width; MinHeight = frame.Height; }
-            }
-            using (ILockedFramebuffer buffer = _bitmap!.Lock())
-            {
-                for (int row = 0; row < frame.Height; row++)
+                if (copy.Width <= 0 || copy.Height <= 0)
                 {
-                    Marshal.Copy(frame.Pixels, row * frame.Width * 4, buffer.Address + row * buffer.RowBytes, frame.Width * 4);
+                    return;
                 }
+
+                _bitmap?.Dispose();
+                DesktopWidth = copy.Width;
+                DesktopHeight = copy.Height;
+                _bitmap = new WriteableBitmap(new(copy.Width, copy.Height), new(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
+                if (!Fit) { MinWidth = copy.Width; MinHeight = copy.Height; }
+                resized = full = true;
+                continue;
             }
-            InvalidateVisual();
-            if (resized)
+
+            if (!copy.Changed.IsEmpty || resized)
             {
-                DesktopSizeChanged?.Invoke();
+                InvalidateVisual();
             }
-        }, DispatcherPriority.Render);
+
+            break;
+        }
+
+        if (resized)
+        {
+            DesktopSizeChanged?.Invoke();
+        }
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -161,20 +262,24 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
 
         double scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
         int width = (int)Math.Round(Bounds.Width * scale) & ~1;   // even width, as display-control requires
-        int height = (int)Math.Round(Bounds.Height * scale) & ~1;
+        int height = (int)Math.Round(Bounds.Height * scale);   // MS-RDPEDISP only requires an even width
         if (width < 200 || height < 200)
         {
             return;
         }
-        // Ignore sub-8px jitter so a one-pixel layout settle does not drive a server reactivation.
-        if (Math.Abs(width - _requestedWidth) < 8 && Math.Abs(height - _requestedHeight) < 8)
+        int percent = (int)Math.Round(scale * 100);
+        RdpViewMetrics.Record(width, height, percent);
+        // Ignore sub-8px jitter so a one-pixel layout settle does not drive a server reactivation (the few pixels
+        // of difference are drawn 1:1 with a thin margin, not resampled); a DPI change always goes through.
+        if (Math.Abs(width - _requestedWidth) < 8 && Math.Abs(height - _requestedHeight) < 8 && percent == _requestedScale)
         {
             return;
         }
 
         _requestedWidth = width;
         _requestedHeight = height;
-        Queue(() => _session.RequestResizeAsync(width, height));
+        _requestedScale = percent;
+        Queue(() => _session.RequestResizeAsync(width, height, percent));
     }
 
     public override void Render(DrawingContext context)
@@ -182,7 +287,14 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         base.Render(context);
         if (_bitmap is { } bitmap)
         {
-            context.DrawImage(bitmap, new Rect(bitmap.Size), DesktopViewport);
+            // 1:1 (the normal case): copy pixels exactly, no filtering at all. Real scaling: high-quality filter.
+            Rect target = DesktopViewport;
+            double s = RenderScaling;
+            bool native = Math.Abs(target.Width * s - bitmap.PixelSize.Width) < 0.5 && Math.Abs(target.Height * s - bitmap.PixelSize.Height) < 0.5;
+            using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = native ? BitmapInterpolationMode.None : BitmapInterpolationMode.HighQuality }))
+            {
+                context.DrawImage(bitmap, new Rect(bitmap.Size), target);
+            }
         }
 
         if (!string.IsNullOrEmpty(_preedit))
@@ -225,15 +337,43 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             _overflowShutdown ??= _session.DisposeAsync().AsTask();
         }
     }
-    internal void SendSecureAttention() => Queue(async () =>
+    internal void SendSecureAttention() => SendChord(0x1d, 0x38, 0x153);
+
+    /// <summary>
+    /// Presses the scan codes in order and releases them in reverse — a key combination the local OS would
+    /// otherwise keep for itself (Win+L, Ctrl+Shift+Esc, Alt+Tab …), sent through the same ordered input queue.
+    /// </summary>
+    internal void SendChord(params uint[] codes) => Queue(async () =>
     {
-        await _session.KeyAsync(0x1d, true);
-        await _session.KeyAsync(0x38, true);
-        await _session.KeyAsync(0x153, true);
-        await _session.KeyAsync(0x153, false);
-        await _session.KeyAsync(0x38, false);
-        await _session.KeyAsync(0x1d, false);
+        foreach (uint code in codes) { await _session.KeyAsync(code, true); }
+        for (int i = codes.Length - 1; i >= 0; i--) { await _session.KeyAsync(codes[i], false); }
     });
+
+    /// <summary>
+    /// Types text as keystrokes: runs of characters go as Unicode input, line breaks as Enter and tabs as Tab, so
+    /// it also works where clipboard sharing does not (the sign-in screen, UAC prompts, consoles). The caller passes
+    /// text from <see cref="NormalizeTypedText"/>.
+    /// </summary>
+    internal void TypeText(string text) => Queue(async () =>
+    {
+        int start = 0;
+        for (int i = 0; i <= text.Length; i++)
+        {
+            uint key = i < text.Length ? text[i] switch { '\n' => 0x1cu, '\t' => 0x0fu, _ => 0u } : 0u;
+            if (i < text.Length && key == 0) { continue; }
+            if (i > start) { await _session.UnicodeAsync(text[start..i]); }
+            if (key != 0)
+            {
+                await _session.KeyAsync(key, true);
+                await _session.KeyAsync(key, false);
+            }
+            start = i + 1;
+        }
+    });
+
+    /// <summary>Line breaks become '\n'; control characters other than '\n' and '\t' are dropped.</summary>
+    internal static string NormalizeTypedText(string text) =>
+        string.Concat(text.ReplaceLineEndings("\n").Where(c => !char.IsControl(c) || c is '\n' or '\t'));
 
     private void PublishOnFocus(Func<Task> publish)
     {
@@ -266,7 +406,51 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         base.OnAttachedToVisualTree(e);
         _window = TopLevel.GetTopLevel(this) as Window;
         _window?.Activated += OnWindowActivated;
+        _window?.PropertyChanged += OnWindowPropertyChanged;
+        _topLevel = TopLevel.GetTopLevel(this);
+        _topLevel?.ScalingChanged += OnScalingChanged;
+        _attached = true;
+        UpdatePresentation();
     }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty)
+        {
+            UpdatePresentation();
+        }
+    }
+
+    /// <summary>Moving to a monitor with another DPI changes the device-pixel size without changing Bounds.</summary>
+    private void OnScalingChanged(object? sender, EventArgs e) => ScheduleResize();
+
+    /// <summary>
+    /// The host detaches an inactive tab's view (and a minimized window shows nothing): stop presenting and ask
+    /// the server to pause display updates, so a background session costs no bandwidth, decoding or copying.
+    /// Changes keep accumulating in the session's dirty region; coming back resumes updates, asks for a repaint
+    /// and presents whatever is pending.
+    /// </summary>
+    private void UpdatePresentation()
+    {
+        bool shown = _attached && _window?.WindowState != WindowState.Minimized;
+        if (shown == _shown || _disposed != 0)
+        {
+            return;
+        }
+
+        _shown = shown;
+        Queue(async () =>
+        {
+            try { await _session.SetDisplayUpdatesAsync(shown); }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or IOException) { /* not connected */ }
+        });
+        if (shown)
+        {
+            OnFrame();
+        }
+    }
+
+    internal bool IsPresenting => _shown;
     private void OnWindowActivated(object? sender, EventArgs e)
     {
         // Returning from another application can retain keyboard focus on this desktop.
@@ -278,7 +462,11 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _window?.Activated -= OnWindowActivated;
-        _window = null; ReleaseInput();
+        _window?.PropertyChanged -= OnWindowPropertyChanged;
+        _topLevel?.ScalingChanged -= OnScalingChanged;
+        _window = null; _topLevel = null; ReleaseInput();
+        _attached = false;
+        UpdatePresentation();
         base.OnDetachedFromVisualTree(e);
     }
     protected override void OnKeyDown(KeyEventArgs e)
@@ -448,10 +636,19 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         if (_disposed != 0) { await _inputPump; return; }
 
         _window?.Activated -= OnWindowActivated;
-        _window = null; ReleaseInput();
+        _window?.PropertyChanged -= OnWindowPropertyChanged;
+        _topLevel?.ScalingChanged -= OnScalingChanged;
+        _window = null; _topLevel = null; ReleaseInput();
         _resizeTimer.Stop();
         _ = Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;
+        if (_session is IRdpPointerSource pointers)
+        {
+            pointers.PointerChanged -= OnPointer;
+        }
+
+        foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { cursor.Dispose(); bitmap.Dispose(); }
+        _cursors.Clear();
         _ = _input.Writer.TryComplete();
         await _inputPump;
         if (_overflowShutdown is { } shutdown)

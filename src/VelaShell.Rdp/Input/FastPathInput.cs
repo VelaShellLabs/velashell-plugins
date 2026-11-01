@@ -4,7 +4,7 @@ namespace VelaShell.Rdp.Input;
 
 /// <summary>
 /// Builds Client Fast-Path Input PDUs (MS-RDPBCGR 2.2.8.1.2). These travel directly over
-/// the transport with no MCS/share headers. Each PDU here carries a single input event.
+/// the transport with no MCS/share headers. Keys and mouse carry one event per PDU; text is batched.
 /// </summary>
 internal static class FastPathInput
 {
@@ -41,6 +41,32 @@ internal static class FastPathInput
         return Frame(e.Span);
     }
 
+    /// <summary>Most events one fast-path PDU can carry (numberEvents is 4 bits).</summary>
+    internal const int MaxEventsPerPdu = 15;
+
+    /// <summary>
+    /// Text as Unicode key events, press and release per UTF-16 unit, batched up to <see cref="MaxEventsPerPdu"/>
+    /// events per PDU (7 characters): typing a password or a pasted line used to cost two PDUs — two TLS records —
+    /// per character. A character's press and release never straddle two PDUs.
+    /// </summary>
+    internal static IEnumerable<byte[]> UnicodeText(string text)
+    {
+        const int charsPerPdu = MaxEventsPerPdu / 2;
+        for (int start = 0; start < text.Length; start += charsPerPdu)
+        {
+            int count = Math.Min(charsPerPdu, text.Length - start);
+            var events = new ByteWriter(count * 6);
+            for (int i = start; i < start + count; i++)
+            {
+                events.U8(EventUnicode << 5);
+                events.U16LE(text[i]);
+                events.U8((byte)((EventUnicode << 5) | KbdFlagsRelease));
+                events.U16LE(text[i]);
+            }
+            yield return Frame(events.Span, count * 2);
+        }
+    }
+
     internal static byte[] Mouse(uint pointerFlags, uint x, uint y)
     {
         var e = new ByteWriter(8);
@@ -51,14 +77,14 @@ internal static class FastPathInput
         return Frame(e.Span);
     }
 
-    /// <summary>Wraps one event in the fast-path header (action=FASTPATH, numEvents=1) and length.</summary>
-    private static byte[] Frame(ReadOnlySpan<byte> singleEvent)
+    /// <summary>Wraps events in the fast-path header (action=FASTPATH, numberEvents) and length.</summary>
+    private static byte[] Frame(ReadOnlySpan<byte> events, int count = 1)
     {
-        // header: action(2b)=0, numberEvents(4b)=1 → 0x04; length is the per-style 1/2-byte total.
-        int bodyLength = singleEvent.Length;
+        // header: action(2b)=0, numberEvents(4b) in bits 2–5; length is the per-style 1/2-byte total.
+        int bodyLength = events.Length;
         int totalOneByte = 2 + bodyLength;           // header(1) + length(1) + body
         var w = new ByteWriter(totalOneByte + 1);
-        w.U8(0x04);
+        w.U8((byte)(count << 2));
         if (totalOneByte <= 0x7F)
         {
             w.U8((byte)totalOneByte);
@@ -69,7 +95,7 @@ internal static class FastPathInput
             w.U8((byte)(0x80 | (total >> 8)));
             w.U8((byte)(total & 0xFF));
         }
-        w.Bytes(singleEvent);
+        w.Bytes(events);
         return w.ToArray();
     }
 }

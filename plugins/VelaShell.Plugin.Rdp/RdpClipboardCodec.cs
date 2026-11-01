@@ -122,13 +122,14 @@ internal static class RdpClipboardCodec
             }
             files.Add(new(name, directory, directory ? 0 : (long)length));
         }
+        // A file may not also be used as a directory by another entry. One set lookup per parent prefix:
+        // the former scan of every file for every prefix was O(n² × depth) — billions of steps for a hostile list.
+        HashSet<string> fileNames = [with(StringComparer.OrdinalIgnoreCase), .. files.Where(f => !f.IsDirectory).Select(f => f.Name)];
         foreach (RdpClipboardFile file in files)
         {
-            string[] components = file.Name.Split('\\');
-            for (int i = 1; i < components.Length; i++)
+            for (int slash = file.Name.IndexOf('\\'); slash > 0; slash = file.Name.IndexOf('\\', slash + 1))
             {
-                string parent = string.Join('\\', components.Take(i));
-                if (files.Any(f => !f.IsDirectory && string.Equals(f.Name, parent, StringComparison.OrdinalIgnoreCase)))
+                if (fileNames.Contains(file.Name[..slash]))
                 {
                     throw new InvalidDataException("Clipboard file and directory names conflict.");
                 }
@@ -145,15 +146,20 @@ internal static class RdpClipboardCodec
         }
         foreach (string part in name.Split('\\'))
         {
-            string stem = part.Split('.')[0];
+            string stem = part.Split('.')[0].TrimEnd(' ');
+            // Format characters (Unicode Cf) are invisible: U+202E RIGHT-TO-LEFT OVERRIDE makes "gpj.exe" display
+            // as "exe.jpg"-style names in Explorer, so a remote file could pose as a harmless type.
             if (part.Length == 0 || part is "." or ".." || part.EndsWith(' ') || part.EndsWith('.')
-                || part.Any(c => char.IsControl(c) || "<>:\"/|?*".Contains(c))
+                || part.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format
+                    || "<>:\"/|?*".Contains(c))
                 || stem.Equals("CON", StringComparison.OrdinalIgnoreCase)
                 || stem.Equals("PRN", StringComparison.OrdinalIgnoreCase)
                 || stem.Equals("AUX", StringComparison.OrdinalIgnoreCase)
                 || stem.Equals("NUL", StringComparison.OrdinalIgnoreCase)
+                || stem.Equals("CONIN$", StringComparison.OrdinalIgnoreCase)
+                || stem.Equals("CONOUT$", StringComparison.OrdinalIgnoreCase)
                 || (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)
-                    || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && stem[3] is >= '0' and <= '9'))
+                    || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && stem[3] is >= '0' and <= '9' or '¹' or '²' or '³'))
             {
                 throw new InvalidDataException("Unsafe clipboard file name.");
             }

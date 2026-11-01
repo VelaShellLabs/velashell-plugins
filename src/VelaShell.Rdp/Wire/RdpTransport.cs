@@ -58,12 +58,14 @@ internal sealed class RdpTransport(Stream stream)
 
     internal async Task<RdpFramePdu> ReadPduAsync(CancellationToken ct)
     {
-        byte[] head = await ReadExactlyAsync(1, ct).ConfigureAwait(false);
-        if (head[0] == 3)
+        // Headers go through one reusable 4-byte buffer (this runs per PDU; it used to allocate up to three
+        // one-byte arrays each time). Only the body is allocated: it outlives the call.
+        await ReadHeaderAsync(1, ct).ConfigureAwait(false);
+        if (_header[0] == 3)
         {
             // TPKT: version(1)=3, reserved(1), length(2 BE)
-            byte[] rest = await ReadExactlyAsync(3, ct).ConfigureAwait(false);
-            int length = (rest[1] << 8) | rest[2];
+            await ReadHeaderAsync(3, ct).ConfigureAwait(false);
+            int length = (_header[1] << 8) | _header[2];
             if (length is < 4 or > 0x10_0000)
             {
                 throw new RdpProtocolException("Invalid TPKT length.");
@@ -73,13 +75,15 @@ internal sealed class RdpTransport(Stream stream)
             return new RdpFramePdu(false, 0, payload);
         }
         // Fast-path output: byte0 header, then 1- or 2-byte length (total PDU length incl. header).
-        byte header = head[0];
-        byte len1 = (await ReadExactlyAsync(1, ct).ConfigureAwait(false))[0];
+        byte header = _header[0];
+        await ReadHeaderAsync(1, ct).ConfigureAwait(false);
+        byte len1 = _header[0];
         int consumed = 2;
         int total;
         if ((len1 & 0x80) != 0)
         {
-            byte len2 = (await ReadExactlyAsync(1, ct).ConfigureAwait(false))[0];
+            await ReadHeaderAsync(1, ct).ConfigureAwait(false);
+            byte len2 = _header[0];
             total = ((len1 & 0x7F) << 8) | len2;
             consumed = 3;
         }
@@ -150,6 +154,23 @@ internal sealed class RdpTransport(Stream stream)
         await Stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
+    private readonly byte[] _header = new byte[4];
+
+    private async Task ReadHeaderAsync(int count, CancellationToken ct)
+    {
+        int read = 0;
+        while (read < count)
+        {
+            int next = await Stream.ReadAsync(_header.AsMemory(read, count - read), ct).ConfigureAwait(false);
+            if (next == 0)
+            {
+                throw new RdpProtocolException("The RDP server closed the connection.");
+            }
+
+            read += next;
+        }
+    }
+
     internal async Task<byte[]> ReadExactlyAsync(int count, CancellationToken ct)
     {
         byte[] buffer = new byte[count];
@@ -176,7 +197,10 @@ internal sealed class RdpTransport(Stream stream)
         // Optional routing cookie, terminated with CR LF.
         if (!string.IsNullOrEmpty(cookieUser))
         {
-            foreach (char c in $"Cookie: mstshash={cookieUser}")
+            // Sent before TLS, in the clear: printable ASCII only (no CR/LF that would end the cookie early,
+            // no truncating casts of non-ASCII characters), and bounded.
+            string user = new([.. cookieUser.Where(c => c is >= (char)0x20 and <= (char)0x7E).Take(64)]);
+            foreach (char c in $"Cookie: mstshash={user}")
             {
                 w.U8((byte)c);
             }

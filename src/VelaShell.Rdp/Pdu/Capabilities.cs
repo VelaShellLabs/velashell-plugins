@@ -11,7 +11,10 @@ namespace VelaShell.Rdp.Pdu;
 internal static class Capabilities
 {
     /// <summary>The share id plus the server's active desktop size (0×0 when the caps omit a bitmap set).</summary>
-    internal readonly record struct DemandActive(uint ShareId, int Width, int Height);
+    internal readonly record struct DemandActive(uint ShareId, int Width, int Height, bool RefreshRect = false, bool SuppressOutput = false, int Bpp = 0);
+
+    /// <summary>Largest desktop area adopted from a server (8K UHD).</summary>
+    internal const long MaxDesktopPixels = 7680L * 4320;
 
     /// <summary>
     /// Reads a Demand Active body (after the share control header). Returns the share id and the
@@ -25,7 +28,8 @@ internal static class Capabilities
         ushort lenSource = r.U16LE();
         _ = r.U16LE();                 // lengthCombinedCapabilities
         r.Skip(lenSource);
-        int width = 0, height = 0;
+        int width = 0, height = 0, bpp = 0;
+        bool refreshRect = false, suppressOutput = false;
         if (r.Remaining >= 4)
         {
             ushort count = r.U16LE();
@@ -40,9 +44,17 @@ internal static class Capabilities
                     break;
                 }
 
-                if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
+                if (type == 1 && bodyLen >= 20) // CAPSTYPE_GENERAL: may the client pause / re-request updates?
                 {
-                    r.Skip(8);     // preferredBitsPerPixel + receive{1,4,8}BitsPerPixel
+                    r.Skip(18);
+                    refreshRect = r.U8() != 0;
+                    suppressOutput = r.U8() != 0;
+                    r.Skip(bodyLen - 20);
+                }
+                else if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
+                {
+                    bpp = r.U16LE();   // preferredBitsPerPixel: the session colour depth drawing orders are encoded in
+                    r.Skip(6);         // receive{1,4,8}BitsPerPixel
                     width = r.U16LE();
                     height = r.U16LE();
                     r.Skip(bodyLen - 12);
@@ -53,15 +65,17 @@ internal static class Capabilities
                 }
             }
         }
-        if (width is < 200 or > 8192 || height is < 200 or > 8192)
+        // A server-chosen size is adopted as the framebuffer, so bound it: 8192 per side (MS-RDPEDISP's limit) and
+        // at most an 8K UHD area (7680×4320 ≈ 133 MB of BGRA), not 8192² (268 MB). Anything else keeps our size.
+        if (width is < 200 or > 8192 || height is < 200 or > 8192 || (long)width * height > MaxDesktopPixels)
         {
             width = height = 0;
         }
 
-        return new DemandActive(shareId, width, height);
+        return new DemandActive(shareId, width, height, refreshRect, suppressOutput, bpp is 8 or 15 or 16 or 24 or 32 ? bpp : 0);
     }
 
-    internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels)
+    internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels, bool drawingOrders = false)
     {
         var caps = new ByteWriter(512);
         ushort count = 0;
@@ -69,7 +83,12 @@ internal static class Capabilities
 
         Set(General);
         Set(w => Bitmap(w, width, height, bpp));
-        Set(Order);
+        Set(w => Order(w, drawingOrders));
+        if (drawingOrders)
+        {
+            Set(BitmapCacheRev2);
+        }
+
         Set(Pointer);
         Set(Input);
         Set(Brush);
@@ -110,12 +129,14 @@ internal static class Capabilities
         w.U16LE(0x0200);   // protocolVersion
         w.U16LE(0);        // pad
         w.U16LE(0);        // compressionTypes
-        w.U16LE(0x0001 | 0x0004); // extraFlags: FASTPATH_OUTPUT_SUPPORTED | LONG_CREDENTIALS_SUPPORTED
+        // extraFlags: FASTPATH_OUTPUT_SUPPORTED | NO_BITMAP_COMPRESSION_HDR (8 bytes less per bitmap; the parser
+        // handles both) | LONG_CREDENTIALS_SUPPORTED
+        w.U16LE(0x0001 | 0x0400 | 0x0004);
         w.U16LE(0);        // updateCapabilityFlag
         w.U16LE(0);        // remoteUnshareFlag
         w.U16LE(0);        // compressionLevel
-        w.U8(0);           // refreshRectSupport
-        w.U8(0);           // suppressOutputSupport
+        w.U8(1);           // refreshRectSupport (we may send Refresh Rect)
+        w.U8(1);           // suppressOutputSupport (we may send Suppress Output for a hidden view)
     }
 
     private static void Bitmap(ByteWriter w, int width, int height, int bpp)
@@ -131,12 +152,23 @@ internal static class Capabilities
         w.U16LE(1);             // desktopResizeFlag
         w.U16LE(1);             // bitmapCompressionFlag
         w.U8(0);                // highColorFlags
-        w.U8(0);                // drawingFlags
+        // drawingFlags: DRAW_ALLOW_SKIP_ALPHA (0x08) lets a 32 bpp server omit the planar alpha plane (desktop alpha
+        // is opaque anyway). No colour-loss or chroma subsampling: lossless, and it avoids the servers that disagree
+        // about R/B order under dynamic colour fidelity.
+        w.U8(0x08);
         w.U16LE(1);             // multipleRectangleSupport
         w.U16LE(0);             // pad
     }
 
-    private static void Order(ByteWriter w)
+    /// <summary>Cell sizes advertised in the revision 2 bitmap cache set: 16×16, 32×32 and 64×64 tiles (as mstsc).</summary>
+    internal static readonly int[] BitmapCacheCells = [600, 600, 2048];
+
+    /// <summary>
+    /// TS_ORDER_CAPABILITYSET. With <paramref name="drawingOrders"/> the server may draw with DstBlt, PatBlt (and OpaqueRect,
+    /// which shares its index), ScrBlt, MemBlt and MultiOpaqueRect instead of bitmaps: scrolling becomes a screen copy and
+    /// repeated tiles a cache reference. Without it every index is zero and the server sends bitmap updates only.
+    /// </summary>
+    private static void Order(ByteWriter w, bool drawingOrders)
     {
         Header(w, 3, 88);
         w.Zeros(16);            // terminalDescriptor
@@ -147,7 +179,17 @@ internal static class Capabilities
         w.U16LE(1);             // maximumOrderLevel
         w.U16LE(0);             // numberFonts
         w.U16LE(0x002A);        // orderFlags: NEGOTIATE | ZEROBOUNDSDELTAS | COLORINDEX
-        w.Zeros(32);            // orderSupport: no orders → server sends bitmap updates
+        Span<byte> support = stackalloc byte[32];   // orderSupport
+        if (drawingOrders)
+        {
+            support[0x00] = 1;  // TS_NEG_DSTBLT_INDEX
+            support[0x01] = 1;  // TS_NEG_PATBLT_INDEX (PatBlt and OpaqueRect)
+            support[0x02] = 1;  // TS_NEG_SCRBLT_INDEX
+            support[0x03] = 1;  // TS_NEG_MEMBLT_INDEX
+            support[0x12] = 1;  // TS_NEG_MULTIOPAQUERECT_INDEX
+        }
+
+        w.Bytes(support);
         w.U16LE(0);             // textFlags
         w.U16LE(0);             // orderSupportExFlags
         w.U32LE(0);             // pad4octetsB
@@ -156,6 +198,24 @@ internal static class Capabilities
         w.U16LE(0);             // pad2octetsD
         w.U16LE(0);             // textANSICodePage
         w.U16LE(0);             // pad2octetsE
+    }
+
+    /// <summary>
+    /// TS_BITMAPCACHE_CAPABILITYSET_REV2 (MS-RDPBCGR 2.2.7.1.4.2): three non-persistent cells, no persistent-key list and no
+    /// waiting list. Required for MemBlt: the server fills the cells with Cache Bitmap (Revision 2) secondary orders.
+    /// </summary>
+    private static void BitmapCacheRev2(ByteWriter w)
+    {
+        Header(w, 19, 40);
+        w.U16LE(0);                                 // CacheFlags: no persistent keys, no waiting list
+        w.U8(0);                                    // pad2
+        w.U8((byte)BitmapCacheCells.Length);        // NumCellCaches
+        for (int i = 0; i < 5; i++)
+        {
+            w.U32LE(i < BitmapCacheCells.Length ? (uint)BitmapCacheCells[i] : 0u);   // numEntries, k (persistent) bit clear
+        }
+
+        w.Zeros(12);                                // Pad3
     }
 
     private static void Pointer(ByteWriter w)

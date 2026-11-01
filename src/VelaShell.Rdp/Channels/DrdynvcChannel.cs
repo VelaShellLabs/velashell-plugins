@@ -26,13 +26,15 @@ internal sealed class DrdynvcChannel
     private uint _displayChannelId;
     private bool _displayReady;     // its capabilities arrived; monitor layouts may now be sent
     private uint _maxMonitors = 1;
-    private (int Width, int Height)? _pending;  // requested before the channel was ready
-    private (int Width, int Height)? _lastSent; // suppress redundant layouts during a resize drag
+    private (int Width, int Height, int Scale)? _pending;  // requested before the channel was ready
+    private (int Width, int Height, int Scale)? _lastSent; // suppress redundant layouts during a resize drag
 
     // Reassembly of a fragmented dynamic-channel message (DATA_FIRST + DATA).
     private uint _reassembleChannel;
     private int _reassembleTotal;
     private MemoryStream? _reassemble;
+    /// <summary>Display Control messages (caps / layout) are well under 1 KB.</summary>
+    private const int MaxDisplayMessage = 64 * 1024;
 
     internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct)
     {
@@ -55,21 +57,22 @@ internal sealed class DrdynvcChannel
     /// Buffered until the Display Control channel reports its capabilities; a no-op if the server
     /// never opens the channel (the desktop then stays at the negotiated size, scaled to fit).
     /// </summary>
-    internal async Task RequestResizeAsync(int width, int height)
+    internal async Task RequestResizeAsync(int width, int height, int scale = 100)
     {
-        width = Clamp(width);
+        width = Clamp(width) & ~1;   // MS-RDPEDISP: the width must be even; the height need not be
         height = Clamp(height);
+        scale = RdpScale.Clamp(scale);
         byte[]? frame;
         lock (_lock)
         {
-            if (!_displayReady) { _pending = (width, height); return; }
-            if (_lastSent is { } last && last.Width == width && last.Height == height)
+            if (!_displayReady) { _pending = (width, height, scale); return; }
+            if (_lastSent is { } last && last.Width == width && last.Height == height && last.Scale == scale)
             {
                 return;
             }
 
-            _lastSent = (width, height);
-            frame = BuildMonitorLayout(_displayChannelId, width, height);
+            _lastSent = (width, height, scale);
+            frame = BuildMonitorLayout(_displayChannelId, width, height, scale);
         }
         await _send(frame, _ct).ConfigureAwait(false);
     }
@@ -148,7 +151,18 @@ internal sealed class DrdynvcChannel
         }
 
         uint channelId = ReadVariable(ref r, cbId);
-        int total = -1;
+        // Only the Display Control channel is ever opened; data for any other id is dropped before anything is
+        // buffered, and its messages are tiny, so a declared total above MaxDisplayMessage is refused outright
+        // (it used to pre-allocate whatever the server declared, up to 2 GB, for any channel id).
+        lock (_lock)
+        {
+            if (!_displayOpen || channelId != _displayChannelId)
+            {
+                return null;
+            }
+        }
+
+        long total = -1;
         if (first)
         {
             if (r.Remaining < CbIdBytes(sp))
@@ -156,7 +170,12 @@ internal sealed class DrdynvcChannel
                 return null;
             }
 
-            total = (int)ReadVariable(ref r, sp);
+            total = ReadVariable(ref r, sp);
+            if (total > MaxDisplayMessage)
+            {
+                _reassemble = null;
+                return null;
+            }
         }
         ReadOnlySpan<byte> data = r.Rest();
 
@@ -167,8 +186,8 @@ internal sealed class DrdynvcChannel
             if (total > data.Length)
             {
                 _reassembleChannel = channelId;
-                _reassembleTotal = total;
-                _reassemble = new MemoryStream(total);
+                _reassembleTotal = (int)total;
+                _reassemble = new MemoryStream();
                 _reassemble.Write(data);
                 return null;
             }
@@ -248,11 +267,11 @@ internal sealed class DrdynvcChannel
 
             _pending = null;
             _lastSent = p;
-            return BuildMonitorLayout(_displayChannelId, p.Width, p.Height);
+            return BuildMonitorLayout(_displayChannelId, p.Width, p.Height, p.Scale);
         }
     }
 
-    private static byte[] BuildMonitorLayout(uint channelId, int width, int height)
+    private static byte[] BuildMonitorLayout(uint channelId, int width, int height, int scale = 100)
     {
         // DISPLAYCONTROL_MONITOR_LAYOUT_PDU (MS-RDPEDISP 2.2.2.2) for a single primary monitor.
         var disp = new ByteWriter(56);
@@ -268,8 +287,8 @@ internal sealed class DrdynvcChannel
         disp.U32LE(0);                          // PhysicalWidth
         disp.U32LE(0);                          // PhysicalHeight
         disp.U32LE(0);                          // Orientation = landscape
-        disp.U32LE(100);                        // DesktopScaleFactor
-        disp.U32LE(100);                        // DeviceScaleFactor
+        disp.U32LE((uint)RdpScale.Clamp(scale));  // DesktopScaleFactor (percent)
+        disp.U32LE((uint)RdpScale.Device(scale)); // DeviceScaleFactor (100 / 140 / 180)
 
         int cbId = channelId <= 0xFF ? 0 : channelId <= 0xFFFF ? 1 : 2;
         var w = new ByteWriter(4 + CbIdBytes(cbId) + disp.Length);
@@ -279,7 +298,7 @@ internal sealed class DrdynvcChannel
         return w.ToArray();
     }
 
-    private static int Clamp(int value) => value < 200 ? 200 : value > 8192 ? 8192 : value & ~1; // even, 200..8192
+    private static int Clamp(int value) => Math.Clamp(value, 200, 8192);
 
     private static int CbIdBytes(int cb) => cb switch { 0 => 1, 1 => 2, _ => 4 };
 

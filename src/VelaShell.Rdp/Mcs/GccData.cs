@@ -28,9 +28,9 @@ internal static class GccData
     private const ushort ScCore = 0x0C01, ScSecurity = 0x0C02, ScNet = 0x0C03;
 
     internal static byte[] BuildClientData(int width, int height, int bpp, uint serverSelectedProtocol,
-        string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels)
+        string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels, int scaleFactor = 100)
     {
-        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout);
+        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout, scaleFactor);
         byte[] security = BuildSecurity();
         byte[] net = BuildNet(channels);
         byte[] cluster = BuildCluster(serverSelectedProtocol);
@@ -44,7 +44,7 @@ internal static class GccData
     }
 
     private static byte[] BuildCore(int width, int height, int bpp, uint serverSelectedProtocol,
-        string clientName, uint keyboardLayout)
+        string clientName, uint keyboardLayout, int scaleFactor = 100)
     {
         var w = new ByteWriter(256);
         int headerAt = w.Length;
@@ -79,6 +79,16 @@ internal static class GccData
         w.U8(0);                                    // connectionType
         w.U8(0);                                    // pad1octet
         w.U32LE(serverSelectedProtocol);            // serverSelectedProtocol (echo)
+        if (scaleFactor != 100)
+        {
+            // The display-scale tail (RDP 8.1+), only when it says something: older servers parse CS_CORE by length.
+            w.U32LE(0);                                 // desktopPhysicalWidth (unknown: ignored)
+            w.U32LE(0);                                 // desktopPhysicalHeight
+            w.U16LE(0);                                 // desktopOrientation = landscape
+            w.U32LE((uint)RdpScale.Clamp(scaleFactor)); // desktopScaleFactor
+            w.U32LE((uint)RdpScale.Device(scaleFactor)); // deviceScaleFactor
+        }
+
         w.PatchU16LE(lenAt, (ushort)(w.Length - headerAt));
         return w.ToArray();
     }

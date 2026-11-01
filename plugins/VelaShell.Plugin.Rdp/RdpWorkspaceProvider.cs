@@ -35,15 +35,31 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
     /// </summary>
     private RdpSessionFactory Logged(RdpSessionFactory inner) => async (request, settings, loc, ct) =>
     {
+        // Downgrade protection for Auto: once a host has logged on with NLA, later connections to it require NLA.
+        // The X.224 negotiation is unauthenticated, so without this a man-in-the-middle could answer "TLS only" and
+        // — if the user accepted its certificate — receive the password in the Client Info. A host that never used
+        // NLA (e.g. one that refuses our NTLM) keeps the TLS fallback.
+        string nlaKey = NlaKey(request);
+        bool pinned = settings.Security == RdpSecurity.Auto && await UsedNlaBeforeAsync(nlaKey, ct).ConfigureAwait(false);
         try
         {
-            IRdpSession session = await inner(request, settings, loc, ct).ConfigureAwait(false);
+            IRdpSession session = await inner(request, pinned ? settings with { Security = RdpSecurity.Nla } : settings, loc, ct).ConfigureAwait(false);
             if (session is RdpManagedSession { NlaRefusal: { } refusal })
             {
                 _context.Log.Warn($"RDP {request.Host}:{request.Port}: the server refused NLA before any credentials were sent " +
                     $"({refusal.Detail}{(refusal.Auth is { } a ? "; " + a : "")}); connected with TLS security instead (security layer: Auto).");
             }
+            else if (!pinned && settings.Security == RdpSecurity.Auto && session is RdpManagedSession { Security: RdpSecurity.Nla })
+            {
+                try { await _context.Storage.SetAsync(nlaKey, true, ct).ConfigureAwait(false); }
+                catch (Exception storeError) when (storeError is not OperationCanceledException) { _context.Log.Warn("Could not record the RDP host's NLA use.", storeError); }
+            }
             return session;
+        }
+        catch (Exception ex) when (pinned && ex.InnerException is RdpNlaUnavailableException or RdpNlaRefusedException)
+        {
+            _context.Log.Warn($"RDP {request.Host}:{request.Port}: this host used NLA before but now offers no NLA — refused as a possible downgrade attack.", ex);
+            throw new ProtocolConnectionException(loc.Format("NlaDowngrade", request.Host), ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not ProtocolCertificateTrustException)
         {
@@ -51,6 +67,14 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             throw;
         }
     };
+
+    private static string NlaKey(WorkspaceConnectRequest request) => $"nla-host:{request.Host.ToLowerInvariant()}:{request.Port}";
+
+    private async Task<bool> UsedNlaBeforeAsync(string key, CancellationToken ct)
+    {
+        try { return await _context.Storage.GetAsync<bool>(key, ct).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return false; }
+    }
     internal Loc Loc
     {
         get
@@ -100,8 +124,8 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         }
         finally { lock (_gate) { if (--_opens == 0 && _disposed) { _ = _drained.TrySetResult(); } } }
     }
-    private static Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
-        RdpConnector.ConnectAsync(request, settings, loc, ct);
+    private Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
+        RdpConnector.ConnectAsync(request, settings, loc, ct, message => _context.Log.Info(message));
 
     private void Closed(RdpWorkspaceDocument document)
     {

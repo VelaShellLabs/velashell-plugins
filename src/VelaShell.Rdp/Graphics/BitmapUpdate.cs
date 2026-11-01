@@ -12,6 +12,10 @@ internal static class BitmapUpdate
     internal static int Apply(ref ByteReader r, Framebuffer framebuffer)
     {
         int rectangles = r.U16LE();
+        // Work budget per update: a legitimate update repaints at most the desktop a few times over (a full-screen
+        // refresh is ~1×). Bounding the declared pixel count stops a handful of tiny headers from demanding
+        // gigabytes of decoding.
+        long budget = Math.Max(4L * framebuffer.Width * framebuffer.Height, 1L << 22);
         for (int i = 0; i < rectangles; i++)
         {
             int left = r.U16LE();
@@ -23,7 +27,11 @@ internal static class BitmapUpdate
             int bpp = r.U16LE();
             ushort flags = r.U16LE();
             int bitmapLength = r.U16LE();
-            _ = right; _ = bottom;
+            budget -= (long)width * height;
+            if (budget < 0)
+            {
+                throw new RdpProtocolException("Bitmap update larger than the desktop allows.");
+            }
 
             bool compressed = (flags & BitmapCompression) != 0;
             ReadOnlySpan<byte> data;
@@ -40,7 +48,7 @@ internal static class BitmapUpdate
             {
                 data = r.Take(bitmapLength);
             }
-            framebuffer.ApplyRect(left, top, width, height, bpp, compressed, data);
+            framebuffer.ApplyRect(left, top, right, bottom, width, height, bpp, compressed, data);
         }
         return rectangles;
     }

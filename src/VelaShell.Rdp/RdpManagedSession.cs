@@ -9,9 +9,11 @@ namespace VelaShell.Rdp;
 /// a single background task pumps the connection while frames are coalesced and snapshotted on
 /// demand, and input, clipboard and dynamic-resolution requests are forwarded to the wire.
 /// </summary>
-public sealed class RdpManagedSession : IRdpSession
+public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 {
     private readonly RdpConnection _connection;
+
+    internal RdpConnection Connection => _connection;
     private readonly CancellationTokenSource _stop = new();
     private Task? _pump;
     private int _dirty;
@@ -24,10 +26,18 @@ public sealed class RdpManagedSession : IRdpSession
     private Channel<byte[]>? _cliprdrQueue;
     private Exception? _clipboardFailure;
     private long _clipboardQueuedBytes;
+    private long _rdpdrQueuedBytes;
     private Task? _cliprdrWorker;
     private RdpdrChannel? _rdpdr;
     private Channel<byte[]>? _rdpdrQueue;
     private Task? _rdpdrWorker;
+    private Action<string>? _driveLog;
+
+    private void LogDrive(string message)
+    {
+        try { _driveLog?.Invoke($"RDPDR {message}"); }
+        catch { /* Diagnostics must not interrupt the channel worker. */ }
+    }
     private DrdynvcChannel? _drdynvc;
     private Channel<byte[]>? _drdynvcQueue;
     private Task? _drdynvcWorker;
@@ -45,6 +55,9 @@ public sealed class RdpManagedSession : IRdpSession
     public uint? LogonInfoType => Volatile.Read(ref _logonInfo) is var v && v >= 0 ? (uint)v : null;
 
     public event Action? FrameAvailable;
+
+    /// <summary>The server changed the mouse pointer (raised on the receive thread).</summary>
+    public event Action<RdpPointer>? PointerChanged;
     public event Action<Exception?>? Disconnected;
 
     private readonly Lock _clipGate = new();
@@ -112,8 +125,17 @@ public sealed class RdpManagedSession : IRdpSession
     {
         _connection = connection;
         _connection.FrameUpdated += OnFrameUpdated;
+        _connection.PointerChanged += pointer =>
+        {
+            try { PointerChanged?.Invoke(pointer); } catch { /* never unwind into the pump */ }
+        };
         _connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
-        _connection.LogonInfoReceived += type => { Volatile.Write(ref _logonInfo, (int)type); Volatile.Write(ref _reachedLogon, 1); };
+        _connection.LogonInfoReceived += type =>
+        {
+            Volatile.Write(ref _logonInfo, (int)type);
+            Volatile.Write(ref _reachedLogon, 1);
+            LogDrive($"server logon notification type={type}");
+        };
         _connection.ChannelData += OnChannelData;
     }
 
@@ -168,7 +190,7 @@ public sealed class RdpManagedSession : IRdpSession
     /// </summary>
     public RdpNlaRefusedException? NlaRefusal { get; private set; }
 
-    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
+    internal static IReadOnlyList<ChannelDef> BuildChannels(RdpClientOptions options)
     {
         var channels = new List<ChannelDef>();
         if (options.Clipboard)
@@ -179,6 +201,8 @@ public sealed class RdpManagedSession : IRdpSession
         if (options.Drives.Count > 0)
         {
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
+            // Windows device redirection also needs the sound channel registered, even without playback.
+            channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
         if (options.DynamicResolution)
@@ -186,12 +210,19 @@ public sealed class RdpManagedSession : IRdpSession
             channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
         }
 
+        return channels;
+    }
+
+    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
+    {
+        IReadOnlyList<ChannelDef> channels = BuildChannels(options);
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
             string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
-            options.Performance, options.AudioPlayback);
+            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders);
 
-        var session = new RdpManagedSession(new RdpConnection(connectOptions));
+        var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
+        session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
         if (options.DynamicResolution)
         {
             session.EnableDynamicChannels();
@@ -218,7 +249,7 @@ public sealed class RdpManagedSession : IRdpSession
             await session.DisposeAsync().ConfigureAwait(false);
             // Cancellation, certificate trust and rejected credentials each mean something specific to
             // the caller; everything else gets the failing stage and a readable cause chain.
-            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException)
+            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException or RdpNlaUnavailableException)
             {
                 throw;
             }
@@ -230,6 +261,7 @@ public sealed class RdpManagedSession : IRdpSession
 
             throw new RdpConnectionException(stage, ex, tls, tlsTrace);
         }
+        session.LogDrive($"connection active; rdpdr channelId={session._connection.ChannelId("rdpdr")}");
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
         session._pump = session.PumpLoopAsync();
@@ -259,7 +291,7 @@ public sealed class RdpManagedSession : IRdpSession
     private void EnableDrives(IReadOnlyList<DriveMapping> mappings)
     {
         _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings);
+        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive);
         _rdpdrWorker = DrainRdpdrAsync();
     }
 
@@ -277,13 +309,17 @@ public sealed class RdpManagedSession : IRdpSession
         }
         else if (payload.ChannelName == "rdpdr")
         {
-            if (_rdpdrQueue?.Writer.TryWrite(payload.Data) != true)
+            // Bounded by bytes as well as by count: 256 queued requests of up to 32 MB each is no bound at all.
+            long queued = Interlocked.Add(ref _rdpdrQueuedBytes, payload.Data.Length);
+            if (queued > 64 * 1024 * 1024 || _rdpdrQueue?.Writer.TryWrite(payload.Data) != true)
             {
+                Interlocked.Add(ref _rdpdrQueuedBytes, -payload.Data.Length);
                 throw new IOException("RDP drive request queue capacity exceeded; reconnect the session.");
             }
         }
-        else if (payload.ChannelName == "drdynvc")
+        else if (payload.ChannelName == "drdynvc" && payload.Data.Length <= 1024 * 1024)
         {
+            // Only Display Control is opened and its messages are tiny; anything larger is not for us.
             _ = (_drdynvcQueue?.Writer.TryWrite(payload.Data));
         }
     }
@@ -299,9 +335,10 @@ public sealed class RdpManagedSession : IRdpSession
         {
             await foreach (byte[] pdu in _rdpdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
+                Interlocked.Add(ref _rdpdrQueuedBytes, -pdu.Length);
                 try { await _rdpdr.ProcessAsync(pdu).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
-                catch { /* a malformed rdpdr PDU must not drop the session */ }
+                catch (Exception ex) { LogDrive($"packet processing failed: {ex.GetType().Name}; bytes={pdu.Length}"); }
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
@@ -329,6 +366,27 @@ public sealed class RdpManagedSession : IRdpSession
     /// <summary>Asks the server, via the display-control channel, to resize the desktop to match the view.</summary>
     public Task RequestResizeAsync(int width, int height, CancellationToken cancellationToken) =>
         _drdynvc?.RequestResizeAsync(width, height) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Like <see cref="RequestResizeAsync(int, int, CancellationToken)"/>, also passing the display scale in percent
+    /// (150 for a 150% local display) so the remote UI renders at the local text size.
+    /// </summary>
+    public Task RequestResizeAsync(int width, int height, int scalePercent, CancellationToken cancellationToken = default) =>
+        _drdynvc?.RequestResizeAsync(width, height, scalePercent) ?? Task.CompletedTask;
+
+    public Task SetDisplayUpdatesAsync(bool visible, CancellationToken cancellationToken = default) => Guard(async () =>
+    {
+        if (_connection.ServerSupportsSuppressOutput)
+        {
+            await _connection.SendSuppressOutputAsync(visible, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Updates suppressed while hidden were never sent; ask for a full repaint when the view comes back.
+        if (visible && _connection.ServerSupportsRefreshRect)
+        {
+            await _connection.SendRefreshRectAsync(cancellationToken).ConfigureAwait(false);
+        }
+    });
 
     private async Task DrainCliprdrAsync()
     {
@@ -375,6 +433,18 @@ public sealed class RdpManagedSession : IRdpSession
         return new RdpFrame(width, height, bgra);
     }
 
+    public RdpFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full = false)
+    {
+        _ = Interlocked.Exchange(ref _dirty, 0);
+        RdpFrameCopy copy = _connection.CopyFrame(destination, stride, width, height, full);
+        if (copy.SizeChanged)
+        {
+            _ = Interlocked.Exchange(ref _dirty, 1);   // still pending until the caller has a surface of the new size
+        }
+
+        return copy;
+    }
+
     private async Task PumpLoopAsync()
     {
         Exception? failure = null;
@@ -399,14 +469,8 @@ public sealed class RdpManagedSession : IRdpSession
     public Task KeyAsync(uint code, bool down, CancellationToken ct = default) =>
         Guard(() => _connection.SendScancodeAsync(code, down, ct));
 
-    public Task UnicodeAsync(string text, CancellationToken ct = default) => Guard(async () =>
-    {
-        foreach (char unit in text)
-        {
-            await _connection.SendUnicodeAsync(unit, down: true, ct).ConfigureAwait(false);
-            await _connection.SendUnicodeAsync(unit, down: false, ct).ConfigureAwait(false);
-        }
-    });
+    public Task UnicodeAsync(string text, CancellationToken ct = default) =>
+        Guard(() => _connection.SendUnicodeTextAsync(text, ct));   // up to 7 characters per fast-path PDU
 
     public Task MouseAsync(uint flags, uint x, uint y, CancellationToken ct = default) =>
         Guard(() => _connection.SendMouseAsync(flags, x, y, ct));
@@ -454,6 +518,7 @@ public sealed class RdpManagedSession : IRdpSession
         await _connection.DisposeAsync().ConfigureAwait(false);
         _stop.Dispose();
         FrameAvailable = null;
+        PointerChanged = null;
         Disconnected = null;
         lock (_clipGate)
         {

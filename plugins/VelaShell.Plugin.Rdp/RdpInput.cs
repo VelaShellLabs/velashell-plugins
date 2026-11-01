@@ -5,7 +5,13 @@ namespace VelaShell.Plugin.Rdp;
 
 internal static class RdpInput
 {
-    internal static Rect Viewport(Size available, int width, int height, bool fit)
+    /// <summary>
+    /// Where the remote desktop is drawn, in DIPs. A desktop that is (almost) exactly the view's size in device pixels
+    /// — the normal case once dynamic resolution has matched it — is drawn at one device pixel per remote pixel,
+    /// centred with its origin on the device-pixel grid: resampling by a factor like 1080/1079 used to soften every
+    /// glyph. Only a real mismatch (a server that cannot follow the window) is scaled to fit.
+    /// </summary>
+    internal static Rect Viewport(Size available, int width, int height, bool fit, double renderScaling = 1)
     {
         if (width <= 0 || height <= 0 || available.Width <= 0 || available.Height <= 0
             || !double.IsFinite(available.Width) || !double.IsFinite(available.Height))
@@ -13,8 +19,27 @@ internal static class RdpInput
             return default;
         }
 
-        double scale = fit ? Math.Min(available.Width / width, available.Height / height) : 1;
-        return new Rect((available.Width - width * scale) / 2, (available.Height - height * scale) / 2, width * scale, height * scale);
+        double s = renderScaling > 0 && double.IsFinite(renderScaling) ? renderScaling : 1;
+        double nativeWidth = width / s, nativeHeight = height / s;   // 1:1 device pixels, in DIPs
+        double scale = !fit || IsNearlyNative(available, width, height, s)
+            ? 1
+            : Math.Min(available.Width / nativeWidth, available.Height / nativeHeight);
+        double w = nativeWidth * scale, h = nativeHeight * scale;
+        double x = (available.Width - w) / 2, y = (available.Height - h) / 2;
+        if (scale == 1)
+        {
+            x = Math.Round(x * s) / s;
+            y = Math.Round(y * s) / s;
+        }
+
+        return new Rect(x, y, w, h);
+    }
+
+    /// <summary>The desktop is within a few device pixels of the view (up to 16 smaller, at most 1 larger).</summary>
+    internal static bool IsNearlyNative(Size available, int width, int height, double renderScaling)
+    {
+        double gapX = available.Width * renderScaling - width, gapY = available.Height * renderScaling - height;
+        return gapX is >= -1 and <= 16 && gapY is >= -1 and <= 16;
     }
 
     internal static bool Map(Point point, Rect viewport, int width, int height, bool captured, out uint x, out uint y)

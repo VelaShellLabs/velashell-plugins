@@ -14,9 +14,13 @@ namespace VelaShell.Plugin.Rdp;
 /// </summary>
 internal static class RdpConnector
 {
-    internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct)
+    internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct, Action<string>? driveLog = null)
     {
         byte[]? pin = settings.CertificateSha256.Length == 64 ? Convert.FromHexString(settings.CertificateSha256) : null;
+        // Connect at the size and scale the view will have (the last view's, recorded when it laid out): starting at
+        // the configured size meant a full repaint, an immediate resize and a second full repaint. The configured
+        // size remains the fallback before any view exists, and for a server that cannot follow the window.
+        (int width, int height, int scale) = RdpViewMetrics.Last ?? (settings.Width, settings.Height, 100);
         var options = new RdpClientOptions
         {
             Host = request.Host,
@@ -24,13 +28,15 @@ internal static class RdpConnector
             Username = request.Username,
             Password = request.Password,
             Domain = settings.Domain,
-            Width = settings.Width,
-            Height = settings.Height,
-            ColorDepth = 16,
+            Width = width,
+            Height = height,
+            DesktopScaleFactor = scale,
+            ColorDepth = settings.ColorDepth,
             CertificatePin = pin,
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,
             Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))],
+            DriveRedirectionLog = driveLog,
             Security = settings.Security,
             Performance = settings.Performance,
             AudioPlayback = settings.Audio
@@ -68,6 +74,7 @@ internal static class RdpConnector
         // host must not suggest re-entering the password.
         RdpNlaRefusedException refused => new ProtocolConnectionException(
             loc.Format(refused.ServerRequiresNla ? "NlaRefusedRequired" : "NlaRefused", refused.Detail), refused),
+        RdpNlaUnavailableException unavailable => new ProtocolConnectionException(loc["NlaUnavailable"], unavailable),
         RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.HybridRequiredByServer } failed =>
             new ProtocolConnectionException(loc["NegotiationNlaRequired"], failed),
         RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.SslNotAllowedByServer } failed =>

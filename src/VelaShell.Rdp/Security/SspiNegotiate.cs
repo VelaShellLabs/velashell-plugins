@@ -6,10 +6,11 @@ namespace VelaShell.Rdp.Security;
 
 /// <summary>
 /// Drives the native Windows <b>Negotiate</b> security package for CredSSP/NLA, exactly as Windows' own RDP
-/// client does. The key difference from the managed <see cref="ManagedNtlm" />: calling Negotiate with a
-/// <see langword="null" /> target name yields a full <b>SPNEGO</b> token (NTLM/Kerberos), whereas the managed
-/// stack and a per-service target both degrade to bare NTLM — which hardened servers refuse during NLA with
-/// SEC_E_UNSUPPORTED_FUNCTION (0x80090302). Sealing uses the same context's EncryptMessage/DecryptMessage.
+/// client does. The difference from the managed <see cref="ManagedNtlm" /> is the native package itself: with a
+/// DNS host name it targets <c>TERMSRV/&lt;host&gt;</c> so Negotiate can use Kerberos for domain servers; with an
+/// IP literal it keeps the null target (Kerberos is impossible there and Negotiate settles on NTLM either way —
+/// observed: explicit credentials give a bare NTLM first token even with the null target). Sealing uses the same
+/// context's EncryptMessage/DecryptMessage.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class SspiNegotiate : INlaSecurityContext
@@ -38,8 +39,16 @@ internal sealed class SspiNegotiate : INlaSecurityContext
     private int _blockSize;
     private bool _disposed;
 
-    internal unsafe SspiNegotiate(string domain, string username, string password)
+    private readonly string? _target;
+
+    /// <summary>
+    /// <paramref name="targetHost"/> as a DNS name becomes the service target <c>TERMSRV/&lt;host&gt;</c>, which is
+    /// what lets Negotiate pick Kerberos for a domain server (as mstsc does) instead of always NTLM. An IP literal
+    /// keeps the null target: Kerberos cannot work for it anyway, and the null target is the established behaviour.
+    /// </summary>
+    internal unsafe SspiNegotiate(string domain, string username, string password, string targetHost = "")
     {
+        _target = targetHost.Length > 0 && !System.Net.IPAddress.TryParse(targetHost.Trim('[', ']'), out _) ? $"TERMSRV/{targetHost}" : null;
         new Span<byte>((void*)_cred, IntPtr.Size * 2).Clear();
         new Span<byte>((void*)_ctx, IntPtr.Size * 2).Clear();
 
@@ -80,8 +89,8 @@ internal sealed class SspiNegotiate : INlaSecurityContext
             var inBuf = new SecBuffer { cbBuffer = incoming.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)inPtr };
             var inDesc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 1, pBuffers = (IntPtr)(&inBuf) };
 
-            // A null target forces SPNEGO (NTLM/Kerberos) rather than the bare-NTLM degradation.
-            uint rc = (uint)InitializeSecurityContext(_cred, _hasContext ? _ctx : IntPtr.Zero, null, ContextReq, 0,
+            // The service target enables Kerberos for DNS names; IP literals keep the null target (see constructor).
+            uint rc = (uint)InitializeSecurityContext(_cred, _hasContext ? _ctx : IntPtr.Zero, _target, ContextReq, 0,
                 SECURITY_NATIVE_DREP, _hasContext ? (IntPtr)(&inDesc) : IntPtr.Zero, 0, _ctx, ref outDesc, out _, out _);
 
             _hasContext = true;

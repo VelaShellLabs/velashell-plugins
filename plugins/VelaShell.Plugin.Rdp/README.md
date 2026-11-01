@@ -28,8 +28,9 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
   `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Security/`).
 - **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Mcs/`).
 - **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
-- **Graphics** — interleaved-RLE decode and a BGRA framebuffer; fragmented fast-path updates are
-  reassembled (`Graphics/`).
+- **Graphics** — interleaved-RLE and RDP 6.0 planar decode, GDI drawing orders with a bitmap cache
+  (`Orders.cs`, ported from FreeRDP), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
+  region; fragmented fast-path updates are reassembled (`Graphics/`).
 - **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
 - **Channels** — clipboard (cliprdr) and drive redirection (rdpdr) over chunked static virtual
   channels, plus the display-control dynamic channel (drdynvc + MS-RDPEDISP) for dynamic
@@ -42,13 +43,49 @@ workspace connection. Supply the server (default port 3389), username/password a
 domain or host-managed SSH jump session. Credentials are passed through APIs, never command-line
 arguments.
 
-- Desktop resolution follows the workspace tab: on connect and whenever the window resizes, the
-  plugin asks the server over the display-control channel (MS-RDPEDISP) to match the viewport, so
-  the remote renders 1:1. The width/height settings (default 1920 × 1080) are the initial size and
-  the fallback when a server declines dynamic resize. Width 320–8192; height 200–8192. Connect
-  timeout 1–120 seconds, default 15. **Fit desktop** scales a mismatched desktop into the tab
-  (smoothed); **100%** shows it 1:1 with scrollbars.
-- Keyboard, mouse, Unicode text and the **Ctrl+Alt+Delete** button send remote input. When a
+- Desktop resolution follows the workspace tab: on connect and whenever the window resizes (or
+  moves to a monitor with another DPI), the plugin asks the server over the display-control channel
+  (MS-RDPEDISP) to match the viewport in device pixels, with the local display scale (150% → remote
+  UI at 150%, deviceScaleFactor bucketed to 100/140/180) also sent in CS_CORE. A desktop within a
+  few device pixels of the view is drawn exactly 1:1 on the pixel grid with no filtering; only a real
+  mismatch (a server that cannot follow the window) is scaled to fit with a high-quality filter. Only
+  the width is forced even (MS-RDPEDISP). A new session connects at the last view's size and scale
+  (`RdpViewMetrics`), so there is no full repaint at the configured size followed by a resize; the
+  width/height settings (default 1920 × 1080; width 320–8192, height 200–8192) are the fallback before
+  any view exists and for servers without dynamic resolution. Connect timeout 1–120 seconds, default 15.
+- **Colour depth** (experience page, `colorDepth`): 16-bit High Color, 24-bit True Color, or 32-bit
+  Highest Quality (default, like mstsc). 32-bit compressed bitmaps are RDP 6.0 planar
+  (`Graphics/Planar.cs`, ported from FreeRDP) with DRAW_ALLOW_SKIP_ALPHA; verified pixel-identical to
+  24-bit against xrdp.
+- Frames: decoding and pixel conversion run on the receive thread outside the surface lock; the surface
+  keeps the union of changed rectangles and `IRdpSession.CopyFrame` copies only that into the locked
+  `WriteableBitmap` (no per-frame full-desktop clone). Bitmaps are clipped to their destination
+  rectangle (row padding is never painted). A view that is detached (inactive tab) or whose window is
+  minimized stops presenting and sends Suppress Output (when the server supports it); coming back
+  resumes updates with a Refresh Rect. Frame posts use Input priority so a frame flood never delays input.
+- **Remote pointer**: pointer updates (colour/new/cached/system, 1–32 bpp, AND/XOR rules from FreeRDP)
+  are decoded and shown as the desktop's cursor — I-beam over text, resize arrows, hidden while typing.
+- Typed text (IME commits, Type clipboard) is batched up to 7 characters (15 fast-path events) per PDU.
+- Keyboard, mouse and Unicode text go to the remote desktop. Key combinations the local OS keeps
+  for itself (the plugin installs no global keyboard hook) live in the **remote-keys floating
+  button** (`RdpQuickBall`) on the desktop edge: drag it and it snaps to the nearer left/right edge;
+  click it and two semicircles fan out inwards over a dimmed desktop — inner ring Ctrl+Alt+Del,
+  Task Manager (Ctrl+Shift+Esc), Switch window (Alt+Tab), Type clipboard; outer ring Start (Win),
+  Run (Win+R), Desktop (Win+D), Lock (Win+L), Screenshot (PrintScreen). Esc or a click on the
+  dimmed desktop folds it; neither reaches the remote. In small views the whole fan (items too)
+  scales down to 0.6 so labels never collide. Rings are separate hit-test-transparent layers above
+  each button (a bordered circle used to let the hover fill overflow it by a pixel and hide half the
+  ring) and use `VelaAccent`, i.e. the user's accent colour: hover fades in the accent ring and a
+  halo growing outwards, the open ball cross-fades the keyboard into × with a quarter turn (that ×
+  turns once more on hover, over a `VelaAccentDim` fill), fan items grow 8% and light their ring on
+  hover. **Type clipboard** reads the local clipboard through
+  the SDK (`IClipboardApi`, never logged) and types it — runs as Unicode, line breaks as Enter, tabs
+  as Tab — for the sign-in screen, UAC and consoles where clipboard sharing does not work. Text with
+  line breaks or over 100 characters needs a second click on the same text (status-bar notice
+  explains; Enter runs commands in a console); over 2000 characters is refused.
+- Deviation from DESIGN.md: there is no 36px document header. Its only action (Ctrl+Alt+Delete)
+  moved into the floating button, so the desktop gets the full height above the 24px status bar.
+- When a
   session drops, a **Reconnect** button appears over the desktop (the host session tab reconnects
   too); reconnecting renews credentials and certificate approval.
 - **Bidirectional clipboard** is off by default. Text/images synchronize as before. On Windows,
@@ -128,9 +165,17 @@ checks the password from the client info itself. In `auto`, a server that refuse
 credentials are sent — it answers the first CredSSP message (the NTLM NEGOTIATE) with errorCode
 0x80090302 or a TLS abort, i.e. it does not accept incoming NTLM — is retried once with TLS only;
 if that is refused too (`HYBRID_REQUIRED_BY_SERVER`) the error explains the server-side fix. A wrong
-password is never retried. On Windows, NLA authenticates through the OS's native SSPI Negotiate
-package (SPNEGO), exactly like mstsc — a null target yields SPNEGO rather than the bare NTLM that
-hardened, NLA-required servers reject; other platforms fall back to managed NTLM. TLS uses OS
+password is never retried. **Downgrade protection:** the X.224 negotiation is unauthenticated, so in
+`auto` a host that once logged on with NLA is remembered (plugin storage key `nla-host:<host>:<port>`)
+and later connections to it require NLA; if it then offers TLS only (`RdpNlaUnavailableException`)
+or refuses NLA, the connection stops before any password is sent and explains that this can be a
+man-in-the-middle forcing a weaker logon (set `tls` explicitly if the server really changed).
+Servers speaking CredSSP below v5 (before the CVE-2018-0886 fix) are refused and never retried as
+TLS. On Windows, NLA authenticates through the OS's native SSPI Negotiate package, like mstsc:
+a DNS host name is targeted as `TERMSRV/<host>` so Kerberos works for domain servers; an IP address
+keeps the null target. Other platforms fall back to managed NTLM. TLS 1.2/1.3 with renegotiation
+refused. Plaintext password copies (Client Info, TSCredentials) are wiped after sending, and the
+options records never print the password. TLS uses OS
 trust/name/validity verification, or an explicitly approved
 exact SHA-256 leaf-certificate pin that replaces CA/name/expiry checks, identically in every mode.
 Legacy RDP transport security is disabled. SSH tunnelling preserves the original server identity
@@ -145,10 +190,24 @@ before the workspace attaches, and format names follow the server's negotiated c
 Remote text/images synchronize automatically; Windows remote file descriptors are published without
 content reads. A newer local copy supersedes pending publication. Unchanged content is not echoed back.
 
-No audio, multiple monitors or drawing-order acceleration (RemoteFX/GFX) are negotiated: the
-server renders via classic RLE bitmap updates with MPPC bulk compression. Dynamic resolution uses
-the display-control channel only; the graphics pipeline (GFX) is declined. The engine runs
-in-process and shares the host's crash boundary; it is not a sandbox.
+No audio, multiple monitors or the graphics pipeline (RemoteFX/GFX/H.264) are negotiated: the server
+renders via classic bitmap updates (interleaved RLE, RDP 6.0 planar at 32 bpp) and GDI drawing orders
+(DstBlt, PatBlt, OpaqueRect, MultiOpaqueRect, ScrBlt, MemBlt from a 600/600/2048-entry revision 2 bitmap
+cache; `RdpClientOptions.DrawingOrders`, on by default) with MPPC bulk compression. Orders let a server
+scroll with a screen copy and repaint repeated tiles from the cache instead of resending pixels; xrdp draws
+the whole desktop as cached MemBlts, newer Windows servers send bitmaps either way. The order stream
+itself is budgeted (16 desktops of drawing per update, a 256 MiB cache). Dynamic resolution uses the display-control channel only; GFX is declined. The engine
+runs in-process and shares the host's crash boundary; it is not a sandbox — so everything a server
+sends is bounded (2026-11-01 review): bitmap rectangles are clipped and capped (8192 per side, a
+per-update budget of four desktop areas) before decoding; virtual-channel reassembly is bounded by
+the length declared in its first chunk (32 MB) and the rdpdr queue by bytes; Display Control
+messages ≤ 64 KB and only on that channel; CredSSP messages ≤ 1 MB; a server-imposed desktop ≤ 8K
+UHD. Drive redirection serves reads of at most 1 MiB, holds at most 4096 open files, refuses writes
+starting more than 256 MB past the end, answers every request, and confines paths component by
+component: `.`/`..`, control characters and — on Windows — alternate data streams, device names
+(CON, NUL, COM¹ …) and trailing dots/spaces are refused, symbolic links/junctions below the mapping
+root are refused for opens, creates and rename targets (cloud placeholders are not links), and the
+prefix check is case-sensitive off Windows.
 
 ## Build
 
@@ -185,4 +244,15 @@ verified live against the FreeRDP shadow server (`VELA_RDP_TEST_NLA_TARGET`): lo
 password without fallback, TLS-only refused by an NLA-only server. The security-layer fallback is
 covered by in-process fake-server tests (`FakeRdpServer`). A successful NLA logon against a real
 Windows server is still outstanding. Interleaved-RLE decode, MCS/GCC, capability exchange and the
-channel wire formats follow MS-RDPBCGR / the published specs.
+channel wire formats follow MS-RDPBCGR / the published specs. Hardening, rendering, planar, pointer and
+input-batching behaviour is covered by `RdpHardeningTests` (incl. a real directory junction and a fake
+server sending oversized or pre-CVE-2018-0886 TSRequests), `RdpRenderingTests`, `PlanarTests` (FreeRDP
+vectors + fuzzing) and `RdpPointerAndInputTests`; against xrdp, 24-bit and 32-bit (planar) decodes of the
+same desktop are pixel-identical (`FullColourDepthsDecodeTheSameDesktop`) and the server's pointer arrives
+as a 32×32 I-beam (`TheServersPointerShapesArrive`). Drawing orders: `OrderDecoderTests` (every order
+and cache form, bounds, deltas, truncation and 2000 mutations), `RdpDrawingOrderTests` (overlap-safe
+screen copies, ROP3 truth table, brush origin, clipping, both update paths); against xrdp the desktop and a
+terminal scrolled through 2000 lines are pixel-identical with orders on and off
+(`DrawingOrdersPaintTheSameDesktopAsBitmaps`, `AScrollingTerminalEndsTheSameWithDrawingOrders`; xrdp sent
+~70 orders updates, 300–500 cached MemBlts). ScrBlt, fills and patterns are not sent by xrdp's Xorg
+backend, so they are covered by the unit tests only.

@@ -98,18 +98,19 @@ internal sealed class ByteWriter
 
     private void Ensure(int count)
     {
-        if (Length + count <= _buffer.Length)
+        // long math: doubling an int capacity past 2^30 used to wrap to 0 and spin forever.
+        long needed = (long)Length + count;
+        if (needed <= _buffer.Length)
         {
             return;
         }
 
-        int capacity = _buffer.Length * 2;
-        while (capacity < Length + count)
+        if (count < 0 || needed > Array.MaxLength)
         {
-            capacity *= 2;
+            throw new RdpProtocolException("Message too large to encode.");
         }
 
-        Array.Resize(ref _buffer, capacity);
+        Array.Resize(ref _buffer, (int)Math.Min(Math.Max(needed, (long)_buffer.Length * 2), Array.MaxLength));
     }
 }
 

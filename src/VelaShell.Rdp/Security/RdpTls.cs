@@ -65,6 +65,7 @@ internal static class RdpTls
         {
             TargetHost = targetHost,
             EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            AllowRenegotiation = false,   // RDP never renegotiates; refusing it removes a class of TLS attacks
             CertificateRevocationCheckMode = pin is null ? X509RevocationMode.Online : X509RevocationMode.NoCheck
         };
         try

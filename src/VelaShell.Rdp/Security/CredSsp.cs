@@ -18,6 +18,10 @@ namespace VelaShell.Rdp.Security;
 internal static class CredSsp
 {
     private const uint ClientVersion = 6;
+    /// <summary>Oldest server CredSSP version accepted: v5 added the nonce-bound public-key hash (CVE-2018-0886).</summary>
+    internal const uint MinPeerVersion = 5;
+    /// <summary>Largest TSRequest accepted; real ones are a few KB (tokens + sealed credentials).</summary>
+    private const int MaxTsRequest = 1024 * 1024;
     private static readonly byte[] ClientServerHashMagic =
         "CredSSP Client-To-Server Binding Hash\0"u8.ToArray();
     private static readonly byte[] ServerClientHashMagic =
@@ -64,6 +68,14 @@ internal static class CredSsp
 
             peerVersion = reply.Version;
             sawReply = true;
+            if (peerVersion < MinPeerVersion)
+            {
+                // Versions before 5 bind the raw TLS key with no nonce — the CVE-2018-0886 relay oracle. mstsc's
+                // default ("Mitigated") refuses them too. Not an NlaRefused: falling back to TLS-only here would
+                // turn a downgrade attempt into a successful downgrade.
+                throw new RdpProtocolException(
+                    $"The server speaks CredSSP v{peerVersion}, which predates the CVE-2018-0886 fix (v{MinPeerVersion}+ required). Update the server.");
+            }
             outToken = auth.Step(reply.NegoToken ?? []);
             if (!auth.IsComplete)
             {
@@ -94,7 +106,11 @@ internal static class CredSsp
         VerifyServerEcho(peerVersion, serverEcho, publicKey, nonce);
 
         // Finally send the credentials, sealed.
-        byte[] credentials = auth.Seal(BuildTsCredentials(domain, username, password));
+        // Plaintext copies of the password are wiped as soon as they are sealed (best effort: managed strings stay).
+        byte[] plain = BuildTsCredentials(domain, username, password);
+        byte[] credentials;
+        try { credentials = auth.Seal(plain); }
+        finally { CryptographicOperations.ZeroMemory(plain); }
         await WriteAsync(tls, BuildTsRequest(ClientVersion, null, credentials, null, nonce), ct).ConfigureAwait(false);
     }
 
@@ -307,7 +323,9 @@ internal static class CredSsp
 
             using (creds.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 2)))
             {
-                creds.WriteOctetString(Encoding.Unicode.GetBytes(password));
+                byte[] secret = Encoding.Unicode.GetBytes(password);
+                creds.WriteOctetString(secret);
+                CryptographicOperations.ZeroMemory(secret);
             }
         }
         byte[] passwordCreds = creds.Encode();
@@ -323,6 +341,7 @@ internal static class CredSsp
             using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
             {
                 w.WriteOctetString(passwordCreds);
+                CryptographicOperations.ZeroMemory(passwordCreds);
             }
         }
         return w.Encode();
@@ -361,11 +380,20 @@ internal static class CredSsp
 
             byte[] lengthBytes = await ReadExactAsync(tls, count, ct).ConfigureAwait(false);
             prefix.AddRange(lengthBytes);
-            contentLength = 0;
+            long length = 0;
             foreach (byte b in lengthBytes)
             {
-                contentLength = (contentLength << 8) | b;
+                length = (length << 8) | b;
             }
+
+            // The length is the server's word: cap it before allocating (it used to allocate up to 2 GB, or throw
+            // an OverflowException for a negative int).
+            if (length > MaxTsRequest)
+            {
+                throw new RdpProtocolException("NLA message too large.");
+            }
+
+            contentLength = (int)length;
         }
         byte[] content = await ReadExactAsync(tls, contentLength, ct).ConfigureAwait(false);
         byte[] element = new byte[prefix.Count + content.Length];

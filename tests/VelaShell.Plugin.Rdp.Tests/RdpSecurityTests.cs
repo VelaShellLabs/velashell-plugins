@@ -131,9 +131,9 @@ public sealed class RdpSecurityTests
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Nla));
 
-        var failed = Assert.IsInstanceOfType<RdpConnectionException>(failure);
-        Assert.AreEqual(RdpConnectStage.Negotiation, failed.Stage);
-        Assert.Contains("did not select NLA", failed.Detail);
+        // Its own type, so a caller that pinned NLA for this host can tell a possible downgrade from other failures.
+        var failed = Assert.IsInstanceOfType<RdpNlaUnavailableException>(failure);
+        Assert.Contains("did not select NLA", failed.Message);
     }
 
     [TestMethod]
