@@ -38,7 +38,7 @@ public sealed class RdpResizeTests
         await dvc.ProcessAsync([0x50, 0x00, 0x03, 0x00]);          // capabilities request, version 3
         await dvc.ProcessAsync(CreateRequest(3, DisplayControl));  // create the display-control channel (id 3)
         await dvc.ProcessAsync(DisplayCapsData(3, maxMonitors: 1)); // its capabilities (no reply owed yet)
-        await dvc.RequestResizeAsync(1366, 769);                   // odd height is rounded down to 768
+        await dvc.RequestResizeAsync(1367, 769, 150);              // odd width → 1366; the height stays odd; 150% scale
 
         Assert.HasCount(3, sent); // caps response, create response, monitor layout
 
@@ -63,7 +63,12 @@ public sealed class RdpResizeTests
         Assert.AreEqual(0u, layout.U32LE());                      // Left
         Assert.AreEqual(0u, layout.U32LE());                      // Top
         Assert.AreEqual(1366u, layout.U32LE());                   // Width
-        Assert.AreEqual(768u, layout.U32LE());                    // Height (769 → even)
+        Assert.AreEqual(769u, layout.U32LE());                    // Height: MS-RDPEDISP only requires an even width
+        Assert.AreEqual(0u, layout.U32LE());                      // PhysicalWidth (unknown)
+        Assert.AreEqual(0u, layout.U32LE());                      // PhysicalHeight
+        Assert.AreEqual(0u, layout.U32LE());                      // Orientation
+        Assert.AreEqual(150u, layout.U32LE());                    // DesktopScaleFactor
+        Assert.AreEqual(140u, layout.U32LE());                    // DeviceScaleFactor: nearest of 100/140/180
     }
 
     [TestMethod]

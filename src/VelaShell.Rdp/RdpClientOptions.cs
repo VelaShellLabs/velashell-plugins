@@ -45,8 +45,15 @@ public sealed record RdpClientOptions
     /// <summary>When <see langword="true" />, remote audio plays on this computer; the default (<see langword="false" />) disables audio playback.</summary>
     public bool AudioPlayback { get; init; }
 
-    /// <summary>Requested colour depth in bits per pixel.</summary>
+    /// <summary>Requested colour depth in bits per pixel: 15, 16, 24 or 32 (32 decodes RDP 6.0 planar bitmaps).</summary>
     public int ColorDepth { get; init; } = 16;
+
+    /// <summary>
+    /// Display scale in percent (100 = 96 dpi, 150 for a 150% local display), sent so the remote renders its UI at
+    /// the same size as local text instead of tiny on a high-DPI screen. 100..500; the pixel count is unchanged, so it
+    /// costs no bandwidth. Follow later changes with <see cref="RdpManagedSession.RequestResizeAsync(int, int, int, System.Threading.CancellationToken)"/>.
+    /// </summary>
+    public int DesktopScaleFactor { get; init; } = 100;
 
     /// <summary>
     /// When set, the server's leaf certificate must match this SHA-256 hash (pinning); CA, name and

@@ -94,6 +94,11 @@ internal sealed class Loc(string locale)
         ["ExpAnimations"] = ["Menu and window animation", "菜单与窗口动画", "選單與視窗動畫", "メニューとウィンドウのアニメーション", "메뉴 및 창 애니메이션"],
         ["ExpThemes"] = ["Visual styles (themes)", "视觉样式（主题）", "視覺樣式（佈景主題）", "視覚スタイル（テーマ）", "시각 스타일(테마)"],
         ["ExpFontSmoothing"] = ["Font smoothing (ClearType)", "字体平滑（ClearType）", "字型平滑（ClearType）", "フォントのスムージング（ClearType）", "글꼴 다듬기(ClearType)"],
+        ["ColorDepth"] = ["Colour depth", "颜色深度", "色彩深度", "色深度", "색 농도"],
+        ["ColorDepthHint"] = ["16-bit uses the least bandwidth but shows banding on gradients; 24/32-bit is full colour.", "16 位最省带宽,但渐变会出现色带;24/32 位为全彩。", "16 位元最省頻寬,但漸層會出現色帶;24/32 位元為全彩。", "16 ビットは帯域が最小ですがグラデーションに縞が出ます。24/32 ビットはフルカラーです。", "16비트는 대역폭이 가장 적지만 그라데이션에 띠가 생깁니다. 24/32비트는 풀 컬러입니다."],
+        ["ColorDepth16"] = ["High Color (16-bit)", "增强色(16 位)", "高彩色(16 位元)", "High Color(16 ビット)", "하이 컬러(16비트)"],
+        ["ColorDepth24"] = ["True Color (24-bit)", "真彩色(24 位)", "全彩(24 位元)", "True Color(24 ビット)", "트루 컬러(24비트)"],
+        ["ColorDepth32"] = ["Highest Quality (32-bit)", "最高质量(32 位)", "最高品質(32 位元)", "最高品質(32 ビット)", "최고 품질(32비트)"],
         ["Drives"] = ["Custom folders", "自定义文件夹", "自訂資料夾", "カスタム フォルダー", "사용자 지정 폴더"],
         ["DrivesHint"] = [
             "Optional. Format: name=full path of a local folder; separate several with semicolons (;).\ne.g.  {0}   or   {1}\nPick any name (1–8 letters, digits or _); the remote desktop sees it as \\\\tsclient\\work. Ticked disks and these folders can be read and written remotely.",

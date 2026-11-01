@@ -14,6 +14,8 @@ internal sealed class FakeRdpSession : IRdpSession
     internal readonly List<string> Input = [];
     internal readonly List<(uint Flags, uint X, uint Y)> Mouse = [];
     internal readonly List<(int Width, int Height)> Resizes = [];
+    internal readonly List<bool> DisplayUpdates = [];
+    internal readonly List<int> ResizeScales = [];
     private RdpFrame? _frame;
     private RdpFrame? _latest;
     private bool _pending;
@@ -34,6 +36,8 @@ internal sealed class FakeRdpSession : IRdpSession
     public Task UnicodeAsync(string text, CancellationToken ct = default) { Input.Add($"'{text}'"); return Task.CompletedTask; }
     public Task MouseAsync(uint flags, uint x, uint y, CancellationToken ct = default) { Mouse.Add((flags, x, y)); return Task.CompletedTask; }
     public Task RequestResizeAsync(int width, int height, CancellationToken ct = default) { Resizes.Add((width, height)); return Task.CompletedTask; }
+    public Task RequestResizeAsync(int width, int height, int scalePercent, CancellationToken ct = default) { Resizes.Add((width, height)); ResizeScales.Add(scalePercent); return Task.CompletedTask; }
+    public Task SetDisplayUpdatesAsync(bool visible, CancellationToken ct = default) { DisplayUpdates.Add(visible); return Task.CompletedTask; }
     public Task OfferFormatsAsync(string formats, CancellationToken cancellationToken) => Task.CompletedTask;
     public Task RequestFormatAsync(uint format, CancellationToken cancellationToken) => Task.CompletedTask;
     public Task RespondFormatAsync(byte[] data, bool success, CancellationToken cancellationToken) => Task.CompletedTask;

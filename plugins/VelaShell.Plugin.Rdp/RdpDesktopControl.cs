@@ -36,7 +36,11 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private readonly DispatcherTimer _resizeTimer;
     private int _requestedWidth;
     private int _requestedHeight;
+    private int _requestedScale = 100;
     private Window? _window;
+    private TopLevel? _topLevel;
+    private bool _attached;
+    private bool _shown = true;
 
     internal Func<Task>? PublishClipboard { get; set; }
     internal Action? OperationFailed { get; set; }
@@ -60,7 +64,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             }
         }
     } = true;
-    internal Rect DesktopViewport => RdpInput.Viewport(Bounds.Size, DesktopWidth, DesktopHeight, Fit);
+    internal Rect DesktopViewport => RdpInput.Viewport(Bounds.Size, DesktopWidth, DesktopHeight, Fit, RenderScaling);
+
+    private double RenderScaling => TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
 
     public RdpDesktopControl(IRdpSession session, int width, int height)
     {
@@ -69,9 +75,6 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         DesktopHeight = height;
         Focusable = true;
         ClipToBounds = true;
-        // Smooth the remote surface when "Fit" scales a resolution that differs from the viewport;
-        // at 1:1 (the common case once the desktop matches the tab) it is a no-op.
-        RenderOptions.SetBitmapInterpolationMode(this, BitmapInterpolationMode.HighQuality);
         _ime = new(this);
         TextInputMethodClientRequested += (_, e) => e.Client = _ime;
         // Coalesce window/tab resizes: ask the server for a matching desktop only after the drag settles.
@@ -92,9 +95,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         Dispatcher.UIThread.Post(() =>
         {
             _ = Interlocked.Exchange(ref _framePending, 0);
-            if (_disposed != 0)
+            if (_disposed != 0 || !_shown)
             {
-                return;
+                return;   // hidden: changes keep accumulating until the view is shown again
             }
 
             PresentFrame();
@@ -187,20 +190,24 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
 
         double scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
         int width = (int)Math.Round(Bounds.Width * scale) & ~1;   // even width, as display-control requires
-        int height = (int)Math.Round(Bounds.Height * scale) & ~1;
+        int height = (int)Math.Round(Bounds.Height * scale);   // MS-RDPEDISP only requires an even width
         if (width < 200 || height < 200)
         {
             return;
         }
-        // Ignore sub-8px jitter so a one-pixel layout settle does not drive a server reactivation.
-        if (Math.Abs(width - _requestedWidth) < 8 && Math.Abs(height - _requestedHeight) < 8)
+        int percent = (int)Math.Round(scale * 100);
+        RdpViewMetrics.Record(width, height, percent);
+        // Ignore sub-8px jitter so a one-pixel layout settle does not drive a server reactivation (the few pixels
+        // of difference are drawn 1:1 with a thin margin, not resampled); a DPI change always goes through.
+        if (Math.Abs(width - _requestedWidth) < 8 && Math.Abs(height - _requestedHeight) < 8 && percent == _requestedScale)
         {
             return;
         }
 
         _requestedWidth = width;
         _requestedHeight = height;
-        Queue(() => _session.RequestResizeAsync(width, height));
+        _requestedScale = percent;
+        Queue(() => _session.RequestResizeAsync(width, height, percent));
     }
 
     public override void Render(DrawingContext context)
@@ -208,7 +215,14 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         base.Render(context);
         if (_bitmap is { } bitmap)
         {
-            context.DrawImage(bitmap, new Rect(bitmap.Size), DesktopViewport);
+            // 1:1 (the normal case): copy pixels exactly, no filtering at all. Real scaling: high-quality filter.
+            Rect target = DesktopViewport;
+            double s = RenderScaling;
+            bool native = Math.Abs(target.Width * s - bitmap.PixelSize.Width) < 0.5 && Math.Abs(target.Height * s - bitmap.PixelSize.Height) < 0.5;
+            using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = native ? BitmapInterpolationMode.None : BitmapInterpolationMode.HighQuality }))
+            {
+                context.DrawImage(bitmap, new Rect(bitmap.Size), target);
+            }
         }
 
         if (!string.IsNullOrEmpty(_preedit))
@@ -320,7 +334,51 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         base.OnAttachedToVisualTree(e);
         _window = TopLevel.GetTopLevel(this) as Window;
         _window?.Activated += OnWindowActivated;
+        _window?.PropertyChanged += OnWindowPropertyChanged;
+        _topLevel = TopLevel.GetTopLevel(this);
+        _topLevel?.ScalingChanged += OnScalingChanged;
+        _attached = true;
+        UpdatePresentation();
     }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty)
+        {
+            UpdatePresentation();
+        }
+    }
+
+    /// <summary>Moving to a monitor with another DPI changes the device-pixel size without changing Bounds.</summary>
+    private void OnScalingChanged(object? sender, EventArgs e) => ScheduleResize();
+
+    /// <summary>
+    /// The host detaches an inactive tab's view (and a minimized window shows nothing): stop presenting and ask
+    /// the server to pause display updates, so a background session costs no bandwidth, decoding or copying.
+    /// Changes keep accumulating in the session's dirty region; coming back resumes updates, asks for a repaint
+    /// and presents whatever is pending.
+    /// </summary>
+    private void UpdatePresentation()
+    {
+        bool shown = _attached && _window?.WindowState != WindowState.Minimized;
+        if (shown == _shown || _disposed != 0)
+        {
+            return;
+        }
+
+        _shown = shown;
+        Queue(async () =>
+        {
+            try { await _session.SetDisplayUpdatesAsync(shown); }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or IOException) { /* not connected */ }
+        });
+        if (shown)
+        {
+            OnFrame();
+        }
+    }
+
+    internal bool IsPresenting => _shown;
     private void OnWindowActivated(object? sender, EventArgs e)
     {
         // Returning from another application can retain keyboard focus on this desktop.
@@ -332,7 +390,11 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _window?.Activated -= OnWindowActivated;
-        _window = null; ReleaseInput();
+        _window?.PropertyChanged -= OnWindowPropertyChanged;
+        _topLevel?.ScalingChanged -= OnScalingChanged;
+        _window = null; _topLevel = null; ReleaseInput();
+        _attached = false;
+        UpdatePresentation();
         base.OnDetachedFromVisualTree(e);
     }
     protected override void OnKeyDown(KeyEventArgs e)
@@ -502,7 +564,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         if (_disposed != 0) { await _inputPump; return; }
 
         _window?.Activated -= OnWindowActivated;
-        _window = null; ReleaseInput();
+        _window?.PropertyChanged -= OnWindowPropertyChanged;
+        _topLevel?.ScalingChanged -= OnScalingChanged;
+        _window = null; _topLevel = null; ReleaseInput();
         _resizeTimer.Stop();
         _ = Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;

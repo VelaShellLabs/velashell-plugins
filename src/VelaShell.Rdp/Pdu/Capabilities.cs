@@ -11,7 +11,7 @@ namespace VelaShell.Rdp.Pdu;
 internal static class Capabilities
 {
     /// <summary>The share id plus the server's active desktop size (0×0 when the caps omit a bitmap set).</summary>
-    internal readonly record struct DemandActive(uint ShareId, int Width, int Height);
+    internal readonly record struct DemandActive(uint ShareId, int Width, int Height, bool RefreshRect = false, bool SuppressOutput = false);
 
     /// <summary>Largest desktop area adopted from a server (8K UHD).</summary>
     internal const long MaxDesktopPixels = 7680L * 4320;
@@ -29,6 +29,7 @@ internal static class Capabilities
         _ = r.U16LE();                 // lengthCombinedCapabilities
         r.Skip(lenSource);
         int width = 0, height = 0;
+        bool refreshRect = false, suppressOutput = false;
         if (r.Remaining >= 4)
         {
             ushort count = r.U16LE();
@@ -43,7 +44,14 @@ internal static class Capabilities
                     break;
                 }
 
-                if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
+                if (type == 1 && bodyLen >= 20) // CAPSTYPE_GENERAL: may the client pause / re-request updates?
+                {
+                    r.Skip(18);
+                    refreshRect = r.U8() != 0;
+                    suppressOutput = r.U8() != 0;
+                    r.Skip(bodyLen - 20);
+                }
+                else if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
                 {
                     r.Skip(8);     // preferredBitsPerPixel + receive{1,4,8}BitsPerPixel
                     width = r.U16LE();
@@ -63,7 +71,7 @@ internal static class Capabilities
             width = height = 0;
         }
 
-        return new DemandActive(shareId, width, height);
+        return new DemandActive(shareId, width, height, refreshRect, suppressOutput);
     }
 
     internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels)
@@ -115,12 +123,14 @@ internal static class Capabilities
         w.U16LE(0x0200);   // protocolVersion
         w.U16LE(0);        // pad
         w.U16LE(0);        // compressionTypes
-        w.U16LE(0x0001 | 0x0004); // extraFlags: FASTPATH_OUTPUT_SUPPORTED | LONG_CREDENTIALS_SUPPORTED
+        // extraFlags: FASTPATH_OUTPUT_SUPPORTED | NO_BITMAP_COMPRESSION_HDR (8 bytes less per bitmap; the parser
+        // handles both) | LONG_CREDENTIALS_SUPPORTED
+        w.U16LE(0x0001 | 0x0400 | 0x0004);
         w.U16LE(0);        // updateCapabilityFlag
         w.U16LE(0);        // remoteUnshareFlag
         w.U16LE(0);        // compressionLevel
-        w.U8(0);           // refreshRectSupport
-        w.U8(0);           // suppressOutputSupport
+        w.U8(1);           // refreshRectSupport (we may send Refresh Rect)
+        w.U8(1);           // suppressOutputSupport (we may send Suppress Output for a hidden view)
     }
 
     private static void Bitmap(ByteWriter w, int width, int height, int bpp)
@@ -136,7 +146,10 @@ internal static class Capabilities
         w.U16LE(1);             // desktopResizeFlag
         w.U16LE(1);             // bitmapCompressionFlag
         w.U8(0);                // highColorFlags
-        w.U8(0);                // drawingFlags
+        // drawingFlags: DRAW_ALLOW_SKIP_ALPHA (0x08) lets a 32 bpp server omit the planar alpha plane (desktop alpha
+        // is opaque anyway). No colour-loss or chroma subsampling: lossless, and it avoids the servers that disagree
+        // about R/B order under dynamic colour fidelity.
+        w.U8(0x08);
         w.U16LE(1);             // multipleRectangleSupport
         w.U16LE(0);             // pad
     }

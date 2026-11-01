@@ -49,4 +49,17 @@ public interface IRdpSession : IRdpClipboardTransport, IAsyncDisposable
     /// display-control channel; the desktop then keeps its negotiated size and is scaled to fit.
     /// </summary>
     Task RequestResizeAsync(int width, int height, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="RequestResizeAsync(int, int, CancellationToken)"/> with the local display scale in percent (100 at
+    /// 96 dpi, 150 on a 150% display), so the remote renders its UI at the local text size. Same pixel count.
+    /// </summary>
+    Task RequestResizeAsync(int width, int height, int scalePercent, CancellationToken ct = default) => RequestResizeAsync(width, height, ct);
+
+    /// <summary>
+    /// Tells the server whether the desktop is being shown. A hidden or minimized view passes
+    /// <see langword="false"/>: the server stops sending display updates (no bandwidth, no decoding) when it supports
+    /// Suppress Output. <see langword="true"/> resumes them and asks for a full repaint. A no-op otherwise.
+    /// </summary>
+    Task SetDisplayUpdatesAsync(bool visible, CancellationToken ct = default) => Task.CompletedTask;
 }

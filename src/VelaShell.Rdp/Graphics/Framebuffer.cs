@@ -72,7 +72,17 @@ internal sealed class Framebuffer
         int needed = scanline * height;   // ≤ 8192 × 8192 × 4, fits an int
         byte[]? decoded = null;
         ReadOnlySpan<byte> pixels;
-        if (compressed)
+        bool topDown = false;
+        if (compressed && bpp == 32)
+        {
+            // 32 bpp compressed bitmaps are RDP 6.0 planar (MS-RDPEGDI 2.2.2.5.1), not interleaved RLE. The planar
+            // decoder writes a top-down BGRA image, so it is not flipped again below.
+            decoded = ArrayPool<byte>.Shared.Rent(needed);
+            Planar.Decompress(data, decoded.AsSpan(0, needed), width, height);
+            pixels = decoded.AsSpan(0, needed);
+            topDown = true;
+        }
+        else if (compressed)
         {
             decoded = ArrayPool<byte>.Shared.Rent(needed);
             int written = InterleavedRle.Decompress(data, decoded.AsSpan(0, needed), width, height, bytesPerPixel);
@@ -96,8 +106,8 @@ internal sealed class Framebuffer
         {
             for (int row = 0; row < visibleHeight; row++)
             {
-                // Bottom-up DIB: destination row (top + row) is source row (height - 1 - row).
-                ConvertRow(pixels.Slice((height - 1 - row) * scanline, visibleWidth * bytesPerPixel),
+                // Bottom-up DIB: destination row (top + row) is source row (height - 1 - row); planar output is top-down.
+                ConvertRow(pixels.Slice((topDown ? row : height - 1 - row) * scanline, visibleWidth * bytesPerPixel),
                     staging.AsSpan(row * visibleWidth * 4, visibleWidth * 4), bpp);
             }
 

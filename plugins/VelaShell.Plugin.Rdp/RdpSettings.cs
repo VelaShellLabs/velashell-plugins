@@ -10,12 +10,20 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     string CertificateHost, string CertificateSha256, IReadOnlyList<RdpDrive> Drives, RdpSecurity Security = RdpSecurity.Auto,
     bool Audio = false,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag
-        | RdpPerformanceFlags.DisableMenuAnimations | RdpPerformanceFlags.DisableThemes)
+        | RdpPerformanceFlags.DisableMenuAnimations | RdpPerformanceFlags.DisableThemes,
+    int ColorDepth = RdpSettings.DefaultColorDepth)
 {
     internal const string TrustedThumbprintKey = "trustedThumbprint";
 
     /// <summary>Setting key of the security-layer choice (<c>auto</c> / <c>nla</c> / <c>tls</c>).</summary>
     internal const string SecurityKey = "security";
+
+    /// <summary>Setting key of the colour depth (<c>16</c> / <c>24</c> / <c>32</c>), on the experience page.</summary>
+    internal const string ColorDepthKey = "colorDepth";
+
+    /// <summary>Colour depth for connections that never chose one: 32-bit "highest quality" like mstsc — lossless RDP 6.0
+    /// planar with the alpha plane skipped, so no 16-bit banding (verified pixel-identical to 24-bit against xrdp).</summary>
+    internal const int DefaultColorDepth = 32;
 
     /// <summary>Page key of the drive-mapping page (local-disk checkboxes + custom folders).</summary>
     internal const string DrivesPage = "drives";
@@ -112,6 +120,15 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             _ => throw new ProtocolConnectionException(loc.Format("Invalid", SecurityKey))
         };
 
+        int colorDepth = request.GetString(ColorDepthKey).Trim() switch
+        {
+            "" => DefaultColorDepth,
+            "16" => 16,
+            "24" => 24,
+            "32" => 32,
+            _ => throw new ProtocolConnectionException(loc.Format("Invalid", ColorDepthKey))
+        };
+
         string certificateHost = request.Tunnel?.TargetHost ?? request.Host;
         if (string.IsNullOrWhiteSpace(certificateHost) || certificateHost.Any(char.IsControl))
         {
@@ -161,7 +178,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             drives.Add(new(name, Path.GetFullPath(path)));
         }
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
-            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance);
+            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance, colorDepth);
     }
 
     public static IReadOnlyList<ProtocolSettingField> Declare(Loc loc) => Declare(loc, LocalDisks.Enumerate());
@@ -218,6 +235,18 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             Placeholder = several,
             DefaultValue = "",
             Page = DrivesPage
+        });
+        // Colour depth heads the experience page (mstsc puts it on its display tab): 16-bit saves bandwidth, 24 and 32
+        // bit are full colour (32 uses the RDP 6.0 planar codec).
+        fields.Add(new()
+        {
+            Key = ColorDepthKey,
+            Label = loc["ColorDepth"],
+            Hint = loc["ColorDepthHint"],
+            Kind = ProtocolSettingKind.Choice,
+            DefaultValue = DefaultColorDepth.ToString(CultureInfo.InvariantCulture),
+            Page = ExperiencePage,
+            Choices = [new("16", loc["ColorDepth16"]), new("24", loc["ColorDepth24"]), new("32", loc["ColorDepth32"])]
         });
         // Experience toggles live on their own page, like mstsc's "Experience" tab. All unticked by
         // default: the responsiveness-first profile (no wallpaper, animations, themes or audio).

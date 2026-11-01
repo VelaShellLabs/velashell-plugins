@@ -174,9 +174,55 @@ public sealed class RdpManagedInteropTests
     }
 
     [TestMethod]
+    public async Task FullColourDepthsDecodeTheSameDesktop()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        byte[] pin = await LearnPinAsync(target);
+        var loc = new Loc("en");
+        var shots = new Dictionary<int, byte[]>();
+        foreach (int depth in new[] { 24, 32, 16 })
+        {
+            RdpViewMetrics.ResetForTest();
+            WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+                ("width", "1024"), ("height", "768"), ("colorDepth", depth.ToString(System.Globalization.CultureInfo.InvariantCulture))) with
+            { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+            IRdpSession session = await RdpConnector.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
+            try
+            {
+                byte[] surface = new byte[1024 * 768 * 4];
+                int changes = 0;
+                DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+                while (DateTime.UtcNow < deadline)
+                {
+                    RdpFrameCopy copy = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+                    Assert.IsFalse(copy.SizeChanged, $"{depth} bpp: desktop is {copy.Width}x{copy.Height}");
+                    changes += copy.Changed.IsEmpty ? 0 : 1;
+                    await Task.Delay(150);
+                }
+                Console.WriteLine($"{depth} bpp: {changes} copies, distinct colours ~{CountDistinct(surface)}");
+                Assert.IsTrue(session.IsConnected, $"{depth} bpp: session dropped (decode failure?)");
+                Assert.IsGreaterThan(1, CountDistinct(surface), $"{depth} bpp: blank desktop");
+                shots[depth] = surface;
+            }
+            finally { await session.DisposeAsync(); }
+        }
+
+        // 24 and 32 bit are both lossless full colour (32 comes as RDP 6.0 planar, 24 as interleaved RLE): the desktop
+        // above the taskbar must decode to the same pixels — this pins planar orientation and channel order.
+        int differing = 0;
+        for (int i = 0; i < 1024 * 600 * 4; i += 4)
+        {
+            differing += shots[24].AsSpan(i, 3).SequenceEqual(shots[32].AsSpan(i, 3)) ? 0 : 1;
+        }
+        Console.WriteLine($"24 vs 32 bpp: {differing} of {1024 * 600} pixels differ");
+        Assert.IsLessThan(1024 * 600 / 100, differing, "24-bit and 32-bit decodes of the same desktop disagree.");
+    }
+
+    [TestMethod]
     public async Task ManagedSessionRendersThroughInterface()
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        RdpViewMetrics.ResetForTest();
         byte[] pin = await LearnPinAsync(target);
         Assert.HasCount(32, pin);
 

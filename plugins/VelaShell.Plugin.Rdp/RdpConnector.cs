@@ -17,6 +17,10 @@ internal static class RdpConnector
     internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct)
     {
         byte[]? pin = settings.CertificateSha256.Length == 64 ? Convert.FromHexString(settings.CertificateSha256) : null;
+        // Connect at the size and scale the view will have (the last view's, recorded when it laid out): starting at
+        // the configured size meant a full repaint, an immediate resize and a second full repaint. The configured
+        // size remains the fallback before any view exists, and for a server that cannot follow the window.
+        (int width, int height, int scale) = RdpViewMetrics.Last ?? (settings.Width, settings.Height, 100);
         var options = new RdpClientOptions
         {
             Host = request.Host,
@@ -24,9 +28,10 @@ internal static class RdpConnector
             Username = request.Username,
             Password = request.Password,
             Domain = settings.Domain,
-            Width = settings.Width,
-            Height = settings.Height,
-            ColorDepth = 16,
+            Width = width,
+            Height = height,
+            DesktopScaleFactor = scale,
+            ColorDepth = settings.ColorDepth,
             CertificatePin = pin,
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,

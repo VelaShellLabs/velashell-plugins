@@ -190,7 +190,7 @@ public sealed class RdpManagedSession : IRdpSession
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
             string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
-            options.Performance, options.AudioPlayback);
+            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor));
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions));
         if (options.DynamicResolution)
@@ -335,6 +335,27 @@ public sealed class RdpManagedSession : IRdpSession
     /// <summary>Asks the server, via the display-control channel, to resize the desktop to match the view.</summary>
     public Task RequestResizeAsync(int width, int height, CancellationToken cancellationToken) =>
         _drdynvc?.RequestResizeAsync(width, height) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Like <see cref="RequestResizeAsync(int, int, CancellationToken)"/>, also passing the display scale in percent
+    /// (150 for a 150% local display) so the remote UI renders at the local text size.
+    /// </summary>
+    public Task RequestResizeAsync(int width, int height, int scalePercent, CancellationToken cancellationToken = default) =>
+        _drdynvc?.RequestResizeAsync(width, height, scalePercent) ?? Task.CompletedTask;
+
+    public Task SetDisplayUpdatesAsync(bool visible, CancellationToken cancellationToken = default) => Guard(async () =>
+    {
+        if (_connection.ServerSupportsSuppressOutput)
+        {
+            await _connection.SendSuppressOutputAsync(visible, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Updates suppressed while hidden were never sent; ask for a full repaint when the view comes back.
+        if (visible && _connection.ServerSupportsRefreshRect)
+        {
+            await _connection.SendRefreshRectAsync(cancellationToken).ConfigureAwait(false);
+        }
+    });
 
     private async Task DrainCliprdrAsync()
     {

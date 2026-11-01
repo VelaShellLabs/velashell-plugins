@@ -176,6 +176,12 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     {
         _download.Update(download, upload: false, _connected, _loc);
         _upload.Update(upload, upload: true, _connected, _loc);
+        // Poll at 10 Hz only while bytes are moving; idle, once a second is enough to notice a new transfer start.
+        TimeSpan interval = TimeSpan.FromMilliseconds(download?.Active == true || upload?.Active == true ? 100 : 1000);
+        if (_transferTimer.Interval != interval)
+        {
+            _transferTimer.Interval = interval;
+        }
     }
 
     /// <summary>

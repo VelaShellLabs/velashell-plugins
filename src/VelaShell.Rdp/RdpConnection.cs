@@ -15,7 +15,7 @@ internal sealed record RdpConnectOptions(
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
-    bool AudioPlayback = false)
+    bool AudioPlayback = false, int ScaleFactor = 100)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -131,7 +131,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         // MCS + GCC.
         Stage = RdpConnectStage.Mcs;
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
-            (uint)selected, "VelaShell", 0x409, _options.Channels);
+            (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor);
         _mcs = new McsLayer(_transport);
         await _mcs.ConnectAsync(gcc, _options.Channels, ct).ConfigureAwait(false);
         _ioChannel = _mcs.Server.IoChannelId;
@@ -195,6 +195,8 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         Capabilities.DemandActive active = Capabilities.ReadDemandActive(ref r);
         _shareId = active.ShareId;
+        ServerSupportsSuppressOutput = active.SuppressOutput;
+        ServerSupportsRefreshRect = active.RefreshRect;
         // Adopt the resolution the server actually settled on (initial negotiation, or the result of
         // a display-control resize); keep the requested size only when the caps omit a bitmap set.
         if (active.Width > 0 && active.Height > 0) { _width = active.Width; _height = active.Height; }
@@ -321,7 +323,7 @@ internal sealed class RdpConnection : IAsyncDisposable
                     break;
                 case 2: // FIRST
                     _fragmentCode = code;
-                    _fragment.SetLength(0);
+                    ResetFragment();
                     _fragment.Write(updateData);
                     break;
                 case 3: // NEXT
@@ -337,13 +339,23 @@ internal sealed class RdpConnection : IAsyncDisposable
                         _fragment.Write(updateData);
                         painted |= ApplyFastPathUpdate(_fragmentCode, _fragment.GetBuffer().AsSpan(0, (int)_fragment.Length));
                     }
-                    _fragment.SetLength(0);
+                    ResetFragment();
                     break;
             }
         }
         if (painted)
         {
             FrameUpdated?.Invoke();
+        }
+    }
+
+    /// <summary>Empties the fast-path fragment buffer; a large update (up to 16 MB) does not keep its peak capacity alive.</summary>
+    private void ResetFragment()
+    {
+        _fragment.SetLength(0);
+        if (_fragment.Capacity > 1024 * 1024)
+        {
+            _fragment.Capacity = 64 * 1024;
         }
     }
 
@@ -397,6 +409,47 @@ internal sealed class RdpConnection : IAsyncDisposable
 
     internal Task SendMouseAsync(uint flags, uint x, uint y, CancellationToken ct) =>
         SendRawAsync(FastPathInput.Mouse(flags, x, y), ct);
+
+    /// <summary>Whether the server (General capability set) accepts TS_SUPPRESS_OUTPUT_PDU / TS_REFRESH_RECT_PDU.</summary>
+    internal bool ServerSupportsSuppressOutput { get; private set; }
+
+    internal bool ServerSupportsRefreshRect { get; private set; }
+
+    /// <summary>
+    /// TS_SUPPRESS_OUTPUT_PDU (MS-RDPBCGR 2.2.11.3.1): with <paramref name="allow"/> false the server stops sending
+    /// display updates (the view is hidden or minimized), with true it resumes for the whole desktop.
+    /// </summary>
+    internal Task SendSuppressOutputAsync(bool allow, CancellationToken ct)
+    {
+        var body = new ByteWriter(12);
+        body.U8(allow ? (byte)1 : (byte)0);
+        body.Zeros(3);
+        if (allow)
+        {
+            WriteDesktopRect(body);
+        }
+
+        return SendOnIoAsync(ShareControl.BuildDataPdu(_shareId, ShareDataType.SuppressOutput, _mcs.UserId, body.Span), ct);
+    }
+
+    /// <summary>TS_REFRESH_RECT_PDU (MS-RDPBCGR 2.2.11.2.1) for the whole desktop: asks the server to repaint it.</summary>
+    internal Task SendRefreshRectAsync(CancellationToken ct)
+    {
+        var body = new ByteWriter(12);
+        body.U8(1);              // numberOfAreas
+        body.Zeros(3);
+        WriteDesktopRect(body);
+        return SendOnIoAsync(ShareControl.BuildDataPdu(_shareId, ShareDataType.RefreshRect, _mcs.UserId, body.Span), ct);
+    }
+
+    private void WriteDesktopRect(ByteWriter body)
+    {
+        Framebuffer fb = Framebuffer;   // TS_RECTANGLE16, inclusive bounds
+        body.U16LE(0);
+        body.U16LE(0);
+        body.U16LE((ushort)Math.Max(0, fb.Width - 1));
+        body.U16LE((ushort)Math.Max(0, fb.Height - 1));
+    }
 
     internal ushort ChannelId(string name) => _mcs.Channels.TryGetValue(name, out ushort id) ? id : (ushort)0;
 
