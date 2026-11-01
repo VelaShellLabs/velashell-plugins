@@ -7,7 +7,10 @@ namespace VelaShell.Plugin.Rdp;
 
 internal sealed record RdpDrive(string Name, string Path);
 internal sealed record RdpSettings(string Domain, int Width, int Height, int TimeoutSeconds, bool Clipboard,
-    string CertificateHost, string CertificateSha256, IReadOnlyList<RdpDrive> Drives, RdpSecurity Security = RdpSecurity.Auto)
+    string CertificateHost, string CertificateSha256, IReadOnlyList<RdpDrive> Drives, RdpSecurity Security = RdpSecurity.Auto,
+    bool Audio = false,
+    RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag
+        | RdpPerformanceFlags.DisableMenuAnimations | RdpPerformanceFlags.DisableThemes)
 {
     internal const string TrustedThumbprintKey = "trustedThumbprint";
 
@@ -16,6 +19,13 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
     /// <summary>Page key of the drive-mapping page (local-disk checkboxes + custom folders).</summary>
     internal const string DrivesPage = "drives";
+
+    /// <summary>Page key of the experience page (audio and the desktop-feature toggles).</summary>
+    internal const string ExperiencePage = "experience";
+
+    /// <summary>Setting keys of the experience toggles, each a Boolean defaulting to off (the responsiveness-first profile).</summary>
+    internal const string AudioKey = "audio", WallpaperKey = "wallpaper", WindowDragKey = "windowDrag",
+        AnimationsKey = "animations", ThemesKey = "themes", FontSmoothingKey = "fontSmoothing";
 
     /// <summary>Setting-key prefix of a local-disk checkbox: <c>drive:&lt;LocalDisk.Id&gt;</c>.</summary>
     internal const string DiskKeyPrefix = "drive:";
@@ -60,11 +70,31 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
             return value;
         }
-        bool clipboard = false;
-        if (request.Settings.TryGetValue("clipboard", out string? clip) && !bool.TryParse(clip, out clipboard))
+        bool Flag(string key)
         {
-            Invalid("clipboard");
+            if (!request.Settings.TryGetValue(key, out string? raw) || string.IsNullOrWhiteSpace(raw))
+            {
+                return false;
+            }
+
+            if (!bool.TryParse(raw, out bool value))
+            {
+                Invalid(key);
+            }
+
+            return value;
         }
+        bool clipboard = Flag("clipboard");
+
+        // Experience toggles: each is phrased as "turn the feature on", so an unticked box (the default)
+        // keeps the bandwidth-saving profile. Font smoothing is an enable bit; the rest are disable bits.
+        bool audio = Flag(AudioKey);
+        RdpPerformanceFlags performance = RdpPerformanceFlags.None;
+        if (!Flag(WallpaperKey)) { performance |= RdpPerformanceFlags.DisableWallpaper; }
+        if (!Flag(WindowDragKey)) { performance |= RdpPerformanceFlags.DisableFullWindowDrag; }
+        if (!Flag(AnimationsKey)) { performance |= RdpPerformanceFlags.DisableMenuAnimations; }
+        if (!Flag(ThemesKey)) { performance |= RdpPerformanceFlags.DisableThemes; }
+        if (Flag(FontSmoothingKey)) { performance |= RdpPerformanceFlags.EnableFontSmoothing; }
 
         string pin = request.GetString(TrustedThumbprintKey).Replace(":", "", StringComparison.Ordinal).Trim();
         if (pin.Length != 0 && (pin.Length != 64 || !pin.All(char.IsAsciiHexDigit)))
@@ -131,7 +161,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             drives.Add(new(name, Path.GetFullPath(path)));
         }
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
-            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security);
+            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance);
     }
 
     public static IReadOnlyList<ProtocolSettingField> Declare(Loc loc) => Declare(loc, LocalDisks.Enumerate());
@@ -189,6 +219,17 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             DefaultValue = "",
             Page = DrivesPage
         });
+        // Experience toggles live on their own page, like mstsc's "Experience" tab. All unticked by
+        // default: the responsiveness-first profile (no wallpaper, animations, themes or audio).
+        foreach ((string key, string label) in new[]
+        {
+            (AudioKey, loc["ExpAudio"]), (WallpaperKey, loc["ExpWallpaper"]), (WindowDragKey, loc["ExpWindowDrag"]),
+            (AnimationsKey, loc["ExpAnimations"]), (ThemesKey, loc["ExpThemes"]), (FontSmoothingKey, loc["ExpFontSmoothing"])
+        })
+        {
+            fields.Add(new() { Key = key, Label = label, Kind = ProtocolSettingKind.Boolean, DefaultValue = "false", Page = ExperiencePage });
+        }
+
         fields.Add(new() { Key = "jumpSession", Label = loc["Jump"], Kind = ProtocolSettingKind.SshSession });
         fields.Add(new() { Key = TrustedThumbprintKey, Label = loc["Pin"], IsHidden = true });
         return fields;

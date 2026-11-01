@@ -13,6 +13,20 @@ public sealed class RdpSecurityTests
 {
     private const uint NtlmRefused = 0x80090302;   // SEC_E_UNSUPPORTED_FUNCTION
 
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ClientInfoRequestsADesktopSessionWithoutAudio(bool autoLogon)
+    {
+        byte[] packet = VelaShell.Rdp.Pdu.ClientInfo.Build("", "vela", "password", autoLogon, 0x07, audioPlayback: false);
+        uint flags = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(packet.AsSpan(8, 4));
+
+        // MS-RDPBCGR TS_INFO_PACKET: RemoteApp with no application can end immediately after logon.
+        Assert.AreEqual(0u, flags & 0x00008000u, "Desktop logons must not set INFO_RAIL.");
+        Assert.AreNotEqual(0u, flags & 0x00080000u, "Audio playback must be disabled with INFO_NOAUDIOPLAYBACK.");
+        Assert.AreEqual(autoLogon, (flags & 0x00000008u) != 0);
+    }
+
     private static RdpClientOptions Options(FakeRdpServer server, RdpSecurity security) => new()
     {
         Host = "127.0.0.1",

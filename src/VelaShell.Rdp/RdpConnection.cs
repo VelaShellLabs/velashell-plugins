@@ -12,7 +12,9 @@ namespace VelaShell.Rdp;
 internal sealed record RdpConnectOptions(
     string Host, int Port, string Username, string Password, string Domain,
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
-    IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto);
+    IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
+    RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
+    bool AudioPlayback = false);
 
 /// <summary>Raised when a virtual channel delivers data to the managed session.</summary>
 internal readonly record struct ChannelPayload(string ChannelName, byte[] Data);
@@ -33,6 +35,8 @@ internal sealed class RdpConnection : IAsyncDisposable
     private int _width;
     private int _height;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _channelWriteGates = new();
+    private readonly CancellationTokenSource _sendStop = new();
     private readonly Dictionary<ushort, string> _channelsById = [];
     private readonly Dictionary<ushort, MemoryStream> _vcReassembly = [];
     private readonly Lock _frameLock = new();
@@ -130,7 +134,8 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // Client Info on the I/O channel.
         Stage = RdpConnectStage.Login;
-        await SendOnIoAsync(ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true), ct).ConfigureAwait(false);
+        await SendOnIoAsync(ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
+            (uint)_options.Performance, _options.AudioPlayback), ct).ConfigureAwait(false);
 
         // Licensing then capability exchange.
         Stage = RdpConnectStage.Licensing;
@@ -341,7 +346,7 @@ internal sealed class RdpConnection : IAsyncDisposable
     /// <summary>Applies MPPC bulk decompression when the flags mark the payload compressed; otherwise passthrough.</summary>
     private ReadOnlySpan<byte> Decompress(ReadOnlySpan<byte> data, byte compressionFlags)
     {
-        if ((compressionFlags & Graphics.Mppc.PacketCompressed) == 0)
+        if ((compressionFlags & (Graphics.Mppc.PacketCompressed | Graphics.Mppc.PacketAtFront | Graphics.Mppc.PacketFlushed)) == 0)
         {
             return data;
         }
@@ -395,7 +400,7 @@ internal sealed class RdpConnection : IAsyncDisposable
     internal ushort ChannelId(string name) => _mcs.Channels.TryGetValue(name, out ushort id) ? id : (ushort)0;
 
     /// <summary>Sends a complete virtual-channel PDU, chunked with CHANNEL_PDU_HEADER (MS-RDPBCGR 2.2.6.1).</summary>
-    internal Task SendVirtualChannelAsync(string name, byte[] data, CancellationToken ct)
+    internal async Task SendVirtualChannelAsync(string name, byte[] data, CancellationToken ct)
     {
         ushort channelId = ChannelId(name);
         if (channelId == 0)
@@ -403,8 +408,16 @@ internal sealed class RdpConnection : IAsyncDisposable
             throw new RdpProtocolException($"Virtual channel '{name}' was not joined.");
         }
 
-        return Guarded(async () =>
+        SemaphoreSlim channelGate = _channelWriteGates.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ct, _sendStop.Token);
+        await channelGate.WaitAsync(waiting.Token).ConfigureAwait(false);
+        // A partially sent channel message cannot be abandoned. Finish its fragments, or close
+        // the connection on a stalled write; cancellation can prevent the next message.
+        using var sending = CancellationTokenSource.CreateLinkedTokenSource(_sendStop.Token);
+        sending.CancelAfter(TimeSpan.FromSeconds(30));
+        try
         {
+            waiting.Token.ThrowIfCancellationRequested();
             int offset = 0;
             bool first = true;
             do
@@ -413,13 +426,23 @@ internal sealed class RdpConnection : IAsyncDisposable
                 uint flags = (first ? ChannelFlagFirst : 0u) | (offset + chunk >= data.Length ? ChannelFlagLast : 0u);
                 var w = new ByteWriter(chunk + 8);
                 w.U32LE((uint)data.Length);     // total length of the reassembled PDU
-                w.U32LE(flags);
+                // CHANNEL_OPTION_SHOW_PROTOCOL requires the header to reach the server's channel consumer.
+                bool showProtocol = _options.Channels.Any(channel => channel.Name == name && (channel.Options & 0x00200000) != 0);
+                w.U32LE(flags | (showProtocol ? 0x10u : 0u));
                 w.Bytes(data.AsSpan(offset, chunk));
-                await _mcs.SendOnChannelAsync(channelId, w.ToArray(), ct).ConfigureAwait(false);
+                await Guarded(() => _mcs.SendOnChannelAsync(channelId, w.ToArray(), sending.Token), sending.Token).ConfigureAwait(false);
                 offset += chunk;
                 first = false;
+                if (offset < data.Length) { await Task.Yield(); }
             } while (offset < data.Length);
-        }, ct);
+        }
+        catch (Exception ex) when (sending.IsCancellationRequested || ex is IOException)
+        {
+            _sendStop.Cancel();
+            _tcp?.Close();
+            throw;
+        }
+        finally { channelGate.Release(); }
     }
 
     private void ReassembleChannel(ushort channelId, string name, byte[] payload)
@@ -427,7 +450,8 @@ internal sealed class RdpConnection : IAsyncDisposable
         var r = new ByteReader(payload);
         uint totalLength = r.U32LE();
         uint flags = r.U32LE();
-        ReadOnlySpan<byte> chunk = r.Rest();
+        // CHANNEL_PACKET_* occupies bits 16–23 and shares the bulk history with graphics.
+        ReadOnlySpan<byte> chunk = Decompress(r.Rest(), (byte)(flags >> 16));
         if ((flags & ChannelFlagFirst) != 0 || !_vcReassembly.TryGetValue(channelId, out MemoryStream? buffer))
         {
             buffer = new MemoryStream();
@@ -497,6 +521,7 @@ internal sealed class RdpConnection : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _sendStop.Cancel();
         try { _tcp?.Close(); } catch { /* ignore */ }
         _tcp?.Dispose();
         _writeGate.Dispose();

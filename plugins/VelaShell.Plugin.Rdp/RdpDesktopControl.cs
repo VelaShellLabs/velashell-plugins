@@ -20,6 +20,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
     private readonly Task _inputPump;
     private Task? _overflowShutdown;
+    private Task? _focusPublication;
     private readonly HashSet<uint> _keys = [];
     private readonly HashSet<uint> _buttons = [];
     private WriteableBitmap? _bitmap;
@@ -35,6 +36,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private readonly DispatcherTimer _resizeTimer;
     private int _requestedWidth;
     private int _requestedHeight;
+    private Window? _window;
 
     internal Func<Task>? PublishClipboard { get; set; }
     internal Action? OperationFailed { get; set; }
@@ -233,12 +235,25 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         await _session.KeyAsync(0x1d, false);
     });
 
+    private void PublishOnFocus(Func<Task> publish)
+    {
+        if (_focusPublication is { IsCompleted: false }) { return; }
+        _focusPublication = PublishOnFocusAsync(publish);
+    }
+
+    private async Task PublishOnFocusAsync(Func<Task> publish)
+    {
+        try { await publish(); }
+        catch (OperationCanceledException) { }
+        catch (Exception) { if (_disposed == 0) { OperationFailed?.Invoke(); } }
+    }
+
     protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
         if (PublishClipboard is { } publish)
         {
-            Queue(publish);
+            PublishOnFocus(publish);
         }
     }
     protected override void OnLostFocus(FocusChangedEventArgs e)
@@ -246,9 +261,24 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         ReleaseInput();
         base.OnLostFocus(e);
     }
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _window = TopLevel.GetTopLevel(this) as Window;
+        _window?.Activated += OnWindowActivated;
+    }
+    private void OnWindowActivated(object? sender, EventArgs e)
+    {
+        // Returning from another application can retain keyboard focus on this desktop.
+        if (IsFocused && IsEffectivelyVisible && IsEffectivelyEnabled && PublishClipboard is { } publish)
+        {
+            PublishOnFocus(publish);
+        }
+    }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        ReleaseInput();
+        _window?.Activated -= OnWindowActivated;
+        _window = null; ReleaseInput();
         base.OnDetachedFromVisualTree(e);
     }
     protected override void OnKeyDown(KeyEventArgs e)
@@ -416,7 +446,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_disposed != 0) { await _inputPump; return; }
-        ReleaseInput();
+
+        _window?.Activated -= OnWindowActivated;
+        _window = null; ReleaseInput();
         _resizeTimer.Stop();
         _ = Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;

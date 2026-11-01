@@ -22,6 +22,8 @@ public sealed class RdpManagedSession : IRdpSession
     private int _reachedLogon;
     private CliprdrChannel? _cliprdr;
     private Channel<byte[]>? _cliprdrQueue;
+    private Exception? _clipboardFailure;
+    private long _clipboardQueuedBytes;
     private Task? _cliprdrWorker;
     private RdpdrChannel? _rdpdr;
     private Channel<byte[]>? _rdpdrQueue;
@@ -58,6 +60,11 @@ public sealed class RdpManagedSession : IRdpSession
             lock (_clipGate)
             {
                 _clipboardHandlers += value;
+                if (_clipboardFailure is { } error)
+                {
+                    SafeClip(value, new RdpClipboardEvent(10, 0, 0, System.Text.Encoding.UTF8.GetBytes(error.Message)));
+                    return;
+                }
                 if (_lastReady is { } ready)
                 {
                     SafeClip(value, ready);
@@ -174,13 +181,21 @@ public sealed class RdpManagedSession : IRdpSession
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
         }
 
-        channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
+        if (options.DynamicResolution)
+        {
+            channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
+        }
+
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
-            string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security);
+            string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
+            options.Performance, options.AudioPlayback);
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions));
-        session.EnableDynamicChannels();
+        if (options.DynamicResolution)
+        {
+            session.EnableDynamicChannels();
+        }
         if (options.Clipboard)
         {
             session.EnableClipboard();
@@ -230,9 +245,13 @@ public sealed class RdpManagedSession : IRdpSession
 
     private void EnableClipboard()
     {
-        _cliprdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite });
+        _cliprdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         _cliprdr = new CliprdrChannel(
-            send: pdu => _connection.SendVirtualChannelAsync("cliprdr", pdu, _stop.Token),
+            send: async (pdu, token) =>
+            {
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
+                await _connection.SendVirtualChannelAsync("cliprdr", pdu, linked.Token).ConfigureAwait(false);
+            },
             raise: RaiseClipboard);
         _cliprdrWorker = DrainCliprdrAsync();
     }
@@ -248,11 +267,20 @@ public sealed class RdpManagedSession : IRdpSession
     {
         if (payload.ChannelName == "cliprdr")
         {
-            _ = (_cliprdrQueue?.Writer.TryWrite(payload.Data));
+            if (_clipboardFailure is not null) { return; }
+            long queued = Interlocked.Add(ref _clipboardQueuedBytes, payload.Data.Length);
+            if (queued > 32 * 1024 * 1024 || _cliprdrQueue?.Writer.TryWrite(payload.Data) != true)
+            {
+                Interlocked.Add(ref _clipboardQueuedBytes, -payload.Data.Length);
+                FailClipboard(new IOException("RDP clipboard queue capacity exceeded."));
+            }
         }
         else if (payload.ChannelName == "rdpdr")
         {
-            _ = (_rdpdrQueue?.Writer.TryWrite(payload.Data));
+            if (_rdpdrQueue?.Writer.TryWrite(payload.Data) != true)
+            {
+                throw new IOException("RDP drive request queue capacity exceeded; reconnect the session.");
+            }
         }
         else if (payload.ChannelName == "drdynvc")
         {
@@ -313,12 +341,21 @@ public sealed class RdpManagedSession : IRdpSession
         {
             await foreach (byte[] pdu in _cliprdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
-                try { await _cliprdr.ProcessAsync(pdu).ConfigureAwait(false); }
+                Interlocked.Add(ref _clipboardQueuedBytes, -pdu.Length);
+                if (_clipboardFailure is not null) { continue; }
+                try { await _cliprdr.ProcessAsync(pdu, _stop.Token).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
-                catch { /* a malformed clipboard PDU must not drop the session */ }
+                catch (Exception ex) { FailClipboard(ex); }
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+    }
+
+    private void FailClipboard(Exception error)
+    {
+        if (Interlocked.CompareExchange(ref _clipboardFailure, error, null) is not null) { return; }
+        _cliprdrQueue?.Writer.TryComplete();
+        RaiseClipboard(new RdpClipboardEvent(10, 0, 0, System.Text.Encoding.UTF8.GetBytes(error.Message)));
     }
 
     private void OnFrameUpdated()
@@ -350,6 +387,7 @@ public sealed class RdpManagedSession : IRdpSession
         finally
         {
             Volatile.Write(ref _isConnected, 0);
+            _stop.Cancel();
             // A clean end (the server dropped the session) after a Set Error Info PDU means the server told us
             // why: surface that as the disconnect cause so the reason is not lost (e.g. signed out, licence).
             uint errorInfo = Volatile.Read(ref _errorInfo);
@@ -374,11 +412,20 @@ public sealed class RdpManagedSession : IRdpSession
         Guard(() => _connection.SendMouseAsync(flags, x, y, ct));
 
     // ---- Clipboard transport → cliprdr channel (inert when clipboard is disabled) ----
-    public Task OfferFormatsAsync(string formats, CancellationToken cancellationToken) => _cliprdr?.OfferFormatsAsync(formats) ?? Task.CompletedTask;
-    public Task RequestFormatAsync(uint format, CancellationToken cancellationToken) => _cliprdr?.RequestFormatAsync(format) ?? Task.CompletedTask;
-    public Task RespondFormatAsync(byte[] data, bool success, CancellationToken cancellationToken) => _cliprdr?.RespondFormatAsync(data, success) ?? Task.CompletedTask;
-    public Task RequestFileAsync(uint stream, uint index, uint flags, ulong offset, uint length, CancellationToken cancellationToken) => _cliprdr?.RequestFileAsync(stream, index, flags, offset, length) ?? Task.CompletedTask;
-    public Task RespondFileAsync(uint stream, byte[] data, bool success, CancellationToken cancellationToken) => _cliprdr?.RespondFileAsync(stream, data, success) ?? Task.CompletedTask;
+    public Task OfferFormatsAsync(string formats, CancellationToken cancellationToken) => Clipboard(channel => channel.OfferFormatsAsync(formats, cancellationToken));
+    public Task RequestFormatAsync(uint format, CancellationToken cancellationToken) => Clipboard(channel => channel.RequestFormatAsync(format, cancellationToken));
+    public Task RespondFormatAsync(byte[] data, bool success, CancellationToken cancellationToken) => Clipboard(channel => channel.RespondFormatAsync(data, success, cancellationToken));
+    public bool SupportsClipboardLock => _cliprdr?.SupportsClipboardLock == true;
+    public Task LockClipboardAsync(uint id, bool locked, CancellationToken cancellationToken) => Clipboard(channel => channel.LockClipboardAsync(id, locked, cancellationToken));
+    public Task RequestFileVersionAsync(uint stream, uint index, uint flags, ulong offset, uint length, uint? clipDataId, CancellationToken cancellationToken) => Clipboard(channel => channel.RequestFileAsync(stream, index, flags, offset, length, clipDataId, cancellationToken));
+    public Task RequestFileAsync(uint stream, uint index, uint flags, ulong offset, uint length, CancellationToken cancellationToken) => Clipboard(channel => channel.RequestFileAsync(stream, index, flags, offset, length, ct: cancellationToken));
+    public Task RespondFileAsync(uint stream, byte[] data, bool success, CancellationToken cancellationToken) => Clipboard(channel => channel.RespondFileAsync(stream, data, success, cancellationToken));
+
+    private Task Clipboard(Func<CliprdrChannel, Task> action)
+    {
+        if (_clipboardFailure is { } error) { return Task.FromException(new IOException("RDP clipboard sharing has stopped.", error)); }
+        return _cliprdr is { } channel ? action(channel) : Task.CompletedTask;
+    }
 
     private async Task Guard(Func<Task> action)
     {

@@ -9,6 +9,7 @@ using VelaShell.Plugin.Rdp.Tests;
 using VelaShell.PluginSdk.Testing;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
+using VelaShell.Rdp.Channels;
 
 [assembly: AvaloniaTestApplication(typeof(RdpHeadlessApp))]
 
@@ -37,6 +38,9 @@ public sealed class RdpHeadlessTests
         window.UpdateLayout();
         Assert.AreEqual(36d, view.RowDefinitions[0].ActualHeight);
         Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
+        var toolbar = (StackPanel)((Border)view.Children[0]).Child!;
+        CollectionAssert.AreEqual(new[] { "Ctrl+Alt+Delete" },
+            toolbar.Children.OfType<Button>().Select(button => (string)button.Content!).ToArray());
         view.ApplyLocale(new("ja"));
         Assert.IsTrue(session.IsConnected);
         session.Emit(new(2, 1, [0, 0, 0, 255, 255, 255, 255, 255]));
@@ -44,6 +48,78 @@ public sealed class RdpHeadlessTests
         Assert.AreEqual(2, view.Desktop.DesktopWidth);
         Assert.AreEqual(1, view.Desktop.DesktopHeight);
         window.Close();
+    });
+
+    [TestMethod]
+    public void TransferProgressNeverChangesDesktopViewportHeight() => Run(async () =>
+    {
+        using var context = new TestPluginContext();
+        var session = new FakeRdpSession();
+        var settings = RdpSettings.From(RdpSettingsTests.Request(), new("en"));
+        await using var view = new RdpWorkspaceView(session, context, settings, new("en"));
+        var window = new Window { Width = 800, Height = 600, Content = view };
+        window.Show();
+        window.UpdateLayout();
+        double desktopHeight = view.RowDefinitions[1].ActualHeight;
+        foreach (string state in new[] { "Ready", "Preparing", "Transferring", "Retrying", "Sent", "Delivered", "Completed", "Cancelled", "Failed" })
+        {
+            view.UpdateTransfers(new(state, 12, 100, new string('x', 260)), new(state, 24, 100));
+            window.UpdateLayout();
+            Assert.AreEqual(desktopHeight, view.RowDefinitions[1].ActualHeight);
+            Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
+        }
+        view.UpdateTransfers(null, null);
+        window.UpdateLayout();
+        Assert.AreEqual(desktopHeight, view.RowDefinitions[1].ActualHeight);
+        session.Emit(new(2, 1, new byte[8]));
+        Dispatcher.UIThread.RunJobs();
+        Assert.AreEqual(2, view.Desktop.DesktopWidth);
+        window.Close();
+    });
+
+    [TestMethod]
+    public void TransferBarsDoNotOverlapCancelIcons() => Run(async () =>
+    {
+        using var context = new TestPluginContext();
+        var settings = RdpSettings.From(RdpSettingsTests.Request(), new("en"));
+        await using var view = new RdpWorkspaceView(new FakeRdpSession(), context, settings, new("en"));
+        var window = new Window { Width = 800, Height = 600, Content = view };
+        window.Show();
+        foreach (int width in new[] { 400, 800, 1200 })
+        {
+            window.Width = width;
+            view.UpdateTransfers(new("Transferring", 50, 100, new string('x', 260)), new("Transferring", 50, 100));
+            window.UpdateLayout();
+            var footer = (Border)view.Children[3];
+            var transfers = (Grid)((Grid)footer.Child!).Children[1];
+            foreach (Grid row in transfers.Children.Cast<Grid>())
+            {
+                var bar = (ProgressBar)row.Children[1];
+                var cancel = (Button)row.Children[2];
+                Assert.IsTrue(bar.Bounds.Right <= cancel.Bounds.Left, $"Overlap at width {width}");
+                Assert.IsTrue(cancel.Bounds.Right <= row.Bounds.Width);
+                Assert.IsInstanceOfType<Avalonia.Controls.Shapes.Path>(cancel.Content);
+                Assert.AreEqual("Cancel", Avalonia.Automation.AutomationProperties.GetName(cancel));
+            }
+            Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
+        }
+        window.Close();
+    });
+
+    [TestMethod]
+    public void FocusPublicationDoesNotHoldTheKeyboardQueue() => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        var publish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        desktop.PublishClipboard = () => publish.Task;
+        var window = new Window { Content = desktop };
+        window.Show();
+        desktop.Focus();
+        var input = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        desktop.Queue(() => { input.SetResult(); return Task.CompletedTask; });
+        try { await input.Task.WaitAsync(TimeSpan.FromSeconds(1)); }
+        finally { publish.TrySetResult(); window.Close(); }
     });
 
     [TestMethod]
@@ -96,6 +172,25 @@ public sealed class RdpHeadlessTests
         await desktop.DisposeAsync();
         Assert.AreEqual((0x1du, false), session.Keys[^1]);
     });
+    [TestMethod]
+    public void ControlVWaitsForCliprdrServerAcknowledgement() => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 1280, 720);
+        var offered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var channel = new CliprdrChannel(_ => { offered.SetResult(); return Task.CompletedTask; }, _ => { });
+        desktop.PublishClipboard = () => channel.OfferFormatsAsync("13\t\n");
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.V, PhysicalKey = PhysicalKey.V, KeyModifiers = KeyModifiers.Control });
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.V, PhysicalKey = PhysicalKey.V, KeyModifiers = KeyModifiers.Control });
+        await offered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.IsEmpty(session.Keys);
+        await channel.ProcessAsync([3, 0, 1, 0, 0, 0, 0, 0]);
+        var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        desktop.Queue(() => { drained.SetResult(); return Task.CompletedTask; });
+        await drained.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        CollectionAssert.AreEqual(new (uint, bool)[] { (0x2f, true), (0x2f, false) }, session.Keys);
+    });
+
     [TestMethod]
     public void CoalescedMouseMovesCannotCrossButtonTransitions() => Run(async () =>
     {

@@ -24,6 +24,24 @@ public sealed record RdpClientOptions
     /// <summary>Initial desktop height.</summary>
     public int Height { get; init; } = 1080;
 
+    /// <summary>
+    /// When <see langword="true" /> (the default) the dynamic display-control channel is advertised, so a
+    /// caller may follow the viewport with <see cref="RdpManagedSession.RequestResizeAsync(int, int, System.Threading.CancellationToken)"/>
+    /// and the desktop resizes to match. Set to <see langword="false" /> for a fixed desktop locked to
+    /// <see cref="Width"/>×<see cref="Height"/> (the channel is then never opened and resize requests are ignored).
+    /// </summary>
+    public bool DynamicResolution { get; init; } = true;
+
+    /// <summary>
+    /// Desktop features to suppress for bandwidth (wallpaper, animations, themes …). The default disables
+    /// wallpaper, full-window drag and menu animations, matching a responsiveness-first profile.
+    /// </summary>
+    public RdpPerformanceFlags Performance { get; init; } =
+        RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations;
+
+    /// <summary>When <see langword="true" />, remote audio plays on this computer; the default (<see langword="false" />) disables audio playback.</summary>
+    public bool AudioPlayback { get; init; }
+
     /// <summary>Requested colour depth in bits per pixel.</summary>
     public int ColorDepth { get; init; } = 16;
 

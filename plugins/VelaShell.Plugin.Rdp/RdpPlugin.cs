@@ -68,7 +68,11 @@ public sealed class RdpPlugin : IVelaPlugin
         HostPlaceholder = "rdp.example.com",
         UsernameLabel = loc["User"],
         PasswordLabel = loc["Password"],
-        Pages = [new ProtocolSettingPage(RdpSettings.DrivesPage, loc["DrivesPage"])],
+        Pages =
+        [
+            new ProtocolSettingPage(RdpSettings.DrivesPage, loc["DrivesPage"]),
+            new ProtocolSettingPage(RdpSettings.ExperiencePage, loc["ExperiencePage"])
+        ],
         Fields = RdpSettings.Declare(loc, disks),
         Features = WorkspaceFeatures.CertificateTrust | WorkspaceFeatures.SshTunnel,
         TrustedThumbprintSettingKey = RdpSettings.TrustedThumbprintKey

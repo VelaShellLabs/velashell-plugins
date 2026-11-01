@@ -31,7 +31,10 @@ internal static class RdpConnector
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,
             Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))],
-            Security = settings.Security
+            Security = settings.Security,
+            Performance = settings.Performance,
+            AudioPlayback = settings.Audio
+            // DynamicResolution left at its default (true): the plugin always follows the window.
         };
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);

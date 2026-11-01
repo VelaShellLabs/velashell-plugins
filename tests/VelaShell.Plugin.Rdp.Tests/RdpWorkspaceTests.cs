@@ -41,8 +41,7 @@ public sealed class RdpWorkspaceTests
         var plugin = new RdpPlugin(() => disks, TimeSpan.FromHours(1));
         await plugin.ActivateAsync(context, default);
         WorkspaceDescriptor first = context.RecordingWorkspaces.Registered.Single();
-        ProtocolSettingPage page = first.Pages.Single();
-        Assert.AreEqual(RdpSettings.DrivesPage, page.Key);
+        ProtocolSettingPage page = first.Pages.Single(p => p.Key == RdpSettings.DrivesPage);
         Assert.AreEqual("Drive mapping", page.Label);
         Assert.IsTrue(first.Fields.Any(field => field.Key == "drive:C" && field.Page == page.Key));
         Assert.IsFalse(first.Fields.Any(field => field.Key == "drive:E"));
