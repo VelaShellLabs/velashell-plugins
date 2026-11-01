@@ -38,7 +38,7 @@ internal sealed class DrdynvcChannel
         internal MemoryStream? Buffer;
         internal int Total;
     }
-    private readonly Dictionary<string, Listener> _listeners = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Listener> _listeners = [with(StringComparer.Ordinal)];
     private readonly Dictionary<uint, Instance> _instances = [];
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private const int MaxDisplayMessage = 64 * 1024;
@@ -48,9 +48,19 @@ internal sealed class DrdynvcChannel
     internal void RegisterListener(string name, Func<DynamicChannel, IDynamicChannelHandler> factory, int maxMessageBytes = MaxDisplayMessage)
     {
         if (string.IsNullOrEmpty(name) || name.Length > 255 || name.Any(c => c is '\0' or > '\x7f'))
+        {
             throw new ArgumentException("A dynamic channel name must be NUL-free ASCII and at most 255 characters.", nameof(name));
-        if (maxMessageBytes is < 1 or > MaxBufferedBytes) throw new ArgumentOutOfRangeException(nameof(maxMessageBytes));
-        lock (_lock) _listeners.Add(name, new(factory, maxMessageBytes));
+        }
+
+        if (maxMessageBytes is < 1 or > MaxBufferedBytes)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxMessageBytes));
+        }
+
+        lock (_lock)
+        {
+            _listeners.Add(name, new(factory, maxMessageBytes));
+        }
     }
 
     internal async Task SendAsync(DynamicChannel channel, byte[] message, CancellationToken ct)
@@ -61,9 +71,14 @@ internal sealed class DrdynvcChannel
         try
         {
             lock (_lock)
+            {
                 if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance.Channel, channel)
                     || message.Length > instance.Limit)
+                {
                     throw new InvalidOperationException("Dynamic channel closed or message too large.");
+                }
+            }
+
             int cb = id <= 255 ? 0 : id <= 65535 ? 1 : 2;
             const int fragment = 1500;
             int offset = 0;
@@ -74,7 +89,11 @@ internal sealed class DrdynvcChannel
                 var w = new ByteWriter(count + 12);
                 w.U8((byte)(((first ? CmdDataFirst : CmdData) << 4) | (first ? 8 : 0) | cb));
                 WriteVariable(w, id, cb);
-                if (first) w.U32LE((uint)message.Length);
+                if (first)
+                {
+                    w.U32LE((uint)message.Length);
+                }
+
                 w.Bytes(message.AsSpan(offset, count));
                 // Once the first fragment is sent, finish this message; cancelling halfway would
                 // make the next response look like a continuation of a truncated message.
@@ -82,7 +101,7 @@ internal sealed class DrdynvcChannel
                 offset += count;
             } while (offset < message.Length);
         }
-        finally { _sendGate.Release(); }
+        finally { _ = _sendGate.Release(); }
     }
 
     internal async Task CloseChannelAsync(DynamicChannel channel)
@@ -94,8 +113,12 @@ internal sealed class DrdynvcChannel
             uint id = channel.Id;
             lock (_lock)
             {
-                if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance.Channel, channel)) return;
-                _instances.Remove(id);
+                if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance.Channel, channel))
+                {
+                    return;
+                }
+
+                _ = _instances.Remove(id);
                 removed = instance;
                 ClearBuffer(instance);
                 if (id == _displayChannelId) { _displayOpen = _displayReady = false; _lastSent = null; }
@@ -106,8 +129,11 @@ internal sealed class DrdynvcChannel
         }
         finally
         {
-            _sendGate.Release();
-            if (removed?.Handler is { } handler) await handler.OnCloseAsync().ConfigureAwait(false);
+            _ = _sendGate.Release();
+            if (removed?.Handler is { } handler)
+            {
+                await handler.OnCloseAsync().ConfigureAwait(false);
+            }
         }
     }
 
@@ -119,21 +145,30 @@ internal sealed class DrdynvcChannel
         {
             lock (_lock)
             {
-                instances = _instances.Values.ToArray();
+                instances = [.. _instances.Values];
                 _instances.Clear();
                 _reservedBytes = 0;
                 _displayReady = _displayOpen = false;
             }
         }
-        finally { _sendGate.Release(); }
+        finally { _ = _sendGate.Release(); }
         List<Exception> failures = [];
         foreach (Instance instance in instances)
         {
             instance.Buffer?.Dispose();
-            try { if (instance.Handler is { } handler) await handler.OnCloseAsync().ConfigureAwait(false); }
+            try
+            {
+                if (instance.Handler is { } handler)
+                {
+                    await handler.OnCloseAsync().ConfigureAwait(false);
+                }
+            }
             catch (Exception ex) { failures.Add(ex); }
         }
-        if (failures.Count != 0) throw new AggregateException("Dynamic channel cleanup failed.", failures);
+        if (failures.Count != 0)
+        {
+            throw new AggregateException("Dynamic channel cleanup failed.", failures);
+        }
     }
 
     internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct, bool displayControl = true,
@@ -197,10 +232,16 @@ internal sealed class DrdynvcChannel
         {
             (byte[]? reply, Func<Task>? pending) = Parse(pdu);
             work = pending;
-            if (reply is not null) await _send(reply, _ct).ConfigureAwait(false);
+            if (reply is not null)
+            {
+                await _send(reply, _ct).ConfigureAwait(false);
+            }
         }
-        finally { _sendGate.Release(); }
-        if (work is not null) await work().ConfigureAwait(false);
+        finally { _ = _sendGate.Release(); }
+        if (work is not null)
+        {
+            await work().ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -210,7 +251,11 @@ internal sealed class DrdynvcChannel
     /// </summary>
     internal async Task RequestResizeAsync(int width, int height, int scale = 100)
     {
-        if (!_displayEnabled) return;
+        if (!_displayEnabled)
+        {
+            return;
+        }
+
         width = Clamp(width) & ~1;   // MS-RDPEDISP: the width must be even; the height need not be
         height = Clamp(height);
         scale = RdpScale.Clamp(scale);
@@ -231,25 +276,37 @@ internal sealed class DrdynvcChannel
             }
             await _send(frame, _ct).ConfigureAwait(false);
         }
-        finally { _sendGate.Release(); }
+        finally { _ = _sendGate.Release(); }
     }
 
     private (byte[]? Reply, Func<Task>? Work) Parse(byte[] pdu)
     {
-        if (pdu.Length == 0) return default;
+        if (pdu.Length == 0)
+        {
+            return default;
+        }
+
         var r = new ByteReader(pdu);
         byte head = r.U8();
         int cmd = head >> 4, sp = (head >> 2) & 3, cb = head & 3;
         if (cmd == CmdCapabilities)
         {
-            if (r.Remaining < 3) return default;
+            if (r.Remaining < 3)
+            {
+                return default;
+            }
+
             _ = r.U8();
             ushort version = r.U16LE();
             var caps = new ByteWriter(4);
             caps.U8(0x50); caps.U8(0); caps.U16LE((ushort)Math.Clamp((int)version, 1, 3));
             return (caps.ToArray(), null);
         }
-        if (cb == 3 || r.Remaining < CbIdBytes(cb)) return default;
+        if (cb == 3 || r.Remaining < CbIdBytes(cb))
+        {
+            return default;
+        }
+
         uint id = ReadVariable(ref r, cb);
         lock (_lock)
         {
@@ -273,7 +330,10 @@ internal sealed class DrdynvcChannel
                         try { created = new(channel, listener.Factory(channel), listener.Limit); }
                         catch (InvalidOperationException) { /* Listener capacity or state refused CREATE. */ }
                     }
-                    if (created is not null) _instances.Add(id, created);
+                    if (created is not null)
+                    {
+                        _instances.Add(id, created);
+                    }
                 }
                 var w = new ByteWriter(8);
                 w.U8((byte)(0x10 | cb)); WriteVariable(w, id, cb);
@@ -281,23 +341,38 @@ internal sealed class DrdynvcChannel
                 return (w.ToArray(), created is { Handler: { } handler } opened
                     ? () => RunHandlerAsync(opened, handler.OnOpenAsync) : null);
             }
-            if (!_instances.TryGetValue(id, out Instance? instance)) return default;
+            if (!_instances.TryGetValue(id, out Instance? instance))
+            {
+                return default;
+            }
+
             if (cmd == CmdClose)
             {
                 ClearBuffer(instance);
-                _instances.Remove(id);
+                _ = _instances.Remove(id);
                 if (_displayOpen && id == _displayChannelId)
                 { _displayOpen = _displayReady = false; _lastSent = null; }
                 return (null, instance.Handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
             }
-            if (cmd is not (CmdData or CmdDataFirst)) return default;
+            if (cmd is not (CmdData or CmdDataFirst))
+            {
+                return default;
+            }
+
             if (cmd == CmdDataFirst)
             {
                 ClearBuffer(instance);
-                if (sp == 3 || r.Remaining < CbIdBytes(sp)) return Reject(instance);
+                if (sp == 3 || r.Remaining < CbIdBytes(sp))
+                {
+                    return Reject(instance);
+                }
+
                 uint total = ReadVariable(ref r, sp);
                 if (total > instance.Limit || total < r.Remaining || total > MaxBufferedBytes - _reservedBytes)
+                {
                     return Reject(instance);
+                }
+
                 if (total > r.Remaining)
                 {
                     instance.Total = (int)total;
@@ -310,15 +385,27 @@ internal sealed class DrdynvcChannel
             byte[] message;
             if (instance.Buffer is { } buffer)
             {
-                if (buffer.Length + r.Remaining > instance.Total) return Reject(instance);
+                if (buffer.Length + r.Remaining > instance.Total)
+                {
+                    return Reject(instance);
+                }
+
                 buffer.Write(r.Rest());
-                if (buffer.Length < instance.Total) return default;
+                if (buffer.Length < instance.Total)
+                {
+                    return default;
+                }
+
                 message = buffer.ToArray();
                 ClearBuffer(instance);
             }
             else
             {
-                if (r.Remaining > instance.Limit) return Reject(instance);
+                if (r.Remaining > instance.Limit)
+                {
+                    return Reject(instance);
+                }
+
                 message = r.Rest().ToArray();
             }
             return instance.Handler is { } receiver
@@ -329,7 +416,11 @@ internal sealed class DrdynvcChannel
 
     private void ClearBuffer(Instance instance)
     {
-        if (instance.Buffer is null) return;
+        if (instance.Buffer is null)
+        {
+            return;
+        }
+
         _reservedBytes -= instance.Total;
         instance.Buffer.Dispose(); instance.Buffer = null; instance.Total = 0;
     }

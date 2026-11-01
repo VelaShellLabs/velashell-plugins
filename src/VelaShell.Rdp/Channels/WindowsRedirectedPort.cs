@@ -5,11 +5,11 @@ using Microsoft.Win32.SafeHandles;
 namespace VelaShell.Rdp.Channels;
 
 /// <summary>Exclusive overlapped Windows port I/O. No unvalidated server IOCTL reaches DeviceIoControl.</summary>
-internal sealed class WindowsRedirectedPort : IRedirectedPort
+internal sealed partial class WindowsRedirectedPort : IRedirectedPort
 {
     private readonly SafeFileHandle _handle;
     private readonly bool _serial;
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private bool _disposed;
     private static int _outstandingNativeOperations;
 
@@ -68,14 +68,14 @@ internal sealed class WindowsRedirectedPort : IRedirectedPort
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (Interlocked.Increment(ref _outstandingNativeOperations) > 64)
             {
-                Interlocked.Decrement(ref _outstandingNativeOperations);
+                _ = Interlocked.Decrement(ref _outstandingNativeOperations);
                 throw new DriveStatusException(NtStatus.InsufficientResources);
             }
             Task<int> native = new Operation(_handle, operation, input, output).RunAsync(cancellationToken);
             _ = native.ContinueWith(completed =>
             {
                 _ = completed.Exception; // Observe late cancellation/error after the caller's deadline.
-                Interlocked.Decrement(ref _outstandingNativeOperations);
+                _ = Interlocked.Decrement(ref _outstandingNativeOperations);
             }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             // Return cancellation promptly but retain kernel-owned memory until actual completion.
             return native.WaitAsync(cancellationToken);
@@ -108,11 +108,11 @@ internal sealed class WindowsRedirectedPort : IRedirectedPort
             try
             {
                 int error = Start();
-                if (error != 0 && error != 997) { throw new Win32Exception(error); }
+                if (error is not 0 and not 997) { throw new Win32Exception(error); }
                 wait = ThreadPool.RegisterWaitForSingleObject(_completed, (_, _) => _signal.TrySetResult(), null, Timeout.Infinite, true);
                 using (token.Register(() => { _ = Native.CancelIoEx(_rawHandle, _overlapped); }))
                 {
-                    if (error == 0) { _signal.TrySetResult(); }
+                    if (error == 0) { _ = _signal.TrySetResult(); }
                     await _signal.Task.ConfigureAwait(false);
                     if (!Native.GetOverlappedResult(_rawHandle, _overlapped, out uint count, false))
                     {
@@ -160,26 +160,26 @@ internal sealed class WindowsRedirectedPort : IRedirectedPort
         }
     }
 
-    private static class Native
+    private static partial class Native
     {
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        internal static extern SafeFileHandle CreateFileW(string name, uint access, uint share, nint security, uint creation, uint flags, nint template);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        internal static extern uint GetFileType(SafeFileHandle handle);
-        [DllImport("kernel32.dll", SetLastError = true)]
+        [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial SafeFileHandle CreateFileW(string name, uint access, uint share, nint security, uint creation, uint flags, nint template);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        internal static partial uint GetFileType(SafeFileHandle handle);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool ReadFile(nint handle, nint buffer, uint length, nint count, nint overlapped);
-        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static partial bool ReadFile(nint handle, nint buffer, uint length, nint count, nint overlapped);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool WriteFile(nint handle, nint buffer, uint length, nint count, nint overlapped);
-        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static partial bool WriteFile(nint handle, nint buffer, uint length, nint count, nint overlapped);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool DeviceIoControl(nint handle, uint code, nint input, uint inputLength, nint output, uint outputLength, nint count, nint overlapped);
-        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static partial bool DeviceIoControl(nint handle, uint code, nint input, uint inputLength, nint output, uint outputLength, nint count, nint overlapped);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool GetOverlappedResult(nint handle, nint overlapped, out uint count, [MarshalAs(UnmanagedType.Bool)] bool wait);
-        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static partial bool GetOverlappedResult(nint handle, nint overlapped, out uint count, [MarshalAs(UnmanagedType.Bool)] bool wait);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool CancelIoEx(nint handle, nint overlapped);
+        internal static partial bool CancelIoEx(nint handle, nint overlapped);
     }
 }

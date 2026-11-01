@@ -14,10 +14,9 @@ public static class WindowsPrinterCatalog
     {
         if (!OperatingSystem.IsWindows()) { return []; }
         string? defaultName = PrinterNative.GetDefaultName();
-        return PrinterNative.Enumerate().Where(queue => queue.IsSupported)
+        return [.. PrinterNative.Enumerate().Where(queue => queue.IsSupported)
             .Select(queue => new PrinterMapping(queue.Name, queue.Driver,
-                string.Equals(queue.Name, defaultName, StringComparison.OrdinalIgnoreCase), queue.IsNetwork))
-            .ToArray();
+                string.Equals(queue.Name, defaultName, StringComparison.OrdinalIgnoreCase), queue.IsNetwork))];
     }
 }
 

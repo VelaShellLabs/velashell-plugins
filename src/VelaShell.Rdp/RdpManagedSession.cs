@@ -11,9 +11,7 @@ namespace VelaShell.Rdp;
 /// </summary>
 public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 {
-    private readonly RdpConnection _connection;
-
-    internal RdpConnection Connection => _connection;
+    internal RdpConnection Connection { get; }
     private readonly CancellationTokenSource _stop = new();
     private Task? _pump;
     private int _dirty;
@@ -126,20 +124,20 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
     private RdpManagedSession(RdpConnection connection)
     {
-        _connection = connection;
-        _connection.FrameUpdated += OnFrameUpdated;
-        _connection.PointerChanged += pointer =>
+        Connection = connection;
+        Connection.FrameUpdated += OnFrameUpdated;
+        Connection.PointerChanged += pointer =>
         {
             try { PointerChanged?.Invoke(pointer); } catch { /* never unwind into the pump */ }
         };
-        _connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
-        _connection.LogonInfoReceived += type =>
+        Connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
+        Connection.LogonInfoReceived += type =>
         {
             Volatile.Write(ref _logonInfo, (int)type);
             Volatile.Write(ref _reachedLogon, 1);
             LogDrive($"server logon notification type={type}");
         };
-        _connection.ChannelData += OnChannelData;
+        Connection.ChannelData += OnChannelData;
     }
 
     /// <summary>
@@ -185,7 +183,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     }
 
     /// <summary>The security layer in use: <see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>.</summary>
-    public RdpSecurity Security => _connection.Security;
+    public RdpSecurity Security => Connection.Security;
 
     /// <summary>
     /// Set when <see cref="RdpSecurity.Auto"/> fell back to TLS because the server refused NLA before any
@@ -240,13 +238,13 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             {
                 session.EnableDrives(options.Drives, options.Ports, options.Printers);
             }
-            await session._connection.ConnectAsync(ct).ConfigureAwait(false);
+            await session.Connection.ConnectAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            RdpConnectStage stage = session._connection.Stage;
-            System.Security.Authentication.SslProtocols? tls = session._connection.TlsProtocol;
-            string? tlsTrace = session._connection.TlsTrace;
+            RdpConnectStage stage = session.Connection.Stage;
+            System.Security.Authentication.SslProtocols? tls = session.Connection.TlsProtocol;
+            string? tlsTrace = session.Connection.TlsTrace;
             await session.DisposeAsync().ConfigureAwait(false);
             // Cancellation, certificate trust and rejected credentials each mean something specific to
             // the caller; everything else gets the failing stage and a readable cause chain.
@@ -262,7 +260,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
             throw new RdpConnectionException(stage, ex, tls, tlsTrace);
         }
-        session.LogDrive($"connection active; rdpdr channelId={session._connection.ChannelId("rdpdr")}");
+        session.LogDrive($"connection active; rdpdr channelId={session.Connection.ChannelId("rdpdr")}");
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
         session._pump = session.PumpLoopAsync();
@@ -276,7 +274,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         // reply, a camera frame). Overflow drops the session, so the 32 MB byte budget in OnChannelData is
         // the real bound; the count only caps per-entry overhead for tiny PDUs.
         _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(16384) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _drdynvc = new DrdynvcChannel((pdu, token) => _connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token,
+        _drdynvc = new DrdynvcChannel((pdu, token) => Connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token,
             options.DynamicResolution, LogDrive);
         if (options.Camera is { } camera)
         {
@@ -286,7 +284,11 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         }
         if (options.WpdDevices.Count != 0)
         {
-            if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("WPD redirection requires Windows.");
+            if (!OperatingSystem.IsWindows())
+            {
+                throw new PlatformNotSupportedException("WPD redirection requires Windows.");
+            }
+
             _wpd = new WpdRedirection(new WindowsWpdBackend(options.WpdDevices, LogDrive));
             _wpd.Register(_drdynvc);
         }
@@ -300,7 +302,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             send: async (pdu, token) =>
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
-                await _connection.SendVirtualChannelAsync("cliprdr", pdu, linked.Token).ConfigureAwait(false);
+                await Connection.SendVirtualChannelAsync("cliprdr", pdu, linked.Token).ConfigureAwait(false);
             },
             raise: RaiseClipboard);
         _cliprdrWorker = DrainCliprdrAsync();
@@ -309,9 +311,9 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     private void EnableDrives(IReadOnlyList<DriveMapping> mappings, IReadOnlyList<PortMapping> ports, IReadOnlyList<PrinterMapping> printers)
     {
         _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _rdpdr = new RdpdrChannel(pdu => _connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive,
-            ports.Select(p => (IRdpdrDevice)new PortDevice(p))
-                .Concat(printers.Select((p, i) => (IRdpdrDevice)new PrinterDevice(p, i + 1))).ToArray(), _stop.Token);
+        _rdpdr = new RdpdrChannel(pdu => Connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive,
+            [.. ports.Select(p => (IRdpdrDevice)new PortDevice(p))
+, .. printers.Select((p, i) => (IRdpdrDevice)new PrinterDevice(p, i + 1))], _stop.Token);
         _rdpdrWorker = DrainRdpdrAsync();
     }
 
@@ -323,7 +325,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             long queued = Interlocked.Add(ref _clipboardQueuedBytes, payload.Data.Length);
             if (queued > 32 * 1024 * 1024 || _cliprdrQueue?.Writer.TryWrite(payload.Data) != true)
             {
-                Interlocked.Add(ref _clipboardQueuedBytes, -payload.Data.Length);
+                _ = Interlocked.Add(ref _clipboardQueuedBytes, -payload.Data.Length);
                 FailClipboard(new IOException("RDP clipboard queue capacity exceeded."));
             }
         }
@@ -333,7 +335,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             long queued = Interlocked.Add(ref _rdpdrQueuedBytes, payload.Data.Length);
             if (queued > 64 * 1024 * 1024 || _rdpdrQueue?.Writer.TryWrite(payload.Data) != true)
             {
-                Interlocked.Add(ref _rdpdrQueuedBytes, -payload.Data.Length);
+                _ = Interlocked.Add(ref _rdpdrQueuedBytes, -payload.Data.Length);
                 throw new IOException("RDP drive request queue capacity exceeded; reconnect the session.");
             }
         }
@@ -343,7 +345,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             if (payload.Data.Length > 1024 * 1024 || queued > 32 * 1024 * 1024
                 || _drdynvcQueue?.Writer.TryWrite(payload.Data) != true)
             {
-                Interlocked.Add(ref _drdynvcQueuedBytes, -payload.Data.Length);
+                _ = Interlocked.Add(ref _drdynvcQueuedBytes, -payload.Data.Length);
                 throw new IOException("RDP dynamic-channel queue capacity exceeded; reconnect the session.");
             }
         }
@@ -360,7 +362,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         {
             await foreach (byte[] pdu in _rdpdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
-                Interlocked.Add(ref _rdpdrQueuedBytes, -pdu.Length);
+                _ = Interlocked.Add(ref _rdpdrQueuedBytes, -pdu.Length);
                 try { await _rdpdr.ProcessAsync(pdu).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
                 catch (Exception ex) { LogDrive($"packet processing failed: {ex.GetType().Name}; bytes={pdu.Length}"); }
@@ -380,7 +382,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         {
             await foreach (byte[] pdu in _drdynvcQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
-                Interlocked.Add(ref _drdynvcQueuedBytes, -pdu.Length);
+                _ = Interlocked.Add(ref _drdynvcQueuedBytes, -pdu.Length);
                 await _drdynvc.ProcessAsync(pdu).ConfigureAwait(false);
             }
         }
@@ -392,7 +394,13 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         }
         finally
         {
-            try { if (_wpd is not null) await _wpd.DisposeAsync().ConfigureAwait(false); }
+            try
+            {
+                if (_wpd is not null)
+                {
+                    await _wpd.DisposeAsync().ConfigureAwait(false);
+                }
+            }
             catch (Exception ex) { LogDrive($"WPD cleanup failed: {ex.GetType().Name}"); }
             try { await _drdynvc.CloseAsync().ConfigureAwait(false); }
             catch (Exception ex) { LogDrive($"dynamic-channel cleanup failed: {ex.GetType().Name}"); }
@@ -412,15 +420,15 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
     public Task SetDisplayUpdatesAsync(bool visible, CancellationToken cancellationToken = default) => Guard(async () =>
     {
-        if (_connection.ServerSupportsSuppressOutput)
+        if (Connection.ServerSupportsSuppressOutput)
         {
-            await _connection.SendSuppressOutputAsync(visible, cancellationToken).ConfigureAwait(false);
+            await Connection.SendSuppressOutputAsync(visible, cancellationToken).ConfigureAwait(false);
         }
 
         // Updates suppressed while hidden were never sent; ask for a full repaint when the view comes back.
-        if (visible && _connection.ServerSupportsRefreshRect)
+        if (visible && Connection.ServerSupportsRefreshRect)
         {
-            await _connection.SendRefreshRectAsync(cancellationToken).ConfigureAwait(false);
+            await Connection.SendRefreshRectAsync(cancellationToken).ConfigureAwait(false);
         }
     });
 
@@ -435,7 +443,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         {
             await foreach (byte[] pdu in _cliprdrQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
-                Interlocked.Add(ref _clipboardQueuedBytes, -pdu.Length);
+                _ = Interlocked.Add(ref _clipboardQueuedBytes, -pdu.Length);
                 if (_clipboardFailure is not null) { continue; }
                 try { await _cliprdr.ProcessAsync(pdu, _stop.Token).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
@@ -448,7 +456,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     private void FailClipboard(Exception error)
     {
         if (Interlocked.CompareExchange(ref _clipboardFailure, error, null) is not null) { return; }
-        _cliprdrQueue?.Writer.TryComplete();
+        _ = (_cliprdrQueue?.Writer.TryComplete());
         RaiseClipboard(new RdpClipboardEvent(10, 0, 0, System.Text.Encoding.UTF8.GetBytes(error.Message)));
     }
 
@@ -465,14 +473,14 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             return null;
         }
 
-        (byte[] bgra, int width, int height) = _connection.SnapshotFrame();
+        (byte[] bgra, int width, int height) = Connection.SnapshotFrame();
         return new RdpFrame(width, height, bgra);
     }
 
     public RdpFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full = false)
     {
         _ = Interlocked.Exchange(ref _dirty, 0);
-        RdpFrameCopy copy = _connection.CopyFrame(destination, stride, width, height, full);
+        RdpFrameCopy copy = Connection.CopyFrame(destination, stride, width, height, full);
         if (copy.SizeChanged)
         {
             _ = Interlocked.Exchange(ref _dirty, 1);   // still pending until the caller has a surface of the new size
@@ -486,7 +494,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         Exception? failure = null;
         try
         {
-            while (!_stop.IsCancellationRequested && await _connection.PumpAsync(_stop.Token).ConfigureAwait(false)) { }
+            while (!_stop.IsCancellationRequested && await Connection.PumpAsync(_stop.Token).ConfigureAwait(false)) { }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         catch (Exception ex) { failure = ex; }
@@ -503,13 +511,13 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
     }
 
     public Task KeyAsync(uint code, bool down, CancellationToken ct = default) =>
-        Guard(() => _connection.SendScancodeAsync(code, down, ct));
+        Guard(() => Connection.SendScancodeAsync(code, down, ct));
 
     public Task UnicodeAsync(string text, CancellationToken ct = default) =>
-        Guard(() => _connection.SendUnicodeTextAsync(text, ct));   // up to 7 characters per fast-path PDU
+        Guard(() => Connection.SendUnicodeTextAsync(text, ct));   // up to 7 characters per fast-path PDU
 
     public Task MouseAsync(uint flags, uint x, uint y, CancellationToken ct = default) =>
-        Guard(() => _connection.SendMouseAsync(flags, x, y, ct));
+        Guard(() => Connection.SendMouseAsync(flags, x, y, ct));
 
     // ---- Clipboard transport → cliprdr channel (inert when clipboard is disabled) ----
     public Task OfferFormatsAsync(string formats, CancellationToken cancellationToken) => Clipboard(channel => channel.OfferFormatsAsync(formats, cancellationToken));
@@ -561,7 +569,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
             try { await devices.DrainDevicesAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
             catch (TimeoutException) { LogDrive("native device cancellation still pending; resources retained until driver completion"); }
         }
-        await _connection.DisposeAsync().ConfigureAwait(false);
+        await Connection.DisposeAsync().ConfigureAwait(false);
         _stop.Dispose();
         FrameAvailable = null;
         PointerChanged = null;

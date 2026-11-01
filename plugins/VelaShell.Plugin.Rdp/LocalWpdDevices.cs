@@ -27,7 +27,7 @@ internal static class LocalWpdDevices
         if (selected.Count > 32) throw new ProtocolConnectionException(loc.Format("Invalid", loc["WpdDevices"]));
         try
         {
-            string[] ids = enumerate().Where(device => selected.Contains(Key(device))).Select(device => device.Id).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            string[] ids = [.. enumerate().Where(device => selected.Contains(Key(device))).Select(device => device.Id).Distinct(StringComparer.OrdinalIgnoreCase)];
             if (ids.Length != selected.Count) throw new IOException("A selected WPD interface is unavailable.");
             return ids;
         }

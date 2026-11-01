@@ -52,7 +52,8 @@ internal sealed class ManagedNtlm : INlaSecurityContext
 {
     private readonly NegotiateAuthentication _auth;
 
-    internal ManagedNtlm(string domain, string username, string password, string targetHost) =>
+    internal ManagedNtlm(string domain, string username, string password, string targetHost)
+    {
         _auth = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
         {
             Package = "NTLM",
@@ -60,6 +61,7 @@ internal sealed class ManagedNtlm : INlaSecurityContext
             TargetName = $"TERMSRV/{targetHost}",
             RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
         });
+    }
 
     public bool IsComplete { get; private set; }
 

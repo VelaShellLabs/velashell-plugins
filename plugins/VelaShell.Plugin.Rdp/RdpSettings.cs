@@ -201,7 +201,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         try
         {
             PortMapping[] ports = string.IsNullOrWhiteSpace(text) ? []
-                : text.Split(';', StringSplitOptions.TrimEntries).Select(p => new PortMapping(p)).ToArray();
+                : [.. text.Split(';', StringSplitOptions.TrimEntries).Select(p => new PortMapping(p))];
             if (ports.Length > 32 || ports.DistinctBy(p => p.Name).Count() != ports.Length) { throw new ArgumentException(); }
             return ports;
         }

@@ -20,12 +20,18 @@ internal sealed class CameraChannel
         DynamicChannel[] enumerators;
         lock (_gate)
         {
-            if (_removed) return;
-            _removed = true; enumerators = _enumerators.ToArray();
+            if (_removed)
+            {
+                return;
+            }
+
+            _removed = true; enumerators = [.. _enumerators];
         }
         byte[] removed = [1, 6, .. Encoding.ASCII.GetBytes(_channelName), 0];
         foreach (DynamicChannel enumerator in enumerators)
+        {
             await enumerator.SendAsync(removed).ConfigureAwait(false);
+        }
     }
 
     internal CameraChannel(DrdynvcChannel channels, RdpCameraDevice device, Func<ICameraBackend> factory)
@@ -41,12 +47,20 @@ internal sealed class CameraChannel
         public Task OnOpenAsync() => channel.SendAsync([1, 3]);
         public async Task OnMessageAsync(byte[] message)
         {
-            if (_negotiated || !message.AsSpan().SequenceEqual(new byte[] { 1, 4 })) return;
+            if (_negotiated || !message.AsSpan().SequenceEqual(new byte[] { 1, 4 }))
+            {
+                return;
+            }
+
             _negotiated = true;
             lock (owner._gate)
             {
-                if (owner._removed) return;
-                owner._enumerators.Add(channel);
+                if (owner._removed)
+                {
+                    return;
+                }
+
+                _ = owner._enumerators.Add(channel);
             }
             byte[] friendly = Encoding.Unicode.GetBytes(owner._device.Name.Replace("\0", "") + "\0");
             byte[] name = Encoding.ASCII.GetBytes(owner._channelName + "\0");
@@ -57,7 +71,11 @@ internal sealed class CameraChannel
         public Task OnCloseAsync()
         {
             _negotiated = false;
-            lock (owner._gate) owner._enumerators.Remove(channel);
+            lock (owner._gate)
+            {
+                _ = owner._enumerators.Remove(channel);
+            }
+
             return Task.CompletedTask;
         }
     }
@@ -72,14 +90,22 @@ internal sealed class CameraChannel
         private Task Error(uint code, byte? stream = null)
         {
             byte[] bytes = new byte[stream.HasValue ? 7 : 6]; bytes[0] = 1; bytes[1] = stream.HasValue ? (byte)0x13 : (byte)2;
-            if (stream.HasValue) bytes[2] = stream.Value;
+            if (stream.HasValue)
+            {
+                bytes[2] = stream.Value;
+            }
+
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(bytes.Length - 4), code);
             return channel.SendAsync(bytes);
         }
         private Task Success() => channel.SendAsync([1, 1]);
         public async Task OnMessageAsync(byte[] message)
         {
-            if (_closed) return;
+            if (_closed)
+            {
+                return;
+            }
+
             if (message.Length < 2 || message[0] != 1) { await Error(2).ConfigureAwait(false); return; }
             byte command = message[1];
             int expected = command switch { 7 or 8 or 9 or 0x10 => 2, 0x0b or 0x0d or 0x11 => 3, 0x0f => 29, _ => -1 };
@@ -96,29 +122,39 @@ internal sealed class CameraChannel
                 {
                     if (_backend is not null) { await Error(4).ConfigureAwait(false); return; }
                     bool claimed;
-                    lock (owner._gate) { claimed = !owner._claimed && !owner._removed; if (claimed) owner._claimed = true; }
+                    lock (owner._gate)
+                    {
+                        claimed = !owner._claimed && !owner._removed; if (claimed)
+                        {
+                            owner._claimed = true;
+                        }
+                    }
                     if (!claimed) { await Error(4).ConfigureAwait(false); return; }
                     try { _backend = owner._factory(); _backend.Activate(); }
-                    catch { _backend?.Dispose(); _backend = null; lock (owner._gate) owner._claimed = false; throw; }
+                    catch { _backend?.Dispose(); _backend = null; lock (owner._gate) { owner._claimed = false; } throw; }
                     await Success().ConfigureAwait(false); return;
                 }
-                if (_backend is null) { await Error(3, command == 0x11 ? (byte)0 : null).ConfigureAwait(false); return; }
+                if (_backend is null) { await Error(3, command == 0x11 ? 0 : null).ConfigureAwait(false); return; }
                 switch (command)
                 {
                     case 8:
                         await StopAsync().ConfigureAwait(false);
                         _backend.Deactivate(); _backend.Dispose(); _backend = null;
-                        lock (owner._gate) owner._claimed = false;
+                        lock (owner._gate)
+                        {
+                            owner._claimed = false;
+                        }
+
                         await Success().ConfigureAwait(false); break;
                     case 9:
                         await channel.SendAsync([1, 0x0a, 1, 0, 1, (byte)(_stream is null ? 0 : 1), 0]).ConfigureAwait(false); break;
                     case 0x0b:
-                        await channel.SendAsync(new byte[] { 1, 0x0c }.Concat(_backend.MediaTypes.SelectMany(t => t.Encode())).ToArray()).ConfigureAwait(false); break;
+                        await channel.SendAsync([1, 0x0c, .. _backend.MediaTypes.SelectMany(t => t.Encode())]).ConfigureAwait(false); break;
                     case 0x0d:
-                        await channel.SendAsync(new byte[] { 1, 0x0e }.Concat(_backend.CurrentMediaType.Encode()).ToArray()).ConfigureAwait(false); break;
+                        await channel.SendAsync([1, 0x0e, .. _backend.CurrentMediaType.Encode()]).ConfigureAwait(false); break;
                     case 0x0f:
                         if (_stream is not null) { await Error(4).ConfigureAwait(false); break; }
-                        CameraMediaType type = CameraMediaType.Decode(message.AsSpan(3));
+                        var type = CameraMediaType.Decode(message.AsSpan(3));
                         if (!_backend.MediaTypes.Contains(type)) { await Error(6).ConfigureAwait(false); break; }
                         _backend.Start(type); _stream = new();
                         await Success().ConfigureAwait(false); break;
@@ -131,8 +167,11 @@ internal sealed class CameraChannel
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                await Error(ex is OutOfMemoryException ? 7u : 1u, command == 0x11 ? (byte)0 : null).ConfigureAwait(false);
-                if (ex is CameraDeviceRemovedException) await owner.RemovedAsync().ConfigureAwait(false);
+                await Error(ex is OutOfMemoryException ? 7u : 1u, command == 0x11 ? 0 : null).ConfigureAwait(false);
+                if (ex is CameraDeviceRemovedException)
+                {
+                    await owner.RemovedAsync().ConfigureAwait(false);
+                }
             }
         }
         private async Task SendSampleAsync(ICameraBackend backend, CancellationToken ct)
@@ -148,7 +187,10 @@ internal sealed class CameraChannel
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                if (!_closed) await Error(4, 0).ConfigureAwait(false);
+                if (!_closed)
+                {
+                    await Error(4, 0).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
@@ -165,7 +207,11 @@ internal sealed class CameraChannel
         }
         private async Task StopAsync()
         {
-            if (_stream is null) return;
+            if (_stream is null)
+            {
+                return;
+            }
+
             _stream.Cancel();
             try { _backend?.Stop(); }
             finally
@@ -183,7 +229,10 @@ internal sealed class CameraChannel
                 if (_backend is not null)
                 {
                     _backend.Dispose(); _backend = null;
-                    lock (owner._gate) owner._claimed = false;
+                    lock (owner._gate)
+                    {
+                        owner._claimed = false;
+                    }
                 }
             }
         }

@@ -27,7 +27,7 @@ public sealed class CameraSettingsTests
         var settings = RdpSettings.From(RdpSettingsTests.Request(("camera", LocalCameras.Key(camera))), new("en"), [], enumerateCameras: () => [camera]);
         Assert.AreSame(camera, settings.Camera);
         var options = new RdpClientOptions { Host = "example", DynamicResolution = false, Camera = settings.Camera };
-        Assert.Contains("drdynvc", RdpManagedSession.BuildChannels(options).Select(c => c.Name).ToArray());
+        Assert.Contains("drdynvc", [.. RdpManagedSession.BuildChannels(options).Select(c => c.Name)]);
         Assert.IsEmpty(RdpManagedSession.BuildChannels(options with { Camera = null }));
     }
 }

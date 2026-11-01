@@ -11,7 +11,7 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
     private readonly HashSet<uint> _announced = [];
     private bool _disposed;
     private Task? _disposing;
-    private readonly HashSet<uint> _allowed = backend.Devices.Select(d => d.DeviceId).ToHashSet();
+    private readonly HashSet<uint> _allowed = [.. backend.Devices.Select(d => d.DeviceId)];
     private readonly List<WpdFileChannel> _files = [];
     private Control? _control;
     private bool _authenticated;
@@ -27,7 +27,10 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
 
     internal void StartMonitoring()
     {
-        if (backend is IWpdDeviceMonitor monitor) monitor.Start(RemoveDeviceAsync, AddDeviceAsync);
+        if (backend is IWpdDeviceMonitor monitor)
+        {
+            monitor.Start(RemoveDeviceAsync, AddDeviceAsync);
+        }
     }
 
     private async Task AddDeviceAsync(WpdDeviceDescription device)
@@ -38,31 +41,44 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
             Control? control;
             lock (_gate)
             {
-                if (_disposed || !_allowed.Add(device.DeviceId)) return;
+                if (_disposed || !_allowed.Add(device.DeviceId))
+                {
+                    return;
+                }
+
                 control = _authenticated ? _control : null;
             }
             if (control is not null)
             {
                 await control.SendAdditionAsync(device).ConfigureAwait(false);
-                _announced.Add(device.DeviceId);
+                _ = _announced.Add(device.DeviceId);
             }
         }
-        finally { _changes.Release(); }
+        finally { _ = _changes.Release(); }
     }
 
     public ValueTask DisposeAsync()
     {
-        lock (_gate) return new(_disposing ??= DisposeCoreAsync());
+        lock (_gate)
+        {
+            return new(_disposing ??= DisposeCoreAsync());
+        }
     }
 
     private async Task DisposeCoreAsync()
     {
         lock (_gate) { _disposed = true; _authenticated = false; }
-        try { if (backend is IWpdDeviceMonitor monitor) await monitor.DisposeAsync().ConfigureAwait(false); }
+        try
+        {
+            if (backend is IWpdDeviceMonitor monitor)
+            {
+                await monitor.DisposeAsync().ConfigureAwait(false);
+            }
+        }
         finally
         {
             WpdFileChannel[] files;
-            lock (_gate) { _authenticated = false; files = _files.ToArray(); }
+            lock (_gate) { _authenticated = false; files = [.. _files]; }
             await Task.WhenAll(files.Select(file => file.CloseAsync())).ConfigureAwait(false);
         }
     }
@@ -71,7 +87,11 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
     {
         lock (_gate)
         {
-            if (_disposed || _control is not null) throw new InvalidOperationException("WPD control channel is closed or already open.");
+            if (_disposed || _control is not null)
+            {
+                throw new InvalidOperationException("WPD control channel is closed or already open.");
+            }
+
             _control = new Control(this, send, close);
             return _control;
         }
@@ -81,12 +101,16 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
     {
         lock (_gate)
         {
-            if (_disposed || _files.Count >= 16) throw new InvalidOperationException("WPD channel is closed or its limit was exceeded.");
+            if (_disposed || _files.Count >= 16)
+            {
+                throw new InvalidOperationException("WPD channel is closed or its limit was exceeded.");
+            }
+
             WpdFileChannel? file = null;
             file = new WpdFileChannel(backend,
-                () => { lock (_gate) return _authenticated; },
-                id => { lock (_gate) return _allowed.Contains(id); }, send, close,
-                () => { lock (_gate) _files.Remove(file!); }, RemoveDeviceAsync);
+                () => { lock (_gate) { return _authenticated; } },
+                id => { lock (_gate) { return _allowed.Contains(id); } }, send, close,
+                () => { lock (_gate) { _ = _files.Remove(file!); } }, RemoveDeviceAsync);
             _files.Add(file);
             return file;
         }
@@ -101,14 +125,21 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
             WpdFileChannel[] files;
             lock (_gate)
             {
-                if (!_allowed.Remove(deviceId)) return;
+                if (!_allowed.Remove(deviceId))
+                {
+                    return;
+                }
+
                 control = _authenticated ? _control : null;
-                files = _files.Where(f => f.DeviceId == deviceId).ToArray();
+                files = [.. _files.Where(f => f.DeviceId == deviceId)];
             }
             await Task.WhenAll(files.Select(file => file.CloseAsync())).ConfigureAwait(false);
-            if (_announced.Remove(deviceId) && control is not null) await control.SendRemovalAsync(deviceId).ConfigureAwait(false);
+            if (_announced.Remove(deviceId) && control is not null)
+            {
+                await control.SendRemovalAsync(deviceId).ConfigureAwait(false);
+            }
         }
-        finally { _changes.Release(); }
+        finally { _ = _changes.Release(); }
     }
 
     private sealed class Control(WpdRedirection owner, Func<byte[], Task> send, Func<Task> close) : IDynamicChannelHandler
@@ -117,7 +148,13 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
         public Task OnOpenAsync() => Task.CompletedTask;
         public async Task OnMessageAsync(byte[] message)
         {
-            lock (owner._gate) { if (_closed) return; }
+            lock (owner._gate)
+            {
+                if (_closed)
+                {
+                    return;
+                }
+            }
             if (message.Length < 8 || BinaryPrimitives.ReadUInt32LittleEndian(message) != message.Length)
             { await close().ConfigureAwait(false); return; }
             uint packet = BinaryPrimitives.ReadUInt32LittleEndian(message.AsSpan(4));
@@ -137,29 +174,42 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
                     WpdDeviceDescription[] devices;
                     lock (owner._gate)
                     {
-                        if (_closed || owner._disposed) return;
+                        if (_closed || owner._disposed)
+                        {
+                            return;
+                        }
+
                         owner._authenticated = true;
                         devices = owner.SelectedDevices();
                     }
-                    if (devices.Length != 0) await send(Addition(devices)).ConfigureAwait(false);
+                    if (devices.Length != 0)
+                    {
+                        await send(Addition(devices)).ConfigureAwait(false);
+                    }
+
                     owner._announced.Clear();
                     owner._announced.UnionWith(devices.Select(d => d.DeviceId));
                 }
-                finally { owner._changes.Release(); }
+                finally { _ = owner._changes.Release(); }
             }
-            else await close().ConfigureAwait(false);
-
-        }
+            else
+            {
+                await close().ConfigureAwait(false);
+            }        }
         public async Task OnCloseAsync()
         {
             WpdFileChannel[] files;
             lock (owner._gate)
             {
-                if (_closed) return;
+                if (_closed)
+                {
+                    return;
+                }
+
                 _closed = true;
                 owner._authenticated = false;
                 owner._control = null;
-                files = owner._files.ToArray();
+                files = [.. owner._files];
                 owner._files.Clear();
             }
             await Task.WhenAll(files.Select(file => file.CloseAsync())).ConfigureAwait(false);
@@ -168,7 +218,7 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
         internal Task SendAdditionAsync(WpdDeviceDescription device) => send(Addition([device]));
     }
 
-    private WpdDeviceDescription[] SelectedDevices() => backend.Devices.Where(d => _allowed.Contains(d.DeviceId)).ToArray();
+    private WpdDeviceDescription[] SelectedDevices() => [.. backend.Devices.Where(d => _allowed.Contains(d.DeviceId))];
 
     internal static byte[] Addition(IReadOnlyList<WpdDeviceDescription> devices) => ControlPacket(0x66, writer =>
     {

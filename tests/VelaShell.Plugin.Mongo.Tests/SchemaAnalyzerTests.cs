@@ -163,7 +163,7 @@ public sealed class SchemaAnalyzerTests
         Assert.IsTrue(SchemaAnalyzer.WeekendDip(schema["at"]!));
         Assert.AreEqual("Date · 周末低谷明显", SchemaAnalyzer.Describe(schema["at"]!, Zh).Text);
 
-        AnalyzedSchema shortSpan = SchemaAnalyzer.Analyze(docs.Take(40).ToList());
+        AnalyzedSchema shortSpan = SchemaAnalyzer.Analyze([.. docs.Take(40)]);
         Assert.IsFalse(SchemaAnalyzer.WeekendDip(shortSpan["at"]!), "four days are not enough to call a weekly pattern");
     }
 

@@ -26,7 +26,7 @@ public sealed class PrinterDeviceTests
     {
         var backend = new FakeBackend { WriteLimit = 2 };
         using var device = Make(backend);
-        byte[] create = Enumerable.Repeat((byte)0xFF, 32).ToArray();
+        byte[] create = [.. Enumerable.Repeat((byte)0xFF, 32)];
         Put(create, 28, 0);
         RdpdrIoResult opened = await Request(device, 0, 0, create);
         Assert.AreEqual(0u, opened.Status);
@@ -40,7 +40,7 @@ public sealed class PrinterDeviceTests
         Assert.AreEqual(0u, written.Status);
         Assert.AreSequenceEqual(new byte[] { 5, 0, 0, 0, 0 }, written.Body);
         FakeJob job = backend.Jobs.Single();
-        Assert.AreSequenceEqual(data, job.Data.ToArray());
+        Assert.AreSequenceEqual(data, [.. job.Data]);
         Assert.AreEqual(3, job.WriteCalls);
         RdpdrIoResult closed = await Request(device, id, 2, new byte[32]);
         Assert.AreEqual(0u, closed.Status);
@@ -76,7 +76,7 @@ public sealed class PrinterDeviceTests
         var backend = new FakeBackend();
         using var device = Make(backend);
         RdpdrIoResult[] opened = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Request(device, 0, 0, new byte[32])));
-        uint[] ids = opened.Select(result => Get(result.Body)).ToArray();
+        uint[] ids = [.. opened.Select(result => Get(result.Body))];
         Assert.AreEqual(4, ids.Distinct().Count());
         RdpdrIoResult rejected = await Request(device, 0, 0, new byte[32]);
         Assert.AreEqual(0xC000009Au, rejected.Status);
@@ -229,7 +229,7 @@ public sealed class PrinterDeviceTests
         finally { release.Set(); }
         RdpdrIoResult[] results = await Task.WhenAll(pending);
         Assert.IsTrue(results.All(result => result.Status == 0));
-        Assert.AreSequenceEqual(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray(), backend.Jobs[0].Data.ToArray());
+        Assert.AreSequenceEqual([.. Enumerable.Range(0, 32).Select(i => (byte)i)], [.. backend.Jobs[0].Data]);
     }
 
     [TestMethod]
@@ -265,7 +265,7 @@ public sealed class PrinterDeviceTests
         Assert.ThrowsExactly<ArgumentException>(() => new PrinterMapping("queue", ""));
         Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([new("queue", "driver"), new("QUEUE", "driver")]));
         Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([new("a", "d", true), new("b", "d", true)]));
-        Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate(Enumerable.Range(0, 17).Select(i => new PrinterMapping($"q{i}", "d")).ToArray()));
+        Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([.. Enumerable.Range(0, 17).Select(i => new PrinterMapping($"q{i}", "d"))]));
     }
 
     [TestMethod]

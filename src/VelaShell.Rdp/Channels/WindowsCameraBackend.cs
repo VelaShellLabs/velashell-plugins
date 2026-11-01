@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -18,9 +19,11 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
     private readonly List<(CameraMediaType Type, nint Native)> _types = [];
     private nint _activate, _source, _reader;
     private bool _started, _mfStarted;
-    private CameraMediaType? _current;
-    public IReadOnlyList<CameraMediaType> MediaTypes => _types.Select(x => x.Type).ToArray();
-    public CameraMediaType CurrentMediaType => _current ?? throw new InvalidOperationException("Camera is inactive.");
+
+    public IReadOnlyList<CameraMediaType> MediaTypes => [.. _types.Select(x => x.Type)];
+
+    [AllowNull]
+    public CameraMediaType CurrentMediaType { get => field ?? throw new InvalidOperationException("Camera is inactive."); private set; }
 
     internal static IReadOnlyList<RdpCameraDevice> Enumerate()
     {
@@ -32,14 +35,18 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
             MfNative.ForEachDevice(activation => result.Add(new(MfNative.GetString(activation, MfNative.SymbolicLink), MfNative.GetString(activation, MfNative.FriendlyName))));
             return result;
         }
-        finally { MfNative.MFShutdown(); }
+        finally { _ = MfNative.MFShutdown(); }
     }
 
     public void Activate()
     {
         lock (_gate)
         {
-            if (_reader != 0) throw new InvalidOperationException("Camera is already active.");
+            if (_reader != 0)
+            {
+                throw new InvalidOperationException("Camera is already active.");
+            }
+
             using var apartment = new MfNative.Apartment();
             try
             {
@@ -47,41 +54,67 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
                 MfNative.ForEachDevice(activation =>
                 {
                     if (_activate == 0 && string.Equals(MfNative.GetString(activation, MfNative.SymbolicLink), deviceId, StringComparison.Ordinal))
-                    { Marshal.AddRef(activation); _activate = activation; }
+                    { _ = Marshal.AddRef(activation); _activate = activation; }
                 });
-                if (_activate == 0) throw new CameraDeviceRemovedException();
+                if (_activate == 0)
+                {
+                    throw new CameraDeviceRemovedException();
+                }
+
                 _source = MfNative.Activate(_activate);
                 MfNative.Check(MfNative.MFCreateAttributes(out nint attributes, 1));
                 try
                 {
                     nint callback = Marshal.GetIUnknownForObject(_callback);
                     try { MfNative.SetUnknown(attributes, MfNative.AsyncCallback, callback); }
-                    finally { Marshal.Release(callback); }
+                    finally { _ = Marshal.Release(callback); }
                     MfNative.Check(MfNative.MFCreateSourceReaderFromMediaSource(_source, attributes, out _reader));
                 }
-                finally { Marshal.Release(attributes); }
+                finally { _ = Marshal.Release(attributes); }
                 MfNative.SelectStream(_reader, 0xfffffffe, false);
                 MfNative.SelectStream(_reader, MfNative.VideoStream, true);
                 for (uint index = 0; index < 1024; index++)
                 {
                     int hr = MfNative.NativeType(_reader, index, out nint media);
-                    if (hr == unchecked((int)0xc00d36b9)) break; // MF_E_NO_MORE_TYPES
+                    if (hr == unchecked((int)0xc00d36b9))
+                    {
+                        break; // MF_E_NO_MORE_TYPES
+                    }
+
                     MfNative.Check(hr);
                     bool keep = false;
                     try
                     {
-                        if (MfNative.GetGuid(media, MfNative.Subtype) != MfNative.Mjpg) continue;
+                        if (MfNative.GetGuid(media, MfNative.Subtype) != MfNative.Mjpg)
+                        {
+                            continue;
+                        }
+
                         ulong size = MfNative.GetUInt64(media, MfNative.FrameSize);
                         ulong rate = MfNative.GetUInt64(media, MfNative.FrameRate);
                         ulong aspect = MfNative.TryGetUInt64(media, MfNative.PixelAspect, (1ul << 32) | 1);
                         var type = new CameraMediaType(2, (uint)(size >> 32), (uint)size, (uint)(rate >> 32), (uint)rate, (uint)(aspect >> 32), (uint)aspect, 1);
-                        if (type.Width is 0 or > 8192 || type.Height is 0 or > 8192 || type.FrameRateNumerator == 0 || type.FrameRateDenominator == 0 || type.PixelAspectNumerator == 0 || type.PixelAspectDenominator == 0 || _types.Any(x => x.Type == type)) continue;
+                        if (type.Width is 0 or > 8192 || type.Height is 0 or > 8192 || type.FrameRateNumerator == 0 || type.FrameRateDenominator == 0 || type.PixelAspectNumerator == 0 || type.PixelAspectDenominator == 0 || _types.Any(x => x.Type == type))
+                        {
+                            continue;
+                        }
+
                         _types.Add((type, media)); keep = true;
                     }
-                    finally { if (!keep) Marshal.Release(media); }
+                    finally
+                    {
+                        if (!keep)
+                        {
+                            _ = Marshal.Release(media);
+                        }
+                    }
                 }
-                if (_types.Count == 0) throw new NotSupportedException("Selected camera has no native MJPEG capture format.");
-                MfNative.SetType(_reader, _types[0].Native); _current = _types[0].Type;
+                if (_types.Count == 0)
+                {
+                    throw new NotSupportedException("Selected camera has no native MJPEG capture format.");
+                }
+
+                MfNative.SetType(_reader, _types[0].Native); CurrentMediaType = _types[0].Type;
             }
             catch { Release(); throw; }
         }
@@ -92,10 +125,18 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
         lock (_gate)
         {
             using var apartment = new MfNative.Apartment();
-            if (_reader == 0 || _started) throw new InvalidOperationException("Invalid camera state.");
-            var selected = _types.FirstOrDefault(x => x.Type == mediaType);
-            if (selected.Native == 0) throw new ArgumentException("Unsupported camera format.", nameof(mediaType));
-            MfNative.SetType(_reader, selected.Native); _current = mediaType; _started = true;
+            if (_reader == 0 || _started)
+            {
+                throw new InvalidOperationException("Invalid camera state.");
+            }
+
+            (CameraMediaType Type, nint Native) selected = _types.FirstOrDefault(x => x.Type == mediaType);
+            if (selected.Native == 0)
+            {
+                throw new ArgumentException("Unsupported camera format.", nameof(mediaType));
+            }
+
+            MfNative.SetType(_reader, selected.Native); CurrentMediaType = mediaType; _started = true;
         }
     }
 
@@ -104,13 +145,20 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
-            if (!_started) throw new InvalidOperationException("Camera is not streaming.");
+            if (!_started)
+            {
+                throw new InvalidOperationException("Camera is not streaming.");
+            }
+
             using var apartment = new MfNative.Apartment();
             var completion = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
             if (Interlocked.CompareExchange(ref _callback.Pending, completion, null) is not null)
+            {
                 throw new InvalidOperationException("One sample is already pending.");
+            }
+
             int hr = MfNative.ReadSample(_reader);
-            if (hr < 0) { Interlocked.Exchange(ref _callback.Pending, null); MfNative.Check(hr); }
+            if (hr < 0) { _ = Interlocked.Exchange(ref _callback.Pending, null); MfNative.Check(hr); }
             return completion.Task.WaitAsync(ct);
         }
     }
@@ -119,9 +167,13 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
     {
         lock (_gate)
         {
-            if (!_started) return;
+            if (!_started)
+            {
+                return;
+            }
+
             _started = false;
-            Interlocked.Exchange(ref _callback.Pending, null)?.TrySetCanceled();
+            _ = (Interlocked.Exchange(ref _callback.Pending, null)?.TrySetCanceled());
             using var apartment = new MfNative.Apartment();
             _callback.Flushed.Reset();
             MfNative.Check(MfNative.Flush(_reader));
@@ -141,14 +193,22 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
     private void Release()
     {
         _started = false;
-        Interlocked.Exchange(ref _callback.Pending, null)?.TrySetCanceled();
-        if (_source != 0) MfNative.ShutdownSource(_source);
-        if (_reader != 0) { Marshal.Release(_reader); _reader = 0; }
-        foreach (var type in _types) Marshal.Release(type.Native);
-        _types.Clear(); _current = null;
-        if (_source != 0) { Marshal.Release(_source); _source = 0; }
-        if (_activate != 0) { MfNative.ShutdownActivation(_activate); Marshal.Release(_activate); _activate = 0; }
-        if (_mfStarted) { MfNative.MFShutdown(); _mfStarted = false; }
+        _ = (Interlocked.Exchange(ref _callback.Pending, null)?.TrySetCanceled());
+        if (_source != 0)
+        {
+            MfNative.ShutdownSource(_source);
+        }
+
+        if (_reader != 0) { _ = Marshal.Release(_reader); _reader = 0; }
+        foreach ((CameraMediaType Type, nint Native) type in _types)
+        {
+            _ = Marshal.Release(type.Native);
+        }
+
+        _types.Clear(); CurrentMediaType = null;
+        if (_source != 0) { _ = Marshal.Release(_source); _source = 0; }
+        if (_activate != 0) { MfNative.ShutdownActivation(_activate); _ = Marshal.Release(_activate); _activate = 0; }
+        if (_mfStarted) { _ = MfNative.MFShutdown(); _mfStarted = false; }
     }
 
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
@@ -159,15 +219,27 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
         public int OnReadSample(int status, uint stream, uint flags, long timestamp, nint sample)
         {
             TaskCompletionSource<byte[]>? pending = Interlocked.Exchange(ref Pending, null);
-            if (pending is null) return 0;
+            if (pending is null)
+            {
+                return 0;
+            }
+
             try
             {
-                if (status == unchecked((int)0xc00d3ea2)) throw new CameraDeviceRemovedException();
+                if (status == unchecked((int)0xc00d3ea2))
+                {
+                    throw new CameraDeviceRemovedException();
+                }
+
                 MfNative.Check(status);
-                if (sample == 0 || (flags & 0x137) != 0) throw new IOException("Camera returned no complete sample or changed its media type.");
-                pending.TrySetResult(MfNative.CopySample(sample));
+                if (sample == 0 || (flags & 0x137) != 0)
+                {
+                    throw new IOException("Camera returned no complete sample or changed its media type.");
+                }
+
+                _ = pending.TrySetResult(MfNative.CopySample(sample));
             }
-            catch (Exception ex) { pending.TrySetException(ex); }
+            catch (Exception ex) { _ = pending.TrySetException(ex); }
             return 0;
         }
         public int OnFlush(uint stream) { Flushed.Set(); return 0; }
@@ -199,7 +271,13 @@ internal static unsafe class MfNative
     internal static readonly Guid PixelAspect = new("c6376a1e-8d0a-4027-be45-6d9a0ad39bb6");
     internal static readonly Guid Mjpg = new("47504a4d-0000-0010-8000-00aa00389b71");
     private static nint Slot(nint obj, int slot) => (*(nint**)obj)[slot];
-    internal static void Check(int hr) { if (hr < 0) Marshal.ThrowExceptionForHR(hr); }
+    internal static void Check(int hr)
+    {
+        if (hr < 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
+    }
     [DllImport("mfplat.dll", ExactSpelling = true)] internal static extern int MFStartup(uint version, uint flags);
     [DllImport("mfplat.dll", ExactSpelling = true)] internal static extern int MFShutdown();
     [DllImport("mfplat.dll", ExactSpelling = true)] internal static extern int MFCreateAttributes(out nint attributes, uint size);
@@ -210,8 +288,14 @@ internal static unsafe class MfNative
     internal sealed class Apartment : IDisposable
     {
         private readonly bool _uninitialize;
-        internal Apartment() { int hr = CoInitializeEx(0, 0); if (hr != unchecked((int)0x80010106)) Check(hr); _uninitialize = hr >= 0; }
-        public void Dispose() { if (_uninitialize) CoUninitialize(); }
+        internal Apartment() { int hr = CoInitializeEx(0, 0); if (hr != unchecked((int)0x80010106)) { Check(hr); } _uninitialize = hr >= 0; }
+        public void Dispose()
+        {
+            if (_uninitialize)
+            {
+                CoUninitialize();
+            }
+        }
     }
     internal static void ForEachDevice(Action<nint> visit)
     {
@@ -222,13 +306,27 @@ internal static unsafe class MfNative
             Guid key = SourceType, value = VideoSource;
             Check(((delegate* unmanaged[Stdcall]<nint, Guid*, Guid*, int>)Slot(attributes, 24))(attributes, &key, &value));
             Check(MFEnumDeviceSources(attributes, out devices, out count));
-            for (uint i = 0; i < count; i++) visit(((nint*)devices)[i]);
+            for (uint i = 0; i < count; i++)
+            {
+                visit(((nint*)devices)[i]);
+            }
         }
         finally
         {
-            for (uint i = 0; i < count; i++) if (((nint*)devices)[i] != 0) Marshal.Release(((nint*)devices)[i]);
-            if (devices != 0) Marshal.FreeCoTaskMem(devices);
-            Marshal.Release(attributes);
+            for (uint i = 0; i < count; i++)
+            {
+                if (((nint*)devices)[i] != 0)
+                {
+                    _ = Marshal.Release(((nint*)devices)[i]);
+                }
+            }
+
+            if (devices != 0)
+            {
+                Marshal.FreeCoTaskMem(devices);
+            }
+
+            _ = Marshal.Release(attributes);
         }
     }
     internal static string GetString(nint obj, Guid key)
@@ -264,11 +362,15 @@ internal static unsafe class MfNative
             Check(((delegate* unmanaged[Stdcall]<nint, nint*, uint*, uint*, int>)Slot(buffer, 3))(buffer, &data, &maximum, &length));
             try
             {
-                if (length is 0 or > 16 * 1024 * 1024 - 3 || length > maximum) throw new IOException("Invalid camera sample length.");
+                if (length is 0 or > 16 * 1024 * 1024 - 3 || length > maximum)
+                {
+                    throw new IOException("Invalid camera sample length.");
+                }
+
                 byte[] result = new byte[length]; Marshal.Copy(data, result, 0, result.Length); return result;
             }
             finally { Check(((delegate* unmanaged[Stdcall]<nint, int>)Slot(buffer, 4))(buffer)); }
         }
-        finally { Marshal.Release(buffer); }
+        finally { _ = Marshal.Release(buffer); }
     }
 }

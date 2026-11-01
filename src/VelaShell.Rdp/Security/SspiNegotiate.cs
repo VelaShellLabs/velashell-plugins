@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Text;
 
 namespace VelaShell.Rdp.Security;
 
@@ -33,7 +32,7 @@ internal sealed class SspiNegotiate : INlaSecurityContext
     private readonly IntPtr _cred = Marshal.AllocHGlobal(IntPtr.Size * 2);
     private readonly IntPtr _ctx = Marshal.AllocHGlobal(IntPtr.Size * 2);
     private bool _hasContext;
-    private bool _credValid;
+    private readonly bool _credValid;
     private bool _ctxValid;
     private int _trailer;
     private int _blockSize;

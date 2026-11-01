@@ -166,7 +166,10 @@ public sealed class RdpNlaRefusedException : Exception
 /// </summary>
 public sealed class RdpAuthenticationException : Exception
 {
-    internal RdpAuthenticationException(string message, uint? status = null) : base(message) => Status = status;
+    internal RdpAuthenticationException(string message, uint? status = null) : base(message)
+    {
+        Status = status;
+    }
 
     /// <summary>The server-reported status code, if any.</summary>
     public uint? Status { get; }

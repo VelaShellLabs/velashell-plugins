@@ -325,7 +325,7 @@ public sealed class WpdRedirectionTests
                 try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
                 catch (OperationCanceledException) { Interlocked.Increment(ref Cancellations); throw; }
             }
-            return new(0, request.Count, request.Function == 1 ? [] : Enumerable.Range(40, request.Count).Select(i => (byte)i).ToArray());
+            return new(0, request.Count, request.Function == 1 ? [] : [.. Enumerable.Range(40, request.Count).Select(i => (byte)i)]);
         }
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
     }

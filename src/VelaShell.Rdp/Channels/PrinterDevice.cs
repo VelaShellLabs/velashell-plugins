@@ -24,8 +24,8 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
     internal const int MaxOpenJobs = 4;
     private const uint InvalidParameter = 0xC000000D, InvalidHandle = 0xC0000008;
     private const uint NotSupported = 0xC00000BB, Cancelled = 0xC0000120, IoError = 0xC0000185;
-    private readonly object _gate = new();
-    private readonly object _lifecycleGate = new();
+    private readonly Lock _gate = new();
+    private readonly Lock _lifecycleGate = new();
     private Task _cleanup = Task.CompletedTask;
     private Task _requests = Task.CompletedTask;
     private readonly PrinterMapping _mapping;
@@ -77,7 +77,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
             Task previous = _requests;
             if (Interlocked.Increment(ref _pending) > 64)
             {
-                Interlocked.Decrement(ref _pending);
+                _ = Interlocked.Decrement(ref _pending);
                 return Task.FromResult(Result(request, 0xC000009A));
             }
             // WRITE offsets are ignored; preserve arrival order even when channel requests overlap.
@@ -110,7 +110,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
                         }
                     }
                 }
-                finally { Interlocked.Decrement(ref _pending); }
+                finally { _ = Interlocked.Decrement(ref _pending); }
             });
             _requests = pending;
             return pending;
@@ -146,7 +146,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
             if (body.Length != 32) { Abort(request.FileId); return Result(request, InvalidParameter); }
             CheckCancellation(cancellationToken, epoch);
             job.Native.Complete();
-            _jobs.Remove(request.FileId);
+            _ = _jobs.Remove(request.FileId);
             job.Native.Dispose();
             _closedIds.Enqueue(request.FileId);
             return Result(request, 0);
@@ -209,7 +209,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
     {
         lock (_lifecycleGate)
         {
-            Interlocked.Increment(ref _epoch);
+            _ = Interlocked.Increment(ref _epoch);
             if (!_cleanup.IsCompleted) { return; }
             Task previous = _cleanup;
             // Winspool calls can block in a driver. Never hold the channel/UI thread waiting for them.

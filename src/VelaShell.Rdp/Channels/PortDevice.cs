@@ -9,7 +9,7 @@ internal sealed class PortDevice(PortMapping mapping, Func<PortMapping, IRedirec
     TimeSpan? operationTimeout = null) : IRdpdrDevice
 {
     internal const int MaxTransfer = 256 * 1024;
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly Func<PortMapping, IRedirectedPort> _open = open ?? WindowsRedirectedPort.Open;
     private readonly TimeSpan _timeout = operationTimeout ?? TimeSpan.FromSeconds(30);
     private IRedirectedPort? _port;

@@ -22,8 +22,18 @@ internal sealed class WpdFileChannel(
     {
         try
         {
-            lock (_gate) { if (_closed) return; }
-            if (message.Length < 8 || message.Length > 2 * WpdPolicy.MaxTransfer + 32) throw new InvalidDataException();
+            lock (_gate)
+            {
+                if (_closed)
+                {
+                    return;
+                }
+            }
+            if (message.Length is < 8 or > (2 * WpdPolicy.MaxTransfer + 32))
+            {
+                throw new InvalidDataException();
+            }
+
             uint id = U32(message, 0) & 0xffffff;
             uint function = U32(message, 4);
             if (function == 6)
@@ -32,12 +42,25 @@ internal sealed class WpdFileChannel(
                 uint target = U32(message, 8) >> 8;
                 lock (_gate)
                 {
-                    if (!_createSeen || _handle is null) throw new InvalidDataException();
-                    if (_pending.TryGetValue(target, out Pending? pending)) pending.Cancellation.Cancel();
+                    if (!_createSeen || _handle is null)
+                    {
+                        throw new InvalidDataException();
+                    }
+
+                    if (_pending.TryGetValue(target, out Pending? pending))
+                    {
+                        pending.Cancellation.Cancel();
+                    }
                 }
                 return;
             }
-            lock (_gate) { if (_pending.ContainsKey(id)) throw new InvalidDataException(); }
+            lock (_gate)
+            {
+                if (_pending.ContainsKey(id))
+                {
+                    throw new InvalidDataException();
+                }
+            }
             if (function == 5)
             {
                 Require(message.Length == 10);
@@ -53,12 +76,20 @@ internal sealed class WpdFileChannel(
                 int result = 0;
                 lock (_gate)
                 {
-                    if (_closed || _createSeen) throw new InvalidDataException();
+                    if (_closed || _createSeen)
+                    {
+                        throw new InvalidDataException();
+                    }
+
                     _createSeen = true;
                     uint deviceId = U32(message, 8);
                     try
                     {
-                        if (!authenticated() || !allowed(deviceId)) throw new Win32Exception(5);
+                        if (!authenticated() || !allowed(deviceId))
+                        {
+                            throw new Win32Exception(5);
+                        }
+
                         var options = new WpdOpenOptions(U32(message, 12), U32(message, 16), U32(message, 20), U32(message, 24));
                         WpdPolicy.ValidateOpen(options);
                         DeviceId = deviceId;
@@ -70,27 +101,54 @@ internal sealed class WpdFileChannel(
                 await send(Reply(id, function, new(result, 0, []))).ConfigureAwait(false);
                 return;
             }
-            if (function > 2) throw new InvalidDataException();
+            if (function > 2)
+            {
+                throw new InvalidDataException();
+            }
+
             WpdIoRequest request = ParseRequest(message, function);
             Pending? operation = null;
             IWpdDeviceHandle? handle;
             int error = 0;
             lock (_gate)
             {
-                if (_closed) return;
-                if (_pending.ContainsKey(id)) throw new InvalidDataException();
+                if (_closed)
+                {
+                    return;
+                }
+
+                if (_pending.ContainsKey(id))
+                {
+                    throw new InvalidDataException();
+                }
+
                 handle = _handle;
-                if (handle is null || !authenticated() || DeviceId is not { } device || !allowed(device)) error = 6;
-                else if (function == 2 && !WpdPolicy.IsAllowedIoctl(request.ControlCode)) error = 5;
-                else if (_pending.Count >= WpdPolicy.MaxPending) error = 170;
+                if (handle is null || !authenticated() || DeviceId is not { } device || !allowed(device))
+                {
+                    error = 6;
+                }
+                else if (function == 2 && !WpdPolicy.IsAllowedIoctl(request.ControlCode))
+                {
+                    error = 5;
+                }
+                else if (_pending.Count >= WpdPolicy.MaxPending)
+                {
+                    error = 170;
+                }
                 else
                 {
                     operation = new(new CancellationTokenSource(), new(TaskCreationOptions.RunContinuationsAsynchronously));
                     _pending.Add(id, operation);
                 }
             }
-            if (operation is null) await send(Reply(id, function, WpdIoResult.Error(error))).ConfigureAwait(false);
-            else _ = RunAsync(id, request, handle!, operation);
+            if (operation is null)
+            {
+                await send(Reply(id, function, WpdIoResult.Error(error))).ConfigureAwait(false);
+            }
+            else
+            {
+                _ = RunAsync(id, request, handle!, operation);
+            }
         }
         catch (InvalidDataException) { await CloseAsync().ConfigureAwait(false); }
     }
@@ -105,22 +163,43 @@ internal sealed class WpdFileChannel(
             catch (Exception ex) when (ex is Win32Exception or IOException or UnauthorizedAccessException or OperationCanceledException or ObjectDisposedException)
             { result = new(Error(ex), 0, []); }
             if (result.Count < 0 || result.Count > request.Count ||
-                (request.Function != 1 && result.Data.Length != result.Count)) result = WpdIoResult.Error(13);
+                (request.Function != 1 && result.Data.Length != result.Count))
+            {
+                result = WpdIoResult.Error(13);
+            }
+
             removed = result.HResult == WpdPolicy.HResult(1167);
-            if (result.HResult < 0) result = new(result.HResult, 0, []);
+            if (result.HResult < 0)
+            {
+                result = new(result.HResult, 0, []);
+            }
+
             bool closed;
-            lock (_gate) closed = _closed;
-            if (!closed) await send(Reply(id, request.Function, result)).ConfigureAwait(false);
+            lock (_gate)
+            {
+                closed = _closed;
+            }
+
+            if (!closed)
+            {
+                await send(Reply(id, request.Function, result)).ConfigureAwait(false);
+            }
         }
         catch { failed = true; }
         finally
         {
-            lock (_gate) { _pending.Remove(id); pending.Cancellation.Dispose(); }
-            pending.Completion.TrySetResult();
+            lock (_gate) { _ = _pending.Remove(id); pending.Cancellation.Dispose(); }
+            _ = pending.Completion.TrySetResult();
         }
         if (removed && deviceRemoved is not null && DeviceId is { } deviceId)
+        {
             await deviceRemoved(deviceId).ConfigureAwait(false);
-        if (failed) await CloseAsync().ConfigureAwait(false);
+        }
+
+        if (failed)
+        {
+            await CloseAsync().ConfigureAwait(false);
+        }
     }
 
     internal async Task CloseAsync()
@@ -133,10 +212,18 @@ internal sealed class WpdFileChannel(
     {
         lock (_gate)
         {
-            if (_closing is not null) return _closing;
+            if (_closing is not null)
+            {
+                return _closing;
+            }
+
             _closed = true;
-            Pending[] pending = _pending.Values.ToArray();
-            foreach (Pending operation in pending) operation.Cancellation.Cancel();
+            Pending[] pending = [.. _pending.Values];
+            foreach (Pending operation in pending)
+            {
+                operation.Cancellation.Cancel();
+            }
+
             _closing = FinishCloseAsync(pending, _handle);
             return _closing;
         }
@@ -147,7 +234,10 @@ internal sealed class WpdFileChannel(
         try
         {
             await Task.WhenAll(pending.Select(p => p.Completion.Task)).ConfigureAwait(false);
-            if (handle is not null) await handle.DisposeAsync().ConfigureAwait(false);
+            if (handle is not null)
+            {
+                await handle.DisposeAsync().ConfigureAwait(false);
+            }
         }
         finally { released?.Invoke(); }
     }
@@ -173,8 +263,16 @@ internal sealed class WpdFileChannel(
         byte[] bytes = new byte[function == 4 ? 8 : function == 1 ? 12 : 13 + result.Data.Length];
         BinaryPrimitives.WriteUInt32LittleEndian(bytes, id);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), result.HResult);
-        if (function != 4) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8), (uint)result.Count);
-        if (function is 0 or 2) result.Data.CopyTo(bytes, 12);
+        if (function != 4)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8), (uint)result.Count);
+        }
+
+        if (function is 0 or 2)
+        {
+            result.Data.CopyTo(bytes, 12);
+        }
+
         return bytes;
     }
     private static int Error(Exception ex) => ex switch
@@ -192,5 +290,11 @@ internal sealed class WpdFileChannel(
         Require(value <= WpdPolicy.MaxTransfer);
         return (int)value;
     }
-    private static void Require(bool condition) { if (!condition) throw new InvalidDataException("Invalid WPD request."); }
+    private static void Require(bool condition)
+    {
+        if (!condition)
+        {
+            throw new InvalidDataException("Invalid WPD request.");
+        }
+    }
 }

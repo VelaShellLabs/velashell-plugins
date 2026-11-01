@@ -129,7 +129,7 @@ public sealed class DynamicChannelTests
         var sender = new DrdynvcChannel((bytes, _) => { packets.Add(bytes); return Task.CompletedTask; }, CancellationToken.None);
         sender.RegisterListener("test", c => { channel = c; return new Handler(); }, 10000);
         await sender.ProcessAsync(Create(7)); packets.Clear();
-        byte[] payload = Enumerable.Range(0, 5000).Select(i => (byte)i).ToArray();
+        byte[] payload = [.. Enumerable.Range(0, 5000).Select(i => (byte)i)];
         await channel!.SendAsync(payload);
         Assert.AreEqual((byte)0x28, packets[0][0]);
         Assert.AreEqual(5000u, BinaryPrimitives.ReadUInt32LittleEndian(packets[0].AsSpan(2)));

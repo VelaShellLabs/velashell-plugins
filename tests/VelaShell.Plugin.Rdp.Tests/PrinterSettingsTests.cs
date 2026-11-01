@@ -28,7 +28,7 @@ public sealed class PrinterSettingsTests
         var options = new RdpClientOptions { Host = "example", Printers = settings.Printers };
         Assert.AreSame(printer, options.Printers.Single());
         Assert.IsEmpty(new RdpClientOptions { Host = "example" }.Printers);
-        string[] channels = RdpManagedSession.BuildChannels(options).Select(channel => channel.Name).ToArray();
+        string[] channels = [.. RdpManagedSession.BuildChannels(options).Select(channel => channel.Name)];
         Assert.Contains("rdpdr", channels);
         Assert.Contains("rdpsnd", channels);
     }

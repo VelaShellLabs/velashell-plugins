@@ -22,7 +22,7 @@ internal static class PortControls
 {
     internal static (PortControl Control, int OutputLength) Validate(bool serial, uint code, byte[] input, uint outputCapacity)
     {
-        PortControl control = (PortControl)code;
+        var control = (PortControl)code;
         (int inputLength, int outputLength) = control switch
         {
             PortControl.SetBaud or PortControl.SetWaitMask or PortControl.Purge => (4, 0),

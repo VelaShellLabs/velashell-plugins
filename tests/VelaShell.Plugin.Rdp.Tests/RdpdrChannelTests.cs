@@ -25,7 +25,7 @@ public sealed class RdpdrChannelTests
             Drives = shareDrive ? [new DriveMapping("work", Path.GetTempPath())] : []
         };
 
-        string[] names = RdpManagedSession.BuildChannels(options).Select(channel => channel.Name).ToArray();
+        string[] names = [.. RdpManagedSession.BuildChannels(options).Select(channel => channel.Name)];
         string[] expected = shareDrive
             ? ["cliprdr", "rdpdr", "rdpsnd", "drdynvc"]
             : ["cliprdr", "drdynvc"];

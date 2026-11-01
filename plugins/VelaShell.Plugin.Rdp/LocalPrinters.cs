@@ -30,7 +30,7 @@ internal static class LocalPrinters
         if (selected.Count > 16) { throw new ProtocolConnectionException(loc.Format("Invalid", loc["Printers"])); }
         try
         {
-            PrinterMapping[] printers = enumerate().Where(printer => selected.Contains(Key(printer))).ToArray();
+            PrinterMapping[] printers = [.. enumerate().Where(printer => selected.Contains(Key(printer)))];
             if (printers.Length != selected.Count) { throw new IOException("A selected printer is unavailable."); }
             return printers;
         }

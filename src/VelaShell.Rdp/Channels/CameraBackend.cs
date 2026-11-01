@@ -11,7 +11,11 @@ internal sealed record CameraMediaType(byte Format, uint Width, uint Height, uin
     {
         byte[] bytes = new byte[26]; bytes[0] = Format;
         uint[] values = [Width, Height, FrameRateNumerator, FrameRateDenominator, PixelAspectNumerator, PixelAspectDenominator];
-        for (int i = 0; i < values.Length; i++) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(1 + i * 4), values[i]);
+        for (int i = 0; i < values.Length; i++)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(1 + i * 4), values[i]);
+        }
+
         bytes[25] = Flags; return bytes;
     }
     internal static CameraMediaType Decode(ReadOnlySpan<byte> bytes) => new(bytes[0],

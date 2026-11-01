@@ -33,17 +33,24 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
     {
         _enumerate = enumerate; _open = open; _log = log;
         var selected = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
-        if (selected.Count > 32) throw new ArgumentException("At most 32 WPD interfaces can be selected.", nameof(selectedIds));
+        if (selected.Count > 32)
+        {
+            throw new ArgumentException("At most 32 WPD interfaces can be selected.", nameof(selectedIds));
+        }
+
         try { _registration = notifications.Register(Enqueue); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or EntryPointNotFoundException or DllNotFoundException or PlatformNotSupportedException)
         { _log($"WPD device notifications unavailable ({ex.Message}); idle removal and automatic reinsertion are disabled; I/O errors still revoke devices."); }
         try
         {
-            _authorized = enumerate().Where(d => selected.Contains(d.Path)).ToArray();
+            _authorized = [.. enumerate().Where(d => selected.Contains(d.Path))];
             foreach (WpdLocalDevice device in _authorized)
             {
                 _present.Add(++_nextId, device);
-                if (device.StableIdentity is null) _log("A selected WPD interface has no verified system-unique instance identity; removal is monitored, but automatic reinsertion is disabled for it.");
+                if (device.StableIdentity is null)
+                {
+                    _log("A selected WPD interface has no verified system-unique instance identity; removal is monitored, but automatic reinsertion is disabled for it.");
+                }
             }
         }
         catch { _registration?.Dispose(); throw; }
@@ -51,15 +58,22 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
 
     private void Enqueue(WpdDeviceChange change)
     {
-        if (Volatile.Read(ref _closed) == 0 && !_events.Writer.TryWrite(change)) Interlocked.Exchange(ref _overflow, 1);
+        if (Volatile.Read(ref _closed) == 0 && !_events.Writer.TryWrite(change))
+        {
+            _ = Interlocked.Exchange(ref _overflow, 1);
+        }
     }
     public IReadOnlyList<WpdDeviceDescription> Devices
-    { get { lock (_gate) return _present.Select(d => Describe(d.Key, d.Value)).ToArray(); } }
+    { get { lock (_gate) { return [.. _present.Select(d => Describe(d.Key, d.Value))]; } } }
     public IWpdDeviceHandle Open(uint id, WpdOpenOptions options)
     {
         lock (_gate)
         {
-            if (_closed != 0 || !_present.TryGetValue(id, out WpdLocalDevice? device)) throw new System.ComponentModel.Win32Exception(1167);
+            if (_closed != 0 || !_present.TryGetValue(id, out WpdLocalDevice? device))
+            {
+                throw new System.ComponentModel.Win32Exception(1167);
+            }
+
             return _open(device, options);
         }
     }
@@ -67,7 +81,11 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
     {
         lock (_gate)
         {
-            if (_closed != 0 || _worker is not null) return;
+            if (_closed != 0 || _worker is not null)
+            {
+                return;
+            }
+
             _worker = Task.Run(() => RunAsync(removed, added));
         }
     }
@@ -75,7 +93,11 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
     {
         await foreach (WpdDeviceChange change in _events.Reader.ReadAllAsync().ConfigureAwait(false))
         {
-            if (Volatile.Read(ref _closed) != 0) break;
+            if (Volatile.Read(ref _closed) != 0)
+            {
+                break;
+            }
+
             try
             {
                 if (Interlocked.Exchange(ref _overflow, 0) != 0)
@@ -83,20 +105,44 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
                     _log("WPD notification queue overflow; revoking all devices rather than retaining potentially stale handles.");
                     await RevokeAsync(_ => true, removed).ConfigureAwait(false);
                 }
-                if (change.Removed) await RevokeAsync(d => StringComparer.OrdinalIgnoreCase.Equals(d.Path, change.Path), removed).ConfigureAwait(false);
+                if (change.Removed)
+                {
+                    await RevokeAsync(d => StringComparer.OrdinalIgnoreCase.Equals(d.Path, change.Path), removed).ConfigureAwait(false);
+                }
+
                 IReadOnlyList<WpdLocalDevice> current = _enumerate();
                 await RevokeAsync(d => !current.Any(n => SamePresentDevice(d, n)), removed).ConfigureAwait(false);
-                if (change.Removed) continue;
+                if (change.Removed)
+                {
+                    continue;
+                }
+
                 foreach (WpdLocalDevice authorized in _authorized)
                 {
-                    if (authorized.StableIdentity is null) continue;
-                    WpdLocalDevice[] matches = current.Where(d => SameIdentity(authorized, d)).ToArray();
-                    if (matches.Length != 1) continue;
+                    if (authorized.StableIdentity is null)
+                    {
+                        continue;
+                    }
+
+                    WpdLocalDevice[] matches = [.. current.Where(d => SameIdentity(authorized, d))];
+                    if (matches.Length != 1)
+                    {
+                        continue;
+                    }
+
                     uint id;
                     lock (_gate)
                     {
-                        if (_closed != 0) return;
-                        if (_present.Values.Any(d => SameIdentity(authorized, d))) continue;
+                        if (_closed != 0)
+                        {
+                            return;
+                        }
+
+                        if (_present.Values.Any(d => SameIdentity(authorized, d)))
+                        {
+                            continue;
+                        }
+
                         id = checked(++_nextId);
                         _present.Add(id, matches[0]);
                     }
@@ -115,10 +161,16 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
         uint[] ids;
         lock (_gate)
         {
-            ids = _present.Where(p => predicate(p.Value)).Select(p => p.Key).ToArray();
-            foreach (uint id in ids) _present.Remove(id);
+            ids = [.. _present.Where(p => predicate(p.Value)).Select(p => p.Key)];
+            foreach (uint id in ids)
+            {
+                _ = _present.Remove(id);
+            }
         }
-        foreach (uint id in ids) await removed(id).ConfigureAwait(false);
+        foreach (uint id in ids)
+        {
+            await removed(id).ConfigureAwait(false);
+        }
     }
     private static bool SameIdentity(WpdLocalDevice a, WpdLocalDevice b) => a.StableIdentity is not null &&
         StringComparer.OrdinalIgnoreCase.Equals(a.StableIdentity, b.StableIdentity) && a.HardwareIds.AsSpan().SequenceEqual(b.HardwareIds);
@@ -127,18 +179,33 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
     private static WpdDeviceDescription Describe(uint id, WpdLocalDevice device) => new(id, device.Name, device.HardwareIds, device.CompatibleIds);
     public ValueTask DisposeAsync()
     {
-        lock (_gate) return new(_disposing ??= DisposeCoreAsync());
+        lock (_gate)
+        {
+            return new(_disposing ??= DisposeCoreAsync());
+        }
     }
     private async Task DisposeCoreAsync()
     {
-        Interlocked.Exchange(ref _closed, 1);
-        _events.Writer.TryComplete();
+        _ = Interlocked.Exchange(ref _closed, 1);
+        _ = _events.Writer.TryComplete();
         // Unregister waits for callbacks and must never run on the native callback thread.
         try { await Task.Run(() => _registration?.Dispose()).ConfigureAwait(false); }
         finally
         {
-            try { if (_worker is not null) await _worker.ConfigureAwait(false); }
-            finally { lock (_gate) _present.Clear(); }
+            try
+            {
+                if (_worker is not null)
+                {
+                    await _worker.ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    _present.Clear();
+                }
+            }
         }
     }
 }

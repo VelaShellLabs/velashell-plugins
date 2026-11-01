@@ -37,7 +37,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private readonly Dictionary<uint, DriveMapping> _devices = [];
     private readonly IReadOnlyList<IRdpdrDevice> _additional = additionalDevices ?? [];
     private readonly Dictionary<uint, IRdpdrDevice> _additionalById = [];
-    private readonly object _pendingGate = new();
+    private readonly Lock _pendingGate = new();
     private readonly HashSet<Task> _pending = [];
     private readonly CancellationTokenSource _deviceStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     private int _generation;
@@ -81,7 +81,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 _clientId = r.Remaining >= 4 ? r.U32LE() : 0;
                 // Windows can restart the channel handshake after logon; announce drives again in that round.
                 _announced = false;
-                Interlocked.Increment(ref _generation);
+                _ = Interlocked.Increment(ref _generation);
                 foreach (IRdpdrDevice device in _additional) { device.Reset(); }
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
                 await _send(BuildClientName()).ConfigureAwait(false);
@@ -156,7 +156,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
     private byte[] BuildCapabilityResponse()
     {
-        IRdpdrDevice[] capabilities = _additional.DistinctBy(d => d.CapabilityType).ToArray();
+        IRdpdrDevice[] capabilities = [.. _additional.DistinctBy(d => d.CapabilityType)];
         ByteWriter w = Header(PakidClientCapability);
         w.U16LE((ushort)(2 + capabilities.Length)); // general + drive + selected non-drive capabilities
         w.U16LE(0);                 // pad
@@ -226,7 +226,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             w.U32LE(device.DeviceType);
             w.U32LE(deviceId++);
             dos.Clear();
-            Encoding.ASCII.GetBytes(device.Name.AsSpan(0, Math.Min(7, device.Name.Length)), dos);
+            _ = Encoding.ASCII.GetBytes(device.Name.AsSpan(0, Math.Min(7, device.Name.Length)), dos);
             w.Bytes(dos);
             byte[] data = device.DeviceData;
             w.U32LE((uint)data.Length);
@@ -255,8 +255,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 }
                 var request = new RdpdrIoRequest(fileId, major, minor, r.Rest().ToArray());
                 Task work = CompleteDeviceAsync(device, request, deviceId, completionId, _generation);
-                _pending.Add(work);
-                _ = work.ContinueWith(t => { lock (_pendingGate) { _pending.Remove(t); } }, CancellationToken.None,
+                _ = _pending.Add(work);
+                _ = work.ContinueWith(t => { lock (_pendingGate) { _ = _pending.Remove(t); } }, CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
             return null;
@@ -563,7 +563,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     internal async Task DrainDevicesAsync()
     {
         Task[] pending;
-        lock (_pendingGate) { pending = _pending.ToArray(); }
+        lock (_pendingGate) { pending = [.. _pending]; }
         await Task.WhenAll(pending).ConfigureAwait(false);
         if (_closed)
         {

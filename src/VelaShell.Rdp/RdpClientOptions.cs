@@ -78,23 +78,19 @@ public sealed record RdpClientOptions
     /// <summary>Folders shared to the remote desktop with read/write access (rdpdr); empty by default.</summary>
     public IReadOnlyList<DriveMapping> Drives { get; init; } = [];
 
-    private IReadOnlyList<PortMapping> _ports = [];
-
     /// <summary>Explicit Windows COM/LPT selections; empty disables port redirection. At most 32 unique ports.</summary>
     public IReadOnlyList<PortMapping> Ports
     {
-        get => _ports;
-        init => _ports = Array.AsReadOnly(PortMapping.Validate(value));
-    }
-
-    private IReadOnlyList<PrinterMapping> _printers = [];
+        get;
+        init => field = Array.AsReadOnly(PortMapping.Validate(value));
+    } = [];
 
     /// <summary>Explicit installed Windows printer selections; empty disables printing. Requires matching server drivers; no Easy Print/XPS.</summary>
     public IReadOnlyList<PrinterMapping> Printers
     {
-        get => _printers;
-        init => _printers = Array.AsReadOnly(PrinterMapping.Validate(value));
-    }
+        get;
+        init => field = Array.AsReadOnly(PrinterMapping.Validate(value));
+    } = [];
 
     /// <summary>One explicitly selected Windows camera; null disables capture. Only native MJPEG formats are offered.</summary>
     public Channels.RdpCameraDevice? Camera { get; init; }
