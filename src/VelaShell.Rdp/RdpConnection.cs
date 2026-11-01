@@ -1,6 +1,6 @@
 using System.Net.Security;
-using System.Security.Cryptography;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Input;
 using VelaShell.Rdp.Mcs;
@@ -121,7 +121,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         }
         else if (selected.HasFlag(SecurityProtocol.Ssl))
         {
-            await StartTlsAsync(ct).ConfigureAwait(false);
+            _ = await StartTlsAsync(ct).ConfigureAwait(false);
         }
         else
         {
@@ -619,7 +619,7 @@ internal sealed class RdpConnection : IAsyncDisposable
             _tcp?.Close();
             throw;
         }
-        finally { channelGate.Release(); }
+        finally { _ = channelGate.Release(); }
     }
 
     internal void ReassembleChannel(ushort channelId, string name, byte[] payload)

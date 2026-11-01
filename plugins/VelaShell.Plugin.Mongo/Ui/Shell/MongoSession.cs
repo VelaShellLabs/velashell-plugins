@@ -294,8 +294,8 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
         Shell.RebuildVisible();
 
         // 计数、TTL、用户数与存储函数:并发补,补到哪行哪行就亮 —— 不让第一次展开等它们。
-        _ = FillCountsAsync(collectionsFolder.Children.ToList());
-        _ = FillBucketCountsAsync(bucketsFolder.Children.ToList());
+        _ = FillCountsAsync([.. collectionsFolder.Children]);
+        _ = FillBucketCountsAsync([.. bucketsFolder.Children]);
         _ = FillUsersAsync(usersFolder);
         if (functionsFolder is not null)
         {

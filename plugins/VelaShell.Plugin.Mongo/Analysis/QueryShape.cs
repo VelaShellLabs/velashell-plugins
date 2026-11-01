@@ -495,7 +495,7 @@ internal sealed record IndexAdvice(
         }
         return keys.ElementCount == 0
             ? null
-            : new IndexAdvice(keys, equality, sortOnly, range.Where(f => !both.Contains(f)).ToList(), both);
+            : new IndexAdvice(keys, equality, sortOnly, [.. range.Where(f => !both.Contains(f))], both);
     }
 
     /// <summary>这份建议是否已被某个现有索引覆盖(键序与方向一致的前缀,或整体反向)。</summary>

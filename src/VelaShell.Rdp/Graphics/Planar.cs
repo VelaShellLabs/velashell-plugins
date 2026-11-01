@@ -142,7 +142,7 @@ internal static class Planar
                 offset = 0;
                 if (hasAlpha)
                 {
-                    alphaPlane = decoded.Slice(0, planeSize);
+                    alphaPlane = decoded[..planeSize];
                     offset = planeSize;
                 }
 

@@ -172,12 +172,7 @@ internal static class CredSsp
     {
         X509Certificate remote = tls.RemoteCertificate ?? throw new RdpProtocolException("No server certificate for NLA.");
         using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(remote.GetRawCertData());
-        using RSA? rsa = cert.GetRSAPublicKey();
-        if (rsa is null)
-        {
-            throw new RdpProtocolException("NLA requires an RSA server certificate.");
-        }
-
+        using RSA? rsa = cert.GetRSAPublicKey() ?? throw new RdpProtocolException("NLA requires an RSA server certificate.");
         return rsa.ExportRSAPublicKey();   // matches OpenSSL i2d_PublicKey (PKCS#1 RSAPublicKey)
     }
 
@@ -295,10 +290,13 @@ internal static class CredSsp
     /// -1073741715 — so a direct <c>(uint)</c> conversion of the <see cref="BigInteger" /> throws
     /// <see cref="OverflowException" />, masking the very error the server is reporting.
     /// </summary>
+#pragma warning disable IDE0078 // 使用模式匹配
     private static uint ToUInt32(BigInteger value) =>
+        // Plain comparisons, not a relational pattern: BigInteger bounds are not constants (CS9135).
         value >= int.MinValue && value <= uint.MaxValue
             ? unchecked((uint)(long)value)
             : throw new RdpProtocolException("An NLA integer is outside the 32-bit range.");
+#pragma warning restore IDE0078 // 使用模式匹配
 
     internal static (uint Version, uint? Error) ParseForTest(byte[] der)
     {

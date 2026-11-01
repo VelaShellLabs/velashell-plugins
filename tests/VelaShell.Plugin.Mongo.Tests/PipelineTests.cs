@@ -242,7 +242,7 @@ public sealed class PipelineTests
         int close = code.LastIndexOf(']');
         PipelineParse back = PipelineText.Parse(code[open..(close + 1)]);
         Assert.IsTrue(back.Ok, back.ErrorKey ?? "");
-        Assert.AreSequenceEqual(stages, back.Stages.Select(s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!)).ToList());
+        Assert.AreSequenceEqual(stages, [.. back.Stages.Select(s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!))]);
     }
 
     [TestMethod]

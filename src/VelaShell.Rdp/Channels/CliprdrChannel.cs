@@ -66,8 +66,8 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
                 {
                     if (_offers.TryDequeue(out TaskCompletionSource? offer) && offer is not null)
                     {
-                        if ((msgFlags & ResponseOk) != 0) { offer.TrySetResult(); }
-                        else { offer.TrySetException(new IOException("The remote clipboard rejected the format list.")); }
+                        if ((msgFlags & ResponseOk) != 0) { _ = offer.TrySetResult(); }
+                        else { _ = offer.TrySetException(new IOException("The remote clipboard rejected the format list.")); }
                     }
                 }
                 break;
@@ -85,7 +85,11 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
                 }
             case LockClipData:
             case UnlockClipData:
-                if (!SupportsClipboardLock || data.Length != 4) throw new InvalidDataException("Invalid clipboard lock PDU.");
+                if (!SupportsClipboardLock || data.Length != 4)
+                {
+                    throw new InvalidDataException("Invalid clipboard lock PDU.");
+                }
+
                 _raise(new RdpClipboardEvent(msgType == LockClipData ? 11u : 12u, BitConverter.ToUInt32(data), 0, []));
                 break;
             case FileContentsRequest:
@@ -102,8 +106,16 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
                     payload.U32LE(posLow);
                     payload.U32LE(posHigh);
                     payload.U32LE(cbRequested);
-                    if (rr.Remaining == 4 && SupportsClipboardLock) payload.U32LE(rr.U32LE());
-                    if (rr.Remaining != 0) throw new InvalidDataException("Invalid clipboard file version.");
+                    if (rr.Remaining == 4 && SupportsClipboardLock)
+                    {
+                        payload.U32LE(rr.U32LE());
+                    }
+
+                    if (rr.Remaining != 0)
+                    {
+                        throw new InvalidDataException("Invalid clipboard file version.");
+                    }
+
                     _raise(new RdpClipboardEvent(6, streamId, listIndex, payload.ToArray()));
                     break;
                 }
@@ -148,7 +160,7 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
                 byte[] shortName = new byte[32];
                 // FileGroupDescriptorW fits the 32-byte ANSI field, but not its UTF-16 variant.
                 Encoding encoding = asciiNames ? Encoding.ASCII : Encoding.Unicode;
-                encoding.GetBytes(name.AsSpan(0, Math.Min(name.Length, asciiNames ? 31 : 15)), shortName);
+                _ = encoding.GetBytes(name.AsSpan(0, Math.Min(name.Length, asciiNames ? 31 : 15)), shortName);
                 body.Bytes(shortName);
             }
         }
@@ -181,7 +193,11 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
         body.U32LE(length);
         if (clipDataId is { } id)
         {
-            if (!SupportsClipboardLock) throw new InvalidOperationException("Peer does not support clipboard locks.");
+            if (!SupportsClipboardLock)
+            {
+                throw new InvalidOperationException("Peer does not support clipboard locks.");
+            }
+
             body.U32LE(id);
         }
         return _send(Header(FileContentsRequest, 0, body.Span), ct);
@@ -189,7 +205,11 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
 
     internal Task LockClipboardAsync(uint id, bool locked, CancellationToken ct)
     {
-        if (!SupportsClipboardLock) throw new InvalidOperationException("Peer does not support clipboard locks.");
+        if (!SupportsClipboardLock)
+        {
+            throw new InvalidOperationException("Peer does not support clipboard locks.");
+        }
+
         return _send(Header(locked ? LockClipData : UnlockClipData, 0, BitConverter.GetBytes(id)), ct);
     }
 
@@ -233,7 +253,7 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
     {
         var r = new ByteReader(data);
         int count = r.U16LE();
-        r.U16LE();
+        _ = r.U16LE();
         for (int i = 0; i < count; i++)
         {
             ushort type = r.U16LE();
@@ -242,7 +262,7 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
             var capability = new ByteReader(r.Take(length - 4));
             if (type == CapstypeGeneral)
             {
-                capability.U32LE();
+                _ = capability.U32LE();
                 _serverFlags = capability.U32LE();
             }
         }
@@ -260,7 +280,7 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
                 uint id = reader.U32LE();
                 ReadOnlySpan<byte> nameBytes = reader.Take(32);
                 string name = (asciiNames ? Encoding.ASCII : Encoding.Unicode).GetString(nameBytes).Split('\0')[0];
-                shortNames.Append(id).Append('\t').Append(name.Replace("\t", "").Replace("\r", "").Replace("\n", "")).Append('\n');
+                _ = shortNames.Append(id).Append('\t').Append(name.Replace("\t", "").Replace("\r", "").Replace("\n", "")).Append('\n');
             }
             return shortNames.ToString();
         }

@@ -2,6 +2,7 @@ using System.Globalization;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
+using VelaShell.Rdp.Channels;
 
 namespace VelaShell.Plugin.Rdp;
 
@@ -13,6 +14,11 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         | RdpPerformanceFlags.DisableMenuAnimations | RdpPerformanceFlags.DisableThemes,
     int ColorDepth = RdpSettings.DefaultColorDepth)
 {
+    internal IReadOnlyList<PortMapping> Ports { get; init; } = [];
+    internal IReadOnlyList<PrinterMapping> Printers { get; init; } = [];
+    internal RdpCameraDevice? Camera { get; init; }
+    internal IReadOnlyList<string> WpdDevices { get; init; } = [];
+    internal const string PortsKey = "ports";
     internal const string TrustedThumbprintKey = "trustedThumbprint";
 
     /// <summary>Setting key of the security-layer choice (<c>auto</c> / <c>nla</c> / <c>tls</c>).</summary>
@@ -40,7 +46,10 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
     public static RdpSettings From(WorkspaceConnectRequest request, Loc loc) => From(request, loc, LocalDisks.Enumerate());
 
-    internal static RdpSettings From(WorkspaceConnectRequest request, Loc loc, IReadOnlyList<LocalDisk> disks)
+    internal static RdpSettings From(WorkspaceConnectRequest request, Loc loc, IReadOnlyList<LocalDisk> disks,
+        Func<IReadOnlyList<PrinterMapping>>? enumeratePrinters = null,
+        Func<IReadOnlyList<RdpCameraDevice>>? enumerateCameras = null,
+        Func<IReadOnlyList<RdpWpdDevice>>? enumerateWpdDevices = null)
     {
         void Invalid(string field) => throw new ProtocolConnectionException(loc.Format("Invalid", field));
         if (string.IsNullOrWhiteSpace(request.Host) || request.Host.Any(char.IsControl))
@@ -178,7 +187,25 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             drives.Add(new(name, Path.GetFullPath(path)));
         }
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
-            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance, colorDepth);
+            Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance, colorDepth)
+        {
+            Ports = ParsePorts(request.GetString(PortsKey), loc),
+            Printers = LocalPrinters.Selected(request, loc, enumeratePrinters ?? WindowsPrinterCatalog.GetPrinters),
+            Camera = LocalCameras.Selected(request, loc, enumerateCameras ?? RdpCameraDevices.Enumerate),
+            WpdDevices = LocalWpdDevices.Selected(request, loc, enumerateWpdDevices ?? RdpWpdDevices.Enumerate)
+        };
+    }
+
+    private static IReadOnlyList<PortMapping> ParsePorts(string text, Loc loc)
+    {
+        try
+        {
+            PortMapping[] ports = string.IsNullOrWhiteSpace(text) ? []
+                : [.. text.Split(';', StringSplitOptions.TrimEntries).Select(p => new PortMapping(p))];
+            if (ports.Length > 32 || ports.DistinctBy(p => p.Name).Count() != ports.Length) { throw new ArgumentException(); }
+            return ports;
+        }
+        catch (ArgumentException) { throw new ProtocolConnectionException(loc.Format("Invalid", loc["Ports"])); }
     }
 
     public static IReadOnlyList<ProtocolSettingField> Declare(Loc loc) => Declare(loc, LocalDisks.Enumerate());
@@ -187,11 +214,14 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     /// Declares the connection form. The drive-mapping page lists one checkbox per local disk (all
     /// unchecked: nothing is shared until the user opts in), followed by the custom-folder field.
     /// </summary>
-    internal static IReadOnlyList<ProtocolSettingField> Declare(Loc loc, IReadOnlyList<LocalDisk> disks)
+    internal static IReadOnlyList<ProtocolSettingField> Declare(Loc loc, IReadOnlyList<LocalDisk> disks,
+        IReadOnlyList<PrinterMapping>? printers = null, IReadOnlyList<RdpCameraDevice>? cameras = null,
+        IReadOnlyList<RdpWpdDevice>? wpdDevices = null)
     {
         List<ProtocolSettingField> fields =
         [
             new() { Key = "domain", Label = loc["Domain"], DefaultValue = "" },
+            new() { Key = PortsKey, Label = loc["Ports"], Hint = loc["PortsHint"], DefaultValue = "", Page = DrivesPage },
             new() { Key = "width", Label = loc["Width"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1920", IsAdvanced = true },
             new() { Key = "height", Label = loc["Height"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1080", IsAdvanced = true },
             new() { Key = "timeout", Label = loc["Timeout"], Kind = ProtocolSettingKind.Integer, DefaultValue = "15", IsAdvanced = true },
@@ -223,6 +253,43 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
                 Page = DrivesPage
             });
         }
+
+        foreach (PrinterMapping printer in printers ?? [])
+        {
+            fields.Add(new()
+            {
+                Key = LocalPrinters.Key(printer),
+                Label = $"{loc["Printers"]}: {printer.PrinterName}",
+                Hint = loc["PrintersHint"],
+                Kind = ProtocolSettingKind.Boolean,
+                DefaultValue = "false",
+                Page = DrivesPage
+            });
+        }
+
+        foreach (RdpWpdDevice device in wpdDevices ?? [])
+        {
+            fields.Add(new()
+            {
+                Key = LocalWpdDevices.Key(device),
+                Label = $"{loc["WpdDevices"]}: {device.Name}",
+                Hint = loc["WpdHint"],
+                Kind = ProtocolSettingKind.Boolean,
+                DefaultValue = "false",
+                Page = DrivesPage
+            });
+        }
+
+        fields.Add(new()
+        {
+            Key = LocalCameras.SettingKey,
+            Label = loc["Camera"],
+            Hint = loc["CameraHint"],
+            Kind = ProtocolSettingKind.Choice,
+            DefaultValue = "",
+            Page = DrivesPage,
+            Choices = [new("", loc["CameraNone"]), .. (cameras ?? []).Select(camera => new ProtocolSettingChoice(LocalCameras.Key(camera), camera.Name))]
+        });
 
         // The hint stays visible under the box (the placeholder vanishes as soon as anything is typed),
         // so it carries the format plus concrete examples for this OS.

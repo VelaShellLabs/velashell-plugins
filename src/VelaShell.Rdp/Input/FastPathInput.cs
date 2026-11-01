@@ -60,7 +60,7 @@ internal static class FastPathInput
             {
                 events.U8(EventUnicode << 5);
                 events.U16LE(text[i]);
-                events.U8((byte)((EventUnicode << 5) | KbdFlagsRelease));
+                events.U8((EventUnicode << 5) | KbdFlagsRelease);
                 events.U16LE(text[i]);
             }
             yield return Frame(events.Span, count * 2);
