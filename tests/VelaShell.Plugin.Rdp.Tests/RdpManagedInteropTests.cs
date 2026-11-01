@@ -219,6 +219,105 @@ public sealed class RdpManagedInteropTests
     }
 
     [TestMethod]
+    public async Task DrawingOrdersPaintTheSameDesktopAsBitmaps()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        byte[] pin = await LearnPinAsync(target);
+        var shots = new Dictionary<bool, byte[]>();
+        foreach (bool orders in new[] { false, true })
+        {
+            await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(new RdpClientOptions
+            {
+                Host = target.Host, Port = target.Port, Username = User, Password = Pass, Width = 1024, Height = 768,
+                ColorDepth = 32, CertificatePin = pin, DynamicResolution = false, DrawingOrders = orders,
+            });
+            byte[] surface = new byte[1024 * 768 * 4];
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
+            for (int i = 0; DateTime.UtcNow < deadline; i++)
+            {
+                RdpFrameCopy copy = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+                Assert.IsFalse(copy.SizeChanged);
+                if (i is > 20 and < 40)
+                {
+                    // Move the pointer across the desktop: hover effects and window redraws exercise more orders.
+                    await session.MouseAsync(0x0800, (uint)(i * 37 % 1024), (uint)(i * 23 % 600), default);
+                }
+
+                await Task.Delay(150);
+            }
+
+            await session.MouseAsync(0x0800, 1000, 760, default);   // park the pointer away from the compared area
+            await Task.Delay(1500);
+            _ = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+            Console.WriteLine($"orders {(orders ? "on" : "off")}: {session.Connection.OrderUpdates} orders updates ({session.Connection.OrderStats}), distinct colours ~{CountDistinct(surface)}");
+            Assert.IsTrue(session.IsConnected, $"orders {orders}: the session dropped (decode failure?)");
+            Assert.IsGreaterThan(1, CountDistinct(surface), "blank desktop");
+            if (!orders)
+            {
+                Assert.AreEqual(0, session.Connection.OrderUpdates, "no orders arrive unless negotiated");
+            }
+
+            shots[orders] = surface;
+        }
+
+        int differing = 0;
+        for (int i = 0; i < 1024 * 600 * 4; i += 4)
+        {
+            differing += shots[false].AsSpan(i, 3).SequenceEqual(shots[true].AsSpan(i, 3)) ? 0 : 1;
+        }
+
+        Console.WriteLine($"orders on vs off: {differing} of {1024 * 600} pixels differ");
+        Assert.IsLessThan(1024 * 600 / 100, differing, "The desktop drawn with orders differs from the bitmap-only one.");
+    }
+
+    [TestMethod]
+    public async Task AScrollingTerminalEndsTheSameWithDrawingOrders()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        string? display = Environment.GetEnvironmentVariable("VELA_RDP_TEST_XDISPLAY");
+        if (string.IsNullOrEmpty(display)) { Assert.Inconclusive("VELA_RDP_TEST_XDISPLAY not set."); return; }
+        // Warm up: the first xterm after a while starts slowly (font cache), and a leftover window would differ.
+        _ = RunInSession(display, "pkill -x xterm; (xterm -e true >/dev/null 2>&1 &); sleep 2");
+        byte[] pin = await LearnPinAsync(target);
+        var shots = new Dictionary<bool, byte[]>();
+        foreach (bool orders in new[] { false, true })
+        {
+            await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(new RdpClientOptions
+            {
+                Host = target.Host, Port = target.Port, Username = User, Password = Pass, Width = 1024, Height = 768,
+                ColorDepth = 32, CertificatePin = pin, DynamicResolution = false, DrawingOrders = orders,
+            });
+            byte[] surface = new byte[1024 * 768 * 4];
+            await Task.Delay(2000);
+            // xterm scrolls with XCopyArea; -hold keeps the last screen (lines 1972..2000) up, so both runs end alike.
+            _ = RunInSession(display, "(xterm -geometry 80x30+40+40 -hold -e seq 1 2000 >/dev/null 2>&1 &); sleep 0.3");
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (DateTime.UtcNow < deadline)
+            {
+                _ = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+                await Task.Delay(100);
+            }
+
+            _ = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+            _ = RunInSession(display, "pkill -x xterm; true");
+            Console.WriteLine($"orders {(orders ? "on" : "off")}: {session.Connection.OrderUpdates} orders updates ({session.Connection.OrderStats})");
+            WriteBmp(surface, 1024, 768, $"scroll-orders-{(orders ? "on" : "off")}.bmp");
+            Assert.IsTrue(session.IsConnected, $"orders {orders}: the session dropped");
+            shots[orders] = surface;
+            await Task.Delay(1500);
+        }
+
+        int differing = 0;
+        for (int i = 0; i < 1024 * 600 * 4; i += 4)
+        {
+            differing += shots[false].AsSpan(i, 3).SequenceEqual(shots[true].AsSpan(i, 3)) ? 0 : 1;
+        }
+
+        Console.WriteLine($"scrolled terminal, orders on vs off: {differing} of {1024 * 600} pixels differ");
+        Assert.IsLessThan(1024 * 600 / 100, differing, "The scrolled terminal drawn with orders differs from the bitmap-only one.");
+    }
+
+    [TestMethod]
     public async Task TheServersPointerShapesArrive()
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }

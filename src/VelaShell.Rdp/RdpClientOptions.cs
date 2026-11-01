@@ -56,6 +56,13 @@ public sealed record RdpClientOptions
     public int DesktopScaleFactor { get; init; } = 100;
 
     /// <summary>
+    /// When <see langword="true" /> (the default) the client accepts GDI drawing orders — solid fills, screen-to-screen
+    /// copies and blits from a bitmap cache — besides bitmaps: a server that uses them (xrdp, older Windows) then scrolls
+    /// and redraws repeated tiles without resending pixels. Newer Windows servers send bitmaps either way.
+    /// </summary>
+    public bool DrawingOrders { get; init; } = true;
+
+    /// <summary>
     /// When set, the server's leaf certificate must match this SHA-256 hash (pinning); CA, name and
     /// expiry checks are then skipped. When null, the OS trust chain is used and an untrusted
     /// certificate raises <see cref="RdpCertificateRejectedException"/> carrying the leaf PEM.

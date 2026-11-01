@@ -15,7 +15,7 @@ internal sealed record RdpConnectOptions(
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
-    bool AudioPlayback = false, int ScaleFactor = 100)
+    bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -202,7 +202,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         if (active.Width > 0 && active.Height > 0) { _width = active.Width; _height = active.Height; }
 
         ushort user = _mcs.UserId;
-        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0), ct).ConfigureAwait(false);
+        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0, _options.DrawingOrders), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.Synchronize(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.ControlCooperate(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.RequestControl(_shareId, user), ct).ConfigureAwait(false);
@@ -210,7 +210,7 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // The server paints a full-screen bitmap update right after the font list, which raises
         // FrameUpdated; resize the backing store here so that update lands in the new dimensions.
-        Framebuffer = new Framebuffer(_width, _height);
+        StartSurface(active.Bpp is 0 ? _options.Bpp : active.Bpp);
     }
 
     // ---- Active-phase pump ----
@@ -263,7 +263,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         }
     }
 
-    private void ProcessDataPdu(ShareDataType type, ref ByteReader r)
+    internal void ProcessDataPdu(ShareDataType type, ref ByteReader r)
     {
         switch (type)
         {
@@ -273,6 +273,15 @@ internal sealed class RdpConnection : IAsyncDisposable
                 {
                     _ = BitmapUpdate.Apply(ref r, Framebuffer);   // decodes outside the surface lock
 
+                    FrameUpdated?.Invoke();
+                }
+                else if (updateType == 0x0000 && _orders is not null)   // UPDATETYPE_ORDERS
+                {
+                    r.Skip(2);                                    // pad2OctetsA
+                    ushort numberOrders = r.U16LE();
+                    r.Skip(2);                                    // pad2OctetsB
+                    _orders.Process(r.Rest(), numberOrders);
+                    OrderUpdates++;
                     FrameUpdated?.Invoke();
                 }
                 break;
@@ -381,7 +390,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         return passthrough ? data : result;
     }
 
-    private bool ApplyFastPathUpdate(int code, ReadOnlySpan<byte> updateData)
+    internal bool ApplyFastPathUpdate(int code, ReadOnlySpan<byte> updateData)
     {
         if (code is >= PointerDecoder.FastPathNull and <= PointerDecoder.FastPathNew)
         {
@@ -392,9 +401,23 @@ internal sealed class RdpConnection : IAsyncDisposable
             return false;
         }
 
+        if (code == 0x0)   // FASTPATH_UPDATETYPE_ORDERS
+        {
+            if (_orders is null)
+            {
+                return false;   // not negotiated
+            }
+
+            var orders = new ByteReader(updateData);
+            ushort numberOrders = orders.U16LE();
+            _orders.Process(orders.Rest(), numberOrders);
+            OrderUpdates++;
+            return true;
+        }
+
         if (code != 0x1)
         {
-            return false; // FASTPATH_UPDATETYPE_BITMAP; orders / palette are not negotiated
+            return false; // FASTPATH_UPDATETYPE_BITMAP; palette (8 bpp) and surface commands are not negotiated
         }
 
         var rr = new ByteReader(updateData);
@@ -402,6 +425,67 @@ internal sealed class RdpConnection : IAsyncDisposable
         _ = BitmapUpdate.Apply(ref rr, Framebuffer);   // decodes outside the surface lock
 
         return true;
+    }
+
+    // Drawing orders (when negotiated): one decoder per connection, so the bitmap cache survives a reactivation (a
+    // resize) like FreeRDP's; its primary-order state is reset then, and it draws on whatever surface is current.
+    private OrderDecoder? _orders;
+
+    /// <summary>Orders updates processed (diagnostics and interop tests).</summary>
+    internal int OrderUpdates { get; private set; }
+
+    /// <summary>Drawing operations by kind: "fill=… dst=… pat=… scr=… mem=…".</summary>
+    internal string OrderStats => $"fill={_orderSurface.Counts[0]} dst={_orderSurface.Counts[1]} pat={_orderSurface.Counts[2]} scr={_orderSurface.Counts[3]} mem={_orderSurface.Counts[4]}";
+
+    private int _ordersBpp;
+    private readonly OrderSurface _orderSurface = new();
+
+    /// <summary>A new surface at the activated size, and the drawing-order decoder pointed at it.</summary>
+    internal void StartSurface(int sessionBpp)
+    {
+        Framebuffer = new Framebuffer(_width, _height);
+        _orderSurface.Current = Framebuffer;
+        if (!_options.DrawingOrders)
+        {
+            return;
+        }
+
+        if (_orders is null || _ordersBpp != sessionBpp)
+        {
+            _orders = new OrderDecoder(sessionBpp, _orderSurface, Capabilities.BitmapCacheCells);
+            _ordersBpp = sessionBpp;
+        }
+        else
+        {
+            _orders.ResetPrimaryState();
+        }
+    }
+
+    /// <summary>Forwards drawing orders to the framebuffer of the current activation (it is replaced on a resize).</summary>
+    private sealed class OrderSurface : IOrderTarget
+    {
+        internal Framebuffer Current { get; set; } = new(1, 1);
+
+        /// <summary>Operations drawn per kind: fill, DstBlt, PatBlt, ScrBlt, MemBlt (diagnostics and interop tests).</summary>
+        internal readonly int[] Counts = new int[5];
+
+        public int Width => Current.Width;
+
+        public int Height => Current.Height;
+
+        public void FillRect(OrderRect rect, uint bgra, OrderRect? clip) { Counts[0]++; Current.FillRect(rect, bgra, clip); }
+
+        public void DstRop(OrderRect rect, byte rop3, OrderRect? clip) { Counts[1]++; Current.DstRop(rect, rop3, clip); }
+
+        public void PatBlt(OrderRect rect, byte rop3, OrderBrush brush, OrderRect? clip) { Counts[2]++; Current.PatBlt(rect, rop3, brush, clip); }
+
+        public void ScreenCopy(int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip) { Counts[3]++; Current.ScreenCopy(srcX, srcY, dest, rop3, clip); }
+
+        public void CachedBlit(CachedBitmap bitmap, int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip)
+        {
+            Counts[4]++;
+            Current.CachedBlit(bitmap, srcX, srcY, dest, rop3, clip);
+        }
     }
 
     /// <summary>The server's mouse pointer changed (decoded and cached by <see cref="PointerDecoder"/>).</summary>

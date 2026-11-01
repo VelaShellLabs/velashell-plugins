@@ -11,7 +11,7 @@ namespace VelaShell.Rdp.Pdu;
 internal static class Capabilities
 {
     /// <summary>The share id plus the server's active desktop size (0×0 when the caps omit a bitmap set).</summary>
-    internal readonly record struct DemandActive(uint ShareId, int Width, int Height, bool RefreshRect = false, bool SuppressOutput = false);
+    internal readonly record struct DemandActive(uint ShareId, int Width, int Height, bool RefreshRect = false, bool SuppressOutput = false, int Bpp = 0);
 
     /// <summary>Largest desktop area adopted from a server (8K UHD).</summary>
     internal const long MaxDesktopPixels = 7680L * 4320;
@@ -28,7 +28,7 @@ internal static class Capabilities
         ushort lenSource = r.U16LE();
         _ = r.U16LE();                 // lengthCombinedCapabilities
         r.Skip(lenSource);
-        int width = 0, height = 0;
+        int width = 0, height = 0, bpp = 0;
         bool refreshRect = false, suppressOutput = false;
         if (r.Remaining >= 4)
         {
@@ -53,7 +53,8 @@ internal static class Capabilities
                 }
                 else if (type == 2 && bodyLen >= 12) // CAPSTYPE_BITMAP
                 {
-                    r.Skip(8);     // preferredBitsPerPixel + receive{1,4,8}BitsPerPixel
+                    bpp = r.U16LE();   // preferredBitsPerPixel: the session colour depth drawing orders are encoded in
+                    r.Skip(6);         // receive{1,4,8}BitsPerPixel
                     width = r.U16LE();
                     height = r.U16LE();
                     r.Skip(bodyLen - 12);
@@ -71,10 +72,10 @@ internal static class Capabilities
             width = height = 0;
         }
 
-        return new DemandActive(shareId, width, height, refreshRect, suppressOutput);
+        return new DemandActive(shareId, width, height, refreshRect, suppressOutput, bpp is 8 or 15 or 16 or 24 or 32 ? bpp : 0);
     }
 
-    internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels)
+    internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels, bool drawingOrders = false)
     {
         var caps = new ByteWriter(512);
         ushort count = 0;
@@ -82,7 +83,12 @@ internal static class Capabilities
 
         Set(General);
         Set(w => Bitmap(w, width, height, bpp));
-        Set(Order);
+        Set(w => Order(w, drawingOrders));
+        if (drawingOrders)
+        {
+            Set(BitmapCacheRev2);
+        }
+
         Set(Pointer);
         Set(Input);
         Set(Brush);
@@ -154,7 +160,15 @@ internal static class Capabilities
         w.U16LE(0);             // pad
     }
 
-    private static void Order(ByteWriter w)
+    /// <summary>Cell sizes advertised in the revision 2 bitmap cache set: 16×16, 32×32 and 64×64 tiles (as mstsc).</summary>
+    internal static readonly int[] BitmapCacheCells = [600, 600, 2048];
+
+    /// <summary>
+    /// TS_ORDER_CAPABILITYSET. With <paramref name="drawingOrders"/> the server may draw with DstBlt, PatBlt (and OpaqueRect,
+    /// which shares its index), ScrBlt, MemBlt and MultiOpaqueRect instead of bitmaps: scrolling becomes a screen copy and
+    /// repeated tiles a cache reference. Without it every index is zero and the server sends bitmap updates only.
+    /// </summary>
+    private static void Order(ByteWriter w, bool drawingOrders)
     {
         Header(w, 3, 88);
         w.Zeros(16);            // terminalDescriptor
@@ -165,7 +179,17 @@ internal static class Capabilities
         w.U16LE(1);             // maximumOrderLevel
         w.U16LE(0);             // numberFonts
         w.U16LE(0x002A);        // orderFlags: NEGOTIATE | ZEROBOUNDSDELTAS | COLORINDEX
-        w.Zeros(32);            // orderSupport: no orders → server sends bitmap updates
+        Span<byte> support = stackalloc byte[32];   // orderSupport
+        if (drawingOrders)
+        {
+            support[0x00] = 1;  // TS_NEG_DSTBLT_INDEX
+            support[0x01] = 1;  // TS_NEG_PATBLT_INDEX (PatBlt and OpaqueRect)
+            support[0x02] = 1;  // TS_NEG_SCRBLT_INDEX
+            support[0x03] = 1;  // TS_NEG_MEMBLT_INDEX
+            support[0x12] = 1;  // TS_NEG_MULTIOPAQUERECT_INDEX
+        }
+
+        w.Bytes(support);
         w.U16LE(0);             // textFlags
         w.U16LE(0);             // orderSupportExFlags
         w.U32LE(0);             // pad4octetsB
@@ -174,6 +198,24 @@ internal static class Capabilities
         w.U16LE(0);             // pad2octetsD
         w.U16LE(0);             // textANSICodePage
         w.U16LE(0);             // pad2octetsE
+    }
+
+    /// <summary>
+    /// TS_BITMAPCACHE_CAPABILITYSET_REV2 (MS-RDPBCGR 2.2.7.1.4.2): three non-persistent cells, no persistent-key list and no
+    /// waiting list. Required for MemBlt: the server fills the cells with Cache Bitmap (Revision 2) secondary orders.
+    /// </summary>
+    private static void BitmapCacheRev2(ByteWriter w)
+    {
+        Header(w, 19, 40);
+        w.U16LE(0);                                 // CacheFlags: no persistent keys, no waiting list
+        w.U8(0);                                    // pad2
+        w.U8((byte)BitmapCacheCells.Length);        // NumCellCaches
+        for (int i = 0; i < 5; i++)
+        {
+            w.U32LE(i < BitmapCacheCells.Length ? (uint)BitmapCacheCells[i] : 0u);   // numEntries, k (persistent) bit clear
+        }
+
+        w.Zeros(12);                                // Pad3
     }
 
     private static void Pointer(ByteWriter w)

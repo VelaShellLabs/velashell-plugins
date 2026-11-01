@@ -28,8 +28,9 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
   `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Security/`).
 - **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Mcs/`).
 - **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
-- **Graphics** — interleaved-RLE and RDP 6.0 planar decode, pointer (cursor) decode, and a BGRA
-  framebuffer that tracks its changed region; fragmented fast-path updates are reassembled (`Graphics/`).
+- **Graphics** — interleaved-RLE and RDP 6.0 planar decode, GDI drawing orders with a bitmap cache
+  (`Orders.cs`, ported from FreeRDP), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
+  region; fragmented fast-path updates are reassembled (`Graphics/`).
 - **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
 - **Channels** — clipboard (cliprdr) and drive redirection (rdpdr) over chunked static virtual
   channels, plus the display-control dynamic channel (drdynvc + MS-RDPEDISP) for dynamic
@@ -190,8 +191,12 @@ Remote text/images synchronize automatically; Windows remote file descriptors ar
 content reads. A newer local copy supersedes pending publication. Unchanged content is not echoed back.
 
 No audio, multiple monitors or the graphics pipeline (RemoteFX/GFX/H.264) are negotiated: the server
-renders via classic bitmap updates (interleaved RLE, RDP 6.0 planar at 32 bpp) with MPPC bulk
-compression. Dynamic resolution uses the display-control channel only; GFX is declined. The engine
+renders via classic bitmap updates (interleaved RLE, RDP 6.0 planar at 32 bpp) and GDI drawing orders
+(DstBlt, PatBlt, OpaqueRect, MultiOpaqueRect, ScrBlt, MemBlt from a 600/600/2048-entry revision 2 bitmap
+cache; `RdpClientOptions.DrawingOrders`, on by default) with MPPC bulk compression. Orders let a server
+scroll with a screen copy and repaint repeated tiles from the cache instead of resending pixels; xrdp draws
+the whole desktop as cached MemBlts, newer Windows servers send bitmaps either way. The order stream
+itself is budgeted (16 desktops of drawing per update, a 256 MiB cache). Dynamic resolution uses the display-control channel only; GFX is declined. The engine
 runs in-process and shares the host's crash boundary; it is not a sandbox — so everything a server
 sends is bounded (2026-11-01 review): bitmap rectangles are clipped and capped (8192 per side, a
 per-update budget of four desktop areas) before decoding; virtual-channel reassembly is bounded by
@@ -244,4 +249,10 @@ input-batching behaviour is covered by `RdpHardeningTests` (incl. a real directo
 server sending oversized or pre-CVE-2018-0886 TSRequests), `RdpRenderingTests`, `PlanarTests` (FreeRDP
 vectors + fuzzing) and `RdpPointerAndInputTests`; against xrdp, 24-bit and 32-bit (planar) decodes of the
 same desktop are pixel-identical (`FullColourDepthsDecodeTheSameDesktop`) and the server's pointer arrives
-as a 32×32 I-beam (`TheServersPointerShapesArrive`).
+as a 32×32 I-beam (`TheServersPointerShapesArrive`). Drawing orders: `OrderDecoderTests` (every order
+and cache form, bounds, deltas, truncation and 2000 mutations), `RdpDrawingOrderTests` (overlap-safe
+screen copies, ROP3 truth table, brush origin, clipping, both update paths); against xrdp the desktop and a
+terminal scrolled through 2000 lines are pixel-identical with orders on and off
+(`DrawingOrdersPaintTheSameDesktopAsBitmaps`, `AScrollingTerminalEndsTheSameWithDrawingOrders`; xrdp sent
+~70 orders updates, 300–500 cached MemBlts). ScrBlt, fills and patterns are not sent by xrdp's Xorg
+backend, so they are covered by the unit tests only.

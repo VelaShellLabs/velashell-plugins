@@ -13,7 +13,7 @@ namespace VelaShell.Rdp.Graphics;
 /// UI copies only what changed instead of the whole desktop every frame.
 /// </para>
 /// </summary>
-internal sealed class Framebuffer
+internal sealed partial class Framebuffer
 {
     /// <summary>Largest bitmap side accepted from the wire (the desktop itself is capped at 8192).</summary>
     internal const int MaxBitmapSide = 8192;

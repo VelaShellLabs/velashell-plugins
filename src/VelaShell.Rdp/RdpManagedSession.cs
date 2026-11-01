@@ -12,6 +12,8 @@ namespace VelaShell.Rdp;
 public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 {
     private readonly RdpConnection _connection;
+
+    internal RdpConnection Connection => _connection;
     private readonly CancellationTokenSource _stop = new();
     private Task? _pump;
     private int _dirty;
@@ -197,7 +199,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
             string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
-            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor));
+            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders);
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions));
         if (options.DynamicResolution)
