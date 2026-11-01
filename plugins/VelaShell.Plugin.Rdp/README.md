@@ -92,9 +92,27 @@ arguments.
   explains; Enter runs commands in a console); over 2000 characters is refused.
 - Deviation from DESIGN.md: there is no 36px document header. Its only action (Ctrl+Alt+Delete)
   moved into the floating button, so the desktop gets the full height above the 24px status bar.
-- When a
-  session drops, a **Reconnect** button appears over the desktop (the host session tab reconnects
-  too); reconnecting renews credentials and certificate approval.
+- **Background sessions stay connected.** A paused (hidden) session is completely silent, and NAT
+  gateways, firewalls, cloud load balancers and port forwarders expire idle connections after
+  minutes without telling either end — the tab then showed a frozen desktop on return and only
+  later the disconnect card. The library now enables TCP keep-alive (after 30 s idle, 3 probes 10 s
+  apart) and, while display updates are paused, re-sends the paused state every 30 s so even a
+  user-space forwarder sees traffic. A path that dies anyway is noticed within about a minute,
+  in the background, instead of when the user comes back.
+- **Automatic reconnect.** When the network drops (`RdpConnectionLostException`: reset, keep-alive
+  timeout, the server closing TCP without a reason) the tab reconnects by itself, like mstsc: up to
+  20 attempts after 1, 2, 4, 8, 15 and then every 30 s, the card showing "reconnecting (attempt n
+  of 20)". The remote Windows session waits in the disconnected state, so the desktop and its
+  programs come back as they were. A reconnect while the tab is in the background starts with
+  display updates paused. A session that drops again within a minute continues the same series, so
+  a failing path gives up instead of looping. Not reconnected automatically: the server ending the
+  session with a reason (signed out, taken over, idle limit, licence — Set Error Info wins over the
+  TCP close that follows it), protocol or channel failures, and an attempt the server rejects for
+  credentials or certificate. A copy that was in flight when the connection dropped is not resumed.
+  Every disconnect, including plain network loss, is logged with its cause.
+- When automatic reconnect does not apply or gives up, a **Reconnect** button appears over the
+  desktop (the host session tab reconnects too); reconnecting renews credentials and certificate
+  approval. The button also works while automatic attempts are waiting.
 - **Bidirectional clipboard** is off by default. Text/images synchronize as before. On Windows,
   remote Ctrl+C publishes virtual file/directory descriptors only. Paste in the chosen local
   Explorer directory requests IStream content; only then do RDP FILECONTENTS requests transfer

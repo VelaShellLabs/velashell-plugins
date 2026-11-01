@@ -451,6 +451,18 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     }
 
     internal bool IsPresenting => _shown;
+
+    /// <summary>
+    /// For a desktop created off screen (a reconnect while the tab is in the background): pause the server's display
+    /// updates now instead of presenting into a view nobody sees; being attached later resumes them with a repaint.
+    /// </summary>
+    internal void PauseUntilShown()
+    {
+        if (!_attached)
+        {
+            UpdatePresentation();
+        }
+    }
     private void OnWindowActivated(object? sender, EventArgs e)
     {
         // Returning from another application can retain keyboard focus on this desktop.

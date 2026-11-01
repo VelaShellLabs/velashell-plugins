@@ -220,7 +220,8 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
             string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
-            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders);
+            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
+            options.KeepAliveInterval);
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
@@ -264,6 +265,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
         session._pump = session.PumpLoopAsync();
+        session._keepAlive = session.KeepAliveLoopAsync(options.KeepAliveInterval);
         return session;
     }
 
@@ -420,17 +422,72 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 
     public Task SetDisplayUpdatesAsync(bool visible, CancellationToken cancellationToken = default) => Guard(async () =>
     {
-        if (Connection.ServerSupportsSuppressOutput)
+        // Serialized with the keep-alive, which re-sends the paused state: a keep-alive that saw "paused" just before
+        // the view came back must not land after the resume and leave the desktop frozen.
+        await _displayGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await Connection.SendSuppressOutputAsync(visible, cancellationToken).ConfigureAwait(false);
+            if (Connection.ServerSupportsSuppressOutput)
+            {
+                Volatile.Write(ref _displayPaused, visible ? 0 : 1);
+                await Connection.SendSuppressOutputAsync(visible, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Updates suppressed while hidden were never sent; ask for a full repaint when the view comes back.
+            if (visible && Connection.ServerSupportsRefreshRect)
+            {
+                await Connection.SendRefreshRectAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally { _ = _displayGate.Release(); }
+    });
+
+    private readonly SemaphoreSlim _displayGate = new(1, 1);
+    private int _displayPaused;
+    private Task? _keepAlive;
+
+    /// <summary>Keep-alive PDUs sent while display updates were paused (diagnostics and tests).</summary>
+    internal int KeepAlivesSent => Volatile.Read(ref _keepAlivesSent);
+    private int _keepAlivesSent;
+
+    /// <summary>
+    /// While display updates are paused the server sends nothing at all, and a silent connection is exactly what NAT
+    /// gateways, firewalls and port forwarders expire — TCP keep-alive probes carry no data, so a user-space forwarder
+    /// (an SSH or frp tunnel, an nginx stream proxy) never sees them. Re-sending the paused state changes nothing on the
+    /// server and keeps every hop on the path busy.
+    /// </summary>
+    private async Task KeepAliveLoopAsync(TimeSpan interval)
+    {
+        if (interval <= TimeSpan.Zero)
+        {
+            return;
         }
 
-        // Updates suppressed while hidden were never sent; ask for a full repaint when the view comes back.
-        if (visible && Connection.ServerSupportsRefreshRect)
+        try
         {
-            await Connection.SendRefreshRectAsync(cancellationToken).ConfigureAwait(false);
+            using var timer = new PeriodicTimer(interval);
+            while (await timer.WaitForNextTickAsync(_stop.Token).ConfigureAwait(false))
+            {
+                if (Volatile.Read(ref _displayPaused) == 0)
+                {
+                    continue;   // a shown desktop has its own traffic, and TCP keep-alive covers a static one
+                }
+
+                await _displayGate.WaitAsync(_stop.Token).ConfigureAwait(false);
+                try
+                {
+                    if (Volatile.Read(ref _displayPaused) != 0 && IsConnected)
+                    {
+                        await Connection.SendSuppressOutputAsync(false, _stop.Token).ConfigureAwait(false);
+                        _ = Interlocked.Increment(ref _keepAlivesSent);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException) { /* a dead connection ends the pump, which reports it */ }
+                finally { _ = _displayGate.Release(); }
+            }
         }
-    });
+        catch (OperationCanceledException) { }
+    }
 
     private async Task DrainCliprdrAsync()
     {
@@ -502,13 +559,19 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         {
             Volatile.Write(ref _isConnected, 0);
             _stop.Cancel();
-            // A clean end (the server dropped the session) after a Set Error Info PDU means the server told us
-            // why: surface that as the disconnect cause so the reason is not lost (e.g. signed out, licence).
-            uint errorInfo = Volatile.Read(ref _errorInfo);
-            failure ??= _dynamicChannelFailure ?? (errorInfo != 0 ? new RdpDisconnectException(errorInfo) : null);
+            failure = DisconnectCause(failure ?? _dynamicChannelFailure, Volatile.Read(ref _errorInfo));
             if (Volatile.Read(ref _disposed) == 0) { try { Disconnected?.Invoke(failure); } catch { /* ignore */ } }
         }
     }
+
+    /// <summary>
+    /// What <see cref="Disconnected"/> reports. A server that sent Set Error Info told us why it is ending the session
+    /// (signed out, taken over, licence …): that reason wins over a clean end and over the connection closing right
+    /// after it, which would otherwise look like a network loss. Everything else is reported as it happened —
+    /// <see cref="RdpConnectionLostException"/> for the network, protocol and channel failures as themselves.
+    /// </summary>
+    internal static Exception? DisconnectCause(Exception? failure, uint errorInfo) =>
+        errorInfo != 0 && failure is null or RdpConnectionLostException ? new RdpDisconnectException(errorInfo) : failure;
 
     public Task KeyAsync(uint code, bool down, CancellationToken ct = default) =>
         Guard(() => Connection.SendScancodeAsync(code, down, ct));
@@ -555,6 +618,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         _ = (_rdpdrQueue?.Writer.TryComplete());
         _ = (_drdynvcQueue?.Writer.TryComplete());
         if (_pump is { } pump) { try { await pump.ConfigureAwait(false); } catch { /* ignore */ } }
+        if (_keepAlive is { } keepAlive) { try { await keepAlive.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_cliprdrWorker is { } worker) { try { await worker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_rdpdrWorker is { } driveWorker) { try { await driveWorker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_drdynvcWorker is { } dvcWorker) { try { await dvcWorker.ConfigureAwait(false); } catch { /* ignore */ } }

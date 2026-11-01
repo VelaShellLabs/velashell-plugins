@@ -164,7 +164,7 @@ internal sealed class RdpTransport(Stream stream)
             int next = await Stream.ReadAsync(_header.AsMemory(read, count - read), ct).ConfigureAwait(false);
             if (next == 0)
             {
-                throw new RdpProtocolException("The RDP server closed the connection.");
+                throw new RdpConnectionLostException("The RDP server closed the connection.");
             }
 
             read += next;
@@ -180,7 +180,7 @@ internal sealed class RdpTransport(Stream stream)
             int next = await Stream.ReadAsync(buffer.AsMemory(read), ct).ConfigureAwait(false);
             if (next == 0)
             {
-                throw new RdpProtocolException("The RDP server closed the connection.");
+                throw new RdpConnectionLostException("The RDP server closed the connection.");
             }
 
             read += next;

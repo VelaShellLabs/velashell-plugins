@@ -219,6 +219,148 @@ public sealed class RdpManagedInteropTests
     }
 
     [TestMethod]
+    public async Task APausedSessionStaysAliveOnKeepAlivesAndRepaintsWhenShown()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        byte[] pin = await LearnPinAsync(target);
+        await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(new RdpClientOptions
+        {
+            Host = target.Host, Port = target.Port, Username = User, Password = Pass, Width = 1024, Height = 768,
+            ColorDepth = 32, CertificatePin = pin, DynamicResolution = false, KeepAliveInterval = TimeSpan.FromSeconds(1),
+        });
+        byte[] surface = new byte[1024 * 768 * 4];
+        for (int i = 0; i < 80 && CountDistinct(surface) <= 1; i++)
+        {
+            _ = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+            await Task.Delay(100);
+        }
+
+        Assert.IsGreaterThan(1, CountDistinct(surface), "the desktop never painted");
+        Assert.IsTrue(session.Connection.ServerSupportsSuppressOutput, "xrdp accepts Suppress Output");
+
+        // The tab goes to the background: updates stop, and only the keep-alive keeps the link busy.
+        await session.SetDisplayUpdatesAsync(false);
+        await Task.Delay(TimeSpan.FromSeconds(5.5));
+        Console.WriteLine($"keep-alives sent while paused: {session.KeepAlivesSent}");
+        Assert.IsGreaterThanOrEqualTo(4, session.KeepAlivesSent);
+        Assert.IsTrue(session.IsConnected, "the server dropped a session that kept re-sending its paused state");
+
+        // Back to the tab: the resume and its Refresh Rect repaint the whole desktop, which arrives as new changes.
+        _ = session.CopyFrame(surface, 1024 * 4, 1024, 768);   // forget what changed before
+        Array.Clear(surface);
+        await session.SetDisplayUpdatesAsync(true);
+        RdpFrameRegion repainted = default;
+        for (int i = 0; i < 50 && (repainted.Width < 1024 || repainted.Height < 768); i++)
+        {
+            await Task.Delay(100);
+            RdpFrameCopy copy = session.CopyFrame(surface, 1024 * 4, 1024, 768);
+            if (!copy.Changed.IsEmpty) { repainted = copy.Changed; }
+        }
+
+        Console.WriteLine($"repainted after resume: {repainted}");
+        Assert.AreEqual(new RdpFrameRegion(0, 0, 1024, 768), repainted);
+        Assert.IsGreaterThan(1, CountDistinct(surface));
+        int sent = session.KeepAlivesSent;
+        await Task.Delay(TimeSpan.FromSeconds(2.5));
+        Assert.AreEqual(sent, session.KeepAlivesSent, "a shown desktop sends no keep-alive PDUs");
+    }
+
+    [TestMethod]
+    public async Task ADroppedConnectionIsReestablishedAutomatically()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        byte[] pin = await LearnPinAsync(target);
+        RdpViewMetrics.ResetForTest();
+        await using var relay = new ResettingRelay(target);
+        using var context = new VelaShell.PluginSdk.Testing.TestPluginContext { PluginId = "velashell.rdp" };
+        await using var provider = new RdpWorkspaceProvider(context, new("en"));   // the real connector
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+            ("width", "1024"), ("height", "768")) with
+        { Host = "127.0.0.1", Port = relay.Port, Username = User, Password = Pass };
+        var document = (RdpWorkspaceDocument)await provider.OpenAsync(request);
+        document.AutoReconnectDelays = [TimeSpan.FromMilliseconds(300)];
+        await Task.Delay(2000);
+
+        relay.Reset();   // what a NAT gateway or firewall does to a connection it forgot: the next packet is refused
+        Task? reconnecting = null;
+        for (int i = 0; i < 100 && (reconnecting = document.AutoReconnectTask) is null; i++) { await Task.Delay(50); }
+        Assert.IsNotNull(reconnecting, "the loss did not start an automatic reconnect");
+        await reconnecting.WaitAsync(TimeSpan.FromSeconds(60));
+
+        foreach (var entry in context.CollectingLog.Entries) { Console.WriteLine($"{entry.Level}: {entry.Message}"); }
+        Assert.AreEqual(VelaShell.PluginSdk.Protocols.ProtocolSessionState.Connected, document.Status.State);
+        Assert.AreEqual(2, relay.Accepted);
+        Assert.Contains(e => e.Message.Contains("connection lost") && e.Message.Contains("reconnecting automatically"), context.CollectingLog.Entries);
+        Assert.Contains(e => e.Message.Contains("reconnected automatically (attempt 1)"), context.CollectingLog.Entries);
+        await document.DisposeAsync();
+        RdpViewMetrics.ResetForTest();
+    }
+
+    /// <summary>Forwards loopback connections to the server; <see cref="Reset"/> aborts them all with a TCP reset.</summary>
+    private sealed class ResettingRelay : IAsyncDisposable
+    {
+        private readonly TcpListener _listener = new(System.Net.IPAddress.Loopback, 0);
+        private readonly List<TcpClient> _open = [];
+        private readonly Task _accepting;
+        private int _accepted;
+
+        internal ResettingRelay((string Host, int Port) target)
+        {
+            _listener.Start();
+            _accepting = AcceptAsync(target);
+        }
+
+        internal int Port => ((System.Net.IPEndPoint)_listener.LocalEndpoint).Port;
+
+        internal int Accepted => Volatile.Read(ref _accepted);
+
+        private async Task AcceptAsync((string Host, int Port) target)
+        {
+            try
+            {
+                while (true)
+                {
+                    TcpClient client = await _listener.AcceptTcpClientAsync();
+                    var upstream = new TcpClient();
+                    await upstream.ConnectAsync(target.Host, target.Port);
+                    _ = Interlocked.Increment(ref _accepted);
+                    lock (_open) { _open.Add(client); _open.Add(upstream); }
+                    _ = Pipe(client, upstream);
+                    _ = Pipe(upstream, client);
+                }
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or SocketException) { }
+        }
+
+        private static async Task Pipe(TcpClient from, TcpClient to)
+        {
+            try { await from.GetStream().CopyToAsync(to.GetStream()); }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException) { }
+        }
+
+        internal void Reset()
+        {
+            lock (_open)
+            {
+                foreach (TcpClient socket in _open)
+                {
+                    socket.LingerState = new LingerOption(true, 0);   // close with RST, not FIN
+                    socket.Close();
+                }
+
+                _open.Clear();
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _listener.Stop();
+            Reset();
+            await _accepting;
+        }
+    }
+
+    [TestMethod]
     public async Task DrawingOrdersPaintTheSameDesktopAsBitmaps()
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }

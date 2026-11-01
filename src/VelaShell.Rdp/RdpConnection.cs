@@ -15,7 +15,7 @@ internal sealed record RdpConnectOptions(
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
-    bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true)
+    bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -96,6 +96,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         Stage = RdpConnectStage.Tcp;
         _tcp = new TcpClient { NoDelay = true };
         await _tcp.ConnectAsync(_options.Host, _options.Port, ct).ConfigureAwait(false);
+        ConfigureKeepAlive(_tcp.Client, _options.KeepAlive);
         _transport = new RdpTransport(_tcp.GetStream());
 
         // X.224 negotiation: offer TLS and NLA and let the server pick (NLA-only offers both too, as the spec
@@ -153,6 +154,40 @@ internal sealed class RdpConnection : IAsyncDisposable
         Stage = RdpConnectStage.Capabilities;
         await HandleDemandActiveAsync(demandActive, ct).ConfigureAwait(false);
         _tlsTap?.Stop();
+    }
+
+    /// <summary>Unanswered keep-alive probes, <see cref="KeepAliveProbeInterval"/> apart, before the connection is declared dead.</summary>
+    internal const int KeepAliveProbes = 3;
+
+    internal static readonly TimeSpan KeepAliveProbeInterval = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// TCP keep-alive after <paramref name="idle"/> of silence. A session whose display updates are paused, or whose
+    /// desktop simply does not change, can be silent for hours, and NAT gateways, firewalls and cloud load balancers
+    /// drop idle connections after minutes — without telling either end, so the next click went into a dead socket.
+    /// The probes keep such middleboxes' state alive, and a dead path is noticed within about
+    /// idle + <see cref="KeepAliveProbes"/> × <see cref="KeepAliveProbeInterval"/> instead of only when the user returns.
+    /// Best effort: an option the platform lacks is skipped.
+    /// </summary>
+    internal static void ConfigureKeepAlive(Socket socket, TimeSpan idle)
+    {
+        if (idle <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        try { socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); }
+        catch (Exception ex) when (ex is SocketException or PlatformNotSupportedException) { return; }
+
+        TrySet(SocketOptionName.TcpKeepAliveTime, (int)Math.Clamp(Math.Ceiling(idle.TotalSeconds), 1, int.MaxValue));
+        TrySet(SocketOptionName.TcpKeepAliveInterval, (int)KeepAliveProbeInterval.TotalSeconds);
+        TrySet(SocketOptionName.TcpKeepAliveRetryCount, KeepAliveProbes);
+
+        void TrySet(SocketOptionName name, int value)
+        {
+            try { socket.SetSocketOption(SocketOptionLevel.Tcp, name, value); }
+            catch (Exception ex) when (ex is SocketException or PlatformNotSupportedException) { /* platform default */ }
+        }
     }
 
     private async Task<SslStream> StartTlsAsync(CancellationToken ct)
@@ -218,7 +253,16 @@ internal sealed class RdpConnection : IAsyncDisposable
     /// <summary>Reads and processes one PDU. Returns false when the server disconnects.</summary>
     internal async Task<bool> PumpAsync(CancellationToken ct)
     {
-        RdpFramePdu pdu = await _transport.ReadPduAsync(ct).ConfigureAwait(false);
+        RdpFramePdu pdu;
+        try { pdu = await _transport.ReadPduAsync(ct).ConfigureAwait(false); }
+        // A failing read is the network, not the protocol: reset, keep-alive timeout, a socket closed after a stalled
+        // send. Marked so callers can reconnect; malformed data still surfaces as RdpProtocolException.
+        catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException
+            && ex is not RdpConnectionLostException && !ct.IsCancellationRequested)
+        {
+            throw new RdpConnectionLostException(ex);
+        }
+
         if (pdu.FastPath)
         {
             ProcessFastPathOutput(pdu.Data);

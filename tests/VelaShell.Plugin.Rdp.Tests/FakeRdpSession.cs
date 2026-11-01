@@ -30,7 +30,7 @@ internal sealed class FakeRdpSession : IRdpSession
         _pending = false;
         return new(width, height, new(0, 0, width, height), false);
     }
-    internal void Disconnect() { IsConnected = false; Disconnected?.Invoke(null); }
+    internal void Disconnect(Exception? failure = null) { IsConnected = false; Disconnected?.Invoke(failure); }
     internal void EmitClipboard(RdpClipboardEvent data) => ClipboardEvent?.Invoke(data);
     public Task KeyAsync(uint code, bool down, CancellationToken ct = default) { Keys.Add((code, down)); Input.Add($"{code:x}{(down ? "+" : "-")}"); return Task.CompletedTask; }
     public Task UnicodeAsync(string text, CancellationToken ct = default) { Input.Add($"'{text}'"); return Task.CompletedTask; }

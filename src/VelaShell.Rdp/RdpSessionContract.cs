@@ -24,6 +24,12 @@ public readonly record struct RdpFrameCopy(int Width, int Height, RdpFrameRegion
 public interface IRdpSession : IRdpClipboardTransport, IAsyncDisposable
 {
     event Action? FrameAvailable;
+
+    /// <summary>
+    /// The session ended without being disposed. The cause is <see cref="RdpConnectionLostException"/> when the network
+    /// dropped (connecting again normally resumes the remote session), <see cref="RdpDisconnectException"/> when the
+    /// server ended it and said why, another exception for a protocol or channel failure, or null for a clean end.
+    /// </summary>
     event Action<Exception?>? Disconnected;
     bool IsConnected { get; }
 
