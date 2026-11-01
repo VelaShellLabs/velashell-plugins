@@ -78,6 +78,9 @@ public sealed record RdpClientOptions
     /// <summary>Folders shared to the remote desktop with read/write access (rdpdr); empty by default.</summary>
     public IReadOnlyList<DriveMapping> Drives { get; init; } = [];
 
+    /// <summary>Optional drive-channel diagnostics (handshake, device results and failures; no file contents). Called on background threads.</summary>
+    public Action<string>? DriveRedirectionLog { get; init; }
+
     /// <summary>Which security layer to offer; <see cref="RdpSecurity.Auto"/> by default.</summary>
     public RdpSecurity Security { get; init; } = RdpSecurity.Auto;
 }

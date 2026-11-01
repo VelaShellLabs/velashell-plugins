@@ -9,7 +9,7 @@ namespace VelaShell.Rdp.Channels;
 /// Device I/O Request → I/O Completion loop that serves file operations via <see cref="DriveFile"/>.
 /// Matches FreeRDP's rdpdr/drive wire formats. Printers, ports, smart cards and audio are not offered.
 /// </summary>
-internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveMapping> mappings)
+internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveMapping> mappings, Action<string>? log = null)
 {
     private const ushort CtypCore = 0x4472;
     private const ushort PakidServerAnnounce = 0x496E, PakidClientIdConfirm = 0x4343, PakidClientName = 0x434E;
@@ -56,7 +56,13 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         ushort packetId = r.U16LE();
         if (component != CtypCore)
         {
+            log?.Invoke($"ignored component=0x{component:X4}; packet=0x{packetId:X4}; bytes={pdu.Length}");
             return;
+        }
+
+        if (packetId != PakidDeviceIoRequest)
+        {
+            log?.Invoke($"receive packet=0x{packetId:X4}; bytes={pdu.Length}");
         }
 
         switch (packetId)
@@ -65,6 +71,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 _ = r.U16LE();                             // server version major
                 _serverMinor = r.Remaining >= 2 ? r.U16LE() : (ushort)0;
                 _clientId = r.Remaining >= 4 ? r.U32LE() : 0;
+                // Windows can restart the channel handshake after logon; announce drives again in that round.
+                _announced = false;
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
                 await _send(BuildClientName()).ConfigureAwait(false);
                 break;
@@ -86,8 +94,9 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             case PakidDeviceReply:
                 // Server Device Announce Response: deviceId then a result NTSTATUS. A non-zero result means
                 // the server refused that drive (commonly a "drive redirection" group policy on the host).
-                _ = r.U32LE();
+                uint deviceId = r.U32LE();
                 LastDeviceRejection = r.Remaining >= 4 ? r.U32LE() : 0;
+                log?.Invoke($"device reply id={deviceId}; status=0x{LastDeviceRejection:X8}");
                 break;
             case PakidDeviceIoRequest:
                 byte[]? completion = HandleIoRequest(ref r);
@@ -102,7 +111,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
     // ---- Handshake PDUs ----
 
-    /// <summary>Sends the device-list announce once; a later trigger (user-logged-on after client-id-confirm) is a no-op.</summary>
+    /// <summary>Sends the device-list announce once per server handshake; repeated triggers in that round are a no-op.</summary>
     private async Task AnnounceDevicesAsync()
     {
         if (_announced)
@@ -112,6 +121,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
         _announced = true;
         await _send(BuildDeviceListAnnounce()).ConfigureAwait(false);
+        log?.Invoke($"announced devices={_mappings.Count}; serverMinor=0x{_serverMinor:X4}");
     }
 
     private byte[] BuildClientAnnounceReply()
@@ -226,6 +236,11 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             {
                 status = NtStatus.Unsuccessful;
             }
+        }
+
+        if (status != NtStatus.Success)
+        {
+            log?.Invoke($"I/O completion device={deviceId}; major=0x{major:X2}; minor=0x{minor:X2}; status=0x{status:X8}");
         }
 
         ByteWriter w = Header(PakidDeviceIoCompletion);
