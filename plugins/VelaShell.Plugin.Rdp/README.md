@@ -58,7 +58,11 @@ arguments.
   inferred destination, or manual receive button is involved. Local→remote is also lazy: publication
   enumerates names/sizes and opens safe source handles without reading content; the remote shell's
   FILECONTENTS requests read/send bytes after paste in its chosen directory.
-- Both transfer indicators and cancel buttons share the existing fixed **24px resolution bar**.
+- Both transfer indicators and cancel buttons share the existing fixed **24px resolution bar**,
+  right-aligned, one group per direction: direction · size · name, a fixed 72px/3px bar, the state
+  (percentage while transferring), and the host transfer panel's 16px button with a 10px Lucide `x`
+  (`RdpGlyph` scales the pen like the host's `LucideIcon`). Under pressure the name trims, then the
+  state; the bar and × keep their size.
   Ready means no content has transferred; delivered/sent bytes do not certify destination save.
   Replacing the clipboard retires the publication while acquired streams retain independent leases.
   Negotiated CAN_LOCK_CLIPDATA, LOCK/UNLOCK and clipDataId preserve remote versions; peer locks likewise

@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using VelaShell.Plugin.Rdp.Tests;
 using VelaShell.PluginSdk.Testing;
 using VelaShell.PluginSdk.Workspaces;
@@ -91,14 +92,19 @@ public sealed class RdpHeadlessTests
             view.UpdateTransfers(new("Transferring", 50, 100, new string('x', 260)), new("Transferring", 50, 100));
             window.UpdateLayout();
             var footer = (Border)view.Children[3];
-            var transfers = (Grid)((Grid)footer.Child!).Children[1];
-            foreach (Grid row in transfers.Children.Cast<Grid>())
+            foreach (string name in new[] { "ClipboardDownload", "ClipboardUpload" })
             {
-                var bar = (ProgressBar)row.Children[1];
-                var cancel = (Button)row.Children[2];
-                Assert.IsTrue(bar.Bounds.Right <= cancel.Bounds.Left, $"Overlap at width {width}");
-                Assert.IsTrue(cancel.Bounds.Right <= row.Bounds.Width);
-                Assert.IsInstanceOfType<Avalonia.Controls.Shapes.Path>(cancel.Content);
+                var controls = footer.GetVisualDescendants().OfType<Control>().ToList();
+                var bar = controls.OfType<ProgressBar>().Single(control => control.Name == name + "Bar");
+                var cancel = controls.OfType<Button>().Single(control => control.Name == "Cancel" + name);
+                var slot = (Control)cancel.Parent!;
+                Assert.IsTrue(bar.Bounds.Right <= cancel.Bounds.Left, $"Overlap at width {width}: {name} bar {bar.Bounds} cancel {cancel.Bounds} visible {cancel.IsVisible}");
+                Assert.IsTrue(cancel.Bounds.Right <= slot.Bounds.Width, $"Cancel clipped at width {width}");
+                // Both transfers stay inside the status bar, side by side, even when it is narrow.
+                Assert.IsTrue(slot.TranslatePoint(new Point(slot.Bounds.Width, 0), footer)!.Value.X <= footer.Bounds.Width, $"Slot past the edge at width {width}");
+                // Host-sized ×: a 16px button around a 10px glyph, not a chrome box around a 14px+ icon.
+                Assert.AreEqual(16d, cancel.Bounds.Width);
+                Assert.AreEqual(10d, ((Control)cancel.Content!).Bounds.Width);
                 Assert.AreEqual("Cancel", Avalonia.Automation.AutomationProperties.GetName(cancel));
             }
             Assert.AreEqual(24d, view.RowDefinitions[2].ActualHeight);
