@@ -63,3 +63,58 @@ public interface IRdpSession : IRdpClipboardTransport, IAsyncDisposable
     /// </summary>
     Task SetDisplayUpdatesAsync(bool visible, CancellationToken ct = default) => Task.CompletedTask;
 }
+
+/// <summary>What the remote mouse pointer should look like.</summary>
+public enum RdpPointerKind
+{
+    /// <summary>The platform's default arrow.</summary>
+    Default,
+
+    /// <summary>No pointer (e.g. while typing in some applications, or full-screen video).</summary>
+    Hidden,
+
+    /// <summary>A custom image: <see cref="RdpPointer.Bgra"/>.</summary>
+    Image
+}
+
+/// <summary>
+/// A remote mouse pointer: its kind and, for <see cref="RdpPointerKind.Image"/>, a top-down BGRA32 image with straight
+/// (non-premultiplied) alpha and its hot spot. Instances are reused when the server re-selects a cached pointer, so a
+/// view can cache the platform cursor it builds per instance.
+/// </summary>
+public sealed class RdpPointer
+{
+    internal RdpPointer(RdpPointerKind kind, int width = 0, int height = 0, int hotspotX = 0, int hotspotY = 0, byte[]? bgra = null)
+    {
+        Kind = kind;
+        Width = width;
+        Height = height;
+        HotspotX = hotspotX;
+        HotspotY = hotspotY;
+        Bgra = bgra ?? [];
+    }
+
+    /// <summary>The platform default arrow.</summary>
+    public static RdpPointer Default { get; } = new(RdpPointerKind.Default);
+
+    /// <summary>No visible pointer.</summary>
+    public static RdpPointer Hidden { get; } = new(RdpPointerKind.Hidden);
+
+    public RdpPointerKind Kind { get; }
+    public int Width { get; }
+    public int Height { get; }
+    public int HotspotX { get; }
+    public int HotspotY { get; }
+
+    /// <summary>Top-down BGRA32, straight alpha, Width × Height × 4 bytes (empty unless <see cref="RdpPointerKind.Image"/>).</summary>
+    public byte[] Bgra { get; }
+}
+
+/// <summary>
+/// Implemented by sessions that forward the server's pointer shape (I-beam over text, resize arrows, hidden while
+/// typing…). Raised on the session's receive thread; marshal to the UI thread before touching UI objects.
+/// </summary>
+public interface IRdpPointerSource
+{
+    event Action<RdpPointer>? PointerChanged;
+}

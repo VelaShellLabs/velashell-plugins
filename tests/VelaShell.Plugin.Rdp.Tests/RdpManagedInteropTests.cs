@@ -219,6 +219,36 @@ public sealed class RdpManagedInteropTests
     }
 
     [TestMethod]
+    public async Task TheServersPointerShapesArrive()
+    {
+        if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
+        RdpViewMetrics.ResetForTest();
+        byte[] pin = await LearnPinAsync(target);
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
+            ("width", "1024"), ("height", "768")) with
+        { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
+        var loc = new Loc("en");
+        IRdpSession session = await RdpConnector.ConnectAsync(request, RdpSettings.From(request, loc), loc, default);
+        try
+        {
+            var shapes = new System.Collections.Concurrent.ConcurrentQueue<RdpPointer>();
+            ((IRdpPointerSource)session).PointerChanged += shapes.Enqueue;
+            // Pointer updates come when the shape changes: sweep across the desktop, the taskbar and window edges.
+            for (int i = 0; i < 40 && !shapes.Any(p => p.Kind == RdpPointerKind.Image); i++)
+            {
+                await session.MouseAsync(0x0800, (uint)(i * 97 % 1024), (uint)(i * 53 % 768), default);
+                await Task.Delay(150);
+            }
+            RdpPointer? image = shapes.FirstOrDefault(p => p.Kind == RdpPointerKind.Image);
+            Console.WriteLine($"pointer updates: {shapes.Count}, first image {image?.Width}x{image?.Height} hot {image?.HotspotX},{image?.HotspotY}");
+            Assert.IsNotNull(image, "No pointer image arrived from the server.");
+            Assert.IsTrue(image.Bgra.Chunk(4).Any(p => p[3] != 0), "The pointer image is fully transparent.");
+            Assert.IsTrue(session.IsConnected);
+        }
+        finally { await session.DisposeAsync(); }
+    }
+
+    [TestMethod]
     public async Task ManagedSessionRendersThroughInterface()
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }

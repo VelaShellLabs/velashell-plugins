@@ -276,6 +276,14 @@ internal sealed class RdpConnection : IAsyncDisposable
                     FrameUpdated?.Invoke();
                 }
                 break;
+            case ShareDataType.Pointer:
+                {
+                    RdpPointer? pointer;
+                    try { pointer = _pointers.SlowPath(r.Rest()); }
+                    catch (RdpProtocolException) { pointer = null; }
+                    EmitPointer(pointer);
+                }
+                break;
             case ShareDataType.SetErrorInfo:
                 uint errorInfo = r.U32LE();
                 if (errorInfo != 0)
@@ -375,9 +383,18 @@ internal sealed class RdpConnection : IAsyncDisposable
 
     private bool ApplyFastPathUpdate(int code, ReadOnlySpan<byte> updateData)
     {
+        if (code is >= PointerDecoder.FastPathNull and <= PointerDecoder.FastPathNew)
+        {
+            RdpPointer? pointer;
+            try { pointer = _pointers.FastPath(code, updateData); }
+            catch (RdpProtocolException) { pointer = null; }   // cosmetic: a malformed cursor never costs the session
+            EmitPointer(pointer);
+            return false;
+        }
+
         if (code != 0x1)
         {
-            return false; // FASTPATH_UPDATETYPE_BITMAP only; others (orders/palette/pointer) ignored
+            return false; // FASTPATH_UPDATETYPE_BITMAP; orders / palette are not negotiated
         }
 
         var rr = new ByteReader(updateData);
@@ -385,6 +402,20 @@ internal sealed class RdpConnection : IAsyncDisposable
         _ = BitmapUpdate.Apply(ref rr, Framebuffer);   // decodes outside the surface lock
 
         return true;
+    }
+
+    /// <summary>The server's mouse pointer changed (decoded and cached by <see cref="PointerDecoder"/>).</summary>
+    internal event Action<RdpPointer>? PointerChanged;
+
+    // Matches the pointer cache sizes advertised in the Pointer capability set (colour 20, pointer 21).
+    private readonly PointerDecoder _pointers = new(21);
+
+    private void EmitPointer(RdpPointer? pointer)
+    {
+        if (pointer is not null)
+        {
+            PointerChanged?.Invoke(pointer);
+        }
     }
 
     private static bool LooksLikeShareControl(ReadOnlySpan<byte> payload)
@@ -403,6 +434,14 @@ internal sealed class RdpConnection : IAsyncDisposable
 
     internal Task SendScancodeAsync(uint scanCode, bool down, CancellationToken ct) =>
         SendRawAsync(FastPathInput.Scancode(scanCode, down), ct);
+
+    internal async Task SendUnicodeTextAsync(string text, CancellationToken ct)
+    {
+        foreach (byte[] pdu in FastPathInput.UnicodeText(text))
+        {
+            await SendRawAsync(pdu, ct).ConfigureAwait(false);
+        }
+    }
 
     internal Task SendUnicodeAsync(ushort code, bool down, CancellationToken ct) =>
         SendRawAsync(FastPathInput.Unicode(code, down), ct);

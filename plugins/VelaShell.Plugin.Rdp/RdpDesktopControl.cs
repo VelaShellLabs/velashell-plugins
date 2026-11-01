@@ -82,6 +82,10 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _resizeTimer.Tick += (_, _) => { _resizeTimer.Stop(); MatchRemoteToViewport(); };
         _inputPump = ProcessInputAsync();
         session.FrameAvailable += OnFrame;
+        if (session is IRdpPointerSource pointers)
+        {
+            pointers.PointerChanged += OnPointer;
+        }
         OnFrame();
     }
 
@@ -101,7 +105,75 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             }
 
             PresentFrame();
-        }, DispatcherPriority.Render);
+        }, DispatcherPriority.Input);   // not Render: that outranks input, so a frame flood could delay clicks and keys
+    }
+
+    // ---- Remote pointer ----
+
+    private RdpPointer? _pendingPointer;
+    private int _pointerPending;
+    private readonly Dictionary<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> _cursors = [];
+    private static Cursor? _noCursor;
+    private static Cursor NoCursor => _noCursor ??= new(StandardCursorType.None);   // created on first use, after platform init
+
+    /// <summary>
+    /// The server's pointer shape (I-beam over text, resize arrows, hidden while typing) replaces the local arrow over
+    /// the desktop. Raised on the receive thread: the newest shape wins and is applied once on the UI thread.
+    /// </summary>
+    private void OnPointer(RdpPointer pointer)
+    {
+        Volatile.Write(ref _pendingPointer, pointer);
+        if (Volatile.Read(ref _disposed) != 0 || Interlocked.Exchange(ref _pointerPending, 1) != 0)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            _ = Interlocked.Exchange(ref _pointerPending, 0);
+            if (_disposed == 0 && Volatile.Read(ref _pendingPointer) is { } latest)
+            {
+                ApplyPointer(latest);
+            }
+        });
+    }
+
+    internal void ApplyPointer(RdpPointer pointer)
+    {
+        Cursor = pointer.Kind switch
+        {
+            RdpPointerKind.Hidden => NoCursor,
+            RdpPointerKind.Image => CursorFor(pointer),
+            _ => null   // the platform default arrow
+        };
+    }
+
+    private Cursor? CursorFor(RdpPointer pointer)
+    {
+        if (_cursors.TryGetValue(pointer, out var cached))
+        {
+            return cached.Cursor;
+        }
+
+        if (_cursors.Count >= 32)
+        {
+            // Pointers are cached by the server too (21 slots): an evicted shape is rebuilt if it ever returns.
+            foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { if (!ReferenceEquals(cursor, Cursor)) { cursor.Dispose(); bitmap.Dispose(); } }
+            _cursors.Clear();
+        }
+
+        var image = new WriteableBitmap(new PixelSize(pointer.Width, pointer.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
+        using (ILockedFramebuffer buffer = image.Lock())
+        {
+            for (int row = 0; row < pointer.Height; row++)
+            {
+                Marshal.Copy(pointer.Bgra, row * pointer.Width * 4, buffer.Address + row * buffer.RowBytes, pointer.Width * 4);
+            }
+        }
+
+        var created = new Cursor(image, new PixelPoint(pointer.HotspotX, pointer.HotspotY));
+        _cursors[pointer] = (created, image);
+        return created;
     }
 
     /// <summary>
@@ -570,6 +642,13 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _resizeTimer.Stop();
         _ = Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;
+        if (_session is IRdpPointerSource pointers)
+        {
+            pointers.PointerChanged -= OnPointer;
+        }
+
+        foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { cursor.Dispose(); bitmap.Dispose(); }
+        _cursors.Clear();
         _ = _input.Writer.TryComplete();
         await _inputPump;
         if (_overflowShutdown is { } shutdown)

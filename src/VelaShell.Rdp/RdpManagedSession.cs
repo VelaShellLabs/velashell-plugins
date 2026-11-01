@@ -9,7 +9,7 @@ namespace VelaShell.Rdp;
 /// a single background task pumps the connection while frames are coalesced and snapshotted on
 /// demand, and input, clipboard and dynamic-resolution requests are forwarded to the wire.
 /// </summary>
-public sealed class RdpManagedSession : IRdpSession
+public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
 {
     private readonly RdpConnection _connection;
     private readonly CancellationTokenSource _stop = new();
@@ -46,6 +46,9 @@ public sealed class RdpManagedSession : IRdpSession
     public uint? LogonInfoType => Volatile.Read(ref _logonInfo) is var v && v >= 0 ? (uint)v : null;
 
     public event Action? FrameAvailable;
+
+    /// <summary>The server changed the mouse pointer (raised on the receive thread).</summary>
+    public event Action<RdpPointer>? PointerChanged;
     public event Action<Exception?>? Disconnected;
 
     private readonly Lock _clipGate = new();
@@ -113,6 +116,10 @@ public sealed class RdpManagedSession : IRdpSession
     {
         _connection = connection;
         _connection.FrameUpdated += OnFrameUpdated;
+        _connection.PointerChanged += pointer =>
+        {
+            try { PointerChanged?.Invoke(pointer); } catch { /* never unwind into the pump */ }
+        };
         _connection.ErrorInfoReceived += code => Volatile.Write(ref _errorInfo, code);
         _connection.LogonInfoReceived += type => { Volatile.Write(ref _logonInfo, (int)type); Volatile.Write(ref _reachedLogon, 1); };
         _connection.ChannelData += OnChannelData;
@@ -438,14 +445,8 @@ public sealed class RdpManagedSession : IRdpSession
     public Task KeyAsync(uint code, bool down, CancellationToken ct = default) =>
         Guard(() => _connection.SendScancodeAsync(code, down, ct));
 
-    public Task UnicodeAsync(string text, CancellationToken ct = default) => Guard(async () =>
-    {
-        foreach (char unit in text)
-        {
-            await _connection.SendUnicodeAsync(unit, down: true, ct).ConfigureAwait(false);
-            await _connection.SendUnicodeAsync(unit, down: false, ct).ConfigureAwait(false);
-        }
-    });
+    public Task UnicodeAsync(string text, CancellationToken ct = default) =>
+        Guard(() => _connection.SendUnicodeTextAsync(text, ct));   // up to 7 characters per fast-path PDU
 
     public Task MouseAsync(uint flags, uint x, uint y, CancellationToken ct = default) =>
         Guard(() => _connection.SendMouseAsync(flags, x, y, ct));
@@ -493,6 +494,7 @@ public sealed class RdpManagedSession : IRdpSession
         await _connection.DisposeAsync().ConfigureAwait(false);
         _stop.Dispose();
         FrameAvailable = null;
+        PointerChanged = null;
         Disconnected = null;
         lock (_clipGate)
         {
