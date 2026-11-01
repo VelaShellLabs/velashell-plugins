@@ -27,6 +27,8 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 隔离进程里明确不可用。
 
 > **原有六个插件都要 SDK ≥ 2.0.4**(各自 `plugin.json` 里钉了 `minSdkVersion: "2.0.4"`);RDP 的要求以其清单为准。
+> S3 后来又抬到了 **2.1.3**:它的协议实现兼实现了 2.1.3 的可选面 `IProtocolChecksum`(交出对象存着的校验和,
+> 见 [S3 的 README](VelaShell.Plugin.S3/README.md)),这个接口在更老的宿主里不存在,装载协议实现类就是 `TypeLoadException`。
 > 它们都自报标签页图标:`PluginIcon` 经 `ProtocolDescriptor.Icon`(Telnet / 串口 / S3)、
 > `WorkspaceDescriptor.Icon`(Redis)或 `PanelOptions.Icon`(Docker 面板 / MongoDB / S3 的工具窗)
 > 交给宿主,这是 SDK 2.0.4 才有的面。`apiLevel` 表达不了这一档(它只在**破坏性**变更时才动),

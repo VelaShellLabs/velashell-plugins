@@ -200,6 +200,35 @@ public sealed class SerialPluginActivationTests
     }
 
     [TestMethod]
+    public async Task LocaleChanged_ReregistersInTheNewLanguage_AndTheOldHandleLeavesItInPlace()
+    {
+        using TestPluginContext context = NewContext();
+        var plugin = new SerialPlugin();
+        await plugin.ActivateAsync(context, CancellationToken.None);
+        IProtocolTerminal? terminal = context.RecordingProtocols.GetTerminal("velashell.serial");
+        Assert.AreEqual("串口设备", context.RecordingProtocols.Registered.Single().HostLabel);
+
+        context.HostInfo.Locale = "en";
+        context.HostEvents.RaiseLocaleChanged("en");
+
+        // 插件先用同一个实现实例注册新描述、再 Dispose 旧句柄。旧句柄此时已不是表里那一条,
+        // 释放它必须是空操作 —— 与宿主 PluginProtocolRegistry 同口径(SDK 2.1.3 起替身按注册条目判定)。
+        ProtocolDescriptor descriptor = context.RecordingProtocols.Registered.Single();
+        Assert.AreEqual("Serial", descriptor.DisplayName);
+        Assert.AreEqual("Serial device", descriptor.HostLabel);
+        Assert.AreSame(terminal, context.RecordingProtocols.GetTerminal("velashell.serial"));
+        // 带外命令同样换了语言重注册,一条不多、一条不少。
+        PluginCommandDescriptor breakCommand = context.RecordingCommands.Registered.Single(c => c.Id == "velashell.serial.break");
+        Assert.AreEqual("Serial: send BREAK", breakCommand.Title);
+        Assert.HasCount(4, context.RecordingCommands.Registered);
+
+        // 插件手里留下的是新句柄:停用时撤的就是还在表里的那一条。
+        await plugin.DeactivateAsync(CancellationToken.None);
+        Assert.IsEmpty(context.RecordingProtocols.Registered);
+        Assert.IsEmpty(context.RecordingCommands.Registered);
+    }
+
+    [TestMethod]
     public async Task Activate_FallsBackToEnglishForOtherLocales()
     {
         using TestPluginContext context = NewContext("ja");

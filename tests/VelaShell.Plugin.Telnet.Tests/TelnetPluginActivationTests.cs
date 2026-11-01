@@ -56,4 +56,28 @@ public sealed class TelnetPluginActivationTests
             "M15 20l3-3h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2l3 3Z M6 8v2 M10 8v2 M14 8v2 M18 8v2",
             icon.PathData);
     }
+
+    [TestMethod]
+    public async Task LocaleChanged_ReregistersInTheNewLanguage_AndTheOldHandleLeavesItInPlace()
+    {
+        using TestPluginContext context = NewContext();
+        var plugin = new TelnetPlugin();
+        await plugin.ActivateAsync(context, CancellationToken.None);
+        IProtocolTerminal? terminal = context.RecordingProtocols.GetTerminal("velashell.telnet");
+        Assert.AreEqual("主机名 / IP", context.RecordingProtocols.Registered.Single().HostLabel);
+
+        context.HostInfo.Locale = "en";
+        context.HostEvents.RaiseLocaleChanged("en");
+
+        // 插件先用同一个实现实例注册新描述、再 Dispose 旧句柄。旧句柄此时已不是表里那一条,
+        // 释放它必须是空操作 —— 与宿主 PluginProtocolRegistry 同口径(SDK 2.1.3 起替身按注册条目判定)。
+        // 撤掉了的话,用户切一次界面语言,Telnet 页签就从连接配置页消失。
+        ProtocolDescriptor descriptor = context.RecordingProtocols.Registered.Single();
+        Assert.AreEqual("Host / IP", descriptor.HostLabel);
+        Assert.AreSame(terminal, context.RecordingProtocols.GetTerminal("velashell.telnet"));
+
+        // 插件手里留下的是新句柄:停用时撤的就是还在表里的那一条。
+        await plugin.DeactivateAsync(CancellationToken.None);
+        Assert.IsEmpty(context.RecordingProtocols.Registered);
+    }
 }
