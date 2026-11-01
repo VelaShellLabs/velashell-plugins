@@ -94,7 +94,7 @@ public sealed class ConnectionProbeTests
             new() { ["directConnection"] = "true" }), "", new SyncProgress(seen.Add), CancellationToken.None);
 
         Assert.IsTrue(report.Succeeded, string.Join("; ", report.Steps.Select(static s => $"{s.Key}={s.State}:{s.Detail}")));
-        CollectionAssert.AreEqual(new[] { "tcp", "auth", "hello", "privileges" }, report.Steps.Select(static s => s.Key).ToArray());
+        Assert.AreSequenceEqual(new[] { "tcp", "auth", "hello", "privileges" }, [.. report.Steps.Select(static s => s.Key)]);
         Assert.IsTrue(report.Steps.Take(3).All(static s => s.State == ProbeState.Passed));
         StringAssert.StartsWith(report.Summary, "连接成功 · ");
         Assert.AreEqual("发现的成员", report.EndpointsTitle);
@@ -136,9 +136,9 @@ public sealed class ConnectionProbeTests
 
         ProbeStep auth = report.Steps.Single(static s => s.Key == "auth");
         ProbeStep privileges = report.Steps.Single(static s => s.Key == "privileges");
-        StringAssert.Contains(auth.Detail, "ops_reader@admin");
+        Assert.Contains("ops_reader@admin", auth.Detail);
         Assert.AreEqual(ProbeState.Warning, privileges.State, privileges.Detail);
-        StringAssert.Contains(privileges.Detail, "read@shop");
+        Assert.Contains("read@shop", privileges.Detail);
     }
 
     private sealed class SyncProgress(Action<ProbeStep> report) : IProgress<ProbeStep>

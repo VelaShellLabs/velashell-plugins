@@ -56,7 +56,7 @@ public sealed class NewCollectionTests
         Assert.AreEqual(7_776_000, command["expireAfterSeconds"].AsInt32);
         Assert.AreEqual("= 7,776,000 s", vm.ExpireSecondsText);
         StringAssert.StartsWith(vm.Preview, "db.createCollection(\n  \"device_metrics\",");
-        StringAssert.Contains(vm.Preview, "expireAfterSeconds: 7776000");
+        Assert.Contains("expireAfterSeconds: 7776000", vm.Preview);
         Assert.IsTrue(vm.CanCreate, vm.Error);
         Assert.AreEqual(CollectionNameState.Available, vm.NameState);
     });

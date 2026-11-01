@@ -97,6 +97,17 @@ internal sealed class LoopbackS3Server : IDisposable
         _buckets[bucket][key] = new(content, DateTimeOffset.UtcNow);
     }
 
+    /// <summary>
+    /// 预置一个带着「上传时存下的校验和」的对象。<paramref name="checksumHeaders" /> 是 HEAD 要回的
+    /// <c>x-amz-checksum-*</c> 头(含 <c>x-amz-checksum-type</c>);与真实 S3 一样,只有请求带了
+    /// <c>x-amz-checksum-mode: ENABLED</c> 才回。
+    /// </summary>
+    public void AddObject(string bucket, string key, byte[] content, IReadOnlyDictionary<string, string> checksumHeaders)
+    {
+        AddBucket(bucket);
+        _buckets[bucket][key] = new(content, DateTimeOffset.UtcNow, checksumHeaders);
+    }
+
     /// <summary>预置一个文本对象。</summary>
     public void AddObject(string bucket, string key, string content) =>
         AddObject(bucket, key, Encoding.UTF8.GetBytes(content));
@@ -575,7 +586,8 @@ internal sealed class LoopbackS3Server : IDisposable
             "PUT" when request.Headers.ContainsKey("x-amz-copy-source") => CopyObject(objects, key, request.Headers["x-amz-copy-source"]),
             "PUT" => PutObject(objects, key, request.Body),
             "GET" => GetObject(objects, key, request.Headers.GetValueOrDefault("Range")),
-            "HEAD" => HeadObject(objects, key),
+            "HEAD" => HeadObject(objects, key,
+                string.Equals(request.Headers.GetValueOrDefault("x-amz-checksum-mode"), "ENABLED", StringComparison.OrdinalIgnoreCase)),
             "DELETE" => DeleteObject(objects, key),
             _ => Error(HttpStatusCode.MethodNotAllowed, "MethodNotAllowed", "Not supported."),
         };
@@ -775,20 +787,33 @@ internal sealed class LoopbackS3Server : IDisposable
         };
     }
 
-    private static HttpResponse HeadObject(ConcurrentDictionary<string, StoredObject> objects, string key) =>
-        objects.TryGetValue(key, out StoredObject stored)
-            ? new()
+    private static HttpResponse HeadObject(ConcurrentDictionary<string, StoredObject> objects, string key, bool checksumMode)
+    {
+        if (!objects.TryGetValue(key, out StoredObject stored))
+        {
+            return Error(HttpStatusCode.NotFound, "NoSuchKey", "The specified key does not exist.");
+        }
+        var response = new HttpResponse
+        {
+            Status = HttpStatusCode.OK,
+            Body = stored.Content, // 只用于填 Content-Length,HEAD 不会真的写出去
+            Headers =
             {
-                Status = HttpStatusCode.OK,
-                Body = stored.Content, // 只用于填 Content-Length,HEAD 不会真的写出去
-                Headers =
-                {
-                    ["ETag"] = $"\"{ETagOf(stored.Content)}\"",
-                    ["Last-Modified"] = stored.LastModified.UtcDateTime.ToString("R", CultureInfo.InvariantCulture),
-                    ["x-amz-storage-class"] = "STANDARD",
-                },
+                ["ETag"] = $"\"{ETagOf(stored.Content)}\"",
+                ["Last-Modified"] = stored.LastModified.UtcDateTime.ToString("R", CultureInfo.InvariantCulture),
+                ["x-amz-storage-class"] = "STANDARD",
+            },
+        };
+        // 存着的校验和只在客户端开了校验和模式时才回(真实 S3 的行为)。
+        if (checksumMode && stored.ChecksumHeaders is { } checksums)
+        {
+            foreach ((string name, string value) in checksums)
+            {
+                response.Headers[name] = value;
             }
-            : Error(HttpStatusCode.NotFound, "NoSuchKey", "The specified key does not exist.");
+        }
+        return response;
+    }
 
     private static HttpResponse DeleteObject(ConcurrentDictionary<string, StoredObject> objects, string key)
     {
@@ -930,7 +955,9 @@ internal sealed class LoopbackS3Server : IDisposable
             Headers = { ["Content-Type"] = "application/xml" },
         };
 
-    private readonly record struct StoredObject(byte[] Content, DateTimeOffset LastModified);
+    // ChecksumHeaders:上传时存下的 x-amz-checksum-* 头;没有时为 null。
+    private readonly record struct StoredObject(byte[] Content, DateTimeOffset LastModified,
+        IReadOnlyDictionary<string, string>? ChecksumHeaders = null);
 
     private sealed class HttpRequest
     {

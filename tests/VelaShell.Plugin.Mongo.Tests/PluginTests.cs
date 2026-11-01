@@ -110,15 +110,15 @@ public sealed class PluginTests
         Assert.IsFalse(context.FakeUi.LastPanel.IsOpen);
     }
 
-    /// <summary>清单:命令贡献 + 按命令惰性激活,不贡献工作台连接类型;用到 2.0.2 的会话面与 2.0.4 的 PluginIcon,minSdkVersion 钉最高那一档。</summary>
+    /// <summary>清单:命令贡献 + 按命令惰性激活,不贡献工作台连接类型;用到 2.0.1 的会话面与 2.0.4 的 PluginIcon,minSdkVersion 钉最高那一档。</summary>
     [TestMethod]
     public void Manifest_ContributesTheCommandNotAWorkspace()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "plugins", "VelaShell.Plugin.Mongo", "plugin.json");
         string json = File.ReadAllText(path);
-        StringAssert.Contains(json, "\"onCommand:velashell.mongo.open\"");
-        StringAssert.Contains(json, "\"commands\"");
-        StringAssert.Contains(json, "\"minSdkVersion\": \"2.0.4\"");
+        Assert.Contains("\"onCommand:velashell.mongo.open\"", json);
+        Assert.Contains("\"commands\"", json);
+        Assert.Contains("\"minSdkVersion\": \"2.0.4\"", json);
         Assert.IsFalse(json.Contains("\"workspaces\"", StringComparison.Ordinal), "不再出现在宿主的新建连接窗口里");
         Assert.IsFalse(json.Contains("onWorkspace:", StringComparison.Ordinal));
     }
@@ -154,7 +154,7 @@ public sealed class PluginTests
             ["sampleSize"] = "1",
             ["ejsonMode"] = "canonical"
         }));
-        CollectionAssert.AreEqual(new[] { "10.20.3.22:27017", "10.20.3.23:27018", "10.20.3.24" }, settings.AdditionalHosts.ToArray());
+        Assert.AreSequenceEqual(new[] { "10.20.3.22:27017", "10.20.3.23:27018", "10.20.3.24" }, [.. settings.AdditionalHosts]);
         Assert.AreEqual(1000, settings.PageSize);
         Assert.AreEqual(50, settings.SampleSize);
         Assert.AreEqual(EjsonMode.Canonical, settings.Ejson);
@@ -314,7 +314,7 @@ public sealed class PluginTests
         {
             Assert.IsNotNull(link.Tunnel);
             Assert.AreEqual("bastion-ops", link.Tunnel.JumpName);
-            StringAssert.Contains(context.FakeSessions.LastOpenReason, "via-bastion");
+            Assert.Contains("via-bastion", context.FakeSessions.LastOpenReason);
             Assert.IsFalse(string.IsNullOrEmpty(link.Connection.Server.Version));
             sessionId = context.FakeSessions.OpenedByPlugin.Single();
             Assert.IsNotEmpty(context.FakeRemoteTunnel.Opened);

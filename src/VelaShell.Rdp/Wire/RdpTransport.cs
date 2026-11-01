@@ -204,7 +204,7 @@ internal sealed class RdpTransport(Stream stream)
 
 /// <summary>The X.224 negotiation returned RDP_NEG_FAILURE (MS-RDPBCGR 2.2.1.2.1).</summary>
 internal sealed class RdpNegotiationFailureException(uint code)
-    : Exception($"RDP security negotiation failed (0x{code:X8}).")
+    : Exception($"The server refused the security negotiation: {(Enum.IsDefined((RdpNegotiationFailure)code) ? ((RdpNegotiationFailure)code).ToString() : "code")} (0x{code:X8}).")
 {
     internal uint Code { get; } = code;
 }

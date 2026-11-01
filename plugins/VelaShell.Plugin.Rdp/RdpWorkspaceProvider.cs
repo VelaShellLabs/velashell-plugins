@@ -1,4 +1,5 @@
 using VelaShell.PluginSdk;
+using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 
@@ -22,9 +23,34 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
     {
         _context = context;
         _loc = loc;
-        _factory = factory ?? DefaultFactory;
+        _factory = Logged(factory ?? DefaultFactory);
         _hostShutdown = context.Shutdown.Register(() => { _ = DisposeAsync().AsTask(); });
     }
+
+    /// <summary>
+    /// Logs every failed connect/reconnect with the full exception. The host only shows the message, so
+    /// without this a TLS/NLA failure leaves nothing to diagnose from (the inner SChannel error and the
+    /// stack live only on the exception). The certificate-trust prompt is the normal first-connect flow,
+    /// not a failure; exceptions never carry the password.
+    /// </summary>
+    private RdpSessionFactory Logged(RdpSessionFactory inner) => async (request, settings, loc, ct) =>
+    {
+        try
+        {
+            IRdpSession session = await inner(request, settings, loc, ct).ConfigureAwait(false);
+            if (session is RdpManagedSession { NlaRefusal: { } refusal })
+            {
+                _context.Log.Warn($"RDP {request.Host}:{request.Port}: the server refused NLA before any credentials were sent " +
+                    $"({refusal.Detail}{(refusal.Auth is { } a ? "; " + a : "")}); connected with TLS security instead (security layer: Auto).");
+            }
+            return session;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not ProtocolCertificateTrustException)
+        {
+            _context.Log.Warn($"RDP connection to {request.Host}:{request.Port} failed: {ex.Message}", ex);
+            throw;
+        }
+    };
     internal Loc Loc
     {
         get
@@ -60,7 +86,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             {
                 if (!_disposed && !linked.IsCancellationRequested)
                 {
-                    document = new(session, request, settings, _context, _loc, _factory, _shutdown.Token, Closed);
+                    document = new(session, request, settings, _context, _loc, _factory, Closed, _shutdown.Token);
                     _ = _documents.Add(document);
                 }
             }

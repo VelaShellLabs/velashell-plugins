@@ -40,6 +40,20 @@ internal static class RdpClipboardCodec
         return end < 0 ? text : text[..end];
     }
 
+    // CLIPRDR_FILEDESCRIPTOR / Shell FILEDESCRIPTORW flags (MS-RDPECLIP 2.2.5.2.3.1).
+    private const uint FdAttributes = 0x00000004;
+    private const uint FdFileSize = 0x00000040;
+    private const uint FdShowProgressUi = 0x00004000;
+
+    /// <summary>
+    /// FD_SHOWPROGRESSUI asks the Windows Shell that consumes these descriptors (the server's Explorer
+    /// for local → remote, the local Explorer for remote → local) to run its own copy-progress dialog,
+    /// as it does for mstsc/FreeRDP pastes. Without it a large paste shows nothing on that side while
+    /// the bytes stream in, so the Explorer window looks hung even though the copy is progressing.
+    /// </summary>
+    internal static uint DescriptorFlags(bool directory) =>
+        directory ? FdAttributes | FdShowProgressUi : FdAttributes | FdFileSize | FdShowProgressUi;
+
     internal static byte[] EncodeFiles(IReadOnlyList<RdpClipboardFile> files)
     {
         if (files.Count > MaxFiles)
@@ -53,7 +67,7 @@ internal static class RdpClipboardCodec
             RdpClipboardFile file = files[i];
             ValidateFileName(file.Name);
             Span<byte> entry = data.AsSpan(4 + i * DescriptorSize, DescriptorSize);
-            BinaryPrimitives.WriteUInt32LittleEndian(entry, file.IsDirectory ? 4u : 0x44u);
+            BinaryPrimitives.WriteUInt32LittleEndian(entry, DescriptorFlags(file.IsDirectory));
             BinaryPrimitives.WriteUInt32LittleEndian(entry[36..], file.IsDirectory ? 0x10u : 0x80u);
             if (file.Length < 0)
             {

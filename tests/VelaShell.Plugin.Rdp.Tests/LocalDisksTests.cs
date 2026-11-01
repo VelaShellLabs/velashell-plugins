@@ -8,10 +8,8 @@ public sealed class LocalDisksTests
     {
         IReadOnlyList<LocalDisk> disks = LocalDisks.FromUnix(
             ["/mnt/data", "/media/joe/My USB", "/media/joe/My-USB", "/mnt/data"], "/home/joe");
-        CollectionAssert.AreEqual(new[] { "/", "~", "/media/joe/My USB", "/media/joe/My-USB", "/mnt/data" },
-            disks.Select(disk => disk.Id).ToArray());
-        CollectionAssert.AreEqual(new[] { "root", "home", "MyUSB", "MyUSB2", "data" },
-            disks.Select(disk => disk.ShareName).ToArray());
+        Assert.AreSequenceEqual(new[] { "/", "~", "/media/joe/My USB", "/media/joe/My-USB", "/mnt/data" }, [.. disks.Select(disk => disk.Id)]);
+        Assert.AreSequenceEqual(new[] { "root", "home", "MyUSB", "MyUSB2", "data" }, [.. disks.Select(disk => disk.ShareName)]);
         Assert.AreEqual(LocalDiskKind.Home, disks[1].Kind);
         Assert.AreEqual("/home/joe", disks[1].Path);
     }
@@ -33,9 +31,9 @@ public sealed class LocalDisksTests
     public void EnumerationOfThisMachineYieldsUniqueValidShareNames()
     {
         IReadOnlyList<LocalDisk> disks = LocalDisks.Enumerate();
-        Assert.IsTrue(disks.Count <= LocalDisks.MaxDisks);
-        Assert.AreEqual(disks.Count, disks.Select(disk => disk.Id).Distinct(StringComparer.Ordinal).Count());
-        Assert.AreEqual(disks.Count, disks.Select(disk => disk.ShareName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.IsLessThanOrEqualTo(LocalDisks.MaxDisks, disks.Count);
+        Assert.HasCount(disks.Count, disks.Select(disk => disk.Id).Distinct(StringComparer.Ordinal));
+        Assert.HasCount(disks.Count, disks.Select(disk => disk.ShareName).Distinct(StringComparer.OrdinalIgnoreCase));
         foreach (LocalDisk disk in disks)
         {
             Assert.IsTrue(disk.ShareName.Length is >= 1 and <= 8 && disk.ShareName.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'),

@@ -383,7 +383,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     }
 
     /// <summary>列出来的事件(收起时前 5 条)。</summary>
-    public IReadOnlyList<MonitorEvent> VisibleEvents => ShowAllEvents ? Events.ToList() : Events.Take(5).ToList();
+    public IReadOnlyList<MonitorEvent> VisibleEvents => ShowAllEvents ? Events.ToList() : [.. Events.Take(5)];
 
     /// <summary>有没有事件。</summary>
     public bool HasEvents => Events.Count > 0;

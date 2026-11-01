@@ -43,7 +43,7 @@ public sealed class RdpResizeTests
         Assert.HasCount(3, sent); // caps response, create response, monitor layout
 
         // Capabilities response echoes the version at Cmd=CAPABILITIES.
-        CollectionAssert.AreEqual(new byte[] { 0x50, 0x00, 0x03, 0x00 }, sent[0]);
+        Assert.AreSequenceEqual(new byte[] { 0x50, 0x00, 0x03, 0x00 }, sent[0]);
 
         // Create response accepts the channel: Cmd=CREATE, same id, CreationStatus 0.
         var create = new ByteReader(sent[1]);

@@ -1,5 +1,6 @@
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
+using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
@@ -24,6 +25,48 @@ public sealed class RdpSettingsTests
         Assert.AreEqual(1920, settings.Width);
         Assert.AreEqual(1080, settings.Height);
     }
+
+    [TestMethod]
+    public void ExperienceTogglesDefaultToTheBandwidthSavingProfile()
+    {
+        var settings = RdpSettings.From(Request(), new("en"));
+        Assert.IsFalse(settings.Audio);
+        Assert.AreEqual(
+            RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag
+                | RdpPerformanceFlags.DisableMenuAnimations | RdpPerformanceFlags.DisableThemes,
+            settings.Performance);
+    }
+
+    [TestMethod]
+    public void ExperienceTogglesMapToPerformanceFlags()
+    {
+        var settings = RdpSettings.From(Request(
+            ("audio", "true"), ("wallpaper", "true"), ("windowDrag", "true"),
+            ("animations", "true"), ("themes", "true"), ("fontSmoothing", "true")), new("en"));
+        Assert.IsTrue(settings.Audio);
+        // Every "show/enable" box ticked: no disable bits remain, font smoothing turned on.
+        Assert.AreEqual(RdpPerformanceFlags.EnableFontSmoothing, settings.Performance);
+    }
+
+    [TestMethod]
+    public void ExperienceFieldsLiveOnTheirOwnPage()
+    {
+        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(new("en"), []);
+        foreach (string key in new[] { "audio", "wallpaper", "windowDrag", "animations", "themes", "fontSmoothing" })
+        {
+            ProtocolSettingField field = fields.Single(f => f.Key == key);
+            Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
+            Assert.AreEqual("false", field.DefaultValue);
+            Assert.AreEqual(RdpSettings.ExperiencePage, field.Page);
+        }
+    }
+
+    [TestMethod]
+    [DataRow("audio")]
+    [DataRow("wallpaper")]
+    [DataRow("fontSmoothing")]
+    public void ExperienceTogglesRejectNonBooleanValues(string key) =>
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((key, "maybe")), new("en")));
     [TestMethod]
     [DataRow("width", "319")]
     [DataRow("height", "8193")]
@@ -111,7 +154,7 @@ public sealed class RdpSettingsTests
         string c = TempDir("c"), work = TempDir("work");
         LocalDisk[] disks = [new("C", "C", c, LocalDiskKind.Fixed)];
         var settings = RdpSettings.From(Request(("drive:C", "true"), ("drives", $"work={work}")), new("en"), disks);
-        CollectionAssert.AreEqual(new[] { "C", "work" }, settings.Drives.Select(drive => drive.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "C", "work" }, [.. settings.Drives.Select(drive => drive.Name)]);
         _ = Assert.ThrowsExactly<ProtocolConnectionException>(() =>
             RdpSettings.From(Request(("drive:C", "true"), ("drives", $"c={work}")), new("en"), disks));
     }

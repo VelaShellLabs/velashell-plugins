@@ -74,7 +74,7 @@ public sealed class RdpManagedInteropTests
                 System.Text.Encoding.UTF8.GetString(ex.Pem));
             pin = SHA256.HashData(leaf.RawData);
         }
-        Assert.AreEqual(32, pin.Length, "Expected the probe to reject and yield a pin.");
+        Assert.HasCount(32, pin, "Expected the probe to reject and yield a pin.");
 
         // Second pass: pin must authenticate.
         using var tcp = new TcpClient();
@@ -110,7 +110,7 @@ public sealed class RdpManagedInteropTests
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
         byte[] pin = await LearnPinAsync(target);
-        Assert.AreEqual(32, pin.Length);
+        Assert.HasCount(32, pin);
 
         var options = new RdpConnectOptions(target.Host, target.Port, User, Pass, Domain: "",
             Width: 1024, Height: 768, Bpp: 16, CertificatePin: pin, CertificateHost: target.Host,
@@ -145,13 +145,13 @@ public sealed class RdpManagedInteropTests
             Console.WriteLine("Pump exception: " + pump.Exception?.GetBaseException());
         }
 
-        Assert.IsTrue(frames > 0, "No desktop frame was received.");
+        Assert.IsGreaterThan(0, frames, "No desktop frame was received.");
 
         byte[] bgra = conn.Framebuffer.Bgra;
         int distinct = CountDistinct(bgra);
         Console.WriteLine($"Framebuffer {conn.Framebuffer.Width}x{conn.Framebuffer.Height}, distinct colours ~{distinct}");
         WriteBmp(bgra, conn.Framebuffer.Width, conn.Framebuffer.Height, "managed-rdp-frame.bmp");
-        Assert.IsTrue(distinct > 1, "Framebuffer appears blank.");
+        Assert.IsGreaterThan(1, distinct, "Framebuffer appears blank.");
 
         // --- Input check: click the IceWM start button (bottom-left) and expect the menu to paint. ---
         // Press Escape first so the desktop starts from a known state (no menu open), robust to a
@@ -178,7 +178,7 @@ public sealed class RdpManagedInteropTests
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
         byte[] pin = await LearnPinAsync(target);
-        Assert.AreEqual(32, pin.Length);
+        Assert.HasCount(32, pin);
 
         WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("width", "1024"), ("height", "768")) with
@@ -206,7 +206,7 @@ public sealed class RdpManagedInteropTests
             Console.WriteLine($"Interface frames={frames}, connected={session.IsConnected}, last={latest?.Width}x{latest?.Height}");
             Assert.IsTrue(session.IsConnected, "Session dropped.");
             Assert.IsNotNull(latest, "No frame delivered through IRdpSession.TakeFrame.");
-            Assert.IsTrue(CountDistinct(latest.Pixels) > 1, "Delivered frame is blank.");
+            Assert.IsGreaterThan(1, CountDistinct(latest.Pixels), "Delivered frame is blank.");
 
             // Exercise input plumbing through the interface.
             await session.MouseAsync(0x0800, 12, 760, default);
@@ -221,7 +221,7 @@ public sealed class RdpManagedInteropTests
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
         byte[] pin = await LearnPinAsync(target);
-        Assert.AreEqual(32, pin.Length);
+        Assert.HasCount(32, pin);
 
         WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("width", "1024"), ("height", "768")) with
@@ -267,7 +267,7 @@ public sealed class RdpManagedInteropTests
                 return;
             }
             Assert.IsTrue(session.IsConnected, "Session dropped during resize.");
-            Assert.IsTrue(CountDistinct(latest!.Pixels) > 1, "Resized frame is blank.");
+            Assert.IsGreaterThan(1, CountDistinct(latest!.Pixels), "Resized frame is blank.");
 
             // Restore the baseline so this test leaves the shared xrdp session as it found it.
             await session.RequestResizeAsync(1024, 768, default);
@@ -281,7 +281,7 @@ public sealed class RdpManagedInteropTests
     {
         if (Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
         byte[] pin = await LearnPinAsync(target);
-        Assert.AreEqual(32, pin.Length);
+        Assert.HasCount(32, pin);
 
         WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("clipboard", "true"), ("width", "1024"), ("height", "768")) with
@@ -302,7 +302,7 @@ public sealed class RdpManagedInteropTests
                 await Task.Delay(150, CancellationToken.None);
             }
             Console.WriteLine($"Clipboard event kinds seen: {string.Join(",", kinds.Distinct().Order())}");
-            Assert.IsTrue(kinds.Any(k => k == 2u), "cliprdr handshake (CB_MONITOR_READY → ready) did not arrive.");
+            Assert.Contains(k => k == 2u, kinds, "cliprdr handshake (CB_MONITOR_READY → ready) did not arrive.");
             Assert.IsTrue(session.IsConnected, "Session dropped during clipboard handshake.");
         }
         finally { await session.DisposeAsync(); }
@@ -339,7 +339,7 @@ public sealed class RdpManagedInteropTests
             Assert.IsTrue(await gate.WaitAsync(TimeSpan.FromSeconds(10)), "No clipboard format list from the server.");
             Console.WriteLine($"Format list:\n{formatList}");
             Assert.IsNotNull(formatList);
-            Assert.IsTrue(formatList.Split('\n').Any(l => l.StartsWith("13\t")), "CF_UNICODETEXT (13) not offered.");
+            Assert.Contains(l => l.StartsWith("13\t"), formatList.Split('\n'), "CF_UNICODETEXT (13) not offered.");
 
             await session.RequestFormatAsync(13, default);
             Assert.IsTrue(await gate.WaitAsync(TimeSpan.FromSeconds(10)), "No format data response.");
@@ -448,7 +448,7 @@ public sealed class RdpManagedInteropTests
         { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
         var settings = RdpSettings.From(request, loc, disks);
-        CollectionAssert.AreEqual(new[] { "V", rootName }, settings.Drives.Select(drive => drive.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "V", rootName }, [.. settings.Drives.Select(drive => drive.Name)]);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
@@ -468,8 +468,8 @@ public sealed class RdpManagedInteropTests
             }
             Console.WriteLine($"Ticked disk read: '{content.Trim()}' (expected '{tag}')");
             Console.WriteLine($"Drive root '{root}' listing contains '{firstSegment}': {rootListing.Contains(firstSegment)}");
-            Assert.IsTrue(content.Contains(tag), "The remote session could not read a file on the ticked disk.");
-            Assert.IsTrue(rootListing.Contains(firstSegment), $"The remote session could not list the drive root {root}.");
+            Assert.Contains(tag, content, "The remote session could not read a file on the ticked disk.");
+            Assert.Contains(firstSegment, rootListing, $"The remote session could not list the drive root {root}.");
         }
         finally
         {
@@ -496,7 +496,7 @@ public sealed class RdpManagedInteropTests
         { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
         var settings = RdpSettings.From(request, loc);
-        Assert.AreEqual(1, settings.Drives.Count);
+        Assert.HasCount(1, settings.Drives);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
@@ -519,7 +519,7 @@ public sealed class RdpManagedInteropTests
             }
             Console.WriteLine($"thinclient_drives listing: '{listing.Trim()}'");
             Console.WriteLine($"Remote read of hello.txt: '{content.Trim()}' (expected '{tag}')");
-            Assert.IsTrue(content.Contains(tag), "The remote session could not read the redirected file.");
+            Assert.Contains(tag, content, "The remote session could not read the redirected file.");
 
             // Write-back: remote creates a file, the managed client must materialize it locally.
             string writeTag = "RemoteWrote-" + Guid.NewGuid().ToString("N")[..6];

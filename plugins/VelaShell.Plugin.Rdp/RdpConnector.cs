@@ -30,7 +30,11 @@ internal static class RdpConnector
             CertificatePin = pin,
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,
-            Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))]
+            Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))],
+            Security = settings.Security,
+            Performance = settings.Performance,
+            AudioPlayback = settings.Audio
+            // DynamicResolution left at its default (true): the plugin always follows the window.
         };
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
@@ -42,9 +46,9 @@ internal static class RdpConnector
         {
             throw CertificateTrust(ex, loc);
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            throw new ProtocolConnectionException(loc["ConnectTimedOut"]);
+            throw new ProtocolConnectionException(loc["ConnectTimedOut"], ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -52,13 +56,76 @@ internal static class RdpConnector
         }
     }
 
-    private static Exception Translate(Exception ex, Loc loc) => ex switch
+    internal static Exception Translate(Exception ex, Loc loc) => ex switch
     {
         ProtocolConnectionException or ProtocolAuthenticationException
             or ProtocolCertificateTrustException or ProtocolUnsupportedException => ex,
         RdpCertificateRejectedException cert => CertificateTrust(cert, loc),
-        _ => new ProtocolConnectionException(ex.Message)
+        // A credentials problem must surface as an authentication failure (not a network error), with
+        // the reason the server gave.
+        RdpAuthenticationException auth => new ProtocolAuthenticationException(AuthenticationMessage(auth.Status, loc), auth),
+        // Refused before any credentials were sent: a server policy, so not an authentication failure — the
+        // host must not suggest re-entering the password.
+        RdpNlaRefusedException refused => new ProtocolConnectionException(
+            loc.Format(refused.ServerRequiresNla ? "NlaRefusedRequired" : "NlaRefused", refused.Detail), refused),
+        RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.HybridRequiredByServer } failed =>
+            new ProtocolConnectionException(loc["NegotiationNlaRequired"], failed),
+        RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.SslNotAllowedByServer } failed =>
+            new ProtocolConnectionException(loc["NegotiationLegacyOnly"], failed),
+        RdpConnectionException failed => new ProtocolConnectionException(
+            loc.Format("ConnectFailedAt", StageName(failed.Stage, loc), failed.Detail), failed),
+        _ => new ProtocolConnectionException(RdpConnectionException.Describe(ex), ex)
     };
+
+    /// <summary>Turns the NTSTATUS/HRESULT a server reports for a rejected NLA logon into a readable reason.</summary>
+    internal static string AuthenticationMessage(uint? status, Loc loc)
+    {
+        string? reason = status switch
+        {
+            0xC000006D or 0xC000006A or 0xC0000064 or 0x8009030C => loc["NlaBadCredentials"],   // logon failure / wrong password / no such user / SEC_E_LOGON_DENIED
+            0xC0000071 or 0xC0000224 => loc["NlaPasswordExpired"],                             // password expired / must change
+            0xC0000234 => loc["NlaAccountLocked"],
+            0xC0000072 or 0xC0000193 => loc["NlaAccountDisabled"],                             // disabled / expired account
+            0xC000006E or 0xC000015B or 0xC000006F or 0xC0000070 or 0xC0000413 => loc["NlaNotAllowed"], // restrictions / logon type not granted / hours / workstation / auth firewall
+            _ => null
+        };
+        return (status, reason) switch
+        {
+            ({ } code, { } known) => loc.Format("NlaRejected", known, code),
+            ({ } code, null) => $"{loc["AuthFailed"]} (0x{code:X8})",
+            _ => loc["AuthFailed"]
+        };
+    }
+
+    private static string StageName(RdpConnectStage stage, Loc loc) => loc["Stage" + stage];
+
+    /// <summary>
+    /// A readable reason for a mid-session disconnect. The server's Set Error Info code is mapped to a
+    /// localized line for the common cases (signed out, taken over, no Remote Desktop licence); other codes
+    /// fall back to the library's neutral text plus the hex code. Returns <see langword="null" /> for an
+    /// ordinary drop (no error-info, e.g. network loss), which keeps the plain "disconnected" message.
+    /// </summary>
+    internal static string? DisconnectReason(Exception? failure, Loc loc)
+    {
+        if (failure is not RdpDisconnectException disconnect)
+        {
+            return null;
+        }
+
+        string? known = disconnect.ErrorInfo switch
+        {
+            0x00000002 or 0x0000000C => loc["ByeLoggedOff"],
+            0x00000005 => loc["ByeTakenOver"],
+            0x00000001 or 0x0000000B => loc["ByeByServer"],
+            0x00000007 or 0x00000009 => loc["ByeDenied"],
+            0x00000003 or 0x00000004 => loc["ByeTimeout"],
+            _ when RdpErrorInfo.IsLicensing(disconnect.ErrorInfo) => loc["ByeLicense"],
+            _ => null
+        };
+        return known is null
+            ? loc.Format("ByeGeneric", disconnect.Reason, disconnect.ErrorInfo)
+            : loc.Format("ByeKnown", known, disconnect.ErrorInfo);
+    }
 
     private static ProtocolCertificateTrustException CertificateTrust(RdpCertificateRejectedException ex, Loc loc)
     {

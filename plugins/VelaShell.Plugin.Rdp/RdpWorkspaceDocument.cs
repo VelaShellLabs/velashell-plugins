@@ -29,7 +29,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     private int _disposed;
 
     internal RdpWorkspaceDocument(IRdpSession session, WorkspaceConnectRequest request, RdpSettings settings,
-        IPluginContext context, Loc loc, RdpSessionFactory factory, CancellationToken lifetime, Action<RdpWorkspaceDocument> closed)
+        IPluginContext context, Loc loc, RdpSessionFactory factory, Action<RdpWorkspaceDocument> closed, CancellationToken lifetime)
     {
         _session = session;
         _request = request;
@@ -99,14 +99,25 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             return;
         }
 
-        SetStatus(new(ProtocolSessionState.Faulted, _loc["Disconnected"]), session);
+        string? reason = RdpConnector.DisconnectReason(failure, _loc);
+        if (reason is not null)
+        {
+            // Whether a Windows session actually started before the drop bisects the cause: logon reached =>
+            // the server ended an established session (policy); not reached => it never got that far.
+            string logon = session is RdpManagedSession managed
+                ? managed.ReachedLogon ? $"; a Windows logon was reached (Save Session Info type {managed.LogonInfoType})" : "; no Windows logon was reached"
+                : "";
+            _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure!.Message}{logon}");
+        }
+
+        SetStatus(new(ProtocolSessionState.Faulted, reason ?? _loc["Disconnected"]), session);
         if (_root is not null)
         {
             Dispatcher.UIThread.Post(() =>
         {
             if (_disposed == 0 && ReferenceEquals(_session, session))
             {
-                _view?.SetConnected(false);
+                _view?.SetConnected(false, reason);
             }
         });
         }

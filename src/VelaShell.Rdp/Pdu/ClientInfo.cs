@@ -23,17 +23,16 @@ internal static class ClientInfo
     private const uint InfoMaximizeShell = 0x00000020;
     private const uint InfoLogonNotify = 0x00000040;
     private const uint InfoEnableWindowsKey = 0x00000100;
-    private const uint InfoNoAudioPlayback = 0x00008000;
-    private const uint InfoRail = 0x00000800;
+    private const uint InfoNoAudioPlayback = 0x00080000;
     private const uint InfoCompression = 0x00000080;
     private const uint CompressionType64K = 1 << 9; // PACKET_COMPR_TYPE_64K in bits 9-12
 
-    // Performance flags (TS_EXTENDED_INFO_PACKET.performanceFlags).
-    private const uint PerfDisableWallpaper = 0x00000001;
-    private const uint PerfDisableFullWindowDrag = 0x00000002;
-    private const uint PerfDisableMenuAnimations = 0x00000004;
-
-    internal static byte[] Build(string domain, string username, string password, bool autoLogon)
+    /// <summary>
+    /// Builds the logon PDU. <paramref name="performanceFlags"/> is written to
+    /// TS_EXTENDED_INFO_PACKET.performanceFlags (desktop features to suppress); when
+    /// <paramref name="audioPlayback"/> is <see langword="false" />, INFO_NOAUDIOPLAYBACK is set so the server plays no audio.
+    /// </summary>
+    internal static byte[] Build(string domain, string username, string password, bool autoLogon, uint performanceFlags, bool audioPlayback)
     {
         var w = new ByteWriter(512);
         // Basic Security Header: SEC_INFO_PKT.
@@ -41,14 +40,16 @@ internal static class ClientInfo
         w.U16LE(0);                       // flagsHi
 
         uint flags = InfoMouse | InfoDisableCtrlAltDel | InfoUnicode | InfoMaximizeShell |
-                     InfoLogonNotify | InfoEnableWindowsKey | InfoNoAudioPlayback |
-                     InfoCompression | CompressionType64K;
+                     InfoLogonNotify | InfoEnableWindowsKey | InfoCompression | CompressionType64K;
+        if (!audioPlayback)
+        {
+            flags |= InfoNoAudioPlayback;
+        }
+
         if (autoLogon && password.Length > 0)
         {
             flags |= InfoAutoLogon;
         }
-
-        _ = InfoRail;
 
         w.U32LE(0);                       // CodePage
         w.U32LE(flags);
@@ -81,7 +82,7 @@ internal static class ClientInfo
         w.Bytes(clientDir);
         w.Zeros(172);                     // clientTimeZone (TS_TIME_ZONE_INFORMATION), UTC/zeroed
         w.U32LE(0);                       // clientSessionId
-        w.U32LE(PerfDisableWallpaper | PerfDisableFullWindowDrag | PerfDisableMenuAnimations);
+        w.U32LE(performanceFlags);
         w.U16LE(0);                       // cbAutoReconnectCookie
         return w.ToArray();
     }

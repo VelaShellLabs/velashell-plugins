@@ -29,9 +29,8 @@ public sealed class XlsxTests
 
         using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         string[] names = [.. zip.Entries.Select(static e => e.FullName).Order(StringComparer.Ordinal)];
-        CollectionAssert.AreEqual(
-            new[] { "[Content_Types].xml", "_rels/.rels", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml" },
-            names);
+        Assert.AreSequenceEqual(
+            new[] { "[Content_Types].xml", "_rels/.rels", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml" }, names);
         foreach (ZipArchiveEntry entry in zip.Entries)
         {
             using Stream stream = entry.Open();
@@ -40,13 +39,13 @@ public sealed class XlsxTests
 
         XDocument workbook = Load(zip, "xl/workbook.xml");
         string[] sheets = [.. workbook.Descendants(Main + "sheet").Select(static s => (string)s.Attribute("name")!)];
-        CollectionAssert.AreEqual(new[] { "orders", "customers" }, sheets);
+        Assert.AreSequenceEqual(new[] { "orders", "customers" }, sheets);
         Assert.AreEqual("rId2", (string)workbook.Descendants(Main + "sheet").Last().Attribute(Rel + "id")!);
 
         XDocument rels = Load(zip, "xl/_rels/workbook.xml.rels");
         XNamespace pkg = "http://schemas.openxmlformats.org/package/2006/relationships";
         string[] targets = [.. rels.Descendants(pkg + "Relationship").Select(static r => (string)r.Attribute("Target")!)];
-        CollectionAssert.AreEqual(new[] { "worksheets/sheet1.xml", "worksheets/sheet2.xml", "styles.xml" }, targets);
+        Assert.AreSequenceEqual(new[] { "worksheets/sheet1.xml", "worksheets/sheet2.xml", "styles.xml" }, targets);
 
         XDocument types = Load(zip, "[Content_Types].xml");
         XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
@@ -121,7 +120,7 @@ public sealed class XlsxTests
         });
         using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         string[] sheets = [.. Load(zip, "xl/workbook.xml").Descendants(Main + "sheet").Select(static s => (string)s.Attribute("name")!)];
-        CollectionAssert.AreEqual(new[] { "orders", "orders (2)" }, sheets, "duplicate sheet names are made unique");
+        Assert.AreSequenceEqual(new[] { "orders", "orders (2)" }, sheets, "duplicate sheet names are made unique");
     }
 
     [TestMethod]

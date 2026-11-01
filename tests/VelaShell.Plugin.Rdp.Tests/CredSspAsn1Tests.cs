@@ -1,5 +1,6 @@
 using System.Formats.Asn1;
 using System.Text;
+using VelaShell.Rdp;
 using VelaShell.Rdp.Security;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -19,7 +20,7 @@ public sealed class CredSspAsn1Tests
         (uint version, byte[]? token, byte[]? pub, uint? error) = CredSsp.RoundTripForTest(6, nego, null, null, null);
         Assert.AreEqual(6u, version);
         Assert.IsNotNull(token);
-        CollectionAssert.AreEqual(nego, token);
+        Assert.AreSequenceEqual(nego, token);
         Assert.IsNull(pub);
         Assert.IsNull(error);
     }
@@ -31,9 +32,9 @@ public sealed class CredSspAsn1Tests
         byte[] nonce = new byte[32];
         (uint version, byte[]? token, byte[]? pub, uint? error) = CredSsp.RoundTripForTest(6, [0xAA], null, pubKeyAuth, nonce);
         Assert.AreEqual(6u, version);
-        CollectionAssert.AreEqual(new byte[] { 0xAA }, token);
+        Assert.AreSequenceEqual(new byte[] { 0xAA }, token);
         Assert.IsNotNull(pub);
-        CollectionAssert.AreEqual(pubKeyAuth, pub);
+        Assert.AreSequenceEqual(pubKeyAuth, pub);
         Assert.IsNull(error);
     }
 
@@ -60,16 +61,51 @@ public sealed class CredSspAsn1Tests
     [TestMethod]
     public void BindingHashMatchesSpecMagicAndIsDirectional()
     {
-        byte[] nonce = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        byte[] nonce = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
         byte[] key = [0xDE, 0xAD, 0xBE, 0xEF];
         byte[] clientToServer = CredSsp.BindingHashForTest(true, nonce, key);
         byte[] serverToClient = CredSsp.BindingHashForTest(false, nonce, key);
-        Assert.AreEqual(32, clientToServer.Length);
+        Assert.HasCount(32, clientToServer);
         CollectionAssert.AreNotEqual(clientToServer, serverToClient, "Client/server binding hashes must differ.");
 
         // Recompute the client→server hash independently: SHA256(magic‖nonce‖key), magic incl. trailing NUL.
         byte[] magic = Encoding.ASCII.GetBytes("CredSSP Client-To-Server Binding Hash\0");
         byte[] expected = System.Security.Cryptography.SHA256.HashData([.. magic, .. nonce, .. key]);
-        CollectionAssert.AreEqual(expected, clientToServer);
+        Assert.AreSequenceEqual(expected, clientToServer);
+    }
+
+    private static byte[] TsRequestWithError(System.Numerics.BigInteger errorCode)
+    {
+        var w = new AsnWriter(AsnEncodingRules.DER);
+        using (w.PushSequence())
+        {
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                w.WriteInteger(6);
+            }
+
+            using (w.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 4)))
+            {
+                w.WriteInteger(errorCode);
+            }
+        }
+        return w.Encode();
+    }
+
+    [TestMethod]
+    public void ServerErrorCodesParseWhetherEncodedSignedOrUnsigned()
+    {
+        // Servers encode NTSTATUS as a signed INTEGER: STATUS_LOGON_FAILURE 0xC000006D arrives as
+        // -1073741715. Converting that BigInteger straight to uint threw OverflowException and hid the
+        // server's actual answer ("wrong password") behind "Arithmetic operation resulted in an overflow".
+        (uint version, uint? signed) = CredSsp.ParseForTest(TsRequestWithError(unchecked((int)0xC000006D)));
+        Assert.AreEqual(6u, version);
+        Assert.AreEqual(0xC000006Du, signed);
+
+        // A server that encodes the same 32 bits as a positive INTEGER must give the same value.
+        (_, uint? unsigned) = CredSsp.ParseForTest(TsRequestWithError(0x8009030CU));
+        Assert.AreEqual(0x8009030Cu, unsigned);
+
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => CredSsp.ParseForTest(TsRequestWithError(System.Numerics.BigInteger.Pow(2, 40))));
     }
 }

@@ -32,11 +32,11 @@ public sealed class ObjectsTests
         string ddl = ObjectScripts.Ddl(info, [new BsonDocument { { "v", 2 }, { "key", new BsonDocument { { "device", 1 }, { "ts", 1 } } }, { "name", "device_1_ts_1" } }]);
 
         StringAssert.StartsWith(ddl, "db.createCollection(\n  \"events\",");
-        StringAssert.Contains(ddl, "granularity: \"minutes\"");
-        StringAssert.Contains(ddl, "expireAfterSeconds: 7776000");
+        Assert.Contains("granularity: \"minutes\"", ddl);
+        Assert.Contains("expireAfterSeconds: 7776000", ddl);
         Assert.IsFalse(ddl.Contains("bucketMaxSpanSeconds", StringComparison.Ordinal), ddl);
         Assert.IsFalse(ddl.Contains("NumberLong", StringComparison.Ordinal), ddl);
-        StringAssert.Contains(ddl, "db.events.createIndex({ device: 1, ts: 1 }, { name: \"device_1_ts_1\" })");
+        Assert.Contains("db.events.createIndex({ device: 1, ts: 1 }, { name: \"device_1_ts_1\" })", ddl);
     }
 
     /// <summary>二级索引(含 TTL)与验证规则都进脚本,_id 索引不进。</summary>
@@ -60,10 +60,10 @@ public sealed class ObjectsTests
 
         StringAssert.StartsWith(ddl, "db.createCollection(\"carts\")");
         Assert.IsFalse(ddl.Contains("_id_", StringComparison.Ordinal), ddl);
-        StringAssert.Contains(ddl, "db.carts.createIndex({ updatedAt: 1 }, { name: \"updatedAt_1\", expireAfterSeconds: 86400 })");
-        StringAssert.Contains(ddl, "collMod: \"carts\"");
-        StringAssert.Contains(ddl, "validationLevel: \"moderate\"");
-        StringAssert.Contains(ddl, "validationAction: \"warn\"");
+        Assert.Contains("db.carts.createIndex({ updatedAt: 1 }, { name: \"updatedAt_1\", expireAfterSeconds: 86400 })", ddl);
+        Assert.Contains("collMod: \"carts\"", ddl);
+        Assert.Contains("validationLevel: \"moderate\"", ddl);
+        Assert.Contains("validationAction: \"warn\"", ddl);
     }
 
     /// <summary>视图写成 createView + 管道。</summary>
@@ -78,7 +78,7 @@ public sealed class ObjectsTests
         string ddl = ObjectScripts.Ddl(new CollectionInfo("shop", "v_paid", CollectionKind.View, options), []);
 
         StringAssert.StartsWith(ddl, "db.createView(\n  \"v_paid\",\n  \"orders\",");
-        StringAssert.Contains(ddl, "$match");
+        Assert.Contains("$match", ddl);
     }
 
     /// <summary>不是合法标识符的集合名走 getCollection("…")。</summary>
@@ -141,7 +141,7 @@ public sealed class ObjectsTests
         IReadOnlyCollection<string> orders = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "orders");
         IReadOnlyCollection<string> system = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "system.profile");
 
-        CollectionAssert.AreEquivalent(new[] { "find", "insert", "listIndexes" }, orders.ToArray());
+        Assert.AreSequenceEqual(new[] { "find", "insert", "listIndexes" }, [.. orders], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.IsEmpty(system);
     }
 
@@ -174,9 +174,9 @@ public sealed class ObjectsTests
         // 选中后详情面板有小节、DDL 与权限页(本机无认证)。
         tab.SelectedItem = tab.Items.Single(static i => i.Name == "events");
         await WaitUntilAsync(() => tab.DdlText.Length > 0 && tab.PrivilegeNotice.Length > 0);
-        StringAssert.Contains(tab.DdlText, "timeseries");
+        Assert.Contains("timeseries", tab.DdlText);
         Assert.AreEqual("时序选项", tab.Sections[0].Title);
-        StringAssert.Contains(tab.StatusText, "events");
+        Assert.Contains("events", tab.StatusText);
     });
 
     /// <summary>真服务器(自建库):清空与删除都经确认框,有数据的删除要手打名称。</summary>

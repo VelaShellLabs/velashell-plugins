@@ -23,6 +23,7 @@ internal enum ShareDataType : byte
     RefreshRect = 33,
     SuppressOutput = 35,
     Shutdown = 36,
+    SaveSessionInfo = 38,
     FontList = 39,
     FontMap = 40,
     SetErrorInfo = 47

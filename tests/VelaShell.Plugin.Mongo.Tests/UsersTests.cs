@@ -51,8 +51,8 @@ public sealed class UsersTests
             [new("readWrite", "shop"), new("read", "logs")],
             [new("read", "logs"), new("dbAdmin", "shop"), new("read", "analytics")]);
 
-        CollectionAssert.AreEqual(new[] { new RoleRef("read", "analytics"), new RoleRef("dbAdmin", "shop") }, added.ToArray());
-        CollectionAssert.AreEqual(new[] { new RoleRef("readWrite", "shop") }, removed.ToArray());
+        Assert.AreSequenceEqual(new[] { new RoleRef("read", "analytics"), new RoleRef("dbAdmin", "shop") }, [.. added]);
+        Assert.AreSequenceEqual(new[] { new RoleRef("readWrite", "shop") }, [.. removed]);
     }
 
     /// <summary>按库授予的内置角色与 AnyDatabase 版本落到矩阵的正确格子,其余角色不上矩阵。</summary>
@@ -162,10 +162,10 @@ public sealed class UsersTests
         (IReadOnlyList<Privilege> grant, IReadOnlyList<Privilege> revoke) = UserAdmin.DiffPrivileges(original, current);
 
         Assert.HasCount(2, grant);
-        CollectionAssert.AreEqual(new[] { "remove" }, grant.Single(p => p.Resource["collection"] == "orders").Actions.ToArray());
+        Assert.AreSequenceEqual(new[] { "remove" }, [.. grant.Single(p => p.Resource["collection"] == "orders").Actions]);
         Assert.Contains(p => p.Resource["db"] == "logs", grant);
         Assert.HasCount(2, revoke);
-        CollectionAssert.AreEqual(new[] { "update" }, revoke.Single(p => p.Resource["collection"] == "orders").Actions.ToArray());
+        Assert.AreSequenceEqual(new[] { "update" }, [.. revoke.Single(p => p.Resource["collection"] == "orders").Actions]);
         Assert.Contains(p => p.Resource["collection"] == "refunds", revoke);
     }
 
@@ -241,7 +241,7 @@ public sealed class UsersTests
         Assert.AreEqual("+1", more);
 
         (IReadOnlyList<RoleTag> reader, more) = RoleTag.Fit([new("read", "logs"), new("read", "shop")], "admin", "shop");
-        CollectionAssert.AreEqual(new[] { "read@shop", "read@logs" }, reader.Select(t => t.Text).ToArray(), "the tab's database first");
+        Assert.AreSequenceEqual(new[] { "read@shop", "read@logs" }, [.. reader.Select(t => t.Text)], "the tab's database first");
         Assert.IsNull(more);
 
         (IReadOnlyList<RoleTag> root, _) = RoleTag.Fit([new("root", "admin")], "admin", "shop");
@@ -289,7 +289,7 @@ public sealed class UsersTests
             await tab.SaveUserAsync(created);
 
             BsonDocument user = await UserDocAsync(admin, name);
-            CollectionAssert.AreEqual(new[] { "read@shop" }, Roles(user));
+            Assert.AreSequenceEqual(new[] { "read@shop" }, Roles(user));
             Assert.IsTrue(user["customData"].AsBsonDocument.Contains(UserAdmin.CreatedKey));
             Assert.AreEqual(name, tab.SelectedUser?.Name, "the new user is selected after saving");
 
@@ -305,7 +305,7 @@ public sealed class UsersTests
             await tab.SaveUserAsync(editor);
 
             user = await UserDocAsync(admin, name);
-            CollectionAssert.AreEqual(new[] { "readWrite@logs" }, Roles(user));
+            Assert.AreSequenceEqual(new[] { "readWrite@logs" }, Roles(user));
             Assert.AreEqual(new BsonArray { "10.20.0.0/16", "127.0.0.1" },
                 user["authenticationRestrictions"].AsBsonArray[0]["clientSource"]);
             Assert.IsFalse(tab.IsModified, "the draft is rebased on the saved state");
@@ -317,7 +317,7 @@ public sealed class UsersTests
             tab.UserEditor!.Roles.Rows.First(r => r.Database == "shop").Cells[1].IsChecked = true;
             await tab.SaveUserAsync(tab.UserEditor!);
             user = await UserDocAsync(admin, name);
-            CollectionAssert.AreEqual(new[] { "readWrite@logs" }, Roles(user), "read-only mode must not write");
+            Assert.AreSequenceEqual(new[] { "readWrite@logs" }, Roles(user), "read-only mode must not write");
             Assert.IsTrue(tab.IsModified, "the blocked change stays as a draft");
             bench.Session.Guard.IsReadOnly = false;
             tab.UserEditor!.DiscardCommand.Execute(null);
@@ -404,8 +404,8 @@ public sealed class UsersTests
             BsonDocument info = await RoleDocAsync(admin, role);
             BsonDocument privilege = info["privileges"].AsBsonArray.Single().AsBsonDocument;
             Assert.AreEqual(db, privilege["resource"]["db"].AsString);
-            CollectionAssert.AreEquivalent(new[] { "find", "insert" }, privilege["actions"].AsBsonArray.Select(a => a.AsString).ToArray());
-            CollectionAssert.AreEqual(new[] { "read@logs" }, Roles(info));
+            Assert.AreSequenceEqual(new[] { "find", "insert" }, [.. privilege["actions"].AsBsonArray.Select(a => a.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+            Assert.AreSequenceEqual(new[] { "read@logs" }, Roles(info));
 
             // 有人持有它 → 编辑器里列出持有者。
             _ = await admin.RunCommandAsync<BsonDocument>(new BsonDocument
@@ -426,14 +426,12 @@ public sealed class UsersTests
             existing.Actions.First(a => a.Name == "insert").IsChecked = false;
             existing.Actions.First(a => a.Name == "update").IsChecked = true;
             editor.Inherits.Rows.First(r => r.Database == "logs").Cells[0].IsChecked = false;
-            CollectionAssert.AreEquivalent(
-                new[] { "revokeRolesFromRole", "grantPrivilegesToRole", "revokePrivilegesFromRole" },
-                editor.Commands.Select(c => c.Command.GetElement(0).Name).ToArray());
+            Assert.AreSequenceEqual(
+                new[] { "revokeRolesFromRole", "grantPrivilegesToRole", "revokePrivilegesFromRole" }, [.. editor.Commands.Select(c => c.Command.GetElement(0).Name)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
             await tab.SaveRoleAsync(editor);
 
             info = await RoleDocAsync(admin, role);
-            CollectionAssert.AreEquivalent(new[] { "find", "update" },
-                info["privileges"].AsBsonArray.Single()["actions"].AsBsonArray.Select(a => a.AsString).ToArray());
+            Assert.AreSequenceEqual(new[] { "find", "update" }, [.. info["privileges"].AsBsonArray.Single()["actions"].AsBsonArray.Select(a => a.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
             Assert.AreEqual(0, info["roles"].AsBsonArray.Count);
 
             // 删除:确认框里列出持有者,要手打角色名。

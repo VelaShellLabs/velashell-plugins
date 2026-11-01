@@ -48,7 +48,8 @@
         版本必须与 SDK 锁的一致 —— Directory.Build.targets 的 VerifyAvaloniaMatchesSdk
         在构建期核对(VELAP1000)。
 
-    本地联调一版还没发布的 SDK:见 nuget.config 里那条注释掉的本地源。
+    SDK 只从 nuget.org 来,本仓库没有 nuget.config、也没有本地源:要用还没发布的契约,
+    等 SDK 发版后抬 Directory.Packages.props(见 AGENTS.md「构建与打包」)。
   -->
 
   <PropertyGroup>

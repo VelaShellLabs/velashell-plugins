@@ -26,13 +26,22 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private const uint IrpDirectoryControl = 0x0C, IrpLockControl = 0x11, IrpDeviceControl = 0x0E;
     private const uint IrpMnQueryDirectory = 0x01;
 
+    // Servers at this version (RDP 6.x+) send PAKID_CORE_USER_LOGGEDON, and a real Windows host ignores a
+    // file-system device announced before it — the drive then never appears. Older servers (e.g. xrdp at a
+    // lower minor) never send it, so for them the devices go out as soon as the client id is confirmed.
+    private const ushort UserLoggedOnMinVersion = 0x000C;
+
     private readonly Func<byte[], Task> _send = send;
     private readonly IReadOnlyList<DriveMapping> _mappings = mappings;
     private readonly Dictionary<uint, DriveMapping> _devices = [];
     private readonly Dictionary<uint, DriveFile> _files = [];
     private uint _clientId;
     private uint _fileSequence = 1;
+    private ushort _serverMinor;
     private bool _announced;
+
+    /// <summary>The server's result code for the last device whose announce it rejected (0 = all accepted).</summary>
+    internal uint LastDeviceRejection { get; private set; }
 
     internal async Task ProcessAsync(byte[] pdu)
     {
@@ -52,7 +61,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         switch (packetId)
         {
             case PakidServerAnnounce:
-                _ = r.U16LE(); _ = r.U16LE();              // server version major/minor
+                _ = r.U16LE();                             // server version major
+                _serverMinor = r.Remaining >= 2 ? r.U16LE() : (ushort)0;
                 _clientId = r.Remaining >= 4 ? r.U32LE() : 0;
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
                 await _send(BuildClientName()).ConfigureAwait(false);
@@ -61,11 +71,22 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 await _send(BuildCapabilityResponse()).ConfigureAwait(false);
                 break;
             case PakidClientIdConfirm:
-                if (!_announced) { _announced = true; await _send(BuildDeviceListAnnounce()).ConfigureAwait(false); }
+                // Modern servers (>= RDP 6.x) want the drives only after the user has logged on; announce
+                // now only for older servers that never send PAKID_CORE_USER_LOGGEDON.
+                if (_serverMinor < UserLoggedOnMinVersion)
+                {
+                    await AnnounceDevicesAsync().ConfigureAwait(false);
+                }
+
                 break;
             case PakidUserLoggedOn:
+                await AnnounceDevicesAsync().ConfigureAwait(false);
                 break;
             case PakidDeviceReply:
+                // Server Device Announce Response: deviceId then a result NTSTATUS. A non-zero result means
+                // the server refused that drive (commonly a "drive redirection" group policy on the host).
+                _ = r.U32LE();
+                LastDeviceRejection = r.Remaining >= 4 ? r.U32LE() : 0;
                 break;
             case PakidDeviceIoRequest:
                 byte[]? completion = HandleIoRequest(ref r);
@@ -79,6 +100,18 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     }
 
     // ---- Handshake PDUs ----
+
+    /// <summary>Sends the device-list announce once; a later trigger (user-logged-on after client-id-confirm) is a no-op.</summary>
+    private async Task AnnounceDevicesAsync()
+    {
+        if (_announced)
+        {
+            return;
+        }
+
+        _announced = true;
+        await _send(BuildDeviceListAnnounce()).ConfigureAwait(false);
+    }
 
     private byte[] BuildClientAnnounceReply()
     {
@@ -153,7 +186,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
             }
 
             w.Bytes(dos);
-            byte[] data = Encoding.ASCII.GetBytes(mapping.Name + "\0");
+            byte[] data = Encoding.Unicode.GetBytes(mapping.Name + "\0");
             w.U32LE((uint)data.Length);
             w.Bytes(data);
             deviceId++;

@@ -1,7 +1,6 @@
-using System.Buffers;
 using System.Formats.Asn1;
-using System.Net;
 using System.Net.Security;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -10,10 +9,11 @@ namespace VelaShell.Rdp.Security;
 
 /// <summary>
 /// CredSSP / NLA (MS-CSSP) over the established TLS channel, for servers that select
-/// PROTOCOL_HYBRID (Windows with Network Level Authentication). NTLM and message sealing
-/// come from <see cref="NegotiateAuthentication"/>; the TSRequest envelope and the public-key
-/// binding (echo for peer version &lt; 5, SHA-256 hash for &gt;= 5) follow MS-CSSP and mirror
-/// FreeRDP's nla.c. Credentials are sent only after the server's public-key echo verifies.
+/// PROTOCOL_HYBRID (Windows with Network Level Authentication). The authentication tokens and message
+/// sealing come from an <see cref="INlaSecurityContext"/> (native SPNEGO on Windows, managed NTLM
+/// elsewhere); the TSRequest envelope and the public-key binding (echo for peer version &lt; 5, SHA-256
+/// hash for &gt;= 5) follow MS-CSSP and mirror FreeRDP's nla.c. Credentials are sent only after the
+/// server's public-key echo verifies.
 /// </summary>
 internal static class CredSsp
 {
@@ -28,46 +28,61 @@ internal static class CredSsp
     {
         byte[] publicKey = ServerPublicKey(tls);
         byte[] nonce = RandomNumberGenerator.GetBytes(32);
+        using INlaSecurityContext auth = NlaSecurityContext.Create(domain, username, password, targetHost);
 
-        using var auth = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
-        {
-            Package = "NTLM",
-            Credential = new NetworkCredential(username, password, domain),
-            TargetName = $"TERMSRV/{targetHost}",
-            RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
-        });
+        // Negotiation loop: exchange security-package tokens (one round for NTLM, possibly more for SPNEGO)
+        // until the context is established; only then is pubKeyAuth attached. The 32-byte clientNonce rides on
+        // every client TSRequest (v5+), as FreeRDP and mstsc send it.
+        byte[] outToken = auth.Step([]);
+        string authInfo = DescribeAuth(auth, outToken);
+        await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, null, nonce), ct).ConfigureAwait(false);
 
-        // Leg 1: client NTLM NEGOTIATE.
-        byte[]? token = auth.GetOutgoingBlob(ReadOnlySpan<byte>.Empty, out NegotiateAuthenticationStatusCode status);
-        if (status is not (NegotiateAuthenticationStatusCode.ContinueNeeded or NegotiateAuthenticationStatusCode.Completed))
+        uint peerVersion = 0;
+        bool sawReply = false;
+        while (!auth.IsComplete)
         {
-            throw new RdpProtocolException($"NLA negotiation failed to start ({status}).");
+            // Nothing secret has been sent yet (no credentials, no proof), so a refusal on the first reply is
+            // server policy, not a password problem: a server that rejects our NLA answers with
+            // errorCode 0x80090302 (SEC_E_UNSUPPORTED_FUNCTION) or aborts the TLS session.
+            byte[] replyBytes;
+            try
+            {
+                replyBytes = await ReadDerAsync(tls, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!sawReply && ex is IOException or RdpProtocolException)
+            {
+                throw new RdpNlaRefusedException(null, ex, auth: authInfo);
+            }
+
+            TsRequest reply = ParseTsRequest(replyBytes);
+            if (reply.ErrorCode is { } refused && refused != 0)
+            {
+                throw sawReply
+                    ? new RdpAuthenticationException($"The server rejected NLA (0x{refused:X8}).", refused)
+                    : new RdpNlaRefusedException(refused, null, auth: authInfo);
+            }
+
+            peerVersion = reply.Version;
+            sawReply = true;
+            outToken = auth.Step(reply.NegoToken ?? []);
+            if (!auth.IsComplete)
+            {
+                await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, null, nonce), ct).ConfigureAwait(false);
+            }
         }
 
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, null, null), ct).ConfigureAwait(false);
+        // Context established: send the final token (if any) together with the sealed public-key binding
+        // (the raw key for peer version < 5, the SHA-256 nonce-bound hash for >= 5).
+        byte[] binding = peerVersion < 5 ? publicKey : BindingHash(ClientServerHashMagic, nonce, publicKey);
+        byte[] pubKeyAuth = auth.Seal(binding);
+        await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, pubKeyAuth, nonce), ct).ConfigureAwait(false);
 
-        // Leg 2: server NTLM CHALLENGE.
-        TsRequest challenge = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
-        uint peerVersion = challenge.Version;
-
-        // Leg 3: client NTLM AUTHENTICATE + pubKeyAuth (+ clientNonce for v5+).
-        token = auth.GetOutgoingBlob(challenge.NegoToken ?? [], out status);
-        if (status != NegotiateAuthenticationStatusCode.Completed)
-        {
-            throw new ProtocolAuthFailure($"NLA authentication did not complete ({status}).");
-        }
-
-        byte[] pubKeyAuth = peerVersion < 5
-            ? Seal(auth, publicKey)
-            : Seal(auth, BindingHash(ClientServerHashMagic, nonce, publicKey));
-        byte[]? sentNonce = peerVersion < 5 ? null : nonce;
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, token, null, pubKeyAuth, sentNonce), ct).ConfigureAwait(false);
-
-        // Leg 4: server public-key echo — verify before sending credentials.
+        // Server public-key echo — verify before sending credentials. A rejection here (e.g. a wrong password,
+        // which the server validates during NLA) is an authentication failure.
         TsRequest echo = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
         if (echo.ErrorCode is { } error && error != 0)
         {
-            throw new ProtocolAuthFailure($"The server rejected NLA (0x{error:X8}).");
+            throw new RdpAuthenticationException($"The server rejected NLA (0x{error:X8}).", error);
         }
 
         if (echo.PubKeyAuth is null)
@@ -75,12 +90,29 @@ internal static class CredSsp
             throw new RdpProtocolException("NLA public-key echo missing.");
         }
 
-        byte[] serverEcho = Unseal(auth, echo.PubKeyAuth);
+        byte[] serverEcho = auth.Unseal(echo.PubKeyAuth);
         VerifyServerEcho(peerVersion, serverEcho, publicKey, nonce);
 
-        // Leg 5: send the credentials, sealed.
-        byte[] credentials = Seal(auth, BuildTsCredentials(domain, username, password));
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, null, credentials, null, null), ct).ConfigureAwait(false);
+        // Finally send the credentials, sealed.
+        byte[] credentials = auth.Seal(BuildTsCredentials(domain, username, password));
+        await WriteAsync(tls, BuildTsRequest(ClientVersion, null, credentials, null, nonce), ct).ConfigureAwait(false);
+    }
+
+    private static byte[]? Nz(byte[] token) => token.Length == 0 ? null : token;
+
+    /// <summary>
+    /// Names the NLA provider and the shape of its first token, so a refusal's log line says whether the build
+    /// sent native SPNEGO (what Windows' own client sends) or bare NTLM — the exact thing a server may reject.
+    /// </summary>
+    private static string DescribeAuth(INlaSecurityContext auth, byte[] token)
+    {
+        string provider = auth is SspiNegotiate ? "native SSPI" : "managed NTLM";
+        string shape = token.Length == 0 ? "empty"
+            : token.Length >= 8 && token.AsSpan(0, 7).SequenceEqual("NTLMSSP"u8) ? "bare NTLM"
+            : token[0] == 0x60 ? "SPNEGO"
+            : token[0] == 0xA1 ? "SPNEGO-resp"
+            : $"0x{token[0]:X2}";
+        return $"NLA via {provider}, first token {shape} {token.Length}B";
     }
 
     private static void VerifyServerEcho(uint peerVersion, byte[] serverEcho, byte[] publicKey, byte[] nonce)
@@ -98,7 +130,7 @@ internal static class CredSsp
             }
             if (!CryptographicOperations.FixedTimeEquals(serverEcho, expected))
             {
-                throw new ProtocolAuthFailure("The server's public-key echo did not match (possible MITM).");
+                throw new RdpProtocolException("The server's public-key echo did not match (possible MITM).");
             }
         }
         else
@@ -106,7 +138,7 @@ internal static class CredSsp
             byte[] expected = BindingHash(ServerClientHashMagic, nonce, publicKey);
             if (!CryptographicOperations.FixedTimeEquals(serverEcho, expected))
             {
-                throw new ProtocolAuthFailure("The server's public-key hash did not match (possible MITM).");
+                throw new RdpProtocolException("The server's public-key hash did not match (possible MITM).");
             }
         }
     }
@@ -131,30 +163,6 @@ internal static class CredSsp
         }
 
         return rsa.ExportRSAPublicKey();   // matches OpenSSL i2d_PublicKey (PKCS#1 RSAPublicKey)
-    }
-
-    private static byte[] Seal(NegotiateAuthentication auth, byte[] data)
-    {
-        var output = new ArrayBufferWriter<byte>();
-        NegotiateAuthenticationStatusCode status = auth.Wrap(data, output, requestEncryption: true, out _);
-        if (status != NegotiateAuthenticationStatusCode.Completed)
-        {
-            throw new RdpProtocolException($"NLA wrap failed ({status}).");
-        }
-
-        return output.WrittenSpan.ToArray();
-    }
-
-    private static byte[] Unseal(NegotiateAuthentication auth, byte[] data)
-    {
-        var output = new ArrayBufferWriter<byte>();
-        NegotiateAuthenticationStatusCode status = auth.Unwrap(data, output, out _);
-        if (status != NegotiateAuthenticationStatusCode.Completed)
-        {
-            throw new RdpProtocolException($"NLA unwrap failed ({status}).");
-        }
-
-        return output.WrittenSpan.ToArray();
     }
 
     // ---- Offline test hooks (NLA needs a live Windows server; these validate the ASN.1) ----
@@ -237,7 +245,7 @@ internal static class CredSsp
             switch (tag.TagValue)
             {
                 case 0:
-                    version = (uint)inner.ReadInteger();
+                    version = ToUInt32(inner.ReadInteger());
                     break;
                 case 1:
                     AsnReader negoData = inner.ReadSequence();   // SEQUENCE OF
@@ -255,7 +263,7 @@ internal static class CredSsp
                     pubKeyAuth = inner.ReadOctetString();
                     break;
                 case 4:
-                    errorCode = (uint)inner.ReadInteger();
+                    errorCode = ToUInt32(inner.ReadInteger());
                     break;
                 case 5:
                     _ = inner.ReadOctetString(); // clientNonce echoed (unused on the client)
@@ -263,6 +271,23 @@ internal static class CredSsp
             }
         }
         return new TsRequest(version, negoToken, pubKeyAuth, errorCode);
+    }
+
+    /// <summary>
+    /// Maps an ASN.1 INTEGER onto a 32-bit code. NTSTATUS/HRESULT error codes have the top bit set, and
+    /// servers encode them as <b>signed</b> INTEGERs — STATUS_LOGON_FAILURE 0xC000006D arrives as
+    /// -1073741715 — so a direct <c>(uint)</c> conversion of the <see cref="BigInteger" /> throws
+    /// <see cref="OverflowException" />, masking the very error the server is reporting.
+    /// </summary>
+    private static uint ToUInt32(BigInteger value) =>
+        value >= int.MinValue && value <= uint.MaxValue
+            ? unchecked((uint)(long)value)
+            : throw new RdpProtocolException("An NLA integer is outside the 32-bit range.");
+
+    internal static (uint Version, uint? Error) ParseForTest(byte[] der)
+    {
+        TsRequest r = ParseTsRequest(der);
+        return (r.Version, r.ErrorCode);
     }
 
     private static byte[] BuildTsCredentials(string domain, string username, string password)
@@ -366,6 +391,3 @@ internal static class CredSsp
         return buffer;
     }
 }
-
-/// <summary>NLA rejected the supplied credentials.</summary>
-internal sealed class ProtocolAuthFailure(string message) : Exception(message);

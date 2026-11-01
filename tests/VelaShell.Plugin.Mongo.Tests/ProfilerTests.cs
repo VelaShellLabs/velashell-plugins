@@ -190,7 +190,7 @@ public sealed class ProfilerTests
             Assert.IsNotNull(tab.Detail);
             Assert.Contains(o => o.IsLong, tab.Ops, "a > 10 s operation is listed in red");
             Assert.DoesNotContain(o => o.Summary.Contains("$currentOp", StringComparison.Ordinal), tab.Ops, "our own $currentOp is hidden");
-            StringAssert.Contains(tab.StatusText, "system.profile");
+            Assert.Contains("system.profile", tab.StatusText);
         }
         finally
         {

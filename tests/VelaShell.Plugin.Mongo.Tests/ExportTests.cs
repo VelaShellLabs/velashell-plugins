@@ -62,10 +62,10 @@ public sealed class ExportTests
         string text = WriteText(output => new ShellExportWriter(output, "shop", new ShellOptions { BatchSize = 2 }), Tricky, Tricky, Tricky);
         Assert.AreEqual(2, CountOf(text, ".insertMany(["), "3 documents in batches of 2 = 2 statements");
         Assert.AreEqual(2, CountOf(text, "]);"));
-        StringAssert.Contains(text, "db.getSiblingDB(\"shop\").getCollection(\"orders\")");
-        StringAssert.Contains(text, "NumberDecimal(\"1299.00\")");
-        StringAssert.Contains(text, "ObjectId(\"66f5c2a1b04e1c3a5d7e9f01\")");
-        StringAssert.Contains(text, "ISODate(\"2026-09-27T07:00:00.123Z\")");
+        Assert.Contains("db.getSiblingDB(\"shop\").getCollection(\"orders\")", text);
+        Assert.Contains("NumberDecimal(\"1299.00\")", text);
+        Assert.Contains("ObjectId(\"66f5c2a1b04e1c3a5d7e9f01\")", text);
+        Assert.Contains("ISODate(\"2026-09-27T07:00:00.123Z\")", text);
     }
 
     [TestMethod]
@@ -117,13 +117,13 @@ public sealed class ExportTests
         ];
         var uuid = Guid.Parse("8f3b0c1a-0000-4000-8000-00000000abcd");
         var metadata = BsonDocument.Parse(BsonDump.MetadataJson(BsonDump.Metadata(info, indexes, uuid)));
-        CollectionAssert.AreEqual(new[] { "options", "indexes", "uuid", "collectionName", "type" }, metadata.Names.ToArray());
+        Assert.AreSequenceEqual(new[] { "options", "indexes", "uuid", "collectionName", "type" }, [.. metadata.Names]);
         Assert.AreEqual("orders", metadata["collectionName"].AsString);
         Assert.AreEqual("collection", metadata["type"].AsString);
         Assert.AreEqual(uuid.ToString("N"), metadata["uuid"].AsString, "uuid is plain hex like mongodump writes it");
         Assert.IsFalse(metadata["indexes"][0].AsBsonDocument.Contains("ns"), "ns is stripped from index specs");
         Assert.IsTrue(metadata["indexes"][1]["unique"].AsBoolean);
-        StringAssert.Contains(BsonDump.MetadataJson(metadata), "\"$numberInt\"", "canonical EJSON like mongodump");
+        Assert.Contains("\"$numberInt\"", BsonDump.MetadataJson(metadata), "canonical EJSON like mongodump");
     }
 
     // ── 导出执行器(真实服务器) ───────────────────────────────────────────

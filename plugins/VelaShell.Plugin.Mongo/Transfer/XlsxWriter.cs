@@ -292,7 +292,7 @@ internal sealed class XlsxWriter : IDisposable
     /// <summary>工作表名:去掉 <c>[]:*?/\</c>,最长 31 个字符,不能为空。</summary>
     public static string SanitizeSheetName(string name)
     {
-        char[] chars = name.Where(static c => c is not ('[' or ']' or ':' or '*' or '?' or '/' or '\\') && !char.IsControl(c)).ToArray();
+        char[] chars = [.. name.Where(static c => c is not ('[' or ']' or ':' or '*' or '?' or '/' or '\\') && !char.IsControl(c))];
         string clean = new string(chars).Trim('\'').Trim();
         if (clean.Length == 0)
         {

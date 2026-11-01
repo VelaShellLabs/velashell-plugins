@@ -51,7 +51,14 @@ dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=
 
 本仓库的插件与第三方插件走**完全同一条路径**:从 nuget.org 引用 `VelaShell.PluginSdk.Build`。
 第一方插件因此天然是 SDK 包的第一个用户 —— 包坏了我们自己先撞上,而不是等插件作者来报。
-想验一版未发布的 SDK,`-p:VelaSdkVersion=<版本>-dev` 配 `nuget.config` 里的本地源。
+SDK 的版本是 `Directory.Packages.props` 里 `VelaShell.PluginSdk.Build` 与 `VelaShell.PluginSdk.Testing`
+两行的**字面量**(同一个号),包只从 nuget.org 来:本仓库没有 `nuget.config`(064cee7 已删),
+也没有 `VelaSdkVersion` 属性,`-p:` 覆盖不了它。插件要用 SDK 里还没发布的契约时,
+等 SDK 发版之后把这两行一起抬上去,再按 `VELAP1000` / `VELAP1001` 的报错把测试工程的 Avalonia* 跟上;
+在那之前用到新面的插件编译不过是预期内的,`plugin.json` 的 `minSdkVersion` 也等包发布了再改。
+**不要**为了先编过去到 sdk 仓库 `dotnet pack` 本地包、加本地源,或把版本指到一个还不存在的号 ——
+见 sdk 仓库 AGENTS.md「版本号不归你定」。`.Build` 发版前的端到端验证由 sdk 仓库自己的
+`scripts/Invoke-Smoke.ps1` 负责。
 
 ### 写插件之前必须读的
 

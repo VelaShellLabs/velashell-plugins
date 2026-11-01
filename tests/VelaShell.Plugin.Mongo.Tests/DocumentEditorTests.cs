@@ -87,9 +87,8 @@ public sealed class DocumentEditorTests
     public void Opening_an_existing_document_shows_its_fields_without_changes() => Screens.OnUi(() =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
-        CollectionAssert.AreEqual(
-            new[] { "_id", "orderNo", "customer", "items", "total", "status", "paid", "createdAt", "tags", "note" },
-            vm.Roots.Select(static r => r.Name).ToArray());
+        Assert.AreSequenceEqual(
+            new[] { "_id", "orderNo", "customer", "items", "total", "status", "paid", "createdAt", "tags", "note" }, [.. vm.Roots.Select(static r => r.Name)]);
         Assert.AreEqual("编辑文档", vm.Title);
         Assert.AreEqual("shop.orders", vm.Subtitle);
         Assert.AreEqual("Mongo.file-pen-line", vm.IconKey);
@@ -161,7 +160,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(DocumentEditorRowState.Added, shipped.State);
         Assert.IsTrue(shipped.ShowDateExtras);
         StringAssert.Matches(shipped.TimeZoneText, new System.Text.RegularExpressions.Regex(@"^UTC[+-]\d\d:\d\d$"));
-        StringAssert.Contains(shipped.IsoEcho, "02:30Z");
+        Assert.Contains("02:30Z", shipped.IsoEcho);
         Assert.AreEqual(DocumentEditorRowState.Modified, Row(vm, "customer.level").State);
         Assert.AreEqual(DocumentEditorRowState.None, Row(vm, "customer").State, "an expanded parent leaves the change to its child");
 
@@ -173,9 +172,9 @@ public sealed class DocumentEditorTests
         Assert.IsFalse(vm.CanCloseWithEscape, "Esc must not throw away unsaved edits");
         Assert.AreEqual("updateOne", vm.CommandName);
         StringAssert.StartsWith(vm.CommandText, "db.orders.updateOne(\n  { _id: ObjectId(\"66f5c2a1d38b5e1a0c7fe3b7\") },\n  { $set: {");
-        StringAssert.Contains(vm.CommandText, "\"customer.level\": \"VIP\"");
-        StringAssert.Contains(vm.CommandText, "shippedAt: ISODate(\"2026-09-27T02:30:00Z\")");
-        StringAssert.Contains(vm.CommandText, "$unset: {\n      note: \"\"");
+        Assert.Contains("\"customer.level\": \"VIP\"", vm.CommandText);
+        Assert.Contains("shippedAt: ISODate(\"2026-09-27T02:30:00Z\")", vm.CommandText);
+        Assert.Contains("$unset: {\n      note: \"\"", vm.CommandText);
         Assert.AreEqual(Zh["Doc_OnlyChangedNoVersion"], vm.CommandNote);
         Assert.IsFalse(vm.CommandText.Contains("orderNo", StringComparison.Ordinal), "only changed fields are sent");
         return Task.CompletedTask;
@@ -276,7 +275,7 @@ public sealed class DocumentEditorTests
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(OrderSchema), Order());
         DocumentEditorRow level = Row(vm, "customer.level");
-        CollectionAssert.AreEqual(new[] { "普通", "VIP", "SVIP" }, level.EnumOptions.ToArray());
+        Assert.AreSequenceEqual(new[] { "普通", "VIP", "SVIP" }, [.. level.EnumOptions]);
         Assert.IsTrue(level.ShowEnum);
         Assert.IsFalse(level.ShowText);
         Assert.IsTrue(level.ShowEnumHint);
@@ -328,7 +327,7 @@ public sealed class DocumentEditorTests
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(vm.Move(Row(vm, "status"), Row(vm, "orderNo"), after: false));
         vm.RecomputeNow();
-        CollectionAssert.AreEqual(new[] { "_id", "status", "orderNo" }, vm.Roots.Take(3).Select(static r => r.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "_id", "status", "orderNo" }, [.. vm.Roots.Take(3).Select(static r => r.Name)]);
         Assert.AreEqual("replaceOne", vm.CommandName);
         Assert.IsTrue(vm.HasReordered);
         Assert.AreEqual(Zh["Doc_ReplaceNoteNoVersion"], vm.CommandNote);
@@ -346,9 +345,9 @@ public sealed class DocumentEditorTests
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(vm.Move(Row(vm, "customer.level"), Row(vm, "customer.id"), after: false));
         vm.RecomputeNow();
-        CollectionAssert.AreEqual(new[] { "level", "id", "name" }, Row(vm, "customer").Children.Select(static r => r.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "level", "id", "name" }, [.. Row(vm, "customer").Children.Select(static r => r.Name)]);
         Assert.AreEqual("updateOne", vm.CommandName);
-        StringAssert.Contains(vm.CommandText, "customer: { level: \"SVIP\"");
+        Assert.Contains("customer: { level: \"SVIP\"", vm.CommandText);
         Assert.AreEqual(DocumentEditorRowState.Modified, Row(vm, "customer").State);
 
         // 落在别的层上:取那一侧与它同层的祖先,不会把字段拖进另一个对象。
@@ -371,12 +370,12 @@ public sealed class DocumentEditorTests
         Assert.AreEqual("", tags.NewItemText);
         tags.CommitItemCommand.Execute(null);
         Assert.IsFalse(tags.IsAddingItem, "an empty Enter closes it");
-        CollectionAssert.AreEqual(new[] { "企业", "开票", "VIP客户" }, tags.Children.Select(static c => c.ChipText).ToArray());
+        Assert.AreSequenceEqual(new[] { "企业", "开票", "VIP客户" }, [.. tags.Children.Select(static c => c.ChipText)]);
         tags.Children[0].RemoveCommand.Execute(null);
-        CollectionAssert.AreEqual(new[] { "0", "1" }, tags.Children.Select(static c => c.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "0", "1" }, [.. tags.Children.Select(static c => c.Name)]);
         vm.RecomputeNow();
         Assert.AreEqual(DocumentEditorRowState.Modified, tags.State);
-        StringAssert.Contains(vm.CommandText, "tags: [ \"开票\", \"VIP客户\" ]");
+        Assert.Contains("tags: [ \"开票\", \"VIP客户\" ]", vm.CommandText);
 
         // 等长数组里改一项:只 $set 那一项的路径。
         vm.Toggle(Row(vm, "items"));
@@ -385,7 +384,7 @@ public sealed class DocumentEditorTests
         vm.RecomputeNow();
         Assert.AreEqual("items.1.qty", qty.Path);
         Assert.AreEqual(DocumentEditorRowState.Modified, qty.State);
-        StringAssert.Contains(vm.CommandText, "\"items.1.qty\": 5");
+        Assert.Contains("\"items.1.qty\": 5", vm.CommandText);
         return Task.CompletedTask;
     });
 
@@ -395,7 +394,7 @@ public sealed class DocumentEditorTests
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.IsSearching = true;
         vm.Search = "LEV";
-        CollectionAssert.AreEqual(new object[] { Row(vm, "customer"), Row(vm, "customer.level") }, vm.FormItems.Take(2).ToArray());
+        Assert.AreSequenceEqual(new object[] { Row(vm, "customer"), Row(vm, "customer.level") }, [.. vm.FormItems.Take(2)]);
         Assert.HasCount(3, vm.FormItems);
         vm.Search = "sku";
         Assert.Contains(Row(vm, "items"), vm.FormItems, "matches inside a collapsed array are revealed");
@@ -434,7 +433,7 @@ public sealed class DocumentEditorTests
         // 表单改了,再进 JSON 模式就是新的文本。
         Row(vm, "paid").BoolValue = false;
         vm.Mode = DocumentEditorMode.Json;
-        StringAssert.Contains(vm.JsonText, "paid: false");
+        Assert.Contains("paid: false", vm.JsonText);
 
         // JSON 里改 _id:不允许。
         vm.JsonText = vm.JsonText.Replace("66f5c2a1d38b5e1a0c7fe3b7", "66f5c2a1d38b5e1a0c7fe3b8", StringComparison.Ordinal);
@@ -503,8 +502,8 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(LineMarkKind.Removed, MarkOf("// note:"));
         Assert.AreEqual(LineMarkKind.Modified, MarkOf("items:"), "a change inside a folded array marks the array line");
         Assert.IsNull(MarkOf("orderNo:"));
-        StringAssert.Contains(vm.PreviewText, "items: [ …2 项 ],");
-        StringAssert.Contains(vm.PreviewText, "tags: [ \"企业\", \"开票\" ]\n  // note: null", "the last real field has no trailing comma");
+        Assert.Contains("items: [ …2 项 ],", vm.PreviewText);
+        Assert.Contains("tags: [ \"企业\", \"开票\" ]\n  // note: null", vm.PreviewText, "the last real field has no trailing comma");
         return Task.CompletedTask;
     });
 
@@ -562,7 +561,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(10, schema.Sampled);
 
         List<string> added = vm.FillFrom(schema);
-        CollectionAssert.AreEquivalent(new[] { "note", "invoice", "customer.vip", "invoice.title", "invoice.amount" }, added);
+        Assert.AreSequenceEqual(new[] { "note", "invoice", "customer.vip", "invoice.title", "invoice.amount" }, added, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
         Assert.AreEqual(BsonKind.Null, Row(vm, "note").Kind);
         Assert.AreEqual(BsonKind.Object, Row(vm, "invoice").Kind);
         Assert.AreEqual(BsonKind.String, Row(vm, "invoice.title").Kind);
@@ -585,7 +584,7 @@ public sealed class DocumentEditorTests
         ]));
         DocumentEditorRow fresh = vm.AddFieldAtEnd()!;
         IReadOnlyList<DocumentEditorSuggestion> all = vm.SuggestNames(fresh, fresh.Name);
-        CollectionAssert.AreEqual(new[] { "discount", "shippedAt" }, all.Select(static s => s.Name).ToArray(), "existing names are left out");
+        Assert.AreSequenceEqual(new[] { "discount", "shippedAt" }, [.. all.Select(static s => s.Name)], "existing names are left out");
         Assert.AreEqual("67%", all[0].RatioText);
         IReadOnlyList<DocumentEditorSuggestion> typed = vm.SuggestNames(fresh, "ship");
         Assert.HasCount(1, typed);
@@ -594,7 +593,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(BsonKind.Date, fresh.Kind, "a fresh empty field takes the sampled type");
 
         DocumentEditorRow nested = vm.AddChild(Row(vm, "customer"))!;
-        CollectionAssert.AreEqual(new[] { "vip" }, vm.SuggestNames(nested, "").Select(static s => s.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "vip" }, [.. vm.SuggestNames(nested, "").Select(static s => s.Name)]);
         return Task.CompletedTask;
     });
 
@@ -690,7 +689,7 @@ public sealed class DocumentEditorTests
             window.MouseMove(At(RowControl("orderNo"), 4), Avalonia.Input.RawInputModifiers.LeftMouseButton);
             window.MouseUp(At(RowControl("orderNo"), 4), Avalonia.Input.MouseButton.Left);
             await Screens.PumpAsync(10);
-            CollectionAssert.AreEqual(new[] { "_id", "paid", "orderNo" }, vm.Roots.Take(3).Select(static r => r.Name).ToArray());
+            Assert.AreSequenceEqual(new[] { "_id", "paid", "orderNo" }, [.. vm.Roots.Take(3).Select(static r => r.Name)]);
 
             // Ctrl+Enter 在焦点那一行后面加字段;新字段的名字框拿到焦点并弹出抽样补全。
             TextBox orderNoKey = RowControl("orderNo").GetVisualDescendants().OfType<TextBox>().First(static t => t.Name == "KeyBox");
@@ -716,7 +715,7 @@ public sealed class DocumentEditorTests
             window.KeyTextInput("新标签");
             window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Enter, null);
             await Screens.PumpAsync(10);
-            CollectionAssert.AreEqual(new[] { "企业", "开票", "新标签" }, Row(vm, "tags").Children.Select(static c => c.ChipText).ToArray());
+            Assert.AreSequenceEqual(new[] { "企业", "开票", "新标签" }, [.. Row(vm, "tags").Children.Select(static c => c.ChipText)]);
 
             // Ctrl+F 打开查找;Ctrl+S 走保存(只读模式下被护栏拦住)。
             window.KeyPress(Avalonia.Input.Key.F, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.F, null);
@@ -757,8 +756,8 @@ public sealed class DocumentEditorTests
         after["discount"] = -20.0;
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(before, after);
         Assert.IsFalse(plan.Replace);
-        CollectionAssert.AreEqual(new[] { "customer.level", "items.0.qty", "status", "discount" }, plan.Set.Names.ToArray());
-        CollectionAssert.AreEqual(new[] { "note" }, plan.Unset.Names.ToArray());
+        Assert.AreSequenceEqual(new[] { "customer.level", "items.0.qty", "status", "discount" }, [.. plan.Set.Names]);
+        Assert.AreSequenceEqual(new[] { "note" }, [.. plan.Unset.Names]);
         Assert.IsTrue(DocumentEditorDiff.Plan(Order(), Order()).IsEmpty);
     }
 
@@ -771,7 +770,7 @@ public sealed class DocumentEditorTests
         after["customer"] = new BsonDocument { ["name"] = "张伟", ["id"] = before["customer"]["id"], ["level"] = "SVIP" };
         after["paid"] = "yes";
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(before, after);
-        CollectionAssert.AreEquivalent(new[] { "customer", "paid", "tags" }, plan.Set.Names.ToArray());
+        Assert.AreSequenceEqual(new[] { "customer", "paid", "tags" }, [.. plan.Set.Names], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -814,12 +813,12 @@ public sealed class DocumentEditorTests
     {
         (HashSet<int> removed, HashSet<int> added) = DocumentEditorDiff.Lines(["{", "  a: 1,", "  b: 2", "}"], ["{", "  a: 1,", "  c: 3,", "  b: 2", "}"]);
         Assert.IsEmpty(removed);
-        CollectionAssert.AreEqual(new[] { 3 }, added.ToArray());
+        Assert.AreSequenceEqual(new[] { 3 }, [.. added]);
         (removed, added) = DocumentEditorDiff.Lines(["x", "y", "z"], ["x", "Y", "z"]);
-        CollectionAssert.AreEqual(new[] { 2 }, removed.ToArray());
-        CollectionAssert.AreEqual(new[] { 2 }, added.ToArray());
+        Assert.AreSequenceEqual(new[] { 2 }, [.. removed]);
+        Assert.AreSequenceEqual(new[] { 2 }, [.. added]);
         (_, added) = DocumentEditorDiff.Lines([], ["a", "b"]);
-        CollectionAssert.AreEquivalent(new[] { 1, 2 }, added.ToArray());
+        Assert.AreSequenceEqual(new[] { 1, 2 }, [.. added], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -832,7 +831,7 @@ public sealed class DocumentEditorTests
             text);
         update["$unset"] = new BsonDocument("note", "");
         string two = DocumentEditorFormat.Command("orders", "updateOne", new BsonDocument("_id", 1), update);
-        StringAssert.Contains(two, "      discount: -20\n    },\n    $unset: {\n      note: \"\"\n  } }\n)");
+        Assert.Contains("      discount: -20\n    },\n    $unset: {\n      note: \"\"\n  } }\n)", two);
     }
 
     [TestMethod]
@@ -844,8 +843,8 @@ public sealed class DocumentEditorTests
         Row(vm, "status").Text = "shipped";
         vm.RecomputeNow();
         Assert.AreEqual(Zh["Doc_OnlyChanged"], vm.CommandNote);
-        StringAssert.Contains(vm.CommandText, "{ _id: ObjectId(\"66f5c2a1d38b5e1a0c7fe3b7\"), updatedAt: ISODate(\"2026-09-27T01:00:00Z\") }");
-        StringAssert.Contains(vm.CommandText, "$currentDate: {\n      updatedAt: true");
+        Assert.Contains("{ _id: ObjectId(\"66f5c2a1d38b5e1a0c7fe3b7\"), updatedAt: ISODate(\"2026-09-27T01:00:00Z\") }", vm.CommandText);
+        Assert.Contains("$currentDate: {\n      updatedAt: true", vm.CommandText);
 
         // 用户自己改了 updatedAt,就不替他刷新。
         Row(vm, "updatedAt").Text = "2026-10-01 08:00:00";
@@ -869,7 +868,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(1, sku.Documents, "an array of documents counts once per document");
         Assert.AreEqual("items", sku.Parent);
         Assert.AreEqual(1.0 / 3, schema.Ratio(sku), 1e-9);
-        CollectionAssert.AreEqual(new[] { "a", "items" }, schema.ChildrenOf("").Select(static f => f.Name).ToArray());
+        Assert.AreSequenceEqual(new[] { "a", "items" }, [.. schema.ChildrenOf("").Select(static f => f.Name)]);
     }
 
     [TestMethod]

@@ -1,0 +1,254 @@
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Text;
+
+namespace VelaShell.Rdp.Security;
+
+/// <summary>
+/// Drives the native Windows <b>Negotiate</b> security package for CredSSP/NLA, exactly as Windows' own RDP
+/// client does. The key difference from the managed <see cref="ManagedNtlm" />: calling Negotiate with a
+/// <see langword="null" /> target name yields a full <b>SPNEGO</b> token (NTLM/Kerberos), whereas the managed
+/// stack and a per-service target both degrade to bare NTLM — which hardened servers refuse during NLA with
+/// SEC_E_UNSUPPORTED_FUNCTION (0x80090302). Sealing uses the same context's EncryptMessage/DecryptMessage.
+/// </summary>
+[SupportedOSPlatform("windows")]
+internal sealed class SspiNegotiate : INlaSecurityContext
+{
+    private const int SECPKG_CRED_OUTBOUND = 2;
+    private const int SECURITY_NATIVE_DREP = 0x10;
+    private const int SECPKG_ATTR_SIZES = 0;
+    private const int SECBUFFER_VERSION = 0;
+    private const int SECBUFFER_EMPTY = 0, SECBUFFER_DATA = 1, SECBUFFER_TOKEN = 2, SECBUFFER_PADDING = 9, SECBUFFER_STREAM = 10;
+    private const int SEC_WINNT_AUTH_IDENTITY_UNICODE = 2;
+    private const uint SEC_E_OK = 0;
+    private const uint SEC_I_CONTINUE_NEEDED = 0x00090312;
+    private const uint SEC_I_COMPLETE_AND_CONTINUE = 0x00090314;
+    private const uint SEC_I_COMPLETE_NEEDED = 0x00090313;
+
+    // Match what Windows' RDP client / FreeRDP request so the server offers the same features.
+    private const int ContextReq = 0x00000001 /*DELEGATE*/ | 0x00000002 /*MUTUAL_AUTH*/ | 0x00000004 /*REPLAY_DETECT*/
+        | 0x00000008 /*SEQUENCE_DETECT*/ | 0x00000010 /*CONFIDENTIALITY*/ | 0x00000020 /*USE_SESSION_KEY*/ | 0x00010000 /*INTEGRITY*/;
+
+    private readonly IntPtr _cred = Marshal.AllocHGlobal(IntPtr.Size * 2);
+    private readonly IntPtr _ctx = Marshal.AllocHGlobal(IntPtr.Size * 2);
+    private bool _hasContext;
+    private bool _credValid;
+    private bool _ctxValid;
+    private int _trailer;
+    private int _blockSize;
+    private bool _disposed;
+
+    internal unsafe SspiNegotiate(string domain, string username, string password)
+    {
+        new Span<byte>((void*)_cred, IntPtr.Size * 2).Clear();
+        new Span<byte>((void*)_ctx, IntPtr.Size * 2).Clear();
+
+        var identity = new SEC_WINNT_AUTH_IDENTITY
+        {
+            User = username,
+            UserLength = username.Length,
+            Domain = domain,
+            DomainLength = domain.Length,
+            Password = password,
+            PasswordLength = password.Length,
+            Flags = SEC_WINNT_AUTH_IDENTITY_UNICODE
+        };
+        int rc = AcquireCredentialsHandle(null, "Negotiate", SECPKG_CRED_OUTBOUND, IntPtr.Zero, ref identity,
+            IntPtr.Zero, IntPtr.Zero, _cred, out _);
+        if (rc != 0)
+        {
+            throw new RdpProtocolException($"NLA could not acquire credentials (0x{rc:X8}).");
+        }
+
+        _credValid = true;
+    }
+
+    public bool IsComplete { get; private set; }
+
+    public unsafe byte[] Step(byte[] incoming)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // Output token: let the package size it; Negotiate's max is well under 64 KiB.
+        byte[] outBytes = new byte[65536];
+        fixed (byte* outPtr = outBytes)
+        fixed (byte* inPtr = incoming.Length > 0 ? incoming : new byte[1])
+        {
+            var outBuf = new SecBuffer { cbBuffer = outBytes.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)outPtr };
+            var outDesc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 1, pBuffers = (IntPtr)(&outBuf) };
+
+            var inBuf = new SecBuffer { cbBuffer = incoming.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)inPtr };
+            var inDesc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 1, pBuffers = (IntPtr)(&inBuf) };
+
+            // A null target forces SPNEGO (NTLM/Kerberos) rather than the bare-NTLM degradation.
+            uint rc = (uint)InitializeSecurityContext(_cred, _hasContext ? _ctx : IntPtr.Zero, null, ContextReq, 0,
+                SECURITY_NATIVE_DREP, _hasContext ? (IntPtr)(&inDesc) : IntPtr.Zero, 0, _ctx, ref outDesc, out _, out _);
+
+            _hasContext = true;
+            _ctxValid = true;
+            if (rc is SEC_E_OK)
+            {
+                IsComplete = true;
+                QuerySizes();
+            }
+            else if (rc is not (SEC_I_CONTINUE_NEEDED or SEC_I_COMPLETE_AND_CONTINUE or SEC_I_COMPLETE_NEEDED))
+            {
+                throw new RdpProtocolException($"NLA InitializeSecurityContext failed (0x{rc:X8}).");
+            }
+
+            return outBuf.cbBuffer == 0 ? [] : outBytes.AsSpan(0, outBuf.cbBuffer).ToArray();
+        }
+    }
+
+    private unsafe void QuerySizes()
+    {
+        Span<int> sizes = stackalloc int[4];   // cbMaxToken, cbMaxSignature, cbBlockSize, cbSecurityTrailer
+        fixed (int* p = sizes)
+        {
+            int rc = QueryContextAttributes(_ctx, SECPKG_ATTR_SIZES, (IntPtr)p);
+            if (rc != 0)
+            {
+                throw new RdpProtocolException($"NLA could not query context sizes (0x{rc:X8}).");
+            }
+        }
+        _blockSize = sizes[2];
+        _trailer = sizes[3];
+    }
+
+    public unsafe byte[] Seal(byte[] plaintext)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        byte[] token = new byte[_trailer];
+        byte[] data = (byte[])plaintext.Clone();
+        byte[] padding = new byte[Math.Max(_blockSize, 16)];
+        fixed (byte* tPtr = token.Length > 0 ? token : new byte[1])
+        fixed (byte* dPtr = data.Length > 0 ? data : new byte[1])
+        fixed (byte* pPtr = padding)
+        {
+            Span<SecBuffer> buffers =
+            [
+                new() { cbBuffer = token.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)tPtr },
+                new() { cbBuffer = data.Length, BufferType = SECBUFFER_DATA, pvBuffer = (IntPtr)dPtr },
+                new() { cbBuffer = padding.Length, BufferType = SECBUFFER_PADDING, pvBuffer = (IntPtr)pPtr }
+            ];
+            fixed (SecBuffer* bp = buffers)
+            {
+                var desc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 3, pBuffers = (IntPtr)bp };
+                int rc = EncryptMessage(_ctx, 0, ref desc, 0);
+                if (rc != 0)
+                {
+                    throw new RdpProtocolException($"NLA EncryptMessage failed (0x{rc:X8}).");
+                }
+
+                // CredSSP carries the sealed value as signature(token) || ciphertext(data) [|| padding].
+                byte[] result = new byte[buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer];
+                int o = 0;
+                foreach (SecBuffer b in buffers)
+                {
+                    new Span<byte>((void*)b.pvBuffer, b.cbBuffer).CopyTo(result.AsSpan(o));
+                    o += b.cbBuffer;
+                }
+
+                return result;
+            }
+        }
+    }
+
+    public unsafe byte[] Unseal(byte[] wrapped)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        byte[] buffer = (byte[])wrapped.Clone();
+        fixed (byte* bPtr = buffer.Length > 0 ? buffer : new byte[1])
+        {
+            Span<SecBuffer> buffers =
+            [
+                new() { cbBuffer = buffer.Length, BufferType = SECBUFFER_STREAM, pvBuffer = (IntPtr)bPtr },
+                new() { cbBuffer = 0, BufferType = SECBUFFER_DATA, pvBuffer = IntPtr.Zero }
+            ];
+            fixed (SecBuffer* bp = buffers)
+            {
+                var desc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 2, pBuffers = (IntPtr)bp };
+                int rc = DecryptMessage(_ctx, ref desc, 0, out _);
+                if (rc != 0)
+                {
+                    throw new RdpProtocolException($"NLA DecryptMessage failed (0x{rc:X8}).");
+                }
+
+                SecBuffer dataBuf = buffers[1].BufferType == SECBUFFER_DATA && buffers[1].cbBuffer > 0 ? buffers[1] : buffers[0];
+                return new Span<byte>((void*)dataBuf.pvBuffer, dataBuf.cbBuffer).ToArray();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_ctxValid)
+        {
+            _ = DeleteSecurityContext(_ctx);
+        }
+        if (_credValid)
+        {
+            _ = FreeCredentialsHandle(_cred);
+        }
+        Marshal.FreeHGlobal(_ctx);
+        Marshal.FreeHGlobal(_cred);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SecBuffer
+    {
+        public int cbBuffer;
+        public int BufferType;
+        public IntPtr pvBuffer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SecBufferDesc
+    {
+        public int ulVersion;
+        public int cBuffers;
+        public IntPtr pBuffers;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct SEC_WINNT_AUTH_IDENTITY
+    {
+        public string? User;
+        public int UserLength;
+        public string? Domain;
+        public int DomainLength;
+        public string? Password;
+        public int PasswordLength;
+        public int Flags;
+    }
+
+    [DllImport("secur32.dll", EntryPoint = "AcquireCredentialsHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int AcquireCredentialsHandle(string? pszPrincipal, string pszPackage, int fCredentialUse,
+        IntPtr pvLogonID, ref SEC_WINNT_AUTH_IDENTITY pAuthData, IntPtr pGetKeyFn, IntPtr pvGetKeyArgument, IntPtr phCredential, out long ptsExpiry);
+
+    [DllImport("secur32.dll", EntryPoint = "InitializeSecurityContextW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int InitializeSecurityContext(IntPtr phCredential, IntPtr phContext, string? pszTargetName,
+        int fContextReq, int Reserved1, int TargetDataRep, IntPtr pInput, int Reserved2, IntPtr phNewContext,
+        ref SecBufferDesc pOutput, out int pfContextAttr, out long ptsExpiry);
+
+    [DllImport("secur32.dll", SetLastError = true)]
+    private static extern int EncryptMessage(IntPtr phContext, uint fQOP, ref SecBufferDesc pMessage, uint MessageSeqNo);
+
+    [DllImport("secur32.dll", SetLastError = true)]
+    private static extern int DecryptMessage(IntPtr phContext, ref SecBufferDesc pMessage, uint MessageSeqNo, out uint pfQOP);
+
+    [DllImport("secur32.dll", SetLastError = true)]
+    private static extern int QueryContextAttributes(IntPtr phContext, int ulAttribute, IntPtr pBuffer);
+
+    [DllImport("secur32.dll", SetLastError = true)]
+    private static extern int DeleteSecurityContext(IntPtr phContext);
+
+    [DllImport("secur32.dll", SetLastError = true)]
+    private static extern int FreeCredentialsHandle(IntPtr phCredential);
+}

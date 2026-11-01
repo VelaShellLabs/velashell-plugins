@@ -110,7 +110,7 @@ public sealed class GridFsTests
         try
         {
             IReadOnlyList<GridFsUploadItem> items = GridFsTabViewModel.ExpandPaths([folder, loose]);
-            CollectionAssert.AreEquivalent(new[] { "SKU-1/main.jpg", "SKU-1/detail/d1.jpg", "loose.txt" }, items.Select(static i => i.Relative).ToArray());
+            Assert.AreSequenceEqual(new[] { "SKU-1/main.jpg", "SKU-1/detail/d1.jpg", "loose.txt" }, [.. items.Select(static i => i.Relative)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
             Assert.AreEqual(3L, items.Single(static i => i.Relative == "SKU-1/main.jpg").Size);
         }
         finally
@@ -322,7 +322,7 @@ public sealed class GridFsTests
         Task deleting = details.DeleteCheckedVersionsCommand.ExecuteAsync();
         await WaitAsync(() => bench.ViewModel.Dialog is ConfirmDialogViewModel || deleting.IsCompleted);
         var confirm = (ConfirmDialogViewModel)bench.ViewModel.Dialog!;
-        StringAssert.Contains(confirm.Request.Message, "v1, v2");
+        Assert.Contains("v1, v2", confirm.Request.Message);
         confirm.ConfirmCommand.Execute(null);
         await deleting;
         await WaitAsync(() => details.Versions.Count == 3);
@@ -330,7 +330,7 @@ public sealed class GridFsTests
         IMongoCollection<BsonDocument> files = temp.Connection.Collection(temp.Database, "fs.files");
         IMongoCollection<BsonDocument> chunks = temp.Connection.Collection(temp.Database, "fs.chunks");
         List<BsonValue> left = [.. (await files.Find(FilterDefinition<BsonDocument>.Empty).ToListAsync()).Select(static d => d["_id"])];
-        CollectionAssert.AreEquivalent(new BsonValue[] { ids[2], ids[3], ids[4] }, left, "only v1 and v2 are gone");
+        Assert.AreSequenceEqual(new BsonValue[] { ids[2], ids[3], ids[4] }, left, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder, "only v1 and v2 are gone");
         Assert.AreEqual(0L, await chunks.CountDocumentsAsync(new BsonDocument("files_id", new BsonDocument("$in", new BsonArray { ids[0], ids[1] }))),
             "their chunks went with them");
         Assert.AreEqual(ids[4], details.Versions[0].File.Id, "the latest stays the latest");
@@ -373,7 +373,7 @@ public sealed class GridFsTests
         var tab = (GridFsTabViewModel)bench.ViewModel.ActiveTab!;
         await WaitAsync(() => !tab.IsLoading && tab.Entries.Count > 0);
         Assert.AreEqual("seed", tab.Entries.Single().Name);
-        StringAssert.Contains(tab.StatusText, $"{temp.Database}.fs");
+        Assert.Contains($"{temp.Database}.fs", tab.StatusText);
 
         // 进入 seed/,经对话框上传两个本地文件(对话框里改 metadata)。
         await tab.NavigateAsync("seed/");
@@ -390,7 +390,7 @@ public sealed class GridFsTests
             await Screens.PumpAsync(5);
             var dialog = (GridFsUploadDialogViewModel)bench.ViewModel.Dialog!;
             Assert.AreEqual("seed/", dialog.Target);
-            StringAssert.Contains(dialog.MetadataText, "uploader");
+            Assert.Contains("uploader", dialog.MetadataText);
             dialog.MetadataText = "{ uploader: \"qa\", batch: 7 }";
             dialog.ConfirmCommand.Execute(null);
             await upload;
@@ -476,7 +476,7 @@ public sealed class GridFsTests
             tab.SelectedEntry = png;
             png.IsChecked = true;
             tab.Entries.Single(static e => e.Name == "manual.pdf").IsChecked = true;
-            StringAssert.Contains(tab.SelectionSummary, "2");
+            Assert.Contains("2", tab.SelectionSummary);
 
             // 删除:确认框写明"全部版本",点确认后两项都没了。
             tab.DeleteCommand.Execute(null);
@@ -554,7 +554,7 @@ public sealed class GridFsTests
         WriteableBitmap? frame = Screens.Capture(bench.Window, "06-gridfs");
         Assert.IsNotNull(frame);
         Assert.IsGreaterThanOrEqualTo(1, tab.Details.Versions.Count);
-        StringAssert.Contains(tab.StatusText, "products/SKU-7710/");
+        Assert.Contains("products/SKU-7710/", tab.StatusText);
     });
 
     [TestMethod]
@@ -581,7 +581,7 @@ public sealed class GridFsTests
             await Screens.PumpAsync(20);
             _ = Screens.Capture(bench.Window, "06-gridfs-upload");
             var dialog = (GridFsUploadDialogViewModel)bench.ViewModel.Dialog!;
-            StringAssert.Contains(dialog.MetadataText, "image/jpeg", "same-type batches get contentType in the template");
+            Assert.Contains("image/jpeg", dialog.MetadataText, "same-type batches get contentType in the template");
             dialog.Close();
             await upload;
             Assert.IsFalse(tab.IsTransferring, "cancelling the dialog uploads nothing");
