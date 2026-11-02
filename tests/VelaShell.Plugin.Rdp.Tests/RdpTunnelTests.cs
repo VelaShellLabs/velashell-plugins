@@ -138,6 +138,37 @@ public sealed class RdpTunnelTests
     }
 
     [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public async Task MappedIpv4AndNativeIpv6PeersCompleteUdpHandshakeAndTransferData(bool lossy, bool ipv6)
+    {
+        if (ipv6 && !System.Net.Sockets.Socket.OSSupportsIPv6) { Assert.Inconclusive("IPv6 is unavailable."); }
+        var server = new FakeRdpUdpServer(ipv6);
+        CancellationToken serverToken = server.Token;
+        Task accepting = server.AcceptAsync(lossy);
+        var peer = new System.Net.IPEndPoint(server.Endpoint.Address.MapToIPv6(), server.Endpoint.Port);
+        try
+        {
+            await using var transport = await RdpUdpTransport.ConnectAsync(peer, lossy, server.Token);
+            await accepting;
+            await transport.SendAsync(new byte[] { 1, 2, 3 }, server.Token);
+            byte[] received = await server.ReadAsync(server.Token);
+            Assert.AreSequenceEqual(new byte[] { 1, 2, 3 }, received);
+            await server.SendAsync(new byte[] { 4, 5, 6 });
+            byte[] response = await transport.ReceiveAsync(server.Token);
+            Assert.AreSequenceEqual(new byte[] { 4, 5, 6 }, response);
+        }
+        finally
+        {
+            await server.DisposeAsync();
+            try { await accepting; }
+            catch (OperationCanceledException) when (serverToken.IsCancellationRequested) { }
+        }
+    }
+
+    [TestMethod]
     public async Task UdpHandshakeCancellationClosesSocketAndBackgroundLoops()
     {
         await using var silent = new FakeRdpUdpServer();

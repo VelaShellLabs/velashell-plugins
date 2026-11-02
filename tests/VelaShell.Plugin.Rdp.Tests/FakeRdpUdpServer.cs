@@ -9,7 +9,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 /// <summary>A loopback UDP peer; deliberately uses real sockets and drives the deterministic wire state.</summary>
 internal sealed class FakeRdpUdpServer : IAsyncDisposable, DatagramTransport
 {
-    private readonly Socket _socket = new(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+    private readonly Socket _socket;
     private readonly CancellationTokenSource _stop = new(TimeSpan.FromSeconds(15));
     private readonly Lock _gate = new();
     private readonly Channel<byte[]> _incoming = Channel.CreateUnbounded<byte[]>();
@@ -19,12 +19,17 @@ internal sealed class FakeRdpUdpServer : IAsyncDisposable, DatagramTransport
     internal byte[][] WirePayloads { get { lock (_gate) { return [.. _wirePayloads]; } } }
     internal IPEndPoint Endpoint => (IPEndPoint)_socket.LocalEndPoint!;
     internal CancellationToken Token => _stop.Token;
-    internal FakeRdpUdpServer() => _socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+    internal FakeRdpUdpServer(bool ipv6 = false)
+    {
+        _socket = new Socket(ipv6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        _socket.Bind(new IPEndPoint(ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback, 0));
+    }
 
     internal async Task AcceptAsync(bool lossy)
     {
         byte[] buffer = new byte[1232];
-        SocketReceiveFromResult received = await _socket.ReceiveFromAsync(buffer, SocketFlags.None, new IPEndPoint(IPAddress.Any, 0), Token);
+        var anyPeer = new IPEndPoint(_socket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
+        SocketReceiveFromResult received = await _socket.ReceiveFromAsync(buffer, SocketFlags.None, anyPeer, Token);
         _socket.Connect(received.RemoteEndPoint);
         RdpUdpPacket syn = RdpUdpPacket.Decode(buffer.AsSpan(0, received.ReceivedBytes));
         Assert.AreEqual(lossy, syn.Flags.HasFlag(RdpUdpFlags.Lossy));

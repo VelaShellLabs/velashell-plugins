@@ -65,6 +65,9 @@ public sealed class RdpBackgroundSessionTests
         var lost = new RdpConnectionLostException("The RDP server closed the connection.");
         Assert.AreEqual(0x0Cu, ((RdpDisconnectException)RdpManagedSession.DisconnectCause(lost, 0x0C)!).ErrorInfo);
         Assert.AreEqual(0x02u, ((RdpDisconnectException)RdpManagedSession.DisconnectCause(null, 0x02)!).ErrorInfo);
+        var graphics = (RdpDisconnectException)RdpManagedSession.DisconnectCause(lost, 0x112F)!;
+        Assert.Contains("GRAPHICS_SUBSYSTEM_FAILED", graphics.Message);
+        Assert.Contains("0x0000112F", graphics.Message);
         Assert.AreSame(lost, RdpManagedSession.DisconnectCause(lost, 0));
         Assert.IsNull(RdpManagedSession.DisconnectCause(null, 0));
         var protocol = new IOException("RDP dynamic-channel processing failed; reconnect the session.");

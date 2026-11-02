@@ -12,7 +12,7 @@ internal sealed partial class DrdynvcChannel
 
     private static uint? PduChannel(byte[] pdu)
     {
-        if (pdu.Length == 0 || pdu[0] >> 4 is not (1 or 2 or 3 or 4) || (pdu[0] & 3) == 3) { return null; }
+        if (pdu.Length == 0 || pdu[0] >> 4 is not (1 or 2 or 3 or 4 or 6 or 7) || (pdu[0] & 3) == 3) { return null; }
         var r = new ByteReader(pdu.AsSpan(1));
         if (r.Remaining < CbIdBytes(pdu[0] & 3)) { return null; }
         return ReadVariable(ref r, pdu[0] & 3);

@@ -31,10 +31,7 @@ public sealed class ManagedRdpGfxTests
         Assert.AreEqual(caps.Length, offset);
         gfx.Feed(Packet(Confirm()));
         Assert.IsFalse(gfx.TryGetFrame(out _));
-        byte[] offer = gfx.ReadResponse()!;
-        Assert.AreEqual((ushort)16, BinaryPrimitives.ReadUInt16LittleEndian(offer));
-        gfx.Feed(Packet(Command(17, w => w.Write((ushort)0))));
-        Assert.IsNull(gfx.ReadResponse());
+        Assert.IsNull(gfx.ReadResponse(), "Without persistent bitmaps there must be no cache-import request.");
         Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Confirm())));
         using var unsupported = new ManagedRdpGfx(2, 1); unsupported.Open();
         unsupported.Feed(Packet(Confirm(0xdeadbeef)));
@@ -69,13 +66,19 @@ public sealed class ManagedRdpGfxTests
     }
 
     [TestMethod]
-    public async Task DynamicChannelCopiesEveryManagedFrameBeforeSendingAcknowledgements()
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public async Task DynamicChannelCopiesEveryManagedFrameBeforeSendingAcknowledgements(bool compressed, bool throwingLog)
     {
         using var stop = new CancellationTokenSource();
+        var logs = new List<string>();
         var painted = new List<byte>();
         var acknowledgements = new List<uint>();
+        var commands = new List<ushort>();
         var dvc = new DrdynvcChannel((packet, _) =>
         {
+            if ((packet[0] >> 4) == 3) { commands.Add(BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(2))); }
             if ((packet[0] >> 4) == 3 && BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(2)) == 13)
             {
                 Assert.AreSequenceEqual(new byte[] { 1, 2 }, painted);
@@ -83,14 +86,29 @@ public sealed class ManagedRdpGfxTests
             }
             return Task.CompletedTask;
         }, stop.Token);
-        await using var channel = new RdpGfxChannel(new ManagedRdpGfx(2, 1), frame => painted.Add(frame.Pixels[0]),
+        await using var channel = new RdpGfxChannel(new ManagedRdpGfx(2, 1, message =>
+        {
+            logs.Add(message);
+            if (throwingLog) { throw new InvalidOperationException("diagnostic callback failed"); }
+        }), frame => painted.Add(frame.Pixels[0]),
             ex => Assert.Fail(ex.ToString()), stop.Token);
         channel.Register(dvc);
         await dvc.ProcessAsync([0x10, 1, .. Encoding.ASCII.GetBytes(RdpGfxChannel.ChannelName), 0]);
         byte[] update = Packet(Confirm(), Create(1, 2, 1), Map(1), Start(10), Fill(1, 1, 0, 0, 2, 1), End(10),
             Start(11), Fill(1, 2, 0, 0, 2, 1), End(11));
-        await dvc.ProcessAsync([0x30, 1, .. update]);
+        if (compressed)
+        {
+            int split = update.Length / 2;
+            await dvc.ProcessAsync([0x60, 1, checked((byte)update.Length), 0xe0, 4, .. update.AsSpan(0, split)]);
+            await dvc.ProcessAsync([0x70, 1, 0xe0, 4, .. update.AsSpan(split)]);
+        }
+        else { await dvc.ProcessAsync([0x30, 1, .. update]); }
+        Assert.AreSequenceEqual(new ushort[] { 0x12, 13, 13 }, commands,
+            "Only capabilities and frame ACKs may be sent; there are no persistent bitmaps to import.");
         Assert.AreSequenceEqual(new uint[] { 10, 11 }, acknowledgements);
+        Assert.IsTrue(logs.Any(message => message.Contains("graphics DVC opened", StringComparison.Ordinal)));
+        Assert.IsTrue(logs.Any(message => message.Contains("server confirmed graphics capabilities", StringComparison.Ordinal)));
+        Assert.AreEqual(1, logs.Count(message => message.Contains("first graphics frame decoded", StringComparison.Ordinal)));
         stop.Cancel(); await dvc.CloseAsync();
     }
 
@@ -191,7 +209,7 @@ public sealed class ManagedRdpGfxTests
             Create(1, 2, 1).Concat(Start(1)).Concat(Fill(1, 1, 0, 0, 3, 1)).ToArray(),
             Create(1, 2, 1).Concat(Command(4, w => { w.Write((ushort)1); w.Write(0u); w.Write((ushort)65535); })).ToArray(),
             Command(14, w => { w.Write(2u); w.Write(1u); w.Write(17u); w.Write(new byte[320]); }),
-            Command(0x7777, _ => { }), Command(17, w => w.Write((ushort)1))
+            Command(0x7777, _ => { }), Command(17, w => w.Write((ushort)0)), Command(17, w => w.Write((ushort)1))
         ];
         foreach (byte[] pdu in invalid)
         {

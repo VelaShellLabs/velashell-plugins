@@ -501,8 +501,10 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
 
         uint code = RdpInput.ScanCode(e.PhysicalKey);
         bool shortcut = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0;
+        // IME-owned keys can arrive before preedit, including candidate-selection shortcuts.
         // Printable local text and IME commits use Unicode; navigation and shortcuts use physical scan codes.
-        if (!shortcut && (!string.IsNullOrEmpty(e.KeySymbol) && !e.KeySymbol.Any(char.IsControl) || !string.IsNullOrEmpty(_preedit)))
+        if (e.Key is Key.ImeProcessed or Key.DeadCharProcessed
+            || !shortcut && (RdpInput.IsTextKey(e) || !string.IsNullOrEmpty(_preedit)))
         { base.OnKeyDown(e); return; }
         if (code == 0) { base.OnKeyDown(e); return; }
         _ = _keys.Add(code);

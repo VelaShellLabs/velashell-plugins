@@ -41,6 +41,19 @@ public sealed class ZgfxTests
     }
 
     [TestMethod]
+    public void ChannelOutputBudgetAppliesToRawCompressedAndMultipartMessages()
+    {
+        byte[][] packets = [[0xe0, 4, 0x49, 0x4a, 0x4b], Compressed("0 01001001 10001 00001 110 001"),
+            Multipart(6, [4, 0x49, 0x4a, 0x4b], Compressed("10001 00011 0")[1..])];
+        foreach (byte[] packet in packets)
+        {
+            byte[] expected = new ZgfxDecoder().Decode(packet);
+            Assert.AreSequenceEqual(expected, new ZgfxDecoder().Decode(packet, expected.Length));
+            Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(packet, expected.Length - 1));
+        }
+    }
+
+    [TestMethod]
     public void CircularHistoryWrapsAndSupportsMaximumDistance()
     {
         var decoder = new ZgfxDecoder();

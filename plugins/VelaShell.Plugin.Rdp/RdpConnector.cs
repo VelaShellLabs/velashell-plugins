@@ -135,6 +135,9 @@ internal static class RdpConnector
             0x00000001 or 0x0000000B => loc["ByeByServer"],
             0x00000007 or 0x00000009 => loc["ByeDenied"],
             0x00000003 or 0x00000004 => loc["ByeTimeout"],
+            0x0000112D => loc["ByeGraphicsMode"],
+            0x0000112E => loc["ByeGraphicsReset"],
+            0x0000112F => loc["ByeGraphicsFailed"],
             _ when RdpErrorInfo.IsLicensing(disconnect.ErrorInfo) => loc["ByeLicense"],
             _ => null
         };

@@ -1,4 +1,5 @@
 using System.Text;
+using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Rdp.Channels;
@@ -13,6 +14,7 @@ internal sealed partial class DrdynvcChannel
 {
     private const string DisplayControlName = "Microsoft::Windows::RDS::DisplayControl";
     private const int CmdCreate = 0x01, CmdDataFirst = 0x02, CmdData = 0x03, CmdClose = 0x04, CmdCapabilities = 0x05;
+    private const int CmdDataFirstCompressed = 0x06, CmdDataCompressed = 0x07;
     private const uint DispCaps = 0x00000005, DispMonitorLayout = 0x00000002;
     private const uint MonitorPrimary = 0x00000001;
 
@@ -36,6 +38,7 @@ internal sealed partial class DrdynvcChannel
         internal readonly IDynamicChannelHandler? Handler = handler;
         internal readonly int Limit = limit;
         internal MemoryStream? Buffer;
+        internal ZgfxDecoder? Decoder;
         internal int Total;
     }
     private readonly Dictionary<string, Listener> _listeners = [with(StringComparer.Ordinal)];
@@ -375,12 +378,14 @@ internal sealed partial class DrdynvcChannel
                 { _displayOpen = _displayReady = false; _lastSent = null; }
                 return (null, instance.Handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
             }
-            if (cmd is not (CmdData or CmdDataFirst))
+            if (cmd is not (CmdData or CmdDataFirst or CmdDataCompressed or CmdDataFirstCompressed))
             {
                 return default;
             }
 
-            if (cmd == CmdDataFirst)
+            bool first = cmd is CmdDataFirst or CmdDataFirstCompressed;
+            int limit = instance.Buffer is { } pending ? instance.Total - (int)pending.Length : instance.Limit;
+            if (first)
             {
                 ClearBuffer(instance);
                 if (sp == 3 || r.Remaining < CbIdBytes(sp))
@@ -389,29 +394,32 @@ internal sealed partial class DrdynvcChannel
                 }
 
                 uint total = ReadVariable(ref r, sp);
-                if (total > instance.Limit || total < r.Remaining || total > MaxBufferedBytes - _reservedBytes)
+                if (total > instance.Limit || total > MaxBufferedBytes - _reservedBytes)
                 {
                     return Reject(instance);
                 }
-
-                if (total > r.Remaining)
-                {
-                    instance.Total = (int)total;
-                    _reservedBytes += (int)total;
-                    instance.Buffer = new MemoryStream((int)total);
-                    instance.Buffer.Write(r.Rest());
-                    return default;
-                }
+                limit = (int)total;
+            }
+            ReadOnlySpan<byte> data = r.Rest();
+            if (cmd is CmdDataCompressed or CmdDataFirstCompressed)
+            {
+                // DVC compression history belongs to the channel, independently of any GFX payload compression.
+                try { data = (instance.Decoder ??= new ZgfxDecoder()).Decode(data, limit); }
+                catch (RdpProtocolException) { return Reject(instance); }
+            }
+            if (data.Length > limit) { return Reject(instance); }
+            if (first && data.Length < limit)
+            {
+                instance.Total = limit;
+                _reservedBytes += limit;
+                instance.Buffer = new MemoryStream(limit);
+                instance.Buffer.Write(data);
+                return default;
             }
             byte[] message;
             if (instance.Buffer is { } buffer)
             {
-                if (buffer.Length + r.Remaining > instance.Total)
-                {
-                    return Reject(instance);
-                }
-
-                buffer.Write(r.Rest());
+                buffer.Write(data);
                 if (buffer.Length < instance.Total)
                 {
                     return default;
@@ -422,12 +430,7 @@ internal sealed partial class DrdynvcChannel
             }
             else
             {
-                if (r.Remaining > instance.Limit)
-                {
-                    return Reject(instance);
-                }
-
-                message = r.Rest().ToArray();
+                message = data.ToArray();
             }
             return instance.Handler is { } receiver
                 ? (null, () => RunHandlerAsync(instance, () => receiver.OnMessageAsync(message)))

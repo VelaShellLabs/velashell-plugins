@@ -17,12 +17,14 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     private byte[] _output, _input = [];
     private int _width, _height, _position, _cacheBytes, _cacheLimit = SmallCacheBytes, _cacheSlots = 4096;
     private long _surfaceBytes;
-    private bool _opened, _disposed, _confirmed, _inFrame, _frameReady, _cacheOfferPending;
+    private bool _opened, _disposed, _confirmed, _inFrame, _frameReady;
     private uint _version, _capFlags, _frameId, _decodedFrames;
     private Rect _dirty;
+    private readonly Action<string>? _log;
 
-    internal ManagedRdpGfx(int width, int height)
+    internal ManagedRdpGfx(int width, int height, Action<string>? log = null)
     {
+        _log = log;
         ValidateDimensions(width, height);
         _width = width; _height = height;
         _output = AllocatePixels(width, height);
@@ -44,6 +46,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
             offset += 8 + size;
         }
         Enqueue(caps);
+        Log("graphics DVC opened; advertising capabilities");
     }
 
     public void Feed(byte[] message)
@@ -142,13 +145,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
             case 12: EndFrame(ref reader); break;
             case 14: ResetGraphics(ref reader); break;
             case 15: MapOutput(ref reader, scaled: false); break;
-            case 17:
-            {
-                int count = reader.U16(); reader.End();
-                if (!_cacheOfferPending || count != 0) { throw Error("Invalid persistent cache import reply."); }
-                _cacheOfferPending = false;
-                break;
-            }
+            case 17: throw Error("Unsolicited persistent cache import reply.");
             case 19: ConfirmCapabilities(ref reader); break;
             case 23: MapOutput(ref reader, scaled: true); break;
             case 21:
@@ -173,10 +170,10 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         if (version == 0xa0100) { _ = reader.Bytes(16); }
         reader.End();
         _version = version; _capFlags = flags; _confirmed = true;
+        Log($"server confirmed graphics capabilities: version=0x{version:X8}, flags=0x{flags:X8}");
         // The server's confirmed flags determine the cache size, even if it omits our small-cache preference.
         if (version != 0xa0301 && (flags & 3) == 0) { _cacheLimit = 100 * 1024 * 1024; _cacheSlots = 25600; }
-        _cacheOfferPending = true;
-        Enqueue(Pdu(0x10, 2)); // Persistent caching is optional; this connection offers no saved entries.
+        // No persistent cache is implemented. Do not initiate cache import with an empty offer.
     }
 
     private void CreateSurface(ref Reader reader)
@@ -300,6 +297,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         _width = width; _height = height; _output = AllocatePixels(width, height);
         foreach (Surface surface in _surfaces.Values) { surface.Dirty = new(0, 0, surface.Width, surface.Height); }
         _dirty = new(0, 0, width, height); _frameReady = true;
+        Log($"graphics reset: {width}x{height}, monitors={monitors}");
     }
 
     private void MapOutput(ref Reader reader, bool scaled)
@@ -326,6 +324,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
             surface.Dirty = default;
         }
         _inFrame = false;
+        if (_decodedFrames == 0) { Log($"first graphics frame decoded: id={id}"); }
         _decodedFrames = unchecked(_decodedFrames + 1);
         byte[] ack = Pdu(13, 12);
         Put32(ack, 12, id); Put32(ack, 16, _decodedFrames);
@@ -433,6 +432,12 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         _disposed = true;
         _codecs.Dispose(); _surfaces.Clear(); _cache.Clear(); _contexts.Clear(); _responses.Clear();
         _input = []; _output = []; _surfaceBytes = 0; _cacheBytes = 0;
+    }
+
+    private void Log(string message)
+    {
+        try { _log?.Invoke(message); }
+        catch { /* Diagnostics must not interrupt graphics processing. */ }
     }
 
     private sealed class Surface(int width, int height, byte format, byte[] pixels)

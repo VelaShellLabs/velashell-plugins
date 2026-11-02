@@ -221,6 +221,9 @@ public static class RdpErrorInfo
         0x00000108 => "the licence message encryption was bad (LICENSE_BAD_CLIENT_ENCRYPTION)",
         0x00000109 => "the licence could not be upgraded (LICENSE_CANT_UPGRADE_LICENSE)",
         0x0000010A => "the server has no Remote Desktop licences available for new connections (LICENSE_NO_REMOTE_CONNECTIONS)",
+        0x0000112D => "the server does not support the graphics mode (GRAPHICS_MODE_NOT_SUPPORTED)",
+        0x0000112E => "the server could not reset its graphics subsystem (GRAPHICS_SUBSYSTEM_RESET_FAILED)",
+        0x0000112F => "the server graphics subsystem failed and cannot continue graphics encoding (GRAPHICS_SUBSYSTEM_FAILED)",
         _ => "the server ended the session"
     };
 
