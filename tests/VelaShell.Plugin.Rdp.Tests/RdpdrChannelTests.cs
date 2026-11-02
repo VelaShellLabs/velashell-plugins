@@ -54,11 +54,11 @@ public sealed class RdpdrChannelTests
     private static bool IsDeviceListAnnounce(byte[] frame) =>
         frame.Length >= 4 && BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == DeviceListAnnounce;
 
-    private static (RdpdrChannel Channel, List<byte[]> Sent) Make()
+    private static (RdpdrChannel Channel, List<byte[]> Sent) Make(bool shareDrive = true)
     {
         var sent = new List<byte[]>();
         var channel = new RdpdrChannel(pdu => { sent.Add(pdu); return Task.CompletedTask; },
-            [new DriveMapping("work", Path.GetTempPath())]);
+            shareDrive ? [new DriveMapping("work", Path.GetTempPath())] : []);
         return (channel, sent);
     }
 
@@ -110,11 +110,13 @@ public sealed class RdpdrChannelTests
     }
 
     [TestMethod]
-    [DataRow(0x000C)]
-    [DataRow(0x0005)]
-    public async Task ServerReannounceStartsANewDeviceAnnouncementRound(int minor)
+    [DataRow(0x000C, true)]
+    [DataRow(0x0005, true)]
+    [DataRow(0x000C, false)]
+    [DataRow(0x0005, false)]
+    public async Task ServerReannounceStartsANewDeviceAnnouncementRound(int minor, bool shareDrive)
     {
-        (RdpdrChannel channel, List<byte[]> sent) = Make();
+        (RdpdrChannel channel, List<byte[]> sent) = Make(shareDrive);
         for (int round = 0; round < 2; round++)
         {
             sent.Clear();
@@ -132,8 +134,15 @@ public sealed class RdpdrChannelTests
                 await channel.ProcessAsync(Pdu(ClientIdConfirm));
             }
 
+            Assert.Contains(frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == ClientIdConfirm, sent);
+            Assert.Contains(frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == 0x434E, sent);
+            Assert.Contains(frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == 0x4350, sent);
             byte[] announcement = sent.Single(IsDeviceListAnnounce);
-            Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32LittleEndian(announcement.AsSpan(4)));
+            Assert.AreEqual(shareDrive ? 1u : 0u, BinaryPrimitives.ReadUInt32LittleEndian(announcement.AsSpan(4)));
+            if (!shareDrive)
+            {
+                Assert.HasCount(8, announcement, "The audio companion handshake must not announce any local device.");
+            }
         }
     }
 

@@ -199,7 +199,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
             channels.Add(new ChannelDef("cliprdr", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
         }
 
-        if (options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
+        // MS-RDPEA 2.1, Windows note: without RDPDR, the server sends nothing on RDPSND.
+        if (options.AudioPlayback || options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
         {
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
         }
@@ -244,7 +245,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
             {
                 session.EnableClipboard();
             }
-            if (options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
+            if (channels.Any(channel => channel.Name == "rdpdr"))
             {
                 session.EnableDrives(options.Drives, options.Ports, options.Printers);
             }

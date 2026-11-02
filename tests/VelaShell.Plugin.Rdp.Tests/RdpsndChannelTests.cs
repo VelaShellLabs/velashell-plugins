@@ -11,7 +11,7 @@ public sealed class RdpsndChannelTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void PlaybackRegistersSoundWithoutRequiringDeviceRedirection(bool drives)
+    public void PlaybackRegistersBothChannelsWithoutRequiringDeviceMappings(bool drives)
     {
         var options = new RdpClientOptions
         {
@@ -20,7 +20,8 @@ public sealed class RdpsndChannelTests
         };
         string[] names = [.. RdpManagedSession.BuildChannels(options).Select(c => c.Name)];
         Assert.AreEqual(1, names.Count(n => n == "rdpsnd"));
-        Assert.AreEqual(drives, names.Contains("rdpdr"));
+        Assert.AreEqual(1, names.Count(n => n == "rdpdr"),
+            "Windows does not send audio formats unless the companion RDPDR channel is advertised (MS-RDPEA 2.1).");
     }
 
     [TestMethod]

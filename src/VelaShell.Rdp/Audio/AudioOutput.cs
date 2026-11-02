@@ -75,7 +75,22 @@ internal sealed class NativeAudioOutput : IAudioOutput
         }
         // Keep the caller cancellable even if a system driver stalls inside a native call. Native
         // buffers remain owned by the worker until that call returns and cleanup is safe.
-        return command.Result!.Task.WaitAsync(PlaybackLimit(format, data.Length), ct);
+        return WaitForPlaybackAsync(command);
+    }
+
+    private async Task WaitForPlaybackAsync(Command command)
+    {
+        try
+        {
+            await command.Result!.Task.WaitAsync(PlaybackLimit(command.Format, command.Data!.Length), command.Cancellation).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // The timer can expire just before the stopwatch deadline due to millisecond rounding.
+            // Invalidate the command before the caller can unblock a stalled native operation.
+            Volatile.Write(ref command.TimedOut, 1);
+            throw;
+        }
     }
 
     public void Close()
@@ -168,7 +183,7 @@ internal sealed class NativeAudioOutput : IAudioOutput
         if (Volatile.Read(ref _disposed) != 0 || command.Generation != Volatile.Read(ref _generation))
             throw new OperationCanceledException("RDP audio playback was closed.");
         TimeSpan deadline = PlaybackLimit(command.Format, command.Data!.Length);
-        if (Stopwatch.GetElapsedTime(command.EnqueuedAt) > deadline)
+        if (Volatile.Read(ref command.TimedOut) != 0 || Stopwatch.GetElapsedTime(command.EnqueuedAt) >= deadline)
             throw new TimeoutException($"RDP audio device stalled for {deadline.TotalSeconds:F1} seconds.");
     }
 
@@ -183,5 +198,8 @@ internal sealed class NativeAudioOutput : IAudioOutput
     }
 
     private sealed record Command(int Generation, AudioFormat Format, byte[]? Data,
-        CancellationToken Cancellation, TaskCompletionSource? Result, long EnqueuedAt);
+        CancellationToken Cancellation, TaskCompletionSource? Result, long EnqueuedAt)
+    {
+        internal int TimedOut;
+    }
 }
