@@ -25,8 +25,17 @@ jobs:
           dotnet-quality: preview
           dotnet-version: 11.0.x
       # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
-      - name: Test portable RDP authentication and licensing
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~Licensing"
+      - name: Test portable RDP authentication, licensing and audio
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests"
+
+      - name: Exercise Linux ALSA output with a process-local null device
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          printf 'pcm.!default { type null }\n' > "$RUNNER_TEMP/rdp-alsa-null.conf"
+          export ALSA_CONFIG_PATH="$RUNNER_TEMP/rdp-alsa-null.conf"
+          export VELA_RDP_ALSA_NULL_TEST=1
+          dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --no-build --no-restore --nologo --filter "FullyQualifiedName~AudioOutputTests.AlsaNullOutput"
 
   build:
     runs-on: windows-latest

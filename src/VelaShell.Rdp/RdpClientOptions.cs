@@ -42,7 +42,10 @@ public sealed record RdpClientOptions
     public RdpPerformanceFlags Performance { get; init; } =
         RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations;
 
-    /// <summary>When <see langword="true" />, remote audio plays on this computer; the default (<see langword="false" />) disables audio playback.</summary>
+    /// <summary>
+    /// Plays remote PCM audio on the default local output device on Windows, macOS or Linux.
+    /// Disabled by default. Failures are reported by <see cref="IRdpAudioSource.AudioPlaybackFailed"/> without ending the desktop session.
+    /// </summary>
     public bool AudioPlayback { get; init; }
 
     /// <summary>Requested colour depth in bits per pixel: 15, 16, 24 or 32 (32 decodes RDP 6.0 planar bitmaps).</summary>

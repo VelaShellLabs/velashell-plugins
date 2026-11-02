@@ -9,7 +9,7 @@ namespace VelaShell.Rdp;
 /// a single background task pumps the connection while frames are coalesced and snapshotted on
 /// demand, and input, clipboard and dynamic-resolution requests are forwarded to the wire.
 /// </summary>
-public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
+public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
 {
     internal RdpConnection Connection { get; }
     private readonly CancellationTokenSource _stop = new();
@@ -122,7 +122,7 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         try { handler?.Invoke(ev); } catch { /* never unwind into the pump */ }
     }
 
-    private RdpManagedSession(RdpConnection connection)
+    internal RdpManagedSession(RdpConnection connection)
     {
         Connection = connection;
         Connection.FrameUpdated += OnFrameUpdated;
@@ -202,7 +202,11 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         if (options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
         {
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
-            // Windows device redirection also needs the sound channel registered, even without playback.
+        }
+
+        // Windows device redirection also needs the sound channel registered, even without playback.
+        if (options.AudioPlayback || options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
+        {
             channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
@@ -227,6 +231,10 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
         try
         {
+            if (channels.Any(channel => channel.Name == "rdpsnd"))
+            {
+                session.EnableAudio(options.AudioPlayback);
+            }
             if (options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
             {
                 session.EnableDynamicChannels(options);
@@ -330,6 +338,10 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
                 _ = Interlocked.Add(ref _clipboardQueuedBytes, -payload.Data.Length);
                 FailClipboard(new IOException("RDP clipboard queue capacity exceeded."));
             }
+        }
+        else if (payload.ChannelName == "rdpsnd")
+        {
+            ReceiveAudio(payload.Data);
         }
         else if (payload.ChannelName == "rdpdr")
         {
@@ -617,6 +629,10 @@ public sealed class RdpManagedSession : IRdpSession, IRdpPointerSource
         _ = (_cliprdrQueue?.Writer.TryComplete());
         _ = (_rdpdrQueue?.Writer.TryComplete());
         _ = (_drdynvcQueue?.Writer.TryComplete());
+        _ = (_audioQueue?.Writer.TryComplete());
+        if (_audioWorker is { } audioWorker) { await audioWorker.ConfigureAwait(false); }
+        _audioStop?.Dispose();
+        lock (_audioGate) { _audioHandlers = null; }
         if (_pump is { } pump) { try { await pump.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_keepAlive is { } keepAlive) { try { await keepAlive.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_cliprdrWorker is { } worker) { try { await worker.ConfigureAwait(false); } catch { /* ignore */ } }

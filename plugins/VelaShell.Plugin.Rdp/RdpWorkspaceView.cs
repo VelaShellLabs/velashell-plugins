@@ -34,6 +34,14 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private bool _failed;
     private bool _reconnecting;
     private string? _disconnectDetail;
+    private string? _audioError;
+
+    internal void SetAudioError(string? error)
+    {
+        _audioError = error;
+        UpdateStatus();
+        ToolTip.SetTip(_status, error is null ? null : _loc.Format("AudioFailed", error));
+    }
 
     /// <summary>Reconnects the workspace; supplied by the owning document. Null hides the in-view button.</summary>
     internal Func<CancellationToken, Task>? Reconnect { get; set; }
@@ -416,7 +424,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _quick.ApplyLocale(loc);
         _reconnect.Content = loc["ReconnectButton"];
         UpdateTransfers();
-        UpdateStatus();
+        SetAudioError(_audioError);
     }
     internal void SetConnected(bool connected, string? detail = null)
     {
@@ -440,6 +448,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private void UpdateStatus() => _status.Text = !_connected ? _disconnectDetail ?? _loc["Disconnected"]
         : _notice is { } notice ? notice
         : _failed ? _loc["InputFailed"]
+        : _audioError is { } audioError ? _loc.Format("AudioFailed", audioError)
         : _loc["Connected"] + " · " + _loc.Format("Resolution", Desktop.DesktopWidth, Desktop.DesktopHeight);
     public async ValueTask DisposeAsync()
     {

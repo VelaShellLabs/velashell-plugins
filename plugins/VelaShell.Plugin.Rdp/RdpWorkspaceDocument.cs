@@ -21,6 +21,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     private WorkspaceConnectRequest? _request;
     private IRdpSession? _session;
     private Action<Exception?>? _disconnectedHandler;
+    private Action<Exception>? _audioFailedHandler;
+    private Exception? _audioError;
     private ContentControl? _root;
     private RdpWorkspaceView? _view;
     private Task? _disposeTask;
@@ -65,6 +67,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
 
         _view = new(_session, _context, _settings, _loc) { Reconnect = ReconnectAsync };
         _view.SetConnected(Status.State == ProtocolSessionState.Connected);
+        _view.SetAudioError(_audioError?.Message);
         _root.Content = _view;
         // Reconnected while the tab is in the background (the host keeps an inactive tab's view out of the visual
         // tree): pause display updates until it is shown, like the view it replaces.
@@ -82,6 +85,10 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             {
                 SetStatus(_status with { Message = loc["Disconnected"] });
             }
+            else if (_status.State == ProtocolSessionState.Connected && _audioError is { } error)
+            {
+                SetStatus(_status with { Message = loc.Format("AudioFailed", error.Message) });
+            }
         }
         if (_root is not null)
         {
@@ -93,11 +100,31 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         lock (_disposeGate)
         {
             _session = session;
+            _audioError = null;
             _attachedAt = Environment.TickCount64;
             _disconnectedHandler = failure => OnDisconnected(session, failure);
             session.Disconnected += _disconnectedHandler;
             SetStatus(new(session.IsConnected ? ProtocolSessionState.Connected : ProtocolSessionState.Faulted), session);
         }
+        if (session is IRdpAudioSource audio)
+        {
+            _audioFailedHandler = failure => OnAudioFailed(session, failure);
+            audio.AudioPlaybackFailed += _audioFailedHandler;
+        }
+    }
+    private void OnAudioFailed(IRdpSession session, Exception failure)
+    {
+        lock (_disposeGate)
+        {
+            if (_disposed != 0 || !ReferenceEquals(_session, session) || !session.IsConnected) { return; }
+            _audioError = failure;
+            SetStatus(new(ProtocolSessionState.Connected, _loc.Format("AudioFailed", failure.Message)), session);
+        }
+        _context.Log.Warn($"RDP audio playback stopped: {failure.Message}");
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed == 0 && ReferenceEquals(_session, session)) { _view?.SetAudioError(failure.Message); }
+        });
     }
     private void OnDisconnected(IRdpSession session, Exception? failure)
     {
@@ -298,6 +325,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         IRdpSession? session;
         lock (_disposeGate) { session = _session; _session = null; }
         session?.Disconnected -= _disconnectedHandler;
+        if (session is IRdpAudioSource audio) { audio.AudioPlaybackFailed -= _audioFailedHandler; }
+        _audioFailedHandler = null;
         _disconnectedHandler = null;
         // Abort the transport before draining clipboard/input tasks that may be awaiting a server reply.
         if (session is not null)
