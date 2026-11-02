@@ -7,10 +7,17 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
 {
     private const string AudioToolbox = "/System/Library/Frameworks/AudioToolbox.framework/AudioToolbox";
     private nint _queue;
-    private nint _buffer;
-    private uint _capacity;
+    private readonly Queue<Buffer> _buffers = new();
+    private readonly Stack<Buffer> _free = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, Buffer> _owned = new();
     private int _blockAlign;
-    private int _returned;
+    private sealed class Buffer(nint pointer, uint capacity)
+    {
+        internal readonly nint Pointer = pointer;
+        internal readonly uint Capacity = capacity;
+        internal double EndSampleTime;
+        internal int Returned;
+    }
     private bool _started;
     private double _endSampleTime;
     private GCHandle _callbackRoot;
@@ -47,25 +54,28 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
 
     public void Start(byte[] data)
     {
-        if (_capacity < data.Length)
+        _free.TryPop(out Buffer? buffer);
+        if (buffer is not null && buffer.Capacity < data.Length)
         {
-            if (_buffer != 0)
-            {
-                Check(Native.AudioQueueFreeBuffer(_queue, _buffer), "release PCM buffer");
-                _buffer = 0;
-                _capacity = 0;
-            }
-            Check(Native.AudioQueueAllocateBuffer(_queue, (uint)data.Length, out _buffer), "allocate PCM buffer");
-            _capacity = (uint)data.Length;
+            Check(Native.AudioQueueFreeBuffer(_queue, buffer.Pointer), "release PCM buffer");
+            _owned.TryRemove(buffer.Pointer, out _);
+            buffer = null;
         }
-        Marshal.Copy(data, 0, Marshal.ReadIntPtr(_buffer, AudioDataOffset), data.Length);
-        Marshal.WriteInt32(_buffer, ByteSizeOffset, data.Length);
-        Volatile.Write(ref _returned, 0);
-        Check(Native.AudioQueueEnqueueBufferWithParameters(_queue, _buffer, 0, 0, 0, 0, 0, 0, 0,
+        if (buffer is null)
+        {
+            Check(Native.AudioQueueAllocateBuffer(_queue, (uint)data.Length, out nint pointer), "allocate PCM buffer");
+            buffer = new Buffer(pointer, (uint)data.Length);
+            _owned[pointer] = buffer;
+        }
+        _buffers.Enqueue(buffer);
+        Marshal.Copy(data, 0, Marshal.ReadIntPtr(buffer.Pointer, AudioDataOffset), data.Length);
+        Marshal.WriteInt32(buffer.Pointer, ByteSizeOffset, data.Length);
+        Volatile.Write(ref buffer.Returned, 0);
+        Check(Native.AudioQueueEnqueueBufferWithParameters(_queue, buffer.Pointer, 0, 0, 0, 0, 0, 0, 0,
             out AudioTimeStamp start), "submit PCM buffer");
         if ((start.Flags & 1) == 0)
             throw new IOException("macOS AudioQueue did not provide a PCM playback start position.");
-        _endSampleTime = start.SampleTime + data.Length / _blockAlign;
+        buffer.EndSampleTime = _endSampleTime = start.SampleTime + data.Length / _blockAlign;
         if (!_started)
         {
             Check(Native.AudioQueueStart(_queue, 0), "start output");
@@ -73,13 +83,22 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
         }
     }
 
+    private double PlaybackPosition()
+    {
+        Check(Native.AudioQueueGetCurrentTime(_queue, 0, out AudioTimeStamp time, 0), "query playback position");
+        return (time.Flags & 1) != 0 ? time.SampleTime : 0;
+    }
+
+    public long PendingFrames => _started ? (long)Math.Max(0, _endSampleTime - PlaybackPosition()) : 0;
+
     public bool IsComplete()
     {
-        // Buffer-return callbacks mean reusable memory, not audible completion. Compare the actual
-        // scheduled end position with the queue's playback clock, leaving the queue running.
-        if (Volatile.Read(ref _returned) == 0) return false;
-        Check(Native.AudioQueueGetCurrentTime(_queue, 0, out AudioTimeStamp time, 0), "query playback position");
-        return (time.Flags & 1) != 0 && time.SampleTime >= _endSampleTime;
+        // Returned memory alone is not audible completion; keep each scheduled end position.
+        if (!_buffers.TryPeek(out Buffer? buffer) || Volatile.Read(ref buffer.Returned) == 0 ||
+            PlaybackPosition() < buffer.EndSampleTime) return false;
+        _buffers.Dequeue();
+        _free.Push(buffer);
+        return true;
     }
 
     public void Reset()
@@ -93,8 +112,11 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
         if (_queue != 0)
         {
             Check(Native.AudioQueueDispose(_queue, 1), "close output");
-            _queue = _buffer = 0;
-            _capacity = 0;
+            _queue = 0;
+            _buffers.Clear();
+            _free.Clear();
+            _owned.Clear();
+            _endSampleTime = 0;
             _started = false;
         }
         if (_callbackRoot.IsAllocated) _callbackRoot.Free();
@@ -103,8 +125,8 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void BufferReturned(nint userData, nint queue, nint buffer)
     {
-        if (GCHandle.FromIntPtr(userData).Target is AudioQueueDevice device)
-            Volatile.Write(ref device._returned, 1);
+        if (GCHandle.FromIntPtr(userData).Target is AudioQueueDevice device && device._owned.TryGetValue(buffer, out Buffer? owner))
+            Volatile.Write(ref owner.Returned, 1);
     }
 
     private static void Check(int result, string operation)

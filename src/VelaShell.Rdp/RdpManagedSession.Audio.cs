@@ -53,12 +53,20 @@ public sealed partial class RdpManagedSession : IRdpAudioSource
             {
                 using var channel = new RdpsndChannel(
                     (pdu, ct) => Connection.SendVirtualChannelAsync("rdpsnd", pdu, ct),
-                    playback ? (createOutput ?? AudioOutput.Create)() : null, LogAudio);
-                await foreach ((byte[] data, long receivedAt) in _audioQueue.Reader.ReadAllAsync(_audioStop.Token).ConfigureAwait(false))
+                    playback ? (createOutput?.Invoke() ?? AudioOutput.Create(LogAudio)) : null, LogAudio);
+                while (true)
                 {
-                    _ = Interlocked.Add(ref _audioQueuedBytes, -data.Length);
-                    await channel.ProcessAsync(data, receivedAt, _audioStop.Token).ConfigureAwait(false);
+                    Task<bool> available = _audioQueue.Reader.WaitToReadAsync(_audioStop.Token).AsTask();
+                    if (await Task.WhenAny(available, channel.PlaybackFailure).ConfigureAwait(false) == channel.PlaybackFailure)
+                        throw await channel.PlaybackFailure.ConfigureAwait(false);
+                    if (!await available.ConfigureAwait(false)) break;
+                    while (_audioQueue.Reader.TryRead(out var message))
+                    {
+                        _ = Interlocked.Add(ref _audioQueuedBytes, -message.Data.Length);
+                        await channel.ProcessAsync(message.Data, message.ReceivedAt, _audioStop.Token).ConfigureAwait(false);
+                    }
                 }
+                await channel.DrainAsync().ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (_audioStop.IsCancellationRequested) { }
             catch (Exception ex) { FailAudio(ex); }
