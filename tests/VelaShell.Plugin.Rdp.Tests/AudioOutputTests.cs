@@ -210,6 +210,78 @@ public sealed class AudioOutputTests
         }
     }
 
+    [TestMethod]
+    [DataRow(-11)]
+    [DataRow(-4)]
+    public void AlsaUnderrunRetriesUnwrittenFramesWithoutReplayingAcceptedAudio(int retry)
+    {
+        var api = new FakeAlsaApi([2, -32, retry, 1]);
+        var device = new AlsaDevice(api);
+        byte[] samples = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        try
+        {
+            device.Open(Stereo);
+            device.Start(samples);
+            Assert.IsFalse(device.IsComplete()); // partial write
+            Assert.IsFalse(device.IsComplete()); // underrun and prepare
+            Assert.IsFalse(device.IsComplete()); // retryable write
+            Assert.IsFalse(device.IsComplete()); // remaining frame is still buffered
+            Assert.IsTrue(device.IsComplete());
+            Assert.AreEqual(1, api.Prepares);
+            Assert.AreEqual(2, api.Starts);
+            Assert.AreSequenceEqual(samples, api.Writes[0]);
+            Assert.HasCount(4, api.Writes);
+            foreach (byte[] write in api.Writes.Skip(1))
+                Assert.AreSequenceEqual(samples.AsSpan(8).ToArray(), write);
+        }
+        finally { device.Close(); }
+        Assert.IsTrue(api.Closed);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task AlsaFatalWriteOrRecoveryFailureStopsPlaybackAndClosesDevice(bool duringRecovery)
+    {
+        var api = new FakeAlsaApi([duringRecovery ? -32 : -19]) { PrepareResult = -19 };
+        using var output = new NativeAudioOutput(new AlsaDevice(api));
+        IOException error = await Assert.ThrowsExactlyAsync<IOException>(
+            () => output.PlayAsync(Stereo, new byte[192], default));
+        StringAssert.Contains(error.Message, "error -19");
+        output.Dispose();
+        await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsTrue(api.Closed);
+        Assert.HasCount(1, api.Writes);
+    }
+
+    private sealed class FakeAlsaApi(IEnumerable<int> results) : IAlsaApi
+    {
+        private readonly Queue<int> _results = new(results);
+        private int _state = 2;
+        private int _delays;
+        internal readonly List<byte[]> Writes = [];
+        internal int Prepares, Starts, PrepareResult;
+        internal bool Closed;
+        public int Open(out nint pcm) { pcm = 1; return 0; }
+        public int Configure(nint pcm, AudioFormat format) => 0;
+        public int Prepare(nint pcm) { Prepares++; _state = 2; return PrepareResult; }
+        public nint Write(nint pcm, nint data, nuint frames)
+        {
+            byte[] samples = new byte[checked((int)frames * Stereo.BlockAlign)];
+            Marshal.Copy(data, samples, 0, samples.Length);
+            Writes.Add(samples);
+            int result = _results.Dequeue();
+            if (result == -32) _state = 4;
+            return result;
+        }
+        public int Start(nint pcm) { Starts++; _state = 3; return 0; }
+        public int State(nint pcm) => _state;
+        public int Delay(nint pcm, out nint frames) { frames = _delays++ == 0 ? 1 : 0; return 0; }
+        public int Drop(nint pcm) => 0;
+        public int Close(nint pcm) { Closed = true; return 0; }
+        public string Error(int code) => "injected ALSA failure";
+    }
+
     private sealed class FakeDevice : IPcmDevice
     {
         internal readonly List<AudioFormat> Opens = [];

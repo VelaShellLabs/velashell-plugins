@@ -37,6 +37,35 @@ jobs:
           export VELA_RDP_ALSA_NULL_TEST=1
           dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --no-build --no-restore --nologo --filter "FullyQualifiedName~AudioOutputTests.AlsaNullOutput"
 
+      - name: Exercise macOS AudioQueue when a default output device is available
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if swift - <<'SWIFT'
+          import CoreAudio
+          import Darwin
+          var address = AudioObjectPropertyAddress(
+              mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+              mScope: kAudioObjectPropertyScopeGlobal,
+              mElement: kAudioObjectPropertyElementMain)
+          var device = AudioDeviceID(kAudioObjectUnknown)
+          var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+          let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
+          guard status == noErr else {
+              print("CoreAudio default output query failed: \(status)")
+              exit(1)
+          }
+          print("CoreAudio default output device ID: \(device)")
+          exit(device == kAudioObjectUnknown ? 2 : 0)
+          SWIFT
+          then
+            VELA_RDP_AUDIO_TEST=1 dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --no-build --no-restore --nologo --filter "FullyQualifiedName~AudioOutputTests.SystemDefaultOutputPlaysAndReopens"
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then exit "$status"; fi
+            echo "::notice::No macOS default output device; AudioQueue playback not exercised. Protocol and native export tests ran separately."
+          fi
+
   build:
     runs-on: windows-latest
     env:
