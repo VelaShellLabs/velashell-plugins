@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Input.TextInput;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
@@ -161,6 +162,88 @@ public sealed class RdpHeadlessTests
         Assert.AreEqual(1, sessions[0].DisposeCount);
         Assert.AreEqual(1, sessions[1].DisposeCount);
         window.Close();
+    });
+
+    [TestMethod]
+    [DataRow(false, null)]
+    [DataRow(false, "")]
+    [DataRow(true, null)]
+    public void ImeCommitsDoNotLeakTheirInitialLetters(bool imeProcessed, string? symbol) => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        var request = new TextInputMethodClientRequestedEventArgs { RoutedEvent = InputElement.TextInputMethodClientRequestedEvent };
+        desktop.RaiseEvent(request);
+        Assert.IsNotNull(request.Client);
+        foreach (var (key, physicalKey, preedit, text) in new[]
+        {
+            (Key.C, PhysicalKey.C, "ceshi", "测试"),
+            (Key.S, PhysicalKey.S, "shuru", "输入")
+        })
+        {
+            // The first key arrives before the IME supplies any preedit text.
+            var down = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = imeProcessed ? Key.ImeProcessed : key, PhysicalKey = physicalKey, KeySymbol = symbol };
+            desktop.RaiseEvent(down);
+            Assert.IsFalse(down.Handled, "The local IME must still receive the key.");
+            request.Client.SetPreeditText(preedit);
+            desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey });
+            desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter, PhysicalKey = PhysicalKey.Enter });
+            request.Client.SetPreeditText(null);
+            desktop.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = text });
+            desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Enter, PhysicalKey = PhysicalKey.Enter });
+        }
+        await desktop.DisposeAsync();
+        Assert.AreSequenceEqual(new[] { "'测试'", "'输入'" }, session.Input);
+    });
+
+    [TestMethod]
+    [DataRow(Key.ImeProcessed, PhysicalKey.Enter, KeyModifiers.Control)]
+    [DataRow(Key.ImeProcessed, PhysicalKey.ArrowDown, KeyModifiers.None)]
+    [DataRow(Key.DeadCharProcessed, PhysicalKey.Quote, KeyModifiers.None)]
+    public void ImeOwnedKeysWithoutPreeditNeverReachTheServer(Key key, PhysicalKey physicalKey, KeyModifiers modifiers) => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers });
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers });
+        await desktop.DisposeAsync();
+        Assert.IsEmpty(session.Input);
+    });
+
+    [TestMethod]
+    [DataRow(Key.A, PhysicalKey.A, KeyModifiers.None, "a")]
+    [DataRow(Key.A, PhysicalKey.A, KeyModifiers.Shift, "A")]
+    [DataRow(Key.D1, PhysicalKey.Digit1, KeyModifiers.None, "1")]
+    [DataRow(Key.OemQuotes, PhysicalKey.Quote, KeyModifiers.None, "é")]
+    [DataRow(Key.Space, PhysicalKey.Space, KeyModifiers.None, " ")]
+    [DataRow(Key.NumPad1, PhysicalKey.NumPad1, KeyModifiers.None, "1")]
+    public void TextWithoutKeySymbolIsSentOnlyOnce(Key key, PhysicalKey physicalKey, KeyModifiers modifiers, string text) => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers });
+        desktop.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = text });
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers });
+        await desktop.DisposeAsync();
+        Assert.AreSequenceEqual(new[] { $"'{text}'" }, session.Input);
+    });
+
+    [TestMethod]
+    [DataRow(Key.C, PhysicalKey.C, KeyModifiers.Control, "c", 0x2e)]
+    [DataRow(Key.A, PhysicalKey.A, KeyModifiers.Alt, "a", 0x1e)]
+    [DataRow(Key.D, PhysicalKey.D, KeyModifiers.Meta, "d", 0x20)]
+    [DataRow(Key.Enter, PhysicalKey.Enter, KeyModifiers.None, null, 0x1c)]
+    [DataRow(Key.Back, PhysicalKey.Backspace, KeyModifiers.None, null, 0x0e)]
+    [DataRow(Key.Left, PhysicalKey.ArrowLeft, KeyModifiers.None, null, 0x14b)]
+    [DataRow(Key.End, PhysicalKey.End, KeyModifiers.None, null, 0x14f)]
+    public void ShortcutsAndNavigationKeepPhysicalKeyPairs(Key key, PhysicalKey physicalKey, KeyModifiers modifiers, string? symbol, int code) => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
+        await desktop.DisposeAsync();
+        Assert.AreSequenceEqual(new (uint, bool)[] { ((uint)code, true), ((uint)code, false) }, session.Keys);
     });
 
     [TestMethod]

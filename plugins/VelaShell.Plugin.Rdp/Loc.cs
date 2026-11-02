@@ -108,6 +108,9 @@ internal sealed class Loc(string locale)
         ["ByeDenied"] = ["the server denied the connection or the account lacks permission to sign in remotely", "服务器拒绝了连接,或该账号没有远程登录权限", "伺服器拒絕了連線,或該帳號沒有遠端登入權限", "サーバーが接続を拒否したか、アカウントにリモート サインインの権限がありません", "서버가 연결을 거부했거나 계정에 원격 로그인 권한이 없습니다"],
         ["ByeTimeout"] = ["the session reached an idle or logon timeout", "会话达到空闲或登录超时", "工作階段達到閒置或登入逾時", "セッションがアイドルまたはログオンのタイムアウトに達しました", "세션이 유휴 또는 로그온 시간 초과에 도달했습니다"],
         ["ByeLicense"] = ["no Remote Desktop licence was available (the server's RDS licensing or its grace period may have expired)", "没有可用的远程桌面授权(服务器的 RDS 授权或宽限期可能已过期)", "沒有可用的遠端桌面授權(伺服器的 RDS 授權或寬限期可能已過期)", "利用可能なリモート デスクトップ ライセンスがありません(サーバーの RDS ライセンスまたは猶予期間が切れている可能性があります)", "사용 가능한 원격 데스크톱 라이선스가 없습니다(서버의 RDS 라이선스 또는 유예 기간이 만료되었을 수 있음)"],
+        ["ByeGraphicsMode"] = ["the server does not support the graphics mode", "服务器不支持当前图形模式", "伺服器不支援目前的圖形模式", "サーバーはこのグラフィックス モードをサポートしていません", "서버가 현재 그래픽 모드를 지원하지 않습니다"],
+        ["ByeGraphicsReset"] = ["the server could not reset its graphics subsystem", "服务器无法重置图形子系统", "伺服器無法重設圖形子系統", "サーバーのグラフィックス サブシステムをリセットできませんでした", "서버가 그래픽 하위 시스템을 재설정하지 못했습니다"],
+        ["ByeGraphicsFailed"] = ["the server graphics subsystem failed and cannot continue encoding the desktop", "服务器图形子系统失败,无法继续编码桌面画面", "伺服器圖形子系統失敗,無法繼續編碼桌面畫面", "サーバーのグラフィックス サブシステムで障害が発生し、デスクトップのエンコードを続行できません", "서버 그래픽 하위 시스템에 오류가 발생하여 데스크톱 인코딩을 계속할 수 없습니다"],
         ["NegotiationNlaRequired"] = [
             "The server requires Network Level Authentication (NLA). Set the security layer to Auto or NLA only.",
             "服务器要求网络级别身份验证(NLA)。请把「安全层」设为「自动」或「仅 NLA」。",

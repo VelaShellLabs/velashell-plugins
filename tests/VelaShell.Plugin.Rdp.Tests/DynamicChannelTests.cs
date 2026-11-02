@@ -38,6 +38,48 @@ public sealed class DynamicChannelTests
         await dvc.CloseAsync(); Assert.AreEqual(1, handlers[1].Closes); Assert.AreEqual(1, handlers[2].Closes);
     }
     [TestMethod]
+    public async Task CompressedFragmentsKeepPerChannelHistoryAndReleaseItOnClose()
+    {
+        var sent = new List<byte[]>(); var handlers = new List<Handler>();
+        var dvc = new DrdynvcChannel((bytes, _) => { sent.Add(bytes); return Task.CompletedTask; }, default);
+        dvc.RegisterListener("test", _ => { var h = new Handler(); handlers.Add(h); return h; }, 8);
+        await dvc.ProcessAsync(Create(1)); await dvc.ProcessAsync(Create(2));
+        await dvc.ProcessAsync([0x60, 1, 6, 0xe0, 4, 0x49, 0x4a, 0x4b]);
+        await dvc.ProcessAsync([0x70, 2, 0xe0, 4, 0x51, 0x52, 0x53]);
+        byte[] match = ZgfxTests.Compressed("10001 00011 0");
+        await dvc.ProcessAsync([0x70, 1, .. match]);
+        await dvc.ProcessAsync([0x70, 2, .. match]);
+        Assert.AreSequenceEqual("IJKIJK"u8.ToArray(), handlers[0].Messages.Single());
+        Assert.HasCount(2, handlers[1].Messages);
+        Assert.AreSequenceEqual("QRS"u8.ToArray(), handlers[1].Messages[1]);
+        await dvc.ProcessAsync([0x60, 1, 4, 0xe0, 4, 7]);
+        await dvc.ProcessAsync([0x30, 1, 8, 9, 10]);
+        Assert.AreSequenceEqual(new byte[] { 7, 8, 9, 10 }, handlers[0].Messages[1]);
+        await dvc.ProcessAsync([0x40, 1]);
+        await dvc.ProcessAsync(Create(1));
+        await dvc.ProcessAsync([0x70, 1, .. match]);
+        Assert.IsEmpty(handlers[2].Messages, "A reused id must not retain compression history.");
+        Assert.AreEqual(1, handlers[2].Closes);
+        Assert.AreSequenceEqual(new byte[] { 0x40, 1 }, sent.Last());
+        await dvc.CloseAsync();
+    }
+
+    [TestMethod]
+    public async Task CompressedExpansionCannotExceedMessageOrRemainingFragmentLimit()
+    {
+        var sent = new List<byte[]>(); var handlers = new List<Handler>();
+        var dvc = new DrdynvcChannel((bytes, _) => { sent.Add(bytes); return Task.CompletedTask; }, default);
+        dvc.RegisterListener("test", _ => { var h = new Handler(); handlers.Add(h); return h; }, 8);
+        await dvc.ProcessAsync(Create(1)); await dvc.ProcessAsync(Create(2));
+        byte[] tenBytes = ZgfxTests.Compressed("0 01001001 10001 00001 110 001");
+        await dvc.ProcessAsync([0x70, 1, .. tenBytes]);
+        await dvc.ProcessAsync([0x60, 2, 4, 0xe0, 4, 1, 2]);
+        await dvc.ProcessAsync([0x70, 2, 0xe0, 4, 3, 4, 5]);
+        Assert.IsTrue(handlers.All(h => h.Messages.Count == 0 && h.Closes == 1));
+        await dvc.CloseAsync();
+    }
+
+    [TestMethod]
     public async Task ReusedIdRejectsOldSendAndOldClose()
     {
         var sent = new List<byte[]>(); var channels = new List<DynamicChannel>();

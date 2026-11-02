@@ -76,6 +76,9 @@ public sealed class RdpConnectorTests
     [DataRow(0x00000009u, "ByeDenied")]      // SERVER_INSUFFICIENT_PRIVILEGES
     [DataRow(0x0000010Au, "ByeLicense")]     // LICENSE_NO_REMOTE_CONNECTIONS
     [DataRow(0x00000102u, "ByeLicense")]     // LICENSE_NO_LICENSE
+    [DataRow(0x0000112Du, "ByeGraphicsMode")]
+    [DataRow(0x0000112Eu, "ByeGraphicsReset")]
+    [DataRow(0x0000112Fu, "ByeGraphicsFailed")]
     public void MidSessionDisconnectReasonsAreLocalizedByErrorInfo(uint code, string key)
     {
         var loc = new Loc("en");

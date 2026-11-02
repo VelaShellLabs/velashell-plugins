@@ -57,6 +57,22 @@ internal static class RdpInput
         return true;
     }
 
+    internal static bool IsTextKey(KeyEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(e.KeySymbol))
+        {
+            return !e.KeySymbol.Any(char.IsControl);
+        }
+
+        // IMEs and dead keys can omit KeySymbol before the first preedit update. Use the
+        // logical key so NumLock-off keypad navigation remains a physical key event.
+        return e.Key is >= Key.A and <= Key.Z or >= Key.D0 and <= Key.D9
+            or >= Key.NumPad0 and <= Key.NumPad9
+            or Key.Space or Key.Multiply or Key.Add or Key.Separator or Key.Subtract or Key.Decimal or Key.Divide
+            or Key.Oem1 or Key.OemPlus or Key.OemComma or Key.OemMinus or Key.OemPeriod
+            or Key.Oem2 or Key.Oem3 or Key.Oem4 or Key.Oem5 or Key.Oem6 or Key.Oem7 or Key.Oem8 or Key.Oem102;
+    }
+
     internal static uint ScanCode(PhysicalKey key) => Codes.GetValueOrDefault(key.ToString());
     internal static uint Wheel(double delta, bool horizontal)
     {

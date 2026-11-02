@@ -136,6 +136,11 @@ public sealed class RdpNetworkTests
         Assert.AreSequenceEqual(new byte[] { 0x30, 2, 8 }, tcp.Last());
         await dvc.ProcessAsync([0x30, 1, 9], 1);
         Assert.AreSequenceEqual(new byte[] { 9 }, sink.Messages.Single());
+        await dvc.ProcessAsync([0x60, 1, 2, 0xe0, 4, 10], 1);
+        await dvc.ProcessAsync([0x70, 1, 0xe0, 4, 11], 1);
+        Assert.AreSequenceEqual(new byte[] { 10, 11 }, sink.Messages[1]);
+        await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x60, 1, 2, 0xe0, 4, 10]));
+        await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x70, 1, 0xe0, 4, 11]));
         await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x30, 1, 9]));
         await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync(Sync((1, [1]), (3, [1]))));
         await dvc.CloseAsync();

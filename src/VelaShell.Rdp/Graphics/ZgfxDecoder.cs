@@ -39,18 +39,20 @@ internal sealed class ZgfxDecoder
         return table;
     }
 
-    internal byte[] Decode(ReadOnlySpan<byte> input)
+    internal byte[] Decode(ReadOnlySpan<byte> input, int maxOutputBytes = MaxOutputBytes)
     {
+        if (maxOutputBytes is < 0 or > MaxOutputBytes) { throw new ArgumentOutOfRangeException(nameof(maxOutputBytes)); }
         if (input.Length < 2 || input.Length > MaxOutputBytes) { throw Error("Invalid message size."); }
         if (input[0] == 0xe0)
         {
             int count = DecodeSegment(input[1..]);
+            if (count > maxOutputBytes) { throw Error("Output exceeds the channel message limit."); }
             return _segment.AsSpan(0, count).ToArray();
         }
         if (input[0] != 0xe1 || input.Length < 7) { throw Error("Invalid segmentation header."); }
         int segments = BinaryPrimitives.ReadUInt16LittleEndian(input[1..]);
         uint size = BinaryPrimitives.ReadUInt32LittleEndian(input[3..]);
-        if (segments == 0 || size > MaxOutputBytes || size > (long)segments * SegmentLimit
+        if (segments == 0 || size > maxOutputBytes || size > (long)segments * SegmentLimit
             || (long)segments * 5 > input.Length - 7) { throw Error("Invalid multipart size."); }
         // Validate every encoded segment before allocating the declared output buffer.
         int offset = 7;

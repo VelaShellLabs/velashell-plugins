@@ -18,6 +18,8 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
 
     private RdpUdpTransport(IPEndPoint peer, bool lossy)
     {
+        // A dual-stack TCP connection reports IPv4 peers as ::ffff:a.b.c.d; a new IPv6-only UDP socket cannot connect to them.
+        if (peer.Address.IsIPv4MappedToIPv6) { peer = new IPEndPoint(peer.Address.MapToIPv4(), peer.Port); }
         _socket = new Socket(peer.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
         try { _socket.Connect(peer); }
         catch { _socket.Dispose(); throw; }
