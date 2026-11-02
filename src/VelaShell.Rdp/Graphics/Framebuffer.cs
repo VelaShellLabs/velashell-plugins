@@ -138,6 +138,26 @@ internal sealed partial class Framebuffer
         }
     }
 
+    /// <summary>Copies the dirty region of a borrowed top-down BGRA surface without staging an entire frame.</summary>
+    internal void Blit(RdpGfxFrame frame)
+    {
+        frame.Validate();
+        if (frame.Width != Width || frame.Height != Height)
+        {
+            throw new RdpProtocolException("RDP graphics frame dimensions do not match the framebuffer.");
+        }
+        if (frame.W == 0 || frame.H == 0) { return; }
+        lock (_gate)
+        {
+            for (int row = frame.Y; row < frame.Y + frame.H; row++)
+            {
+                ReadOnlySpan<byte> source = frame.Pixels.AsSpan(row * frame.Stride + frame.X * 4, frame.W * 4);
+                source.CopyTo(Bgra.AsSpan((row * Width + frame.X) * 4, frame.W * 4));
+            }
+            Union(frame.X, frame.Y, frame.X + frame.W, frame.Y + frame.H);
+        }
+    }
+
     /// <summary>
     /// Copies what changed since the last call (everything when <paramref name="full"/>) into a top-down BGRA
     /// surface of exactly this size, then forgets it. Returns the copied region (empty when nothing changed).

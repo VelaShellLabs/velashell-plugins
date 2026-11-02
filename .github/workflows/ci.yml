@@ -28,6 +28,9 @@ jobs:
       - name: Test portable RDP authentication, licensing and audio
         run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests"
 
+      - name: Test managed GFX codecs and protocol on Unix
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --no-build --no-restore --nologo --filter "FullyQualifiedName~Gfx|FullyQualifiedName~Zgfx|FullyQualifiedName~PlanarTests"
+
       - name: Exercise Linux ALSA output with a process-local null device
         if: runner.os == 'Linux'
         shell: bash
@@ -189,3 +192,14 @@ jobs:
             throw "Shared assemblies leaked into the plugin bundle: $(($leaked | ForEach-Object FullName) -join ', ')"
           }
           Write-Host "OK: no shared assemblies in the bundle."
+
+      - name: Assert managed GFX dependencies and notices are bundled
+        shell: pwsh
+        run: |
+          $engines = @(Get-ChildItem artifacts/plugins-bundle -Recurse -Filter 'VelaShell.Rdp.dll')
+          if ($engines.Count -ne 1) { throw 'Expected one RDP engine in the plugin bundle.' }
+          foreach ($name in @('ManagedCodecs.H264.dll', 'ManagedCodecs.Core.dll', 'VelaShell.Rdp.THIRD-PARTY-NOTICES.txt')) {
+            if (-not (Test-Path (Join-Path $engines[0].DirectoryName $name))) {
+              throw "Missing managed GFX distribution asset: $name"
+            }
+          }

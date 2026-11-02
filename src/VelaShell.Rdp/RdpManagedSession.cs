@@ -198,7 +198,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     /// </summary>
     public RdpNlaRefusedException? NlaRefusal { get; private set; }
 
-    internal static IReadOnlyList<ChannelDef> BuildChannels(RdpClientOptions options)
+    internal static IReadOnlyList<ChannelDef> BuildChannels(RdpClientOptions options, bool graphicsReady = false)
     {
         var channels = new List<ChannelDef>();
         if (options.Clipboard)
@@ -218,9 +218,9 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
-        if (options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
+        if (graphicsReady || options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
         {
-            channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic virtual channels: display-control resize
+            channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic graphics, display control and device channels
         }
 
         return channels;
@@ -228,14 +228,32 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
 
     private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
     {
-        IReadOnlyList<ChannelDef> channels = BuildChannels(options);
-        var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
-            options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
-            string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
-            options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
-            options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel);
-
-        var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
+        var backend = PrepareGraphics(options);
+        IReadOnlyList<ChannelDef> channels;
+        RdpManagedSession session;
+        try
+        {
+            channels = BuildChannels(options, backend is not null);
+            var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
+                options.Domain, options.Width, options.Height, backend is not null ? 32 : options.ColorDepth, options.CertificatePin,
+                string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
+                options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
+                options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null);
+            session = new RdpManagedSession(new RdpConnection(connectOptions))
+            {
+                _driveLog = options.DriveRedirectionLog,
+                _graphicsLog = options.GraphicsLog
+            };
+            if (backend is not null)
+            {
+                session._graphics = new RdpGfxChannel(backend, session.Connection.ApplyGraphicsFrame, session.FailGraphics, session._stop.Token);
+            }
+        }
+        catch
+        {
+            backend?.Dispose();
+            throw;
+        }
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
         session.LogAudio($"configured playback={options.AudioPlayback}; requested={channels.Any(channel => channel.Name == "rdpsnd")}; backend={(OperatingSystem.IsWindows() ? "WinMM" : OperatingSystem.IsMacOS() ? "AudioQueue" : "ALSA")}");
         try
@@ -244,7 +262,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             {
                 session.EnableAudio(options.AudioPlayback);
             }
-            if (options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
+            if (channels.Any(channel => channel.Name == "drdynvc"))
             {
                 session.EnableDynamicChannels(options);
             }
@@ -256,10 +274,13 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             {
                 session.EnableDrives(options.Drives, options.Ports, options.Printers);
             }
-            await session.Connection.ConnectAsync(ct).ConfigureAwait(false);
+            using var connectStop = CancellationTokenSource.CreateLinkedTokenSource(ct, session._stop.Token);
+            await session.Connection.ConnectAsync(connectStop.Token).ConfigureAwait(false);
+            if (session._dynamicChannelFailure is { } failure) { throw failure; }
         }
         catch (Exception ex)
         {
+            if (ex is OperationCanceledException && session._dynamicChannelFailure is { } failure) { ex = failure; }
             RdpConnectStage stage = session.Connection.Stage;
             System.Security.Authentication.SslProtocols? tls = session.Connection.TlsProtocol;
             string? tlsTrace = session.Connection.TlsTrace;
@@ -312,6 +333,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             _wpd = new WpdRedirection(new WindowsWpdBackend(options.WpdDevices, LogDrive));
             _wpd.Register(_drdynvc);
         }
+        _graphics?.Register(_drdynvc);
         _drdynvcWorker = DrainDrdynvcAsync();
     }
 
@@ -413,7 +435,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            _dynamicChannelFailure = new IOException("RDP dynamic-channel processing failed; reconnect the session.", ex);
+            _ = Interlocked.CompareExchange(ref _dynamicChannelFailure,
+                new IOException("RDP dynamic-channel processing failed; reconnect the session.", ex), null);
             _stop.Cancel();
         }
         finally
@@ -428,6 +451,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             catch (Exception ex) { LogDrive($"WPD cleanup failed: {ex.GetType().Name}"); }
             try { await _drdynvc.CloseAsync().ConfigureAwait(false); }
             catch (Exception ex) { LogDrive($"dynamic-channel cleanup failed: {ex.GetType().Name}"); }
+            if (_graphics is not null) { await _graphics.DisposeAsync().ConfigureAwait(false); }
         }
     }
 
@@ -581,7 +605,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         {
             Volatile.Write(ref _isConnected, 0);
             _stop.Cancel();
-            failure = DisconnectCause(failure ?? _dynamicChannelFailure, Volatile.Read(ref _errorInfo));
+            failure = DisconnectCause(_dynamicChannelFailure ?? failure, Volatile.Read(ref _errorInfo));
             if (Volatile.Read(ref _disposed) == 0) { try { Disconnected?.Invoke(failure); } catch { /* ignore */ } }
         }
     }
@@ -648,6 +672,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         if (_cliprdrWorker is { } worker) { try { await worker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_rdpdrWorker is { } driveWorker) { try { await driveWorker.ConfigureAwait(false); } catch { /* ignore */ } }
         if (_drdynvcWorker is { } dvcWorker) { try { await dvcWorker.ConfigureAwait(false); } catch { /* ignore */ } }
+        if (_graphics is not null) { await _graphics.DisposeAsync().ConfigureAwait(false); }
         if (_wpd is not null)
         {
             try { await _wpd.DisposeAsync().ConfigureAwait(false); }

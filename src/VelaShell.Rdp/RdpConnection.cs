@@ -16,7 +16,8 @@ internal sealed record RdpConnectOptions(
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
     bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default,
-    RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false)
+    RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false,
+    bool GraphicsPipeline = false)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -55,7 +56,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     private const int MaxFragment = 16 * 1024 * 1024;
     private Graphics.Mppc? _mppc;                    // server→client bulk decompression (shared history)
 
-    // Replaced only on the pump thread (reactivation); readers take the reference once and use that surface.
+    // Replaced under _surfaceGate by classic activation or GFX updates; readers retain one surface reference.
     private volatile Framebuffer _framebuffer = new(1, 1);
     internal Framebuffer Framebuffer { get => _framebuffer; private set => _framebuffer = value; }
     internal event Action? FrameUpdated;
@@ -139,7 +140,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             && _options.Channels.Any(c => c.Name == "drdynvc");
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
             (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor,
-            extended && (_options.AdaptiveNetwork || _udpAdvertised), _udpAdvertised, _options.AdaptiveNetwork);
+            extended && (_options.AdaptiveNetwork || _udpAdvertised), _udpAdvertised, _options.AdaptiveNetwork, _options.GraphicsPipeline);
         _mcs = new McsLayer(_transport);
         await _mcs.ConnectAsync(gcc, _options.Channels, ct).ConfigureAwait(false);
         _ioChannel = _mcs.Server.IoChannelId;
@@ -509,8 +510,11 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     /// <summary>A new surface at the activated size, and the drawing-order decoder pointed at it.</summary>
     internal void StartSurface(int sessionBpp)
     {
-        Framebuffer = new Framebuffer(_width, _height);
-        _orderSurface.Current = Framebuffer;
+        lock (_surfaceGate)
+        {
+            if (!_graphicsActive) { Framebuffer = new Framebuffer(_width, _height); }
+            _orderSurface.Current = Framebuffer;
+        }
         if (!_options.DrawingOrders)
         {
             return;

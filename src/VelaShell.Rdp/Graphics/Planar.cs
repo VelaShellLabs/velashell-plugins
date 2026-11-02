@@ -18,9 +18,9 @@ namespace VelaShell.Rdp.Graphics;
 /// <para>
 /// Orientation: in a bitmap update the planes are stored bottom-up, like every TS_BITMAP_DATA
 /// payload — the first plane scanline is the bottom image row. FreeRDP's GDI path therefore calls
-/// the decoder with <c>vFlip = TRUE</c> for bitmap updates; this port bakes that in and writes a
-/// <b>top-down</b> image, so callers must not flip the result again. (The RDPGFX planar codec
-/// stores top-down planes and is not what this entry point decodes.)
+/// the decoder with <c>vFlip = TRUE</c> for bitmap updates; this entry point defaults to that and writes a
+/// <b>top-down</b> image, so callers must not flip the result again. The RDPGFX planar codec
+/// stores top-down planes and passes <c>bottomUp = false</c>.
 /// </para>
 /// <para>
 /// Not ported: FreeRDP's <c>freerdp_planar_switch_bgr</c> heuristic, which swaps red and blue for
@@ -44,7 +44,7 @@ internal static class Planar
     /// B,G,R,A image with stride <c>width * 4</c>. Only the first <c>width * height * 4</c> bytes
     /// of the destination are written.
     /// </summary>
-    internal static void Decompress(ReadOnlySpan<byte> src, Span<byte> dstBgra, int width, int height)
+    internal static void Decompress(ReadOnlySpan<byte> src, Span<byte> dstBgra, int width, int height, bool bottomUp = true)
     {
         if (width <= 0 || height <= 0)
         {
@@ -153,12 +153,12 @@ internal static class Planar
 
             if (colorLossLevel == 0)
             {
-                ComposeArgb(lumaOrRed, orangeChromaOrGreen, greenChromaOrBlue, alphaPlane, hasAlpha, dstBgra, width, height);
+                ComposeArgb(lumaOrRed, orangeChromaOrGreen, greenChromaOrBlue, alphaPlane, hasAlpha, dstBgra, width, height, bottomUp);
             }
             else
             {
                 ComposeAYCoCg(lumaOrRed, orangeChromaOrGreen, greenChromaOrBlue, alphaPlane, hasAlpha,
-                    dstBgra, width, height, colorLossLevel, chromaSubsampling, chromaWidth);
+                    dstBgra, width, height, colorLossLevel, chromaSubsampling, chromaWidth, bottomUp);
             }
         }
         finally
@@ -260,11 +260,11 @@ internal static class Planar
 
     /// <summary>Writes ARGB planes (color loss level 0) as top-down BGRA; plane row 0 is the bottom row.</summary>
     private static void ComposeArgb(ReadOnlySpan<byte> red, ReadOnlySpan<byte> green, ReadOnlySpan<byte> blue,
-        ReadOnlySpan<byte> alpha, bool hasAlpha, Span<byte> dst, int width, int height)
+        ReadOnlySpan<byte> alpha, bool hasAlpha, Span<byte> dst, int width, int height, bool bottomUp = true)
     {
         for (int y = 0; y < height; y++)
         {
-            int planeRow = (height - 1 - y) * width;
+            int planeRow = (bottomUp ? height - 1 - y : y) * width;
             int d = y * width * 4;
             for (int x = 0; x < width; x++)
             {
@@ -285,14 +285,14 @@ internal static class Planar
     /// </summary>
     private static void ComposeAYCoCg(ReadOnlySpan<byte> luma, ReadOnlySpan<byte> orangeChroma, ReadOnlySpan<byte> greenChroma,
         ReadOnlySpan<byte> alpha, bool hasAlpha, Span<byte> dst, int width, int height, int colorLossLevel,
-        bool chromaSubsampling, int chromaWidth)
+        bool chromaSubsampling, int chromaWidth, bool bottomUp)
     {
         // The chroma planes were shifted right by the color loss level on the server; shifting
         // left by one less builds in the halving of Co and Cg in the inverse transform.
         int shift = colorLossLevel - 1;
         for (int y = 0; y < height; y++)
         {
-            int planeY = height - 1 - y;
+            int planeY = bottomUp ? height - 1 - y : y;
             int planeRow = planeY * width;
             int chromaRow = chromaSubsampling ? (planeY / 2) * chromaWidth : planeRow;
             int d = y * width * 4;

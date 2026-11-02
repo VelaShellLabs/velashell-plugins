@@ -10,7 +10,7 @@
     <RootNamespace>VelaShell.Rdp</RootNamespace>
     <AssemblyName>VelaShell.Rdp</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Managed .NET RDP (Remote Desktop Protocol) client: X.224/MCS/GCC, TLS and CredSSP/NLA, interleaved RLE and MPPC decoding, fast-path input, clipboard and drive virtual channels, dynamic resolution (MS-RDPEDISP), and audio playback (MS-RDPEA) through system audio libraries. No bundled native binaries.</Description>
+    <Description>Managed .NET RDP (Remote Desktop Protocol) client: X.224/MCS/GCC, TLS and CredSSP/NLA, interleaved RLE, MPPC and managed RDPGFX with H.264 AVC420/AVC444 decoding, fast-path input, clipboard and drive virtual channels, dynamic resolution (MS-RDPEDISP), and audio playback (MS-RDPEA) through system audio libraries. No bundled native binaries.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <!-- 公共 API 的 XML 文档尚未补齐,先消掉缺文档告警(CS1591)。 -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
@@ -19,6 +19,9 @@
   <ItemGroup>
     <InternalsVisibleTo Include="VelaShell.Plugin.Rdp.Tests" />
     <PackageReference Include="BouncyCastle.Cryptography" />
+    <PackageReference Include="ManagedCodecs.H264" />
+    <None Update="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" TargetPath="VelaShell.Rdp.THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
 </Project>

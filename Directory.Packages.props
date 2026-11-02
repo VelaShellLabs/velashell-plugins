@@ -69,6 +69,9 @@
          而在 Windows 开发机上永远测不出来(调研文档 §五.2 记的正是这条)。 -->
     <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.3.26522.148" />
   </ItemGroup>
+  <ItemGroup Label="RDP 托管图形解码">
+    <PackageVersion Include="ManagedCodecs.H264" Version="0.6.0" />
+  </ItemGroup>
   <ItemGroup Label="RDP 托管 DTLS">
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
   </ItemGroup>
