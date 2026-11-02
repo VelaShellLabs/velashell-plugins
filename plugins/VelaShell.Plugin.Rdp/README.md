@@ -3,11 +3,25 @@
 `velashell.rdp` embeds a remote desktop in an Avalonia workspace using a **pure-managed C#
 RDP client** — no FreeRDP or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop; explicitly selected COM/LPT ports use overlapped Windows I/O (MS-RDPESP). In the Drive mapping page, enter `COM3;LPT1` in COM / LPT ports; empty shares none. Port names are validated, transfers are capped at 256 KiB and controls are allowlisted. Reads, writes and `WAIT_ON_MASK` wait as on a local port (bounded by the remote application's own COMMTIMEOUTS) until they complete or a purge, close or disconnect cancels them; other controls get a 30-second deadline. Faulty drivers may delay native completion. Fake-backend tests do not access port hardware; real-server/hardware interoperability remains unverified. The protocol stack is the
 standalone [`VelaShell.Rdp`](../../src/VelaShell.Rdp) library (MIT), which implements the subset of
-MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS this plugin needs. The plugin
+MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS / MS-RDPEA this plugin needs. The plugin
 references that library and owns only the Avalonia view and input/clipboard integration; no
 external RDP window is launched.
 
 Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
+
+## Remote audio playback
+
+Enable **Remote audio** on **Experience** (`audio`, off by default), then reconnect. `rdpsnd`
+negotiates PCM 8/16-bit mono/stereo at 8–48 kHz, handles training and WaveInfo/Wave or Wave2,
+and confirms samples after playback completes. Output uses the system default device through
+WinMM (Windows), AudioToolbox AudioQueue (macOS), or ALSA `default` (Linux). Linux needs
+`libasound.so.2` and a configured default PCM; PipeWire/PulseAudio desktops need their ALSA plugin.
+No native binaries are bundled. Microphone capture, compressed codecs and UDP audio are not supported.
+The audio worker has a 128-message / 1 MiB queue bound. Device/protocol failures disable audio and
+show a status-bar warning without ending the desktop; fix the default device and reconnect.
+Audio continues in background tabs. Check the remote Windows playback-redirection policy and
+Windows Audio service if the remote session has no audio device. Tests cover protocol and error
+handling; actual speaker output and real-server interoperability require platform hardware validation.
 
 ## Legacy printer redirection (Windows)
 
@@ -38,7 +52,7 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
   (`Orders.cs`, ported from FreeRDP), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
   region; fragmented fast-path updates are reassembled (`Graphics/`).
 - **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
-- **Channels** — clipboard (cliprdr) and selected drives, ports and legacy printers (rdpdr)
+- **Channels** — clipboard (cliprdr), audio playback (rdpsnd), and selected drives, ports and legacy printers (rdpdr)
   over chunked static virtual channels; drdynvc supports display control (MS-RDPEDISP),
   the selected camera (MS-RDPECAM) and selected Windows portable devices (MS-RDPEPNP)
   (`Channels/`).
@@ -230,7 +244,7 @@ before the workspace attaches, and format names follow the server's negotiated c
 Remote text/images synchronize automatically; Windows remote file descriptors are published without
 content reads. A newer local copy supersedes pending publication. Unchanged content is not echoed back.
 
-No audio, multiple monitors or the graphics pipeline (RemoteFX/GFX/H.264) are negotiated: the server
+No microphone capture, multiple monitors or the graphics pipeline (RemoteFX/GFX/H.264) are negotiated: the server
 renders via classic bitmap updates (interleaved RLE, RDP 6.0 planar at 32 bpp) and GDI drawing orders
 (DstBlt, PatBlt, OpaqueRect, MultiOpaqueRect, ScrBlt, MemBlt from a 600/600/2048-entry revision 2 bitmap
 cache; `RdpClientOptions.DrawingOrders`, on by default) with MPPC bulk compression. Orders let a server

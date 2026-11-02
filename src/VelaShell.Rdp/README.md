@@ -1,7 +1,7 @@
 # VelaShell.Rdp
 
-A **pure-managed .NET RDP (Remote Desktop Protocol) client** — no native dependencies, no
-FreeRDP, no P/Invoke beyond the BCL. It is the engine behind the VelaShell RDP plugin, extracted
+A **managed .NET RDP (Remote Desktop Protocol) client** — no FreeRDP or bundled native binaries.
+Optional audio playback uses the system's WinMM, AudioToolbox or ALSA libraries. It is the engine behind the VelaShell RDP plugin, extracted
 into a standalone, UI-agnostic library so it can be reused on its own.
 
 Released under the **MIT License** (see [LICENSE](LICENSE)) alongside the
@@ -24,7 +24,13 @@ Released under the **MIT License** (see [LICENSE](LICENSE)) alongside the
   display-control channel (drdynvc + MS-RDPEDISP); other dynamic channels are declined so the
   server keeps to the classic bitmap path.
 
-It does **not** negotiate audio, multiple monitors, or the graphics pipeline (RemoteFX/GFX).
+- **Audio output** — opt-in `AudioPlayback` over `rdpsnd` (MS-RDPEA), including formats, training,
+  WaveInfo/Wave, Wave2 and playback confirmations. PCM 8/16-bit mono/stereo at 8–48 kHz plays on
+  the system default output: WinMM on Windows, AudioQueue on macOS, ALSA `default` on Linux
+  (`libasound.so.2` plus a working ALSA/PipeWire/PulseAudio configuration). Audio failures are replayed
+  through `IRdpAudioSource.AudioPlaybackFailed` and disable audio without disconnecting the desktop.
+
+It does **not** negotiate microphone capture, multiple monitors, or the graphics pipeline (RemoteFX/GFX).
 
 ## Usage
 
@@ -41,6 +47,7 @@ await using var session = await RdpManagedSession.ConnectAsync(new RdpClientOpti
     ColorDepth = 32,            // 15, 16, 24 or 32
     DesktopScaleFactor = 150,   // the local display scale, so remote text is not tiny on a high-DPI screen
     Clipboard = true,
+    AudioPlayback = true,       // default output device; optional, disabled by default
     Drives = [new DriveMapping("work", @"C:\Work\Share")],
 }, cancellationToken);
 
@@ -79,7 +86,8 @@ Without a `CertificatePin`, an untrusted server certificate raises
 - **Bounded against a hostile server.** Bitmap rectangles, drawing-order work, the bitmap cache (256 MiB),
   virtual-channel reassembly, CredSSP messages and the desktop size are all capped; drive redirection confines
   paths component by component and refuses links below the mapped folder. Malformed input raises
-  `RdpProtocolException` and ends the session instead of allocating without bound.
+  `RdpProtocolException` and ends the session instead of allocating without bound. Audio has a separate
+  128-message / 1 MiB queue limit; audio errors stop only playback, leaving desktop input and display active.
 - **Targets `net11.0`.** BCL-only; nothing is pulled from NuGet.
 - The library DLL ships inside the RDP plugin's signed `.vpx`; it is not published as a separate
   NuGet package.

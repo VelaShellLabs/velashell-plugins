@@ -2,8 +2,10 @@ using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
-internal sealed class FakeRdpSession : IRdpSession
+internal sealed class FakeRdpSession : IRdpSession, IRdpAudioSource
 {
+    public event Action<Exception>? AudioPlaybackFailed;
+    internal void FailAudio(Exception error) => AudioPlaybackFailed?.Invoke(error);
     public event Action? FrameAvailable;
     public event Action<Exception?>? Disconnected;
     public event Action<RdpClipboardEvent>? ClipboardEvent;

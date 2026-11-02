@@ -85,6 +85,30 @@ public sealed class RdpWorkspaceTests
         Assert.AreEqual(ProtocolSessionState.Closed, document.Status.State);
     }
     [TestMethod]
+    public async Task AudioFailureKeepsDesktopConnectedAndReconnectClearsWarning()
+    {
+        using var context = new TestPluginContext { PluginId = "velashell.rdp" };
+        var sessions = new List<FakeRdpSession>();
+        await using var provider = new RdpWorkspaceProvider(context, new("en"), (_, _, _, _) =>
+        {
+            var session = new FakeRdpSession();
+            sessions.Add(session);
+            return Task.FromResult<IRdpSession>(session);
+        });
+        IWorkspaceDocument document = await provider.OpenAsync(RdpSettingsTests.Request());
+        sessions[0].FailAudio(new IOException("No default output device"));
+        Assert.AreEqual(ProtocolSessionState.Connected, document.Status.State);
+        Assert.Contains("No default output device", document.Status.Message!);
+        ((RdpWorkspaceDocument)document).SetLocale(new("zh-Hans"));
+        Assert.AreEqual(new Loc("zh-Hans").Format("AudioFailed", "No default output device"), document.Status.Message);
+        await document.ReconnectAsync();
+        Assert.AreEqual(ProtocolSessionState.Connected, document.Status.State);
+        Assert.IsTrue(string.IsNullOrEmpty(document.Status.Message));
+        sessions[0].FailAudio(new IOException("Stale output error"));
+        Assert.IsTrue(string.IsNullOrEmpty(document.Status.Message));
+    }
+
+    [TestMethod]
     public async Task ProviderShutdownCancelsInflightConnectionAndClosesExistingDocuments()
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };

@@ -257,7 +257,7 @@ public interface IMfCameraReaderCallback
 
 /// <summary>Vtable slots follow the Windows SDK mfobjects.h, mfidl.h and mfreadwrite.h.</summary>
 [SupportedOSPlatform("windows")]
-internal static unsafe class MfNative
+internal static unsafe partial class MfNative
 {
     internal const uint VideoStream = 0xfffffffc;
     internal static readonly Guid SourceType = new("c60ac5fe-252a-478f-a0ef-bc8fa5f7cad3");
@@ -278,13 +278,20 @@ internal static unsafe class MfNative
             Marshal.ThrowExceptionForHR(hr);
         }
     }
-    [DllImport("mfplat.dll", ExactSpelling = true)] internal static extern int MFStartup(uint version, uint flags);
-    [DllImport("mfplat.dll", ExactSpelling = true)] internal static extern int MFShutdown();
-    [DllImport("mfplat.dll", ExactSpelling = true)] internal static extern int MFCreateAttributes(out nint attributes, uint size);
-    [DllImport("mf.dll", ExactSpelling = true)] private static extern int MFEnumDeviceSources(nint attributes, out nint devices, out uint count);
-    [DllImport("mfreadwrite.dll", ExactSpelling = true)] internal static extern int MFCreateSourceReaderFromMediaSource(nint source, nint attributes, out nint reader);
-    [DllImport("ole32.dll", ExactSpelling = true)] private static extern int CoInitializeEx(nint reserved, uint mode);
-    [DllImport("ole32.dll", ExactSpelling = true)] private static extern void CoUninitialize();
+    [LibraryImport("mfplat.dll")]
+    internal static partial int MFStartup(uint version, uint flags);
+    [LibraryImport("mfplat.dll")]
+    internal static partial int MFShutdown();
+    [LibraryImport("mfplat.dll")]
+    internal static partial int MFCreateAttributes(out nint attributes, uint size);
+    [LibraryImport("mf.dll")]
+    private static partial int MFEnumDeviceSources(nint attributes, out nint devices, out uint count);
+    [LibraryImport("mfreadwrite.dll")]
+    internal static partial int MFCreateSourceReaderFromMediaSource(nint source, nint attributes, out nint reader);
+    [LibraryImport("ole32.dll")]
+    private static partial int CoInitializeEx(nint reserved, uint mode);
+    [LibraryImport("ole32.dll")]
+    private static partial void CoUninitialize();
     internal sealed class Apartment : IDisposable
     {
         private readonly bool _uninitialize;

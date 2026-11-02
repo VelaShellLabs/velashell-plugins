@@ -6,7 +6,7 @@ using System.Runtime.Versioning;
 namespace VelaShell.Plugin.Rdp;
 
 [SupportedOSPlatform("windows")]
-internal sealed class WindowsVirtualFileClipboard : IRdpVirtualFileClipboard
+internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipboard
 {
     private readonly ConcurrentQueue<Action> _work = new();
     private readonly AutoResetEvent _wake = new(false);
@@ -125,26 +125,30 @@ internal sealed class WindowsVirtualFileClipboard : IRdpVirtualFileClipboard
         try { await _ended.Task.ConfigureAwait(false); }
         finally { _wake.Dispose(); }
     }
-    internal static class Native
+    internal static partial class Native
     {
-        [DllImport("ole32.dll")] internal static extern int OleInitialize(nint reserved);
-        [DllImport("ole32.dll")] internal static extern void OleUninitialize();
+        [LibraryImport("ole32.dll")] internal static partial int OleInitialize(nint reserved);
+        [LibraryImport("ole32.dll")] internal static partial void OleUninitialize();
+        // LibraryImport cannot marshal these classic COM interfaces through the runtime CCW.
         [DllImport("ole32.dll")] internal static extern int OleSetClipboard([MarshalAs(UnmanagedType.Interface)] IVirtualFileDataObject? data);
         [DllImport("ole32.dll")] internal static extern int OleIsCurrentClipboard([MarshalAs(UnmanagedType.Interface)] IVirtualFileDataObject data);
-        [DllImport("user32.dll")] internal static extern uint GetClipboardSequenceNumber();
-        [DllImport("user32.dll")] internal static extern nint GetClipboardOwner();
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern uint RegisterClipboardFormat(string name);
-        [DllImport("kernel32.dll")] internal static extern nint GlobalAlloc(uint flags, nuint size);
-        [DllImport("kernel32.dll")] internal static extern nint GlobalLock(nint memory);
-        [DllImport("kernel32.dll")] internal static extern bool GlobalUnlock(nint memory);
-        [DllImport("kernel32.dll")] internal static extern nuint GlobalSize(nint memory);
+        [LibraryImport("user32.dll")] internal static partial uint GetClipboardSequenceNumber();
+        [LibraryImport("user32.dll")] internal static partial nint GetClipboardOwner();
+        [LibraryImport("user32.dll", EntryPoint = "RegisterClipboardFormatW", StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial uint RegisterClipboardFormat(string name);
+        [LibraryImport("kernel32.dll")] internal static partial nint GlobalAlloc(uint flags, nuint size);
+        [LibraryImport("kernel32.dll")] internal static partial nint GlobalLock(nint memory);
+        [LibraryImport("kernel32.dll")][return: MarshalAs(UnmanagedType.Bool)] internal static partial bool GlobalUnlock(nint memory);
+        [LibraryImport("kernel32.dll")] internal static partial nuint GlobalSize(nint memory);
+        // STGMEDIUM.pUnkForRelease uses runtime COM object marshalling, unsupported by LibraryImport.
         [DllImport("ole32.dll")] internal static extern void ReleaseStgMedium(ref STGMEDIUM medium);
-        [DllImport("kernel32.dll")] internal static extern nint GlobalFree(nint memory);
+        [LibraryImport("kernel32.dll")] internal static partial nint GlobalFree(nint memory);
         [StructLayout(LayoutKind.Sequential)] internal struct Message
         { internal nint Window; internal uint Id; internal nuint WParam; internal nint LParam; internal uint Time; internal int X, Y; internal uint Private; }
-        [DllImport("user32.dll")] internal static extern bool PeekMessage(out Message message, nint window, uint min, uint max, uint remove);
-        [DllImport("user32.dll")] internal static extern bool TranslateMessage(ref Message message);
-        [DllImport("user32.dll")] internal static extern nint DispatchMessage(ref Message message);
+        [LibraryImport("user32.dll", EntryPoint = "PeekMessageA")][return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool PeekMessage(out Message message, nint window, uint min, uint max, uint remove);
+        [LibraryImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] internal static partial bool TranslateMessage(ref Message message);
+        [LibraryImport("user32.dll", EntryPoint = "DispatchMessageA")] internal static partial nint DispatchMessage(ref Message message);
     }
 }
 

@@ -12,7 +12,7 @@ namespace VelaShell.Rdp.Security;
 /// context's EncryptMessage/DecryptMessage.
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class SspiNegotiate : INlaSecurityContext
+internal sealed partial class SspiNegotiate : INlaSecurityContext
 {
     private const int SECPKG_CRED_OUTBOUND = 2;
     private const int SECURITY_NATIVE_DREP = 0x10;
@@ -51,18 +51,22 @@ internal sealed class SspiNegotiate : INlaSecurityContext
         new Span<byte>((void*)_cred, IntPtr.Size * 2).Clear();
         new Span<byte>((void*)_ctx, IntPtr.Size * 2).Clear();
 
-        var identity = new SEC_WINNT_AUTH_IDENTITY
+        int rc;
+        fixed (char* userPointer = username, domainPointer = domain, passwordPointer = password)
         {
-            User = username,
-            UserLength = username.Length,
-            Domain = domain,
-            DomainLength = domain.Length,
-            Password = password,
-            PasswordLength = password.Length,
-            Flags = SEC_WINNT_AUTH_IDENTITY_UNICODE
-        };
-        int rc = AcquireCredentialsHandle(null, "Negotiate", SECPKG_CRED_OUTBOUND, IntPtr.Zero, ref identity,
-            IntPtr.Zero, IntPtr.Zero, _cred, out _);
+            var identity = new SEC_WINNT_AUTH_IDENTITY
+            {
+                User = userPointer,
+                UserLength = username.Length,
+                Domain = domainPointer,
+                DomainLength = domain.Length,
+                Password = passwordPointer,
+                PasswordLength = password.Length,
+                Flags = SEC_WINNT_AUTH_IDENTITY_UNICODE
+            };
+            rc = AcquireCredentialsHandle(null, "Negotiate", SECPKG_CRED_OUTBOUND, IntPtr.Zero, ref identity,
+                IntPtr.Zero, IntPtr.Zero, _cred, out _);
+        }
         if (rc != 0)
         {
             throw new RdpProtocolException($"NLA could not acquire credentials (0x{rc:X8}).");
@@ -224,39 +228,39 @@ internal sealed class SspiNegotiate : INlaSecurityContext
         public IntPtr pBuffers;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct SEC_WINNT_AUTH_IDENTITY
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct SEC_WINNT_AUTH_IDENTITY
     {
-        public string? User;
+        public char* User;
         public int UserLength;
-        public string? Domain;
+        public char* Domain;
         public int DomainLength;
-        public string? Password;
+        public char* Password;
         public int PasswordLength;
         public int Flags;
     }
 
-    [DllImport("secur32.dll", EntryPoint = "AcquireCredentialsHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int AcquireCredentialsHandle(string? pszPrincipal, string pszPackage, int fCredentialUse,
+    [LibraryImport("secur32.dll", EntryPoint = "AcquireCredentialsHandleW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial int AcquireCredentialsHandle(string? pszPrincipal, string pszPackage, int fCredentialUse,
         IntPtr pvLogonID, ref SEC_WINNT_AUTH_IDENTITY pAuthData, IntPtr pGetKeyFn, IntPtr pvGetKeyArgument, IntPtr phCredential, out long ptsExpiry);
 
-    [DllImport("secur32.dll", EntryPoint = "InitializeSecurityContextW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int InitializeSecurityContext(IntPtr phCredential, IntPtr phContext, string? pszTargetName,
+    [LibraryImport("secur32.dll", EntryPoint = "InitializeSecurityContextW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int InitializeSecurityContext(IntPtr phCredential, IntPtr phContext, string? pszTargetName,
         int fContextReq, int Reserved1, int TargetDataRep, IntPtr pInput, int Reserved2, IntPtr phNewContext,
         ref SecBufferDesc pOutput, out int pfContextAttr, out long ptsExpiry);
 
-    [DllImport("secur32.dll", SetLastError = true)]
-    private static extern int EncryptMessage(IntPtr phContext, uint fQOP, ref SecBufferDesc pMessage, uint MessageSeqNo);
+    [LibraryImport("secur32.dll", SetLastError = true)]
+    private static partial int EncryptMessage(IntPtr phContext, uint fQOP, ref SecBufferDesc pMessage, uint MessageSeqNo);
 
-    [DllImport("secur32.dll", SetLastError = true)]
-    private static extern int DecryptMessage(IntPtr phContext, ref SecBufferDesc pMessage, uint MessageSeqNo, out uint pfQOP);
+    [LibraryImport("secur32.dll", SetLastError = true)]
+    private static partial int DecryptMessage(IntPtr phContext, ref SecBufferDesc pMessage, uint MessageSeqNo, out uint pfQOP);
 
-    [DllImport("secur32.dll", SetLastError = true)]
-    private static extern int QueryContextAttributes(IntPtr phContext, int ulAttribute, IntPtr pBuffer);
+    [LibraryImport("secur32.dll", EntryPoint = "QueryContextAttributesW", SetLastError = true)]
+    private static partial int QueryContextAttributes(IntPtr phContext, int ulAttribute, IntPtr pBuffer);
 
-    [DllImport("secur32.dll", SetLastError = true)]
-    private static extern int DeleteSecurityContext(IntPtr phContext);
+    [LibraryImport("secur32.dll", SetLastError = true)]
+    private static partial int DeleteSecurityContext(IntPtr phContext);
 
-    [DllImport("secur32.dll", SetLastError = true)]
-    private static extern int FreeCredentialsHandle(IntPtr phCredential);
+    [LibraryImport("secur32.dll", SetLastError = true)]
+    private static partial int FreeCredentialsHandle(IntPtr phCredential);
 }

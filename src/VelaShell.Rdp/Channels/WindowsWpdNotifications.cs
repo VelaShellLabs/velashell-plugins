@@ -5,7 +5,7 @@ using System.Runtime.Versioning;
 namespace VelaShell.Rdp.Channels;
 
 [SupportedOSPlatform("windows")]
-internal sealed class WindowsWpdNotifications : IWpdNotifications
+internal sealed partial class WindowsWpdNotifications : IWpdNotifications
 {
     public IDisposable Register(Action<WpdDeviceChange> changed)
     {
@@ -84,8 +84,8 @@ internal sealed class WindowsWpdNotifications : IWpdNotifications
     }
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private delegate uint Callback(nint notification, nint context, uint action, nint eventData, uint eventDataSize);
-    [DllImport("cfgmgr32.dll", ExactSpelling = true)]
-    private static extern uint CM_Register_Notification(ref Filter filter, nint context, Callback callback, out nint notification);
-    [DllImport("cfgmgr32.dll", ExactSpelling = true)]
-    private static extern uint CM_Unregister_Notification(nint notification);
+    [LibraryImport("cfgmgr32.dll")]
+    private static partial uint CM_Register_Notification(ref Filter filter, nint context, Callback callback, out nint notification);
+    [LibraryImport("cfgmgr32.dll")]
+    private static partial uint CM_Unregister_Notification(nint notification);
 }

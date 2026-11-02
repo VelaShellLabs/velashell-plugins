@@ -116,6 +116,14 @@ Assert.AreSequenceEqual(content, downloaded);
 
 同一条规则适用于任何 span 接收者或 span 实参的调用:**调用的实参列表里不许出现 `await`**。
 
+### 原生互操作:优先 LibraryImport
+
+- 所有新增或修改的 P/Invoke(含测试与脚本)优先使用 `LibraryImport` 与 `static partial` 方法。
+- 只有源生成封送确实不支持且不能用等价的原生签名简单表达时,才保留 `DllImport`;在声明旁说明具体限制(例如经典 COM 接口或 `STGMEDIUM.pUnkForRelease` 的运行时 COM 封送)。
+- 保持原生 ABI、调用约定、结构布局、缓冲区长度、句柄/回调生命周期与 `SetLastError` 语义。显式声明字符串编码及 Win32 `BOOL` 封送。
+- `LibraryImport` 不自动探测 `A` / `W` 后缀:方法名不等于实际导出名时必须设置 `EntryPoint`,如 `QueryContextAttributesW`;不要把 `StringMarshalling.Utf16` 当作入口点后缀选择。
+- 迁移后编译受影响项目并运行相关平台回归测试,验证实际入口点与封送行为,不能仅凭编译通过认定运行时兼容。
+
 ### 提交约束
 
 - **所有提交信息与 PR 描述都不要附加 Claude Code 等 AI 工具的作者信息** —— 不加 `Co-Authored-By: Claude …` 行,也不加 `🤖 Generated with Claude Code` 之类的署名。VelaShellLabs 下所有仓库一致适用。

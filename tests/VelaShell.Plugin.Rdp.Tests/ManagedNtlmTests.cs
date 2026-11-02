@@ -55,6 +55,29 @@ public sealed class ManagedNtlmTests
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => auth.Unseal([.. signature, .. encrypted]));
     }
 
+    [TestMethod]
+    [DataRow("Domain", "User", "password")]
+    [DataRow("域", "用户", "密码")]
+    [DataRow("", "User", "password")]
+    public void WindowsSspiCompletesChallengeQueriesSizesAndSeals(string domain, string user, string password)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows SSPI requires Windows.");
+            return;
+        }
+        using var auth = new SspiNegotiate(domain, user, password, "127.0.0.1");
+        _ = auth.Step([]);
+        byte[] response = auth.Step(BuildChallenge());
+        Assert.IsTrue(auth.IsComplete);
+        Assert.AreSequenceEqual("NTLMSSP\0"u8.ToArray(), response[..8]);
+        Assert.AreEqual(3u, BinaryPrimitives.ReadUInt32LittleEndian(response.AsSpan(8)));
+        Assert.AreEqual(domain, Encoding.Unicode.GetString(Field(response, 28)));
+        Assert.AreEqual(user, Encoding.Unicode.GetString(Field(response, 36)));
+        byte[] sealedMessage = auth.Seal([1, 2, 3, 4]);
+        Assert.IsTrue(sealedMessage.Length > 4, "The queried context sizes must provide space for the sealing signature.");
+    }
+
     private static byte[] Complete(ManagedNtlm auth)
     {
         _ = auth.Step([]);
