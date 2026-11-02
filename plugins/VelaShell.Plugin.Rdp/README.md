@@ -9,6 +9,22 @@ external RDP window is launched.
 
 Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
 
+## Managed GFX and H.264
+
+The **Graphics pipeline** setting on **Experience** (`graphicsMode`) defaults to `auto`.
+It enables the managed MS-RDPEGFX dynamic channel with AVC420, AVC444/AVC444v2, RemoteFX,
+Progressive, ClearCodec, Planar and Alpha decoding. Servers that do not open GFX continue
+using classic bitmap/GDI updates. Select `classic` and reconnect to disable GFX explicitly.
+Malformed data after GFX negotiation ends the session rather than replaying updates on another path.
+
+The same C# implementation runs on Windows, Linux and macOS. The `.vpx` includes the pure-managed
+`ManagedCodecs.H264` 0.6.0 and `ManagedCodecs.Core` assemblies and third-party notices;
+no FreeRDP/FFmpeg binary or graphics-specific native build is needed. H.264 uses CPU decoding.
+Desktop/scaled-output mappings are implemented; RemoteApp window mappings and Progressive V2
+(codec 13) are not. Offline tests cover real IDR/P decoding, AVC444 reconstruction, cache/context
+lifetimes and frame acknowledgements. Real Windows-server interoperability and 4K/video performance
+still require live-server validation; the CI matrix runs codec/protocol tests on all three OSes.
+
 ## Remote audio playback
 
 Enable **Remote audio** on **Experience** (`audio`, off by default), then reconnect. `rdpsnd`
@@ -34,8 +50,8 @@ CREATE starts a fixed-name RAW document on the selected queue, ordered WRITE req
 The former implementation wrapped FreeRDP (C) behind a C++ ABI bridge with per-platform native
 builds and bundled OpenSSL/VC runtimes. This replaces all of it with managed C#: `SslStream`
 for TLS, `NegotiateAuthentication` for NLA/CredSSP, and a from-scratch decoder for classic
-interleaved-RLE bitmaps. The result is one assembly that runs on every RID with no native
-toolchain, no CMake, and nothing to compile per platform — far simpler to maintain.
+interleaved-RLE bitmaps. The managed engine and its NuGet dependencies run on every RID with no graphics-native
+toolchain or CMake build. C# owns protocol handling, graphics state and presentation.
 
 ## Architecture
 
@@ -50,10 +66,11 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
 - **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
 - **Graphics** — interleaved-RLE and RDP 6.0 planar decode, GDI drawing orders with a bitmap cache
   (`Orders.cs`, ported from FreeRDP), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
-  region; fragmented fast-path updates are reassembled (`Graphics/`).
+  region; fragmented fast-path updates are reassembled. MS-RDPEGFX adds ZGFX decompression,
+  surface/cache operations and managed AVC420/AVC444 decoding (`Graphics/`).
 - **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
 - **Channels** — clipboard (cliprdr), audio playback (rdpsnd), and selected drives, ports and legacy printers (rdpdr)
-  over chunked static virtual channels; drdynvc supports display control (MS-RDPEDISP),
+  over chunked static virtual channels; drdynvc supports graphics (MS-RDPEGFX), display control (MS-RDPEDISP),
   the selected camera (MS-RDPECAM) and selected Windows portable devices (MS-RDPEPNP)
   (`Channels/`).
 
@@ -244,13 +261,13 @@ before the workspace attaches, and format names follow the server's negotiated c
 Remote text/images synchronize automatically; Windows remote file descriptors are published without
 content reads. A newer local copy supersedes pending publication. Unchanged content is not echoed back.
 
-No microphone capture, multiple monitors or the graphics pipeline (RemoteFX/GFX/H.264) are negotiated: the server
+Microphone capture and multiple monitors are not negotiated. When GFX is disabled or unopened, the server
 renders via classic bitmap updates (interleaved RLE, RDP 6.0 planar at 32 bpp) and GDI drawing orders
 (DstBlt, PatBlt, OpaqueRect, MultiOpaqueRect, ScrBlt, MemBlt from a 600/600/2048-entry revision 2 bitmap
 cache; `RdpClientOptions.DrawingOrders`, on by default) with MPPC bulk compression. Orders let a server
 scroll with a screen copy and repaint repeated tiles from the cache instead of resending pixels; xrdp draws
 the whole desktop as cached MemBlts, newer Windows servers send bitmaps either way. The order stream
-itself is budgeted (16 desktops of drawing per update, a 256 MiB cache). Dynamic resolution uses the display-control channel only; GFX is declined. The engine
+itself is budgeted (16 desktops of drawing per update, a 256 MiB cache). Dynamic resolution uses the display-control channel; GFX reset/surface state follows the server's graphics commands. The engine
 runs in-process and shares the host's crash boundary; it is not a sandbox — so everything a server
 sends is bounded (2026-11-01 review): bitmap rectangles are clipped and capped (8192 per side, a
 per-update budget of four desktop areas) before decoding; virtual-channel reassembly is bounded by
@@ -272,7 +289,7 @@ dotnet build .\plugins\VelaShell.Plugin.Rdp -c Release
 dotnet build .\plugins\VelaShell.Plugin.Rdp -c Release -t:PackVpx
 ```
 
-Uses the repository's .NET 11, SDK and Avalonia settings without changing dependencies. Platform interop includes `WindowsVirtualFileClipboard` (system ole32/user32/kernel32) and
+Uses the repository's .NET 11, SDK and Avalonia settings, adding the pure-managed `ManagedCodecs.H264` 0.6.0 dependency for GFX. Platform interop includes `WindowsVirtualFileClipboard` (system ole32/user32/kernel32) and
 `UnixClipboardFile`, which P/Invokes the OS `libc` (`open`/`fstat`)
 to open a clipboard file for local→remote transfer without blocking on a FIFO or following a
 symlink; Windows source files use the .NET file API.

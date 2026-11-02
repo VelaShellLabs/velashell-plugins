@@ -6,6 +6,8 @@ into a standalone, UI-agnostic library so it can be reused on its own.
 
 Released under the **MIT License** (see [LICENSE](LICENSE)) alongside the
 [velashell-plugins](https://github.com/VelaShellLabs/velashell-plugins) repository.
+Adapted codec algorithms and bundled managed dependencies retain the notices in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 
 ## What it does
 
@@ -18,11 +20,12 @@ Released under the **MIT License** (see [LICENSE](LICENSE)) alongside the
 - **Graphics** — interleaved RLE (8–24 bpp) and RDP 6.0 planar (32 bpp) bitmap decoding, MPPC bulk
   decompression, GDI drawing orders (DstBlt, PatBlt, ScrBlt, OpaqueRect, MultiOpaqueRect, MemBlt) with a revision 2
   bitmap cache, and pointer shapes (`IRdpPointerSource`), into a BGRA framebuffer that tracks its changed region;
-  fast-path fragment reassembly.
+  fast-path fragment reassembly. The managed MS-RDPEGFX pipeline adds ZGFX, surfaces/caches,
+  frame acknowledgements, ClearCodec, RemoteFX/Progressive, and H.264 AVC420/AVC444/AVC444v2.
 - **Input** — fast-path keyboard (scancode), Unicode and mouse; Unicode text is batched 7 characters per PDU.
 - **Channels** — clipboard (cliprdr), folder redirection (rdpdr), and dynamic resolution over the
-  display-control channel (drdynvc + MS-RDPEDISP); other dynamic channels are declined so the
-  server keeps to the classic bitmap path.
+  display-control channel (drdynvc + MS-RDPEDISP), plus the registered graphics, camera and
+  portable-device dynamic channels. Unregistered dynamic channels are declined.
 
 - **Audio output** — opt-in `AudioPlayback` over `rdpsnd` (MS-RDPEA), including formats, training,
   WaveInfo/Wave, Wave2 and playback confirmations. PCM 8/16-bit mono/stereo at 8–48 kHz plays on
@@ -30,7 +33,29 @@ Released under the **MIT License** (see [LICENSE](LICENSE)) alongside the
   (`libasound.so.2` plus a working ALSA/PipeWire/PulseAudio configuration). Audio failures are replayed
   through `IRdpAudioSource.AudioPlaybackFailed` and disable audio without disconnecting the desktop.
 
-It does **not** negotiate microphone capture, multiple monitors, or the graphics pipeline (RemoteFX/GFX).
+It does **not** negotiate microphone capture, multiple monitors or RemoteApp window mappings.
+
+## Managed graphics pipeline
+
+`RdpClientOptions.EnableGraphicsPipeline` defaults to `true`. The server may open
+`Microsoft::Windows::RDS::Graphics` and select RDPGFX 8.0 through 10.7; servers that do not
+open it retain classic bitmap/GDI rendering. Set the option to `false` to force the classic path.
+`GraphicsLog` reports negotiation and protocol failures without recording decoded desktop content.
+
+GFX protocol handling and pixel reconstruction are C#. H.264 uses the pure-managed NuGet
+`ManagedCodecs.H264` 0.6.0 and `ManagedCodecs.Core`; no native decoder, FFmpeg installation or
+per-platform graphics binary is required. AVC444/v2 main and auxiliary pictures share one
+prediction chain, with surface state retained between updates. Progressive sub-band history
+survives deletion of an encoding context and is released with its surface.
+
+Desktop and scaled-output mappings, raw/Planar/Alpha, ClearCodec (including NSCodec/RLEX),
+RemoteFX RLGR1/RLGR3 and Progressive simple/first/upgrade are supported. Progressive V2
+(codec 13) and RemoteApp window mappings are not supported. A malformed negotiated graphics
+stream ends the session; reconnect with the classic option if needed. No mid-stream replay is attempted.
+
+H.264 decoding is software-only. Codec/protocol tests include real IDR/P pictures and framebuffer
+presentation with ACKs; these do not establish real Windows-server interoperability or 4K video
+throughput. Windows, Linux and macOS use the same code, with Unix codec tests included in CI.
 
 ## Usage
 
@@ -48,6 +73,7 @@ await using var session = await RdpManagedSession.ConnectAsync(new RdpClientOpti
     DesktopScaleFactor = 150,   // the local display scale, so remote text is not tiny on a high-DPI screen
     Clipboard = true,
     AudioPlayback = true,       // default output device; optional, disabled by default
+    EnableGraphicsPipeline = true, // default; false forces classic bitmap/GDI
     Drives = [new DriveMapping("work", @"C:\Work\Share")],
 }, cancellationToken);
 

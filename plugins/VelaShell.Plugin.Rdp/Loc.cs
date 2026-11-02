@@ -19,6 +19,15 @@ internal sealed class Loc(string locale)
 
     private static readonly Dictionary<string, string[]> Text = new(StringComparer.Ordinal)
     {
+        ["GraphicsMode"] = ["Graphics mode", "图形模式", "圖形模式", "グラフィックス モード", "그래픽 모드"],
+        ["GraphicsAuto"] = ["Automatic (RDPGFX / H.264)", "自动（RDPGFX / H.264）", "自動（RDPGFX / H.264）", "自動 (RDPGFX / H.264)", "자동 (RDPGFX / H.264)"],
+        ["GraphicsClassic"] = ["Classic", "经典", "傳統", "クラシック", "클래식"],
+        ["GraphicsModeHint"] = [
+            "Automatic offers RDPGFX with AVC420/AVC444/AVC444v2; the server selects the graphics mode. Classic disables RDPGFX. A graphics failure after negotiation disconnects the session.",
+            "自动模式协商 RDPGFX（AVC420/AVC444/AVC444v2），由服务器选择图形模式。经典模式关闭 RDPGFX。协商后图形处理失败会断开会话。",
+            "自動模式協商 RDPGFX（AVC420/AVC444/AVC444v2），由伺服器選擇圖形模式。傳統模式關閉 RDPGFX。協商後圖形處理失敗會中斷工作階段。",
+            "自動では RDPGFX (AVC420/AVC444/AVC444v2) を提示し、サーバーが描画方式を選択します。クラシックは RDPGFX を無効にします。ネゴシエーション後の描画障害は接続を終了します。",
+            "자동은 RDPGFX (AVC420/AVC444/AVC444v2)를 제안하고 서버가 그래픽 모드를 선택합니다. 클래식은 RDPGFX를 비활성화합니다. 협상 후 그래픽 오류가 발생하면 연결이 종료됩니다."],
         ["WpdDevices"] = ["Portable device (WPD)", "便携设备（WPD）", "可攜式裝置（WPD）", "ポータブル デバイス (WPD)", "휴대용 장치 (WPD)"],
         ["WpdHint"] = [
             "Allow the remote session to read and change this selected Windows portable device. Off by default; WPD only, not general USB. Removal closes its handles; reinsertion resumes only when its unique identity is verified.",

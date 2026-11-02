@@ -18,6 +18,8 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     internal IReadOnlyList<PrinterMapping> Printers { get; init; } = [];
     internal RdpCameraDevice? Camera { get; init; }
     internal IReadOnlyList<string> WpdDevices { get; init; } = [];
+    internal bool EnableGraphicsPipeline { get; init; } = true;
+    internal const string GraphicsModeKey = "graphicsMode";
     internal RdpTransportMode Transport { get; init; } = RdpTransportMode.Auto;
     internal bool AdaptiveNetwork { get; init; } = true;
     internal const string TransportKey = "transport", AdaptiveNetworkKey = "adaptiveNetwork";
@@ -132,6 +134,12 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             _ => throw new ProtocolConnectionException(loc.Format("Invalid", SecurityKey))
         };
 
+        bool graphics = request.GetString(GraphicsModeKey).Trim().ToLowerInvariant() switch
+        {
+            "" or "auto" => true,
+            "classic" => false,
+            _ => throw new ProtocolConnectionException(loc.Format("Invalid", GraphicsModeKey))
+        };
         int colorDepth = request.GetString(ColorDepthKey).Trim() switch
         {
             "" => DefaultColorDepth,
@@ -192,6 +200,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
             Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance, colorDepth)
         {
+            EnableGraphicsPipeline = graphics,
             Transport = request.GetString(TransportKey).Trim().ToLowerInvariant() switch
             {
                 "" or "auto" => RdpTransportMode.Auto,
@@ -324,6 +333,16 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             DefaultValue = DefaultColorDepth.ToString(CultureInfo.InvariantCulture),
             Page = ExperiencePage,
             Choices = [new("16", loc["ColorDepth16"]), new("24", loc["ColorDepth24"]), new("32", loc["ColorDepth32"])]
+        });
+        fields.Add(new()
+        {
+            Key = GraphicsModeKey,
+            Label = loc["GraphicsMode"],
+            Hint = loc["GraphicsModeHint"],
+            Kind = ProtocolSettingKind.Choice,
+            DefaultValue = "auto",
+            Page = ExperiencePage,
+            Choices = [new("auto", loc["GraphicsAuto"]), new("classic", loc["GraphicsClassic"])]
         });
         fields.Add(new()
         {

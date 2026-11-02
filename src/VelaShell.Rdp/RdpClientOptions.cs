@@ -57,7 +57,10 @@ public sealed record RdpClientOptions
     /// </summary>
     public bool AudioPlayback { get; init; }
 
-    /// <summary>Requested colour depth in bits per pixel: 15, 16, 24 or 32 (32 decodes RDP 6.0 planar bitmaps).</summary>
+    /// <summary>
+    /// Requested classic colour depth: 15, 16, 24 or 32 (32 decodes RDP 6.0 planar bitmaps).
+    /// Offering the managed graphics pipeline requests a 32-bit desktop regardless of this setting.
+    /// </summary>
     public int ColorDepth { get; init; } = 16;
 
     /// <summary>
@@ -73,6 +76,16 @@ public sealed record RdpClientOptions
     /// and redraws repeated tiles without resending pixels. Newer Windows servers send bitmaps either way.
     /// </summary>
     public bool DrawingOrders { get; init; } = true;
+
+    /// <summary>
+    /// Offer the managed RDP graphics pipeline, including H.264 AVC420/AVC444/AVC444v2.
+    /// Defaults to true; false selects classic graphics. A server may still choose classic graphics.
+    /// Graphics failures after negotiation end the session.
+    /// </summary>
+    public bool EnableGraphicsPipeline { get; init; } = true;
+
+    /// <summary>Optional graphics initialization/failure diagnostics, called on background threads.</summary>
+    public Action<string>? GraphicsLog { get; init; }
 
     /// <summary>
     /// When set, the server's leaf certificate must match this SHA-256 hash (pinning); CA, name and

@@ -44,6 +44,8 @@ internal static class RdpConnector
             Camera = settings.Camera,
             WpdDevices = settings.WpdDevices,
             DriveRedirectionLog = driveLog,
+            GraphicsLog = driveLog,
+            EnableGraphicsPipeline = settings.EnableGraphicsPipeline,
             Security = settings.Security,
             Performance = settings.Performance,
             AudioPlayback = settings.Audio

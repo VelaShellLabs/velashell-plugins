@@ -31,9 +31,9 @@ internal static class GccData
 
     internal static byte[] BuildClientData(int width, int height, int bpp, uint serverSelectedProtocol,
         string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels, int scaleFactor = 100,
-        bool messageChannel = false, bool multitransport = false, bool adaptiveNetwork = false)
+        bool messageChannel = false, bool multitransport = false, bool adaptiveNetwork = false, bool graphicsPipeline = false)
     {
-        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout, scaleFactor, messageChannel && adaptiveNetwork);
+        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout, scaleFactor, messageChannel && adaptiveNetwork, graphicsPipeline);
         byte[] security = BuildSecurity();
         byte[] net = BuildNet(channels);
         byte[] cluster = BuildCluster(serverSelectedProtocol);
@@ -52,7 +52,7 @@ internal static class GccData
     }
 
     private static byte[] BuildCore(int width, int height, int bpp, uint serverSelectedProtocol,
-        string clientName, uint keyboardLayout, int scaleFactor = 100, bool adaptiveNetwork = false)
+        string clientName, uint keyboardLayout, int scaleFactor = 100, bool adaptiveNetwork = false, bool graphicsPipeline = false)
     {
         var w = new ByteWriter(256);
         int headerAt = w.Length;
@@ -82,6 +82,7 @@ internal static class GccData
             early |= 0x0002;             // RNS_UD_CS_WANT_32BPP_SESSION
         }
 
+        if (graphicsPipeline) { early |= 0x0100; } // RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL
         if (adaptiveNetwork) { early |= 0x00A0; } // VALID_CONNECTION_TYPE | SUPPORT_NETCHAR_AUTODETECT
         w.U16LE(early);
         w.Zeros(64);                                // clientDigProductId
