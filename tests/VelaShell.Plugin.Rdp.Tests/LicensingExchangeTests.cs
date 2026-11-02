@@ -112,7 +112,21 @@ public sealed class LicensingExchangeTests
 
     private sealed class LicenseServer : IDisposable
     {
-        private readonly RSA _rsa;
+        // Public protocol constants, not deployment credentials: MS-RDPBCGR 5.3.3.1.1.
+        // https://learn.microsoft.com/openspecs/windows_protocols/ms-rdpbcgr/c2389e29-5706-4ac4-b555-e26f93144db7
+        private static readonly RSAParameters SigningKey = new()
+        {
+            Modulus = Convert.FromHexString(
+                "3D3A5EBD72433EC94DBBC11E4ABA5FCB3E882087EFF5C1E2D7B76B9AF2524595" +
+                "CE63656B583AFEEF7CE7BFFE3DF65C7D6C5E06091AF561BB2093095F056DEA87").Reverse().ToArray(),
+            Exponent = Convert.FromHexString("C0887B5B"),
+            D = Convert.FromHexString(
+                "87A71932DA11875558001616256568F8243EE6FAE9674994CF92CC3399E80860" +
+                "179A129F24DDB12499C73AB80A7B0DDD350779170B519BB3C7100113E73FF35F").Reverse().ToArray()
+        };
+
+        private readonly RSA? _rsa;
+        private readonly RSAParameters _key;
         private readonly byte[] _certificate;
         private readonly byte[] _random = RandomNumberGenerator.GetBytes(32);
         private readonly byte[] _challenge = Encoding.Unicode.GetBytes("TEST\0");
@@ -122,7 +136,16 @@ public sealed class LicensingExchangeTests
 
         internal LicenseServer(bool x509, bool tamperSignature = false, int keySize = 2048)
         {
-            _rsa = RSA.Create(keySize);
+            if (!x509 && keySize == 512)
+            {
+                // macOS rejects 512-bit OS RSA keys; raw protocol arithmetic needs no OS key object.
+                _key = SigningKey;
+            }
+            else
+            {
+                _rsa = RSA.Create(keySize);
+                _key = _rsa.ExportParameters(true);
+            }
             _certificate = x509 ? X509Certificate() : ProprietaryCertificate();
             if (tamperSignature)
             {
@@ -151,7 +174,7 @@ public sealed class LicensingExchangeTests
             ClientRandom = r.ReadBytes(32);
             Assert.AreEqual(32, ClientRandom.Length);
             byte[] encrypted = ReadBlob(r, 2);
-            RSAParameters key = _rsa.ExportParameters(true);
+            RSAParameters key = _key;
             int width = key.Modulus!.Length;
             Assert.AreEqual(width + 8, encrypted.Length);
             Assert.AreSequenceEqual(new byte[8], encrypted.AsSpan(width).ToArray());
@@ -262,7 +285,7 @@ public sealed class LicensingExchangeTests
 
         private byte[] ProprietaryCertificate()
         {
-            RSAParameters key = _rsa.ExportParameters(false);
+            RSAParameters key = _key;
             byte[] publicKey = Encode(w =>
             {
                 w.Write(0x31415352u);
@@ -280,14 +303,8 @@ public sealed class LicensingExchangeTests
                 w.Write(1u);
                 WriteBlob(w, 6, publicKey);
             });
-            // Public protocol constants, not deployment credentials: MS-RDPBCGR 5.3.3.1.1.
-            // https://learn.microsoft.com/openspecs/windows_protocols/ms-rdpbcgr/c2389e29-5706-4ac4-b555-e26f93144db7
-            BigInteger modulus = new(Convert.FromHexString(
-                "3D3A5EBD72433EC94DBBC11E4ABA5FCB3E882087EFF5C1E2D7B76B9AF2524595" +
-                "CE63656B583AFEEF7CE7BFFE3DF65C7D6C5E06091AF561BB2093095F056DEA87"), isUnsigned: true);
-            BigInteger exponent = new(Convert.FromHexString(
-                "87A71932DA11875558001616256568F8243EE6FAE9674994CF92CC3399E80860" +
-                "179A129F24DDB12499C73AB80A7B0DDD350779170B519BB3C7100113E73FF35F"), isUnsigned: true);
+            BigInteger modulus = new(SigningKey.Modulus!, isUnsigned: true, isBigEndian: true);
+            BigInteger exponent = new(SigningKey.D!, isUnsigned: true, isBigEndian: true);
             byte[] paddedHash = [.. MD5.HashData(signed), 0, .. Enumerable.Repeat((byte)0xFF, 45), 1];
             byte[] signature = new byte[72];
             Assert.IsTrue(BigInteger.ModPow(new BigInteger(paddedHash, isUnsigned: true), exponent, modulus)
@@ -303,7 +320,7 @@ public sealed class LicensingExchangeTests
             rootRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
             DateTimeOffset now = DateTimeOffset.UtcNow;
             using X509Certificate2 root = rootRequest.CreateSelfSigned(now.AddDays(-2), now.AddDays(2));
-            var leafRequest = new CertificateRequest("CN=Licensing fixture leaf", _rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var leafRequest = new CertificateRequest("CN=Licensing fixture leaf", _rsa!, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             leafRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             leafRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyEncipherment, true));
             using X509Certificate2 leaf = leafRequest.Create(root, now.AddDays(-1), now.AddDays(1), new byte[] { 1, 2, 3, 4 });
@@ -321,7 +338,7 @@ public sealed class LicensingExchangeTests
             });
         }
 
-        public void Dispose() => _rsa.Dispose();
+        public void Dispose() => _rsa?.Dispose();
     }
 
     private sealed class LicensingStream : Stream
