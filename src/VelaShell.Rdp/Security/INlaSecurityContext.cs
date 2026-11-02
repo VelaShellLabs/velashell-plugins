@@ -54,6 +54,14 @@ internal sealed class ManagedNtlm : INlaSecurityContext
 
     internal ManagedNtlm(string domain, string username, string password, string targetHost)
     {
+        // On Linux, Package="NTLM" otherwise uses GSSAPI (and requires an installed NTLM provider).
+        // The host also sets this in runtimeconfig: .NET caches it at the first NegotiateAuthentication,
+        // which may belong to another plugin. This covers standalone use before that first call.
+        if (!OperatingSystem.IsWindows())
+        {
+            AppContext.SetSwitch("System.Net.Security.UseManagedNtlm", true);
+        }
+
         _auth = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
         {
             Package = "NTLM",
