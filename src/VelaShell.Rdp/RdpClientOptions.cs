@@ -12,6 +12,15 @@ public sealed record RdpClientOptions
     /// <summary>TCP port; defaults to the standard RDP port 3389.</summary>
     public int Port { get; init; } = 3389;
 
+    /// <summary>Try reliable and lossy UDP side channels when supported; TCP remains the primary transport.</summary>
+    public RdpTransportMode Transport { get; init; } = RdpTransportMode.Auto;
+
+    /// <summary>Enable server network detection and adaptive experience hints. Disable to preserve manual performance flags.</summary>
+    public bool AdaptiveNetwork { get; init; } = true;
+
+    /// <summary>Set for SSH/proxy tunnels that forward TCP only. Prevents direct UDP connections.</summary>
+    public bool TcpTunnel { get; init; }
+
     public string Username { get; init; } = "";
     public string Password { get; init; } = "";
 

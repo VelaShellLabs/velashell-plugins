@@ -89,6 +89,33 @@ public sealed class RdpPointerAndInputTests
     });
 
     [TestMethod]
+    public void PoorNetworkCoalescesMotionWithoutReorderingKeys() => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        session.SetNetwork(new(Quality: RdpNetworkQuality.Poor));
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        var started = new TaskCompletionSource();
+        desktop.MovePointer(1, 1);
+        desktop.Queue(() => { started.SetResult(); return Task.CompletedTask; });
+        await started.Task;
+        desktop.MovePointer(2, 2);
+        desktop.MovePointer(3, 3);
+        var keyed = new TaskCompletionSource();
+        desktop.Queue(() =>
+        {
+            Assert.AreEqual((0x0800u, 3u, 3u), session.Mouse.Last());
+            keyed.SetResult(); return Task.CompletedTask;
+        });
+        desktop.MovePointer(4, 4);
+        var done = new TaskCompletionSource();
+        desktop.Queue(() => { done.SetResult(); return Task.CompletedTask; });
+        await keyed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await done.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.AreEqual((0x0800u, 4u, 4u), session.Mouse.Last());
+        Assert.IsFalse(session.Mouse.Any(p => p.X == 2));
+    });
+
+    [TestMethod]
     public void TypedTextIsBatchedSevenCharactersPerPdu()
     {
         byte[][] pdus = [.. FastPathInput.UnicodeText("abcdefghi")];

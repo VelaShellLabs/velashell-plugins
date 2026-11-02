@@ -2,8 +2,11 @@ using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
-internal sealed class FakeRdpSession : IRdpSession, IRdpAudioSource
+internal sealed class FakeRdpSession : IRdpSession, IRdpAudioSource, IRdpNetworkSource
 {
+    public RdpNetworkStatus NetworkStatus { get; private set; } = new();
+    public event Action<RdpNetworkStatus>? NetworkChanged;
+    internal void SetNetwork(RdpNetworkStatus status) { NetworkStatus = status; NetworkChanged?.Invoke(status); }
     public event Action<Exception>? AudioPlaybackFailed;
     internal void FailAudio(Exception error) => AudioPlaybackFailed?.Invoke(error);
     public event Action? FrameAvailable;

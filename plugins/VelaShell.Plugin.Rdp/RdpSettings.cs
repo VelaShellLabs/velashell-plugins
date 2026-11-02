@@ -18,6 +18,9 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     internal IReadOnlyList<PrinterMapping> Printers { get; init; } = [];
     internal RdpCameraDevice? Camera { get; init; }
     internal IReadOnlyList<string> WpdDevices { get; init; } = [];
+    internal RdpTransportMode Transport { get; init; } = RdpTransportMode.Auto;
+    internal bool AdaptiveNetwork { get; init; } = true;
+    internal const string TransportKey = "transport", AdaptiveNetworkKey = "adaptiveNetwork";
     internal const string PortsKey = "ports";
     internal const string TrustedThumbprintKey = "trustedThumbprint";
 
@@ -87,11 +90,11 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
             return value;
         }
-        bool Flag(string key)
+        bool Flag(string key, bool fallback = false)
         {
             if (!request.Settings.TryGetValue(key, out string? raw) || string.IsNullOrWhiteSpace(raw))
             {
-                return false;
+                return fallback;
             }
 
             if (!bool.TryParse(raw, out bool value))
@@ -189,6 +192,13 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
             Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance, colorDepth)
         {
+            Transport = request.GetString(TransportKey).Trim().ToLowerInvariant() switch
+            {
+                "" or "auto" => RdpTransportMode.Auto,
+                "tcp" => RdpTransportMode.Tcp,
+                _ => throw new ProtocolConnectionException(loc.Format("Invalid", TransportKey))
+            },
+            AdaptiveNetwork = Flag(AdaptiveNetworkKey, true),
             Ports = ParsePorts(request.GetString(PortsKey), loc),
             Printers = LocalPrinters.Selected(request, loc, enumeratePrinters ?? WindowsPrinterCatalog.GetPrinters),
             Camera = LocalCameras.Selected(request, loc, enumerateCameras ?? RdpCameraDevices.Enumerate),
@@ -314,6 +324,17 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             DefaultValue = DefaultColorDepth.ToString(CultureInfo.InvariantCulture),
             Page = ExperiencePage,
             Choices = [new("16", loc["ColorDepth16"]), new("24", loc["ColorDepth24"]), new("32", loc["ColorDepth32"])]
+        });
+        fields.Add(new()
+        {
+            Key = TransportKey, Label = loc["Transport"], Hint = loc["TransportHint"],
+            Kind = ProtocolSettingKind.Choice, DefaultValue = "auto", Page = ExperiencePage,
+            Choices = [new("auto", loc["TransportAuto"]), new("tcp", "TCP")]
+        });
+        fields.Add(new()
+        {
+            Key = AdaptiveNetworkKey, Label = loc["AdaptiveNetwork"], Hint = loc["AdaptiveNetworkHint"],
+            Kind = ProtocolSettingKind.Boolean, DefaultValue = "true", Page = ExperiencePage
         });
         // Experience toggles live on their own page, like mstsc's "Experience" tab. All unticked by
         // default: the responsiveness-first profile (no wallpaper, animations, themes or audio).

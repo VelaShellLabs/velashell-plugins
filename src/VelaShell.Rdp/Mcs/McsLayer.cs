@@ -56,6 +56,12 @@ internal sealed class McsLayer(RdpTransport transport)
         {
             await JoinChannelAsync(id, ct).ConfigureAwait(false);
         }
+        if (Server.MessageChannelId != 0)
+        {
+            if (Server.MessageChannelId == UserId || Server.MessageChannelId == Server.IoChannelId || Server.ChannelIds.Contains(Server.MessageChannelId))
+            { throw new RdpProtocolException("Duplicate MCS message channel ID."); }
+            await JoinChannelAsync(Server.MessageChannelId, ct).ConfigureAwait(false);
+        }
     }
 
     // ---- Send Data ----

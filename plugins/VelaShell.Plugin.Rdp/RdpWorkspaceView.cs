@@ -35,6 +35,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private bool _reconnecting;
     private string? _disconnectDetail;
     private string? _audioError;
+    private readonly IRdpNetworkSource? _network;
+    private int _disposed;
 
     internal void SetAudioError(string? error)
     {
@@ -51,6 +53,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     {
         _loc = loc;
         _context = context;
+        _network = session as IRdpNetworkSource;
+        if (_network is not null) { _network.NetworkChanged += OnNetworkChanged; }
         // No document header: the only toolbar action (Ctrl+Alt+Delete) moved into the floating remote-keys
         // button, so the remote desktop gets the full height above the 24px status bar.
         RowDefinitions = [with("*,24")];
@@ -449,9 +453,29 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         : _notice is { } notice ? notice
         : _failed ? _loc["InputFailed"]
         : _audioError is { } audioError ? _loc.Format("AudioFailed", audioError)
-        : _loc["Connected"] + " · " + _loc.Format("Resolution", Desktop.DesktopWidth, Desktop.DesktopHeight);
+        : _loc["Connected"] + " · " + _loc.Format("Resolution", Desktop.DesktopWidth, Desktop.DesktopHeight) + NetworkSummary();
+
+    private void OnNetworkChanged(RdpNetworkStatus _) => Dispatcher.UIThread.Post(() =>
+    {
+        if (Volatile.Read(ref _disposed) == 0) { UpdateStatus(); }
+    });
+
+    private string NetworkSummary()
+    {
+        if (_network is null) { return ""; }
+        RdpNetworkStatus network = _network.NetworkStatus;
+        string transport = "TCP" + (network.ReliableUdp ? " + UDP-R" : "") + (network.LossyUdp ? " + UDP-L" : "");
+        if (network.UdpFallback) { transport += " (" + _loc["UdpFallback"] + ")"; }
+        string result = " · " + transport;
+        if (network.RoundTripMilliseconds is { } rtt) { result += $" · {rtt} ms"; }
+        if (network.BandwidthKbps is { } bandwidth) { result += $" · {bandwidth} kbps"; }
+        if (network.Quality != RdpNetworkQuality.Unknown) { result += " · " + _loc["Network" + network.Quality]; }
+        return result;
+    }
     public async ValueTask DisposeAsync()
     {
+        Interlocked.Exchange(ref _disposed, 1);
+        if (_network is not null) { _network.NetworkChanged -= OnNetworkChanged; }
         _transferTimer.Stop();
         _noticeTimer.Stop();
         try { await _clipboard.DisposeAsync(); }

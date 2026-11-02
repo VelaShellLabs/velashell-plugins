@@ -156,6 +156,7 @@ public sealed class RdpdrChannelTests
             "localhost", 3389, "", "", "", 800, 600, 16, null, "localhost", []));
         using var wire = new MemoryStream();
         var transport = new VelaShell.Rdp.Wire.RdpTransport(wire);
+        typeof(RdpConnection).GetField("_mcs", flags)!.SetValue(connection, new VelaShell.Rdp.Mcs.McsLayer(transport));
         typeof(RdpConnection).GetField("_transport", flags)!.SetValue(connection, transport);
         typeof(RdpConnection).GetField("_ioChannel", flags)!.SetValue(connection, (ushort)1003);
         var channels = (Dictionary<ushort, string>)typeof(RdpConnection).GetField("_channelsById", flags)!.GetValue(connection)!;

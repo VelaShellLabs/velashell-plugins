@@ -9,7 +9,7 @@ namespace VelaShell.Rdp;
 /// a single background task pumps the connection while frames are coalesced and snapshotted on
 /// demand, and input, clipboard and dynamic-resolution requests are forwarded to the wire.
 /// </summary>
-public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
+public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, IRdpNetworkSource
 {
     internal RdpConnection Connection { get; }
     private readonly CancellationTokenSource _stop = new();
@@ -38,7 +38,14 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
     }
     private DrdynvcChannel? _drdynvc;
     private WpdRedirection? _wpd;
-    private Channel<byte[]>? _drdynvcQueue;
+    public RdpNetworkStatus NetworkStatus => Connection.Network.Status;
+    public event Action<RdpNetworkStatus>? NetworkChanged
+    {
+        add => Connection.Network.Changed += value;
+        remove => Connection.Network.Changed -= value;
+    }
+
+    private Channel<ChannelPayload>? _drdynvcQueue;
     private Task? _drdynvcWorker;
     private long _drdynvcQueuedBytes;
     private Exception? _dynamicChannelFailure;
@@ -226,7 +233,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
             options.Domain, options.Width, options.Height, options.ColorDepth, options.CertificatePin,
             string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
             options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
-            options.KeepAliveInterval);
+            options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel);
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
@@ -286,9 +293,9 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
         // thousand queue entries, and the worker can be held behind a large outbound message (a WPD read
         // reply, a camera frame). Overflow drops the session, so the 32 MB byte budget in OnChannelData is
         // the real bound; the count only caps per-entry overhead for tiny PDUs.
-        _drdynvcQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(16384) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+        _drdynvcQueue = Channel.CreateBounded<ChannelPayload>(new BoundedChannelOptions(16384) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         _drdynvc = new DrdynvcChannel((pdu, token) => Connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token,
-            options.DynamicResolution, LogDrive);
+            options.DynamicResolution, LogDrive, Connection.WaitForTunnelAsync, Connection.EnableTunnelReading, Connection.SendTunnelAsync);
         if (options.Camera is { } camera)
         {
             _ = new CameraChannel(_drdynvc, camera, () => OperatingSystem.IsWindows()
@@ -360,7 +367,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
         {
             long queued = Interlocked.Add(ref _drdynvcQueuedBytes, payload.Data.Length);
             if (payload.Data.Length > 1024 * 1024 || queued > 32 * 1024 * 1024
-                || _drdynvcQueue?.Writer.TryWrite(payload.Data) != true)
+                || _drdynvcQueue?.Writer.TryWrite(payload) != true)
             {
                 _ = Interlocked.Add(ref _drdynvcQueuedBytes, -payload.Data.Length);
                 throw new IOException("RDP dynamic-channel queue capacity exceeded; reconnect the session.");
@@ -397,10 +404,10 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
 
         try
         {
-            await foreach (byte[] pdu in _drdynvcQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
+            await foreach (ChannelPayload pdu in _drdynvcQueue.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
             {
-                _ = Interlocked.Add(ref _drdynvcQueuedBytes, -pdu.Length);
-                await _drdynvc.ProcessAsync(pdu).ConfigureAwait(false);
+                _ = Interlocked.Add(ref _drdynvcQueuedBytes, -pdu.Data.Length);
+                await _drdynvc.ProcessAsync(pdu.Data, pdu.TunnelType).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }

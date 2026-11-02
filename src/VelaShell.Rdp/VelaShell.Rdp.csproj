@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="VelaShell.Plugin.Rdp.Tests" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
   </ItemGroup>
 
 </Project>

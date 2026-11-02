@@ -13,6 +13,8 @@ internal sealed class GccServerData
     internal IReadOnlyList<ushort> ChannelIds { get; init; } = [];
     internal uint EncryptionMethod { get; init; }
     internal uint EncryptionLevel { get; init; }
+    internal ushort MessageChannelId { get; init; }
+    internal uint MultitransportFlags { get; init; }
 }
 
 /// <summary>
@@ -28,9 +30,10 @@ internal static class GccData
     private const ushort ScCore = 0x0C01, ScSecurity = 0x0C02, ScNet = 0x0C03;
 
     internal static byte[] BuildClientData(int width, int height, int bpp, uint serverSelectedProtocol,
-        string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels, int scaleFactor = 100)
+        string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels, int scaleFactor = 100,
+        bool messageChannel = false, bool multitransport = false, bool adaptiveNetwork = false)
     {
-        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout, scaleFactor);
+        byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout, scaleFactor, messageChannel && adaptiveNetwork);
         byte[] security = BuildSecurity();
         byte[] net = BuildNet(channels);
         byte[] cluster = BuildCluster(serverSelectedProtocol);
@@ -40,11 +43,16 @@ internal static class GccData
         blocks.Bytes(security);
         blocks.Bytes(net);
         blocks.Bytes(cluster);
+        if (messageChannel)
+        {
+            blocks.U16LE(0xC006); blocks.U16LE(8); blocks.U32LE(0);
+            if (multitransport) { blocks.U16LE(0xC00A); blocks.U16LE(8); blocks.U32LE(0x205); }
+        }
         return WrapConferenceCreateRequest(blocks.Span);
     }
 
     private static byte[] BuildCore(int width, int height, int bpp, uint serverSelectedProtocol,
-        string clientName, uint keyboardLayout, int scaleFactor = 100)
+        string clientName, uint keyboardLayout, int scaleFactor = 100, bool adaptiveNetwork = false)
     {
         var w = new ByteWriter(256);
         int headerAt = w.Length;
@@ -74,9 +82,10 @@ internal static class GccData
             early |= 0x0002;             // RNS_UD_CS_WANT_32BPP_SESSION
         }
 
+        if (adaptiveNetwork) { early |= 0x00A0; } // VALID_CONNECTION_TYPE | SUPPORT_NETCHAR_AUTODETECT
         w.U16LE(early);
         w.Zeros(64);                                // clientDigProductId
-        w.U8(0);                                    // connectionType
+        w.U8(adaptiveNetwork ? (byte)7 : (byte)0);   // CONNECTION_TYPE_AUTODETECT
         w.U8(0);                                    // pad1octet
         w.U32LE(serverSelectedProtocol);            // serverSelectedProtocol (echo)
         if (scaleFactor != 100)
@@ -185,7 +194,8 @@ internal static class GccData
         _ = Per.ReadOctetString(ref r, 4);                  // h221 key "McDn"
         _ = Per.ReadLength(ref r);                           // server data block length
 
-        ushort ioChannel = 0;
+        ushort ioChannel = 0, messageChannel = 0;
+        uint multitransport = 0;
         var channelIds = new List<ushort>();
         uint encMethod = 0, encLevel = 0;
         while (r.Remaining >= 4)
@@ -202,6 +212,12 @@ internal static class GccData
             ByteReader body = new(r.Peek(Math.Min(bodyLen, r.Remaining)));
             switch (type)
             {
+                case 0x0C04:
+                    messageChannel = body.U16LE();
+                    break;
+                case 0x0C08:
+                    multitransport = body.U32LE();
+                    break;
                 case ScCore:
                     break; // version / clientRequestedProtocols / earlyCapabilityFlags — not needed
                 case ScSecurity:
@@ -233,6 +249,8 @@ internal static class GccData
         return new GccServerData
         {
             IoChannelId = ioChannel,
+            MessageChannelId = messageChannel,
+            MultitransportFlags = multitransport,
             ChannelIds = channelIds,
             EncryptionMethod = encMethod,
             EncryptionLevel = encLevel
