@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace VelaShell.Rdp.Audio;
 
-internal sealed class AlsaDevice : IPcmDevice
+internal sealed partial class AlsaDevice : IPcmDevice
 {
     private const int Again = -11;
     private nint _pcm;
@@ -101,28 +101,38 @@ internal sealed class AlsaDevice : IPcmDevice
             throw new IOException($"Linux ALSA could not {operation}: {Marshal.PtrToStringUTF8(Native.snd_strerror(result))} (error {result}). Check the system default playback device and its PulseAudio/PipeWire ALSA configuration.");
     }
 
-    private static class Native
+    private static partial class Native
     {
         private const string Alsa = "libasound.so.2";
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_open(out nint pcm, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int stream, int mode);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_set_params(nint pcm, int format, int access, uint channels, uint rate, int softResample, uint latency);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_prepare(nint pcm);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern nint snd_pcm_writei(nint pcm, nint data, nuint frames);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_start(nint pcm);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_state(nint pcm);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_delay(nint pcm, out nint delay);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_drop(nint pcm);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int snd_pcm_close(nint pcm);
-        [DllImport(Alsa, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern nint snd_strerror(int error);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_open(out nint pcm, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int stream, int mode);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_set_params(nint pcm, int format, int access, uint channels, uint rate, int softResample, uint latency);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_prepare(nint pcm);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial nint snd_pcm_writei(nint pcm, nint data, nuint frames);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_start(nint pcm);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_state(nint pcm);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_delay(nint pcm, out nint delay);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_drop(nint pcm);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial int snd_pcm_close(nint pcm);
+        [LibraryImport(Alsa)]
+        [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        internal static partial nint snd_strerror(int error);
     }
 }

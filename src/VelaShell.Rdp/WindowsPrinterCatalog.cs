@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Text;
 using Microsoft.Win32.SafeHandles;
 using VelaShell.Rdp.Channels;
 
@@ -22,7 +21,7 @@ public static class WindowsPrinterCatalog
 
 internal sealed class WindowsPrinterBackend : IPrinterBackend
 {
-    public IPrinterJob Start(PrinterMapping printer)
+    public unsafe IPrinterJob Start(PrinterMapping printer)
     {
         if (!OperatingSystem.IsWindows()) { throw new PlatformNotSupportedException("Legacy printer redirection requires Windows."); }
         // A server never chooses an OpenPrinter target. Resolve only an existing locally installed selection.
@@ -43,10 +42,13 @@ internal sealed class WindowsPrinterBackend : IPrinterBackend
             {
                 throw new IOException("The selected printer configuration changed.");
             }
-            var document = new PrinterNative.DocumentInfo { DocumentName = "VelaShell remote print job", DataType = "RAW" };
-            if (PrinterNative.StartDocPrinterW(handle, 1, ref document) == 0)
+            fixed (char* documentName = "VelaShell remote print job", dataType = "RAW")
             {
-                throw new Win32Exception(Marshal.GetLastPInvokeError());
+                var document = new PrinterNative.DocumentInfo { DocumentName = documentName, DataType = dataType };
+                if (PrinterNative.StartDocPrinterW(handle, 1, ref document) == 0)
+                {
+                    throw new Win32Exception(Marshal.GetLastPInvokeError());
+                }
             }
             return new WindowsPrinterJob(handle);
         }
@@ -93,7 +95,7 @@ internal sealed class WindowsPrinterBackend : IPrinterBackend
     }
 }
 
-internal static class PrinterNative
+internal static partial class PrinterNative
 {
     private const int MaxBuffer = 16 * 1024 * 1024;
     internal sealed record QueueInfo(string Name, string Driver, string Ports, uint Attributes)
@@ -151,13 +153,19 @@ internal static class PrinterNative
         finally { Marshal.FreeHGlobal(buffer); }
     }
 
-    internal static string? GetDefaultName()
+    internal static unsafe string? GetDefaultName()
     {
         uint length = 0;
         _ = GetDefaultPrinterW(null, ref length);
         if (length is 0 or > 1025) { return null; }
-        var name = new StringBuilder((int)length);
-        return GetDefaultPrinterW(name, ref length) ? name.ToString() : null;
+        Span<char> name = stackalloc char[(int)length];
+        name.Clear();
+        fixed (char* pointer = name)
+        {
+            if (!GetDefaultPrinterW(pointer, ref length)) { return null; }
+        }
+        int terminator = name.IndexOf('\0');
+        return new string(terminator < 0 ? name : name[..terminator]);
     }
 
     private static void ValidateSize(uint size)
@@ -178,12 +186,12 @@ internal static class PrinterNative
         internal IntPtr DevMode, SeparatorFile, PrintProcessor, DataType, Parameters, SecurityDescriptor;
         internal uint Attributes, Priority, DefaultPriority, StartTime, UntilTime, Status, Jobs, AveragePpm;
     }
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct DocumentInfo
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct DocumentInfo
     {
-        [MarshalAs(UnmanagedType.LPWStr)] internal string DocumentName;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string? OutputFile;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string DataType;
+        internal char* DocumentName;
+        internal char* OutputFile;
+        internal char* DataType;
     }
     internal sealed class PrinterHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
@@ -191,30 +199,30 @@ internal static class PrinterNative
         protected override bool ReleaseHandle() => ClosePrinter(handle);
     }
 
-    [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+    [LibraryImport("winspool.drv", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnumPrintersW(uint flags, string? name, uint level, IntPtr buffer, uint size, out uint needed, out uint returned);
-    [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+    private static partial bool EnumPrintersW(uint flags, string? name, uint level, IntPtr buffer, uint size, out uint needed, out uint returned);
+    [LibraryImport("winspool.drv", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool OpenPrinterW(string name, out PrinterHandle handle, IntPtr defaults);
-    [DllImport("winspool.drv", SetLastError = true, ExactSpelling = true)]
+    internal static partial bool OpenPrinterW(string name, out PrinterHandle handle, IntPtr defaults);
+    [LibraryImport("winspool.drv", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetPrinterW(PrinterHandle handle, uint level, IntPtr buffer, uint size, out uint needed);
-    [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+    private static partial bool GetPrinterW(PrinterHandle handle, uint level, IntPtr buffer, uint size, out uint needed);
+    [LibraryImport("winspool.drv", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetDefaultPrinterW(StringBuilder? buffer, ref uint characters);
-    [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
-    internal static extern uint StartDocPrinterW(PrinterHandle handle, uint level, ref DocumentInfo info);
-    [DllImport("winspool.drv", SetLastError = true, ExactSpelling = true)]
+    private static unsafe partial bool GetDefaultPrinterW(char* buffer, ref uint characters);
+    [LibraryImport("winspool.drv", SetLastError = true)]
+    internal static partial uint StartDocPrinterW(PrinterHandle handle, uint level, ref DocumentInfo info);
+    [LibraryImport("winspool.drv", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool WritePrinter(PrinterHandle handle, IntPtr buffer, uint length, out uint written);
-    [DllImport("winspool.drv", SetLastError = true, ExactSpelling = true)]
+    internal static partial bool WritePrinter(PrinterHandle handle, IntPtr buffer, uint length, out uint written);
+    [LibraryImport("winspool.drv", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool EndDocPrinter(PrinterHandle handle);
-    [DllImport("winspool.drv", SetLastError = true, ExactSpelling = true)]
+    internal static partial bool EndDocPrinter(PrinterHandle handle);
+    [LibraryImport("winspool.drv", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool AbortPrinter(PrinterHandle handle);
-    [DllImport("winspool.drv", SetLastError = true, ExactSpelling = true)]
+    internal static partial bool AbortPrinter(PrinterHandle handle);
+    [LibraryImport("winspool.drv", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ClosePrinter(IntPtr handle);
+    private static partial bool ClosePrinter(IntPtr handle);
 }

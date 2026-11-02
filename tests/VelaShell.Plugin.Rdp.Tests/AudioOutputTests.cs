@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using VelaShell.Rdp.Audio;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -124,6 +126,31 @@ public sealed class AudioOutputTests
         await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.IsEmpty(device.Opens);
         Assert.ThrowsExactly<ObjectDisposedException>(() => output.PlayAsync(Stereo, new byte[4], default));
+    }
+
+    [TestMethod]
+    public void PlatformAudioImportsResolveActualExports()
+    {
+        Type backend;
+        if (OperatingSystem.IsWindows()) backend = typeof(WaveOutDevice);
+        else if (OperatingSystem.IsMacOS()) backend = typeof(AudioQueueDevice);
+        else if (OperatingSystem.IsLinux()) backend = typeof(AlsaDevice);
+        else { Assert.Inconclusive("No native audio backend for this platform."); return; }
+
+        Type native = backend.GetNestedType("Native", BindingFlags.NonPublic)!;
+        foreach (MethodInfo method in native.GetMethods(BindingFlags.Static | BindingFlags.NonPublic))
+        {
+            LibraryImportAttribute? import = method.GetCustomAttribute<LibraryImportAttribute>();
+            if (import is null) continue;
+            nint library = NativeLibrary.Load(import.LibraryName);
+            try
+            {
+                string entryPoint = import.EntryPoint ?? method.Name;
+                Assert.IsTrue(NativeLibrary.TryGetExport(library, entryPoint, out _),
+                    $"{import.LibraryName} does not export {entryPoint}.");
+            }
+            finally { NativeLibrary.Free(library); }
+        }
     }
 
     [TestMethod]

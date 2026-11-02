@@ -108,7 +108,7 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
         finally { _ = Native.SetupDiDestroyDeviceInfoList(set); }
     }
 
-    private static string? StableIdentity(nint set, ref Native.DeviceInfo info)
+    private static unsafe string? StableIdentity(nint set, ref Native.DeviceInfo info)
     {
         byte[] capabilities = new byte[4];
         if (!Native.SetupDiGetDeviceRegistryPropertyW(set, ref info, 15, out uint type, capabilities, 4, out uint size) ||
@@ -117,9 +117,17 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
             return null;
         }
 
-        var instance = new StringBuilder(200);
-        return Native.SetupDiGetDeviceInstanceIdW(set, ref info, instance, 200, out _) && instance.Length != 0
-            ? instance.ToString() : null;
+        Span<char> instance = stackalloc char[200];
+        instance.Clear();
+        fixed (char* pointer = instance)
+        {
+            if (!Native.SetupDiGetDeviceInstanceIdW(set, ref info, pointer, (uint)instance.Length, out _) || instance[0] == '\0')
+            {
+                return null;
+            }
+        }
+        int terminator = instance.IndexOf('\0');
+        return new string(terminator < 0 ? instance : instance[..terminator]);
     }
 
     private static byte[] Property(nint set, ref Native.DeviceInfo info, uint property)
@@ -274,8 +282,8 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
         internal static partial bool SetupDiGetDeviceInterfaceDetailW(nint set, ref InterfaceData data, nint detail, uint size, out uint required, ref DeviceInfo info);
         [LibraryImport("setupapi.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiGetDeviceRegistryPropertyW(nint set, ref DeviceInfo info, uint property, out uint type, [Out] byte[] data, uint size, out uint required);
-        [DllImport("setupapi.dll", CharSet = CharSet.Unicode, SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool SetupDiGetDeviceInstanceIdW(nint set, ref DeviceInfo info, StringBuilder instanceId, uint size, out uint required);
+        [LibraryImport("setupapi.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        internal static unsafe partial bool SetupDiGetDeviceInstanceIdW(nint set, ref DeviceInfo info, char* instanceId, uint size, out uint required);
         [LibraryImport("setupapi.dll")][return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiDestroyDeviceInfoList(nint set);
         [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]

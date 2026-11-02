@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace VelaShell.Rdp.Audio;
 
-internal sealed class AudioQueueDevice : IPcmDevice
+internal sealed partial class AudioQueueDevice : IPcmDevice
 {
     private const string AudioToolbox = "/System/Library/Frameworks/AudioToolbox.framework/AudioToolbox";
     private nint _queue;
@@ -165,27 +165,35 @@ internal sealed class AudioQueueDevice : IPcmDevice
         internal short Frames;
     }
 
-    private static class Native
+    private static partial class Native
     {
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern unsafe int AudioQueueNewOutput(ref StreamDescription format,
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static unsafe partial int AudioQueueNewOutput(ref StreamDescription format,
             delegate* unmanaged[Cdecl]<nint, nint, nint, void> callback, nint userData,
             nint runLoop, nint runLoopMode, uint flags, out nint queue);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueAllocateBuffer(nint queue, uint size, out nint buffer);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueFreeBuffer(nint queue, nint buffer);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueEnqueueBufferWithParameters(nint queue, nint buffer,
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueAllocateBuffer(nint queue, uint size, out nint buffer);
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueFreeBuffer(nint queue, nint buffer);
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueEnqueueBufferWithParameters(nint queue, nint buffer,
             uint packetCount, nint packetDescriptions, uint trimStart, uint trimEnd, uint parameterCount,
             nint parameters, nint startTime, out AudioTimeStamp actualStartTime);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueStart(nint queue, nint startTime);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueStop(nint queue, byte immediate);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueGetCurrentTime(nint queue, nint timeline, out AudioTimeStamp time, nint discontinuity);
-        [DllImport(AudioToolbox, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int AudioQueueDispose(nint queue, byte immediate);
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueStart(nint queue, nint startTime);
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueStop(nint queue, byte immediate);
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueGetCurrentTime(nint queue, nint timeline, out AudioTimeStamp time, nint discontinuity);
+        [LibraryImport(AudioToolbox)]
+        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+        internal static partial int AudioQueueDispose(nint queue, byte immediate);
     }
 }

@@ -287,5 +287,6 @@ public sealed class RdpVirtualFileTests
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int SetData(nint self, ref FORMATETC format, ref STGMEDIUM medium, int release);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int Read(nint self, nint buffer, int count, nint fetched);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int Seek(nint self, long move, int origin, nint position);
+    // STGMEDIUM.pUnkForRelease requires runtime COM object marshalling, unsupported by LibraryImport.
     [DllImport("ole32.dll")] private static extern void ReleaseStgMedium(ref STGMEDIUM medium);
 }

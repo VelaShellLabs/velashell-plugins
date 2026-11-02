@@ -1,9 +1,8 @@
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace VelaShell.Rdp.Audio;
 
-internal sealed class WaveOutDevice : IPcmDevice
+internal sealed partial class WaveOutDevice : IPcmDevice
 {
     private nint _handle;
     private nint _header;
@@ -71,12 +70,18 @@ internal sealed class WaveOutDevice : IPcmDevice
         _header = _samples = 0;
     }
 
-    private static void Check(uint result, string operation)
+    private static unsafe void Check(uint result, string operation)
     {
         if (result == 0) return;
-        var message = new StringBuilder(256);
-        _ = Native.waveOutGetErrorTextW(result, message, (uint)message.Capacity);
-        throw new IOException($"Windows audio could not {operation}: {message} (MMRESULT {result}).");
+        Span<char> message = stackalloc char[256];
+        message.Clear();
+        fixed (char* pointer = message)
+        {
+            _ = Native.waveOutGetErrorTextW(result, pointer, (uint)message.Length);
+        }
+        int terminator = message.IndexOf('\0');
+        string text = new(terminator < 0 ? message : message[..terminator]);
+        throw new IOException($"Windows audio could not {operation}: {text} (MMRESULT {result}).");
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -104,21 +109,21 @@ internal sealed class WaveOutDevice : IPcmDevice
         internal nuint Reserved;
     }
 
-    private static class Native
+    private static partial class Native
     {
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        internal static extern uint waveOutOpen(out nint handle, uint deviceId, ref WaveFormat format, nuint callback, nuint instance, uint flags);
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        internal static extern uint waveOutPrepareHeader(nint handle, nint header, uint size);
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        internal static extern uint waveOutWrite(nint handle, nint header, uint size);
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        internal static extern uint waveOutUnprepareHeader(nint handle, nint header, uint size);
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        internal static extern uint waveOutReset(nint handle);
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        internal static extern uint waveOutClose(nint handle);
-        [DllImport("winmm.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-        internal static extern uint waveOutGetErrorTextW(uint error, StringBuilder text, uint length);
+        [LibraryImport("winmm.dll")]
+        internal static partial uint waveOutOpen(out nint handle, uint deviceId, ref WaveFormat format, nuint callback, nuint instance, uint flags);
+        [LibraryImport("winmm.dll")]
+        internal static partial uint waveOutPrepareHeader(nint handle, nint header, uint size);
+        [LibraryImport("winmm.dll")]
+        internal static partial uint waveOutWrite(nint handle, nint header, uint size);
+        [LibraryImport("winmm.dll")]
+        internal static partial uint waveOutUnprepareHeader(nint handle, nint header, uint size);
+        [LibraryImport("winmm.dll")]
+        internal static partial uint waveOutReset(nint handle);
+        [LibraryImport("winmm.dll")]
+        internal static partial uint waveOutClose(nint handle);
+        [LibraryImport("winmm.dll")]
+        internal static unsafe partial uint waveOutGetErrorTextW(uint error, char* text, uint length);
     }
 }
