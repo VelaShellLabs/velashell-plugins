@@ -53,7 +53,7 @@ public sealed partial class RdpManagedSession : IRdpAudioSource
             {
                 using var channel = new RdpsndChannel(
                     (pdu, ct) => Connection.SendVirtualChannelAsync("rdpsnd", pdu, ct),
-                    playback ? (createOutput ?? AudioOutput.Create)() : null);
+                    playback ? (createOutput ?? AudioOutput.Create)() : null, LogAudio);
                 await foreach ((byte[] data, long receivedAt) in _audioQueue.Reader.ReadAllAsync(_audioStop.Token).ConfigureAwait(false))
                 {
                     _ = Interlocked.Add(ref _audioQueuedBytes, -data.Length);
@@ -95,8 +95,13 @@ public sealed partial class RdpManagedSession : IRdpAudioSource
         }
         _audioQueue?.Writer.TryComplete();
         _audioStop?.Cancel();
-        try { _driveLog?.Invoke($"RDPSND playback stopped: {error.Message}"); }
-        catch { /* Diagnostics must not interrupt audio cleanup. */ }
+        LogAudio($"playback stopped: {error.Message}");
         try { handlers?.Invoke(error); } catch { /* Audio errors must not stop the desktop. */ }
+    }
+
+    private void LogAudio(string message)
+    {
+        try { _driveLog?.Invoke($"RDPSND {message}"); }
+        catch { /* Diagnostics must not interrupt audio cleanup. */ }
     }
 }

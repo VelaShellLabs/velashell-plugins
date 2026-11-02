@@ -4,9 +4,12 @@ using VelaShell.Rdp.Audio;
 namespace VelaShell.Rdp.Channels;
 
 /// <summary>MS-RDPEA over the reliable static channel; PCM only, without UDP, pitch or volume redirection.</summary>
-internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, IAudioOutput? output) : IDisposable
+internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, IAudioOutput? output, Action<string>? log = null) : IDisposable
 {
     private readonly List<AudioFormat> _formats = [];
+    private long _playedBlocks;
+    private bool _receivedWave;
+    private bool _receivedNonSilentWave;
     private bool _initialized;
     private bool _closed;
     private ushort _version;
@@ -44,11 +47,13 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
             case 6:
                 Require(bodySize >= 4, "Truncated audio training PDU.");
                 await send(Packet(6, pdu.AsSpan(4, 4).ToArray()), ct).ConfigureAwait(false);
+                Log("training replied");
                 break;
             case 1:
                 Require(bodySize == 0, "Invalid audio close PDU.");
                 _closed = true;
                 output?.Close();
+                Log($"server closed output; playedBlocks={_playedBlocks}");
                 break;
             case 2:
                 Require(!_closed && pdu.Length == 16 && bodySize >= 12, "Invalid WaveInfo PDU.");
@@ -96,6 +101,9 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
         _version = Math.Min((ushort)8, U16(pdu, 21));
         _initialized = true;
         _closed = false;
+        _playedBlocks = 0;
+        _receivedWave = _receivedNonSilentWave = false;
+        Log($"formats received; serverVersion={U16(pdu, 21)}; offered={count}; accepted={formats.Count}; playback={output is not null}");
         byte[] response = new byte[20 + accepted.Sum(f => f.Length)];
         BinaryPrimitives.WriteUInt32LittleEndian(response, output is not null ? 1u : 0u);
         BinaryPrimitives.WriteUInt16LittleEndian(response.AsSpan(14), (ushort)accepted.Count);
@@ -111,6 +119,7 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
         {
             await send(Packet(12, [2, 0, 0, 0]), ct).ConfigureAwait(false);
         }
+        Log($"formats replied; version={_version}; quality={(_version >= 6 ? "high" : "legacy")}");
         if (output is not null && _formats.Count == 0)
         {
             throw new IOException("The RDP server offered no supported PCM audio format (8/16-bit mono/stereo, 8–48 kHz).");
@@ -122,12 +131,28 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
         ValidateFormat(index);
         AudioFormat format = _formats[index];
         Require(data.Length > 0 && data.Length % format.BlockAlign == 0, "Audio samples are not frame aligned.");
+        if (!_receivedNonSilentWave)
+        {
+            bool silent = !data.AsSpan().ContainsAnyExcept(format.BitsPerSample == 8 ? (byte)128 : (byte)0);
+            if (!_receivedWave || !silent)
+            {
+                Log($"wave received; format={index}; rate={format.SampleRate}; channels={format.Channels}; bits={format.BitsPerSample}; bytes={data.Length}; silent={silent}");
+            }
+            _receivedNonSilentWave = !silent;
+        }
+        _receivedWave = true;
         await output!.PlayAsync(format, data, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         byte[] confirm = new byte[4];
         BinaryPrimitives.WriteUInt16LittleEndian(confirm, unchecked((ushort)(timestamp + Environment.TickCount64 - receivedAt)));
         confirm[2] = block;
         await send(Packet(5, confirm), ct).ConfigureAwait(false);
+        if (++_playedBlocks == 1) { Log("first playback completed and confirmed"); }
+    }
+
+    private void Log(string message)
+    {
+        try { log?.Invoke(message); } catch { /* Diagnostics must not interrupt playback. */ }
     }
 
     private void ValidateFormat(ushort index) => Require(output is not null && index < _formats.Count, "Invalid negotiated audio format index.");

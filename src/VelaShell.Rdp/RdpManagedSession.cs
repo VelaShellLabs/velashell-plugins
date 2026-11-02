@@ -229,6 +229,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
 
         var session = new RdpManagedSession(new RdpConnection(connectOptions)) { _driveLog = options.DriveRedirectionLog };
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
+        session.LogAudio($"configured playback={options.AudioPlayback}; requested={channels.Any(channel => channel.Name == "rdpsnd")}; backend={(OperatingSystem.IsWindows() ? "WinMM" : OperatingSystem.IsMacOS() ? "AudioQueue" : "ALSA")}");
         try
         {
             if (channels.Any(channel => channel.Name == "rdpsnd"))
@@ -270,6 +271,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource
             throw new RdpConnectionException(stage, ex, tls, tlsTrace);
         }
         session.LogDrive($"connection active; rdpdr channelId={session.Connection.ChannelId("rdpdr")}");
+        session.LogAudio($"connection active; rdpsnd channelId={session.Connection.ChannelId("rdpsnd")}");
         Volatile.Write(ref session._isConnected, 1);
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
         session._pump = session.PumpLoopAsync();

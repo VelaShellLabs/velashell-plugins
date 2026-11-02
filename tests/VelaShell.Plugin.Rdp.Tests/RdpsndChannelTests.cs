@@ -191,6 +191,68 @@ public sealed class RdpsndChannelTests
         }
     }
 
+    [TestMethod]
+    [TestCategory("NativeAudio")]
+    public async Task SystemDefaultOutputPlaysProtocolTone()
+    {
+        if (Environment.GetEnvironmentVariable("VELA_RDP_AUDIO_TONE_TEST") != "1")
+        {
+            Assert.Inconclusive("Set VELA_RDP_AUDIO_TONE_TEST=1 to play two quiet 440 Hz tones through RDPSND on the default device.");
+            return;
+        }
+        var sent = new List<byte[]>();
+        using var output = AudioOutput.Create();
+        using var channel = Make(output, sent);
+        await Process(channel, Formats(8, Format()));
+        byte[] samples = new byte[44100 * 4 * 3 / 10];
+        for (int frame = 0; frame < samples.Length / 4; frame++)
+        {
+            short value = (short)(Math.Sin(2 * Math.PI * 440 * frame / 44100) * 2000);
+            BinaryPrimitives.WriteInt16LittleEndian(samples.AsSpan(frame * 4), value);
+            BinaryPrimitives.WriteInt16LittleEndian(samples.AsSpan(frame * 4 + 2), value);
+        }
+        await Process(channel, Wave2(0, samples)).WaitAsync(TimeSpan.FromSeconds(7));
+        await Process(channel, Wave2(0, samples)).WaitAsync(TimeSpan.FromSeconds(7));
+        Assert.AreEqual(2, sent.Count(pdu => pdu[0] == 5));
+        output.Dispose();
+        await ((NativeAudioOutput)output).Completion.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [TestMethod]
+    [DataRow(8, 128)]
+    [DataRow(16, 0)]
+    public async Task DiagnosticsDistinguishSilenceFromSamplesWithoutLoggingEveryWave(int bits, int silence)
+    {
+        var messages = new List<string>();
+        using var channel = new RdpsndChannel((_, _) => Task.CompletedTask, new RecordingOutput(), messages.Add);
+        await Process(channel, Formats(8, Format(channels: 1, bits: (ushort)bits)));
+        await Process(channel, Wave2(0, [(byte)silence, (byte)silence]));
+        await Process(channel, Wave2(0, [(byte)silence, (byte)silence]));
+        await Process(channel, Wave2(0, [(byte)silence, (byte)(silence + 1)]));
+        await Process(channel, Wave2(0, [(byte)silence, (byte)(silence + 1)]));
+        Assert.Contains(message => message.Contains("offered=1; accepted=1"), messages);
+        Assert.AreEqual(2, messages.Count(message => message.StartsWith("wave received;")));
+        Assert.Contains(message => message.Contains("silent=True"), messages);
+        Assert.Contains(message => message.Contains("silent=False"), messages);
+        Assert.AreEqual(1, messages.Count(message => message == "first playback completed and confirmed"));
+    }
+
+    [TestMethod]
+    public async Task ThrowingDiagnosticsDoNotInterruptNegotiationPlaybackOrConfirmation()
+    {
+        var sent = new List<byte[]>();
+        var output = new RecordingOutput();
+        using var channel = new RdpsndChannel(
+            (pdu, _) => { sent.Add(pdu); return Task.CompletedTask; }, output,
+            _ => throw new InvalidOperationException("Logging unavailable"));
+        await Process(channel, Formats(8, Format()));
+        await Process(channel, Packet(6, [0, 0, 0, 0]));
+        await Process(channel, Wave2(0, [1, 2, 3, 4]));
+        await Process(channel, Packet(1, []));
+        Assert.HasCount(1, output.Samples);
+        Assert.AreSequenceEqual(new byte[] { 7, 12, 6, 5 }, sent.Select(pdu => pdu[0]).ToArray());
+    }
+
     private static RdpsndChannel Make(IAudioOutput? output, List<byte[]> sent) =>
         new((pdu, _) => { sent.Add(pdu); return Task.CompletedTask; }, output);
     private static Task Process(RdpsndChannel channel, byte[] pdu) => channel.ProcessAsync(pdu, Environment.TickCount64, default);
