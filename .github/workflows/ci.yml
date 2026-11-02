@@ -25,8 +25,8 @@ jobs:
           dotnet-quality: preview
           dotnet-version: 11.0.x
       # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
-      - name: Test portable RDP authentication
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests"
+      - name: Test portable RDP authentication and licensing
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~Licensing"
 
   build:
     runs-on: windows-latest
