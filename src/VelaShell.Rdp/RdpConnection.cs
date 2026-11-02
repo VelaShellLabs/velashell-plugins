@@ -204,17 +204,26 @@ internal sealed class RdpConnection : IAsyncDisposable
 
     private async Task<byte[]> ReceiveLicensingThenDemandActiveAsync(CancellationToken ct)
     {
+        using var licensing = new Licensing(_options.Username, Environment.MachineName);
         while (true)
         {
             byte[] payload = await ReadIoPayloadAsync(ct).ConfigureAwait(false);
             if (LooksLikeShareControl(payload))
             {
-                return payload;   // server skipped or finished licensing
+                if (!licensing.CanActivate)
+                {
+                    throw new RdpProtocolException("The server activated the session before completing RDP licensing.");
+                }
+                return payload;
             }
 
-            if (Licensing.Process(payload))
+            if (licensing.Process(payload) is { } response)
             {
-                return await ReadIoPayloadAsync(ct).ConfigureAwait(false);
+                await SendOnIoAsync(response, ct).ConfigureAwait(false);
+            }
+            if (licensing.Failure is { } failure)
+            {
+                throw failure;
             }
         }
     }
