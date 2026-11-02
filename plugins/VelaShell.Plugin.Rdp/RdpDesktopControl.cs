@@ -29,6 +29,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private uint _mouseY;
     private sealed class PendingMove(uint x, uint y) { internal uint X = x; internal uint Y = y; }
     private PendingMove? _pendingMove;
+    private PendingMove? _deferredMove;
+    private readonly DispatcherTimer _moveTimer = new();
+    private long _lastMove;
     private int _framePending;
     private int _disposed;
     private string? _preedit;
@@ -80,6 +83,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         // Coalesce window/tab resizes: ask the server for a matching desktop only after the drag settles.
         _resizeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         _resizeTimer.Tick += (_, _) => { _resizeTimer.Stop(); MatchRemoteToViewport(); };
+        _moveTimer.Tick += (_, _) => FlushPointerMove();
         _inputPump = ProcessInputAsync();
         session.FrameAvailable += OnFrame;
         if (session is IRdpPointerSource pointers)
@@ -324,6 +328,13 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         }
     }
     internal void Queue(Func<Task> action)
+    {
+        FlushPointerMove();
+        _pendingMove = null;
+        EnqueueInput(action);
+    }
+
+    private void EnqueueInput(Func<Task> action)
     {
         if (_disposed != 0)
         {
@@ -575,21 +586,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             return;
         }
 
-        if (_pendingMove is { } pending) { pending.X = _mouseX; pending.Y = _mouseY; }
-        else
-        {
-            var move = new PendingMove(_mouseX, _mouseY);
-            _pendingMove = move;
-            Queue(async () =>
-            {
-                if (ReferenceEquals(_pendingMove, move))
-                {
-                    _pendingMove = null;
-                }
-
-                await _session.MouseAsync(0x0800, move.X, move.Y);
-            });
-        }
+        MovePointer(_mouseX, _mouseY);
         _ime.CursorMoved();
     }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -622,6 +619,39 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _mouseY = y;
         return true;
     }
+    internal void MovePointer(uint x, uint y)
+    {
+        int interval = (_session as IRdpNetworkSource)?.NetworkStatus.PointerIntervalMilliseconds ?? 0;
+        long remaining = interval - (Environment.TickCount64 - _lastMove);
+        if (remaining > 0 && _pendingMove is null)
+        {
+            _deferredMove = new(x, y);
+            if (!_moveTimer.IsEnabled)
+            {
+                _moveTimer.Interval = TimeSpan.FromMilliseconds(remaining);
+                _moveTimer.Start();
+            }
+            return;
+        }
+        _deferredMove = new(x, y);
+        FlushPointerMove();
+    }
+
+    private void FlushPointerMove()
+    {
+        _moveTimer.Stop();
+        if (_deferredMove is not { } move) { return; }
+        _deferredMove = null;
+        _lastMove = Environment.TickCount64;
+        if (_pendingMove is { } pending) { pending.X = move.X; pending.Y = move.Y; return; }
+        _pendingMove = move;
+        EnqueueInput(async () =>
+        {
+            if (ReferenceEquals(_pendingMove, move)) { _pendingMove = null; }
+            await _session.MouseAsync(0x0800, move.X, move.Y);
+        });
+    }
+
     private void SendMouse(uint flags)
     {
         _pendingMove = null;
@@ -652,6 +682,8 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _topLevel?.ScalingChanged -= OnScalingChanged;
         _window = null; _topLevel = null; ReleaseInput();
         _resizeTimer.Stop();
+        _moveTimer.Stop();
+        _deferredMove = null;
         _ = Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;
         if (_session is IRdpPointerSource pointers)

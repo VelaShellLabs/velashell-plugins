@@ -104,14 +104,14 @@ internal sealed class FakeRdpConnection(NetworkStream net, X509Certificate2 cert
     }
 
     /// <summary>X.224 Connection Confirm with RDP_NEG_RSP selecting <paramref name="protocol" />.</summary>
-    internal Task SelectAsync(uint protocol) => SendNegotiationAsync(0x02, protocol);
+    internal Task SelectAsync(uint protocol, byte flags = 0) => SendNegotiationAsync(0x02, protocol, flags);
 
     /// <summary>X.224 Connection Confirm with RDP_NEG_FAILURE <paramref name="code" />.</summary>
     internal Task RefuseAsync(uint code) => SendNegotiationAsync(0x03, code);
 
-    private async Task SendNegotiationAsync(byte type, uint value)
+    private async Task SendNegotiationAsync(byte type, uint value, byte flags = 0)
     {
-        byte[] pdu = [3, 0, 0, 19, 14, 0xD0, 0, 0, 0, 0, 0, type, 0, 8, 0, 0, 0, 0, 0];
+        byte[] pdu = [3, 0, 0, 19, 14, 0xD0, 0, 0, 0, 0, 0, type, flags, 8, 0, 0, 0, 0, 0];
         BitConverter.TryWriteBytes(pdu.AsSpan(15), value);
         await net.WriteAsync(pdu);
     }

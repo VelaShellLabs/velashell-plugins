@@ -9,7 +9,7 @@ namespace VelaShell.Rdp.Channels;
 /// before the server sends CREATE. Unknown names remain disabled. Instances have independent,
 /// bounded reassembly and may share a listener name.
 /// </summary>
-internal sealed class DrdynvcChannel
+internal sealed partial class DrdynvcChannel
 {
     private const string DisplayControlName = "Microsoft::Windows::RDS::DisplayControl";
     private const int CmdCreate = 0x01, CmdDataFirst = 0x02, CmdData = 0x03, CmdClose = 0x04, CmdCapabilities = 0x05;
@@ -80,7 +80,10 @@ internal sealed class DrdynvcChannel
             }
 
             int cb = id <= 255 ? 0 : id <= 65535 ? 1 : 2;
-            const int fragment = 1500;
+            bool lossy = _routes.GetValueOrDefault(id) == 3;
+            int fragment = lossy ? 600 : 1500;
+            if (lossy && message.Length > fragment)
+            { throw new InvalidOperationException("Fragmented outbound DVC messages require a reliable transport."); }
             int offset = 0;
             do
             {
@@ -125,7 +128,8 @@ internal sealed class DrdynvcChannel
             }
             int cb = id <= 255 ? 0 : id <= 65535 ? 1 : 2;
             var w = new ByteWriter(5); w.U8((byte)(0x40 | cb)); WriteVariable(w, id, cb);
-            await _send(w.ToArray(), _ct).ConfigureAwait(false);
+            try { await _send(w.ToArray(), _ct).ConfigureAwait(false); }
+            finally { _routes.Remove(id); }
         }
         finally
         {
@@ -147,6 +151,7 @@ internal sealed class DrdynvcChannel
             {
                 instances = [.. _instances.Values];
                 _instances.Clear();
+                _routes.Clear();
                 _reservedBytes = 0;
                 _displayReady = _displayOpen = false;
             }
@@ -172,9 +177,14 @@ internal sealed class DrdynvcChannel
     }
 
     internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct, bool displayControl = true,
-        Action<string>? log = null)
+        Action<string>? log = null, Func<int, Task>? waitForTunnel = null,
+        Action<int>? enableTunnel = null, Func<int, byte[], CancellationToken, Task>? sendTunnel = null)
     {
-        _send = send;
+        _tcpSend = send;
+        _send = SendRoutedAsync;
+        _waitForTunnel = waitForTunnel;
+        _enableTunnel = enableTunnel;
+        _sendTunnel = sendTunnel;
         _ct = ct;
         _displayEnabled = displayControl;
         _log = log;
@@ -224,17 +234,28 @@ internal sealed class DrdynvcChannel
     }
 
     /// <summary>Handles one drdynvc PDU delivered over the static channel.</summary>
-    internal async Task ProcessAsync(byte[] pdu)
+    internal async Task ProcessAsync(byte[] pdu, int tunnelType = 0)
     {
         Func<Task>? work;
         await _sendGate.WaitAsync(_ct).ConfigureAwait(false);
         try
         {
+            if (pdu.Length > 0 && pdu[0] >> 4 == 8)
+            {
+                if (tunnelType != 0) { throw new RdpProtocolException("Soft-Sync must use TCP."); }
+                await SoftSyncAsync(pdu).ConfigureAwait(false);
+                return;
+            }
+            ValidateTransport(pdu, tunnelType);
             (byte[]? reply, Func<Task>? pending) = Parse(pdu);
             work = pending;
             if (reply is not null)
             {
                 await _send(reply, _ct).ConfigureAwait(false);
+            }
+            if (PduChannel(pdu) is { } id)
+            {
+                lock (_lock) { if (!_instances.ContainsKey(id)) { _routes.Remove(id); } }
             }
         }
         finally { _ = _sendGate.Release(); }

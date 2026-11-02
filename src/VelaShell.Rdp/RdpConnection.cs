@@ -15,21 +15,22 @@ internal sealed record RdpConnectOptions(
     int Width, int Height, int Bpp, byte[]? CertificatePin, string CertificateHost,
     IReadOnlyList<ChannelDef> Channels, RdpSecurity Security = RdpSecurity.Auto,
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
-    bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default)
+    bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default,
+    RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
 }
 
 /// <summary>Raised when a virtual channel delivers data to the managed session.</summary>
-internal readonly record struct ChannelPayload(string ChannelName, byte[] Data);
+internal readonly record struct ChannelPayload(string ChannelName, byte[] Data, int TunnelType = 0);
 
 /// <summary>
 /// Drives the full RDP connection sequence and the active-phase pump using only managed
 /// code: X.224 negotiation, TLS (or CredSSP when a server requires NLA), MCS/GCC, the client
 /// info, licensing, capability exchange and finalization, then bitmap output and input.
 /// </summary>
-internal sealed class RdpConnection : IAsyncDisposable
+internal sealed partial class RdpConnection : IAsyncDisposable
 {
     private readonly RdpConnectOptions _options;
     private TcpClient? _tcp;
@@ -67,6 +68,8 @@ internal sealed class RdpConnection : IAsyncDisposable
     internal RdpConnection(RdpConnectOptions options)
     {
         _options = options;
+        Network = new(options.AdaptiveNetwork);
+        _autoDetect = new(Network);
         _width = options.Width;
         _height = options.Height;
     }
@@ -106,7 +109,7 @@ internal sealed class RdpConnection : IAsyncDisposable
             ? SecurityProtocol.Ssl
             : SecurityProtocol.Ssl | SecurityProtocol.Hybrid;
         await _transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(_options.Username, requested), ct).ConfigureAwait(false);
-        (SecurityProtocol selected, _) = await _transport.ReadConnectionConfirmAsync(ct).ConfigureAwait(false);
+        (SecurityProtocol selected, byte negotiationFlags) = await _transport.ReadConnectionConfirmAsync(ct).ConfigureAwait(false);
         bool nla = selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx);
         if (!nla && _options.Security == RdpSecurity.Nla)
         {
@@ -131,8 +134,12 @@ internal sealed class RdpConnection : IAsyncDisposable
 
         // MCS + GCC.
         Stage = RdpConnectStage.Mcs;
+        bool extended = (negotiationFlags & 1) != 0;
+        _udpAdvertised = extended && _options.Transport == RdpTransportMode.Auto && !_options.TcpTunnel
+            && _options.Channels.Any(c => c.Name == "drdynvc");
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
-            (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor);
+            (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor,
+            extended && (_options.AdaptiveNetwork || _udpAdvertised), _udpAdvertised, _options.AdaptiveNetwork);
         _mcs = new McsLayer(_transport);
         await _mcs.ConnectAsync(gcc, _options.Channels, ct).ConfigureAwait(false);
         _ioChannel = _mcs.Server.IoChannelId;
@@ -195,6 +202,7 @@ internal sealed class RdpConnection : IAsyncDisposable
         Stage = RdpConnectStage.Tls;
         _tlsTap = new TlsRecordTap(_transport.Stream);
         SslStream ssl = await RdpTls.AuthenticateAsync(_tlsTap, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+        _certificateDigest = SHA256.HashData(ssl.RemoteCertificate!.GetRawCertData());
         _tlsTap.MarkHandshakeComplete();
         TlsProtocol = ssl.SslProtocol;
         _tlsCipher = ssl.NegotiatedCipherSuite;
@@ -272,6 +280,7 @@ internal sealed class RdpConnection : IAsyncDisposable
             throw new RdpConnectionLostException(ex);
         }
 
+        _autoDetect.Observe(pdu.Data.Length);
         if (pdu.FastPath)
         {
             ProcessFastPathOutput(pdu.Data);
@@ -286,6 +295,10 @@ internal sealed class RdpConnection : IAsyncDisposable
         if (indication.ChannelId == _ioChannel)
         {
             await ProcessIoAsync(indication.Payload, ct).ConfigureAwait(false);
+        }
+        else if (indication.ChannelId == _mcs.Server.MessageChannelId && indication.ChannelId != 0)
+        {
+            await ProcessMessageChannelAsync(indication.Payload, ct).ConfigureAwait(false);
         }
         else if (_channelsById.TryGetValue(indication.ChannelId, out string? name))
         {
@@ -774,6 +787,12 @@ internal sealed class RdpConnection : IAsyncDisposable
                 return indication.Payload;
             }
 
+            if (indication.ChannelId == _mcs.Server.MessageChannelId && indication.ChannelId != 0)
+            {
+                await ProcessMessageChannelAsync(indication.Payload, ct).ConfigureAwait(false);
+                continue;
+            }
+
             // RDPDR can start its handshake before licensing / Demand Active completes.
             // Dropping that first Server Announce leaves the server waiting forever for our reply.
             if (_channelsById.TryGetValue(indication.ChannelId, out string? name))
@@ -788,7 +807,8 @@ internal sealed class RdpConnection : IAsyncDisposable
         _sendStop.Cancel();
         try { _tcp?.Close(); } catch { /* ignore */ }
         _tcp?.Dispose();
+        await Task.WhenAll(_tunnelAttempts.Values).ConfigureAwait(false);
+        foreach (RdpMultitransport tunnel in _tunnels.Values) { await tunnel.DisposeAsync().ConfigureAwait(false); }
         _writeGate.Dispose();
-        await Task.CompletedTask;
     }
 }

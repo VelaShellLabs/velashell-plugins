@@ -79,6 +79,35 @@ connections. Reconnecting is left to the caller.
 Without a `CertificatePin`, an untrusted server certificate raises
 `RdpCertificateRejectedException`, whose `Pem` lets you show the leaf's SHA-256 and offer to pin it.
 
+## UDP and network adaptation
+
+`RdpClientOptions.Transport` defaults to `RdpTransportMode.Auto`; `Tcp` disables UDP negotiation.
+The main connection, classic bitmap/GDI output, input and static channels remain on TCP.
+When the server supports extended negotiation and Soft-Sync, dynamic channels can move to
+MS-RDPEUDP v1 reliable UDP (TLS) or lossy UDP (DTLS 1.2), using MS-RDPEMT.
+Both side tunnels must present the main connection's exact leaf certificate. Creation cookies
+are sent only inside encryption. UDP v2 and UDP Preferred are not advertised.
+
+Setup failures leave TCP running. After a tunnel is accepted, its failure ends the connection
+so callers can reconnect without replaying channel operations on another transport.
+UDP-L uses FEC but currently requires reconnection on an unrecovered application-data gap,
+preventing DVC fragments from different messages being spliced together. Outbound UDP-L DVC
+messages are limited to 600 bytes and are never fragmented. This is not continuous playback
+through arbitrary residual loss. `TcpTunnel = true` disables direct UDP for TCP-only proxies;
+the plugin sets this automatically for SSH jump hosts.
+
+`AdaptiveNetwork` defaults to `true`. Server-provided RTT/bandwidth measurements are exposed
+through `IRdpNetworkSource.NetworkStatus` and `NetworkChanged`. The plugin displays transport
+and quality and coalesces pointer motion at 25/50 ms on constrained/poor links; keys and clicks
+flush pending motion in order. Improvement requires three healthier samples. Automatic network
+characteristics allow the server to override manual experience flags; disable adaptation to retain
+the manual profile. Unknown measurements are not fabricated.
+
+Offline tests cover loss/reordering/FEC, Soft-Sync routing, early message-channel handling,
+and real loopback UDP sockets with TLS/DTLS, EMT messages split across records or combined
+in one record, certificate rejection and cancellation. Real Windows
+server interoperability and WAN performance remain unverified.
+
 ## Design notes
 
 - **No UI, no plugin SDK.** The library produces frames and accepts input through `IRdpSession`;
@@ -88,6 +117,6 @@ Without a `CertificatePin`, an untrusted server certificate raises
   paths component by component and refuses links below the mapped folder. Malformed input raises
   `RdpProtocolException` and ends the session instead of allocating without bound. Audio has a separate
   128-message / 1 MiB queue limit; audio errors stop only playback, leaving desktop input and display active.
-- **Targets `net11.0`.** BCL-only; nothing is pulled from NuGet.
+- **Targets `net11.0`.** UDP-L uses the managed `BouncyCastle.Cryptography` 2.7.0 package for DTLS 1.2; UDP-R uses `SslStream` TLS. Transport code does not require a native UDP/DTLS library.
 - The library DLL ships inside the RDP plugin's signed `.vpx`; it is not published as a separate
   NuGet package.
