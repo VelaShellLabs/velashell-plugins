@@ -45,6 +45,81 @@ public sealed class AudioOutputTests
     }
 
     [TestMethod]
+    public async Task SubmitsMultipleBuffersBeforeCompletionAndPreservesCompletionOrder()
+    {
+        var device = new FakeDevice();
+        using var output = new NativeAudioOutput(device);
+        Task first = output.PlayAsync(Stereo, new byte[3840], default);
+        Task second = output.PlayAsync(Stereo, new byte[3840], default);
+        Task third = output.PlayAsync(Stereo, new byte[3840], default);
+        await device.MultipleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsFalse(first.IsCompleted);
+        Assert.IsFalse(second.IsCompleted);
+        Assert.IsFalse(third.IsCompleted);
+        Volatile.Write(ref device.PermittedCompletions, 1);
+        await first.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsFalse(second.IsCompleted);
+        Assert.IsFalse(third.IsCompleted);
+        Volatile.Write(ref device.PermittedCompletions, 2);
+        await Task.WhenAll(second, third).WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.AreEqual(1, device.Opens.Count);
+        output.Dispose();
+        await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [TestMethod]
+    public async Task CloseCancelsAllInFlightBuffersAndReopensWithDifferentFormat()
+    {
+        var device = new FakeDevice();
+        using var output = new NativeAudioOutput(device);
+        Task[] playing = Enumerable.Range(0, 3).Select(_ => output.PlayAsync(Stereo, new byte[3840], default)).ToArray();
+        await device.MultipleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Task changed = output.PlayAsync(new(1, 8000, 8), new byte[160], default);
+        Assert.HasCount(1, device.Opens);
+        output.Close();
+        foreach (Task task in playing.Append(changed))
+            await Assert.ThrowsAsync<OperationCanceledException>(() => task.WaitAsync(TimeSpan.FromSeconds(2)));
+        device.Complete = true;
+        await output.PlayAsync(new(1, 8000, 8), new byte[160], default);
+        Assert.AreEqual(4, device.Starts);
+        Assert.HasCount(2, device.Opens);
+        output.Dispose();
+        await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [TestMethod]
+    public async Task FormatChangeWaitsUntilPreviouslySubmittedBuffersFinish()
+    {
+        var device = new FakeDevice();
+        using var output = new NativeAudioOutput(device);
+        Task[] playing = Enumerable.Range(0, 3).Select(_ => output.PlayAsync(Stereo, new byte[3840], default)).ToArray();
+        await device.MultipleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Task changed = output.PlayAsync(new(1, 8000, 8), new byte[160], default);
+        Volatile.Write(ref device.PermittedCompletions, 1);
+        await playing[0].WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsFalse(changed.IsCompleted);
+        Assert.HasCount(1, device.Opens);
+        device.Complete = true;
+        await Task.WhenAll(playing.Append(changed)).WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.AreSequenceEqual(new[] { Stereo, new AudioFormat(1, 8000, 8) }, device.Opens);
+        output.Dispose();
+        await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [TestMethod]
+    public async Task QueueBudgetIncludesBuffersAlreadyTakenByWorker()
+    {
+        var device = new FakeDevice();
+        using var output = new NativeAudioOutput(device);
+        Task[] playing = Enumerable.Range(0, 3).Select(_ => output.PlayAsync(Stereo, new byte[3840], default)).ToArray();
+        await device.MultipleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Assert.ThrowsExactlyAsync<IOException>(() => output.PlayAsync(Stereo, new byte[384000], default));
+        output.Dispose();
+        foreach (Task task in playing) await Assert.ThrowsAsync<OperationCanceledException>(() => task);
+        await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [TestMethod]
     public async Task CancellationAndDisposalDoNotWaitForANativeCall()
     {
         using var nativeCall = new ManualResetEventSlim();
@@ -171,7 +246,8 @@ public sealed class AudioOutputTests
             await output.PlayAsync(format, silence, default).WaitAsync(TimeSpan.FromSeconds(7));
             Assert.IsGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(50), elapsed.Elapsed,
                 "Playback completion must not just mean that a native buffer was accepted.");
-            await output.PlayAsync(format, silence, default).WaitAsync(TimeSpan.FromSeconds(7));
+            Task[] continuous = Enumerable.Range(0, 3).Select(_ => output.PlayAsync(format, silence, default)).ToArray();
+            await Task.WhenAll(continuous).WaitAsync(TimeSpan.FromSeconds(7));
             output.Close();
         }
         output.Dispose();
@@ -239,6 +315,32 @@ public sealed class AudioOutputTests
     }
 
     [TestMethod]
+    public void AlsaFeedsLaterBuffersBeforeCompletionAndRecoversTheirUnwrittenSuffix()
+    {
+        var api = new FakeAlsaApi([3, 1, -32, -11, 1]) { DelayResults = new Queue<int>([3, 1, 0]) };
+        var device = new AlsaDevice(api);
+        byte[] first = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        byte[] second = [12, 13, 14, 15, 16, 17, 18, 19];
+        try
+        {
+            device.Open(Stereo);
+            device.Start(first);
+            device.Start(second);
+            Assert.IsFalse(device.IsComplete());
+            Assert.HasCount(2, api.Writes, "The second buffer must be written while the first is still audible.");
+            Assert.IsTrue(device.IsComplete()); // XRUN consumed the first buffer and one frame of the second.
+            Assert.IsFalse(device.IsComplete());
+            Assert.IsFalse(device.IsComplete());
+            Assert.IsTrue(device.IsComplete());
+            Assert.AreSequenceEqual(first, api.Writes[0]);
+            Assert.AreSequenceEqual(second, api.Writes[1]);
+            foreach (byte[] retry in api.Writes.Skip(2)) Assert.AreSequenceEqual(second.AsSpan(4).ToArray(), retry);
+            Assert.AreEqual(1, api.Prepares);
+        }
+        finally { device.Close(); }
+    }
+
+    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     public async Task AlsaFatalWriteOrRecoveryFailureStopsPlaybackAndClosesDevice(bool duringRecovery)
@@ -261,6 +363,7 @@ public sealed class AudioOutputTests
         private int _delays;
         internal readonly List<byte[]> Writes = [];
         internal int Prepares, Starts, PrepareResult;
+        internal Queue<int>? DelayResults;
         internal bool Closed;
         public int Open(out nint pcm) { pcm = 1; return 0; }
         public int Configure(nint pcm, AudioFormat format) => 0;
@@ -276,7 +379,7 @@ public sealed class AudioOutputTests
         }
         public int Start(nint pcm) { Starts++; _state = 3; return 0; }
         public int State(nint pcm) => _state;
-        public int Delay(nint pcm, out nint frames) { frames = _delays++ == 0 ? 1 : 0; return 0; }
+        public int Delay(nint pcm, out nint frames) { frames = DelayResults?.Dequeue() ?? (_delays++ == 0 ? 1 : 0); return 0; }
         public int Drop(nint pcm) => 0;
         public int Close(nint pcm) { Closed = true; return 0; }
         public string Error(int code) => "injected ALSA failure";
@@ -286,6 +389,8 @@ public sealed class AudioOutputTests
     {
         internal readonly List<AudioFormat> Opens = [];
         internal readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource MultipleStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int PermittedCompletions;
         internal readonly TaskCompletionSource OpenEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource Closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal volatile bool Complete;
@@ -306,8 +411,16 @@ public sealed class AudioOutputTests
             if (StartError is not null) throw StartError;
             Starts++;
             Started.TrySetResult();
+            if (Starts >= 3) MultipleStarted.TrySetResult();
         }
-        public bool IsComplete() => Complete;
+        public long PendingFrames => 0;
+        public bool IsComplete()
+        {
+            if (Complete) return true;
+            if (Volatile.Read(ref PermittedCompletions) <= 0) return false;
+            Interlocked.Decrement(ref PermittedCompletions);
+            return true;
+        }
         public void Reset() { }
         public void Close()
         {

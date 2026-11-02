@@ -16,19 +16,23 @@ internal interface IAudioOutput : IDisposable
 
 internal static class AudioOutput
 {
-    internal static IAudioOutput Create() => new NativeAudioOutput(
+    internal static IAudioOutput Create() => Create(null);
+
+    internal static IAudioOutput Create(Action<string>? log) => new NativeAudioOutput(
         OperatingSystem.IsWindows() ? new WaveOutDevice() :
         OperatingSystem.IsMacOS() ? new AudioQueueDevice() :
         OperatingSystem.IsLinux() ? new AlsaDevice() :
-        throw new PlatformNotSupportedException("RDP audio playback requires Windows, macOS or Linux."));
+        throw new PlatformNotSupportedException("RDP audio playback requires Windows, macOS or Linux."), log: log);
 }
 
 // All device methods run on the output worker; Close/Dispose only invalidate and enqueue work.
 internal interface IPcmDevice
 {
     void Open(AudioFormat format);
+    // Start appends a buffer; IsComplete consumes only the oldest completed buffer.
     void Start(byte[] data);
     bool IsComplete();
+    long PendingFrames { get; }
     void Reset();
     void Close();
 }
@@ -36,7 +40,7 @@ internal interface IPcmDevice
 internal sealed class NativeAudioOutput : IAudioOutput
 {
     private readonly IPcmDevice _device;
-    private readonly Channel<Command> _commands = Channel.CreateBounded<Command>(new BoundedChannelOptions(16)
+    private readonly Channel<Command> _commands = Channel.CreateBounded<Command>(new BoundedChannelOptions(128)
     {
         SingleReader = true,
         FullMode = BoundedChannelFullMode.Wait,
@@ -46,10 +50,17 @@ internal sealed class NativeAudioOutput : IAudioOutput
     private int _generation;
     private int _disposed;
     private Exception? _closeError;
+    private readonly Lock _budgetGate = new();
+    private int _queuedCount;
+    private long _queuedBytes;
+    private double _queuedMilliseconds;
 
-    internal NativeAudioOutput(IPcmDevice device, TimeSpan? stallAllowance = null)
+    private readonly Action<string>? _log;
+
+    internal NativeAudioOutput(IPcmDevice device, TimeSpan? stallAllowance = null, Action<string>? log = null)
     {
         _device = device;
+        _log = log;
         _stallAllowance = stallAllowance ?? TimeSpan.FromSeconds(5);
         Completion = Task.Run(RunAsync);
     }
@@ -69,9 +80,21 @@ internal sealed class NativeAudioOutput : IAudioOutput
         if (ct.IsCancellationRequested) return Task.FromCanceled(ct);
         var command = new Command(Volatile.Read(ref _generation), format, data, ct,
             new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), Stopwatch.GetTimestamp());
-        if (!_commands.Writer.TryWrite(command))
+        lock (_budgetGate)
         {
-            command.Result!.SetException(new IOException("RDP audio output queue is full or closed."));
+            double duration = DurationMilliseconds(command);
+            if (_queuedCount >= 128 || _queuedBytes + data.Length > 1024 * 1024 ||
+                (_queuedCount > 0 && _queuedMilliseconds + duration > 2000))
+                return Task.FromException(new IOException("RDP audio output queue capacity exceeded."));
+            _queuedCount++;
+            _queuedBytes += data.Length;
+            _queuedMilliseconds += duration;
+            command.QueueAllowance = TimeSpan.FromMilliseconds(_queuedMilliseconds + 100);
+            if (!_commands.Writer.TryWrite(command))
+            {
+                ReleaseBudget(command);
+                command.Result!.SetException(new IOException("RDP audio output queue is closed."));
+            }
         }
         // Keep the caller cancellable even if a system driver stalls inside a native call. Native
         // buffers remain owned by the worker until that call returns and cleanup is safe.
@@ -82,7 +105,7 @@ internal sealed class NativeAudioOutput : IAudioOutput
     {
         try
         {
-            await command.Result!.Task.WaitAsync(PlaybackLimit(command.Format, command.Data!.Length), command.Cancellation).ConfigureAwait(false);
+            await command.Result!.Task.WaitAsync(_stallAllowance + command.QueueAllowance, command.Cancellation).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
@@ -112,59 +135,127 @@ internal sealed class NativeAudioOutput : IAudioOutput
     {
         AudioFormat? opened = null;
         int deviceGeneration = -1;
+        var waiting = new Queue<Command>();
+        var active = new Queue<Command>();
+        var timing = new AudioPlayoutTiming();
+        double waitingMilliseconds = 0;
+        long bufferingSince = 0;
+        long lastReport = 0;
         try
         {
-            await foreach (Command command in _commands.Reader.ReadAllAsync().ConfigureAwait(false))
+            while (true)
             {
-                if (opened is not null && deviceGeneration != Volatile.Read(ref _generation))
+                while (_commands.Reader.TryRead(out Command? incoming))
                 {
-                    CloseDevice();
-                    opened = null;
+                    if (incoming.Result is null) continue;
+                    waiting.Enqueue(incoming);
+                    waitingMilliseconds += DurationMilliseconds(incoming);
                 }
-                if (command.Result is null) continue;
+                Command? submitting = null;
                 try
                 {
-                    CheckCancellation(command);
-                    if (_closeError is { } closeError)
+                    foreach (Command command in active) CheckCancellation(command);
+                    if (opened is not null && deviceGeneration != Volatile.Read(ref _generation))
                     {
-                        _closeError = null;
-                        throw new IOException("The previous RDP audio device could not be closed.", closeError);
-                    }
-                    if (command.Data!.Length == 0)
-                    {
-                        command.Result.SetResult();
-                        continue;
-                    }
-                    if (opened != command.Format)
-                    {
-                        _device.Close();
+                        CloseDevice();
                         opened = null;
-                        _device.Open(command.Format);
-                        opened = command.Format;
+                        timing = new AudioPlayoutTiming();
                     }
-                    deviceGeneration = command.Generation;
-                    CheckCancellation(command);
-                    _device.Start(command.Data);
-                    while (true)
+                    // Reap completed buffers without draining the device. Later buffers keep playing.
+                    while (active.Count > 0 && _device.IsComplete())
                     {
-                        CheckCancellation(command);
-                        if (_device.IsComplete()) break;
-                        await Task.Delay(2, command.Cancellation).ConfigureAwait(false);
+                        Command completed = active.Peek();
+                        CheckCancellation(completed);
+                        active.Dequeue();
+                        Finish(completed);
                     }
-                    CheckCancellation(command);
-                    command.Result.SetResult();
+                    if (active.Count == 0 && bufferingSince == 0)
+                    {
+                        bufferingSince = Stopwatch.GetTimestamp();
+                        timing.ResetDrift();
+                    }
+                    while (waiting.TryPeek(out Command? next) && active.Count < 32)
+                    {
+                        submitting = next;
+                        CheckCancellation(next);
+                        if (_closeError is { } closeError)
+                        {
+                            _closeError = null;
+                            throw new IOException("The previous RDP audio device could not be closed.", closeError);
+                        }
+                        if (next.Data!.Length == 0)
+                        {
+                            waiting.Dequeue();
+                            Finish(next);
+                            submitting = null;
+                            continue;
+                        }
+                        if (opened != next.Format)
+                        {
+                            if (active.Count > 0) break;
+                            _device.Close();
+                            opened = null;
+                            _device.Open(next.Format);
+                            opened = next.Format;
+                            deviceGeneration = next.Generation;
+                            timing = new AudioPlayoutTiming();
+                            bufferingSince = Stopwatch.GetTimestamp();
+                            CheckCancellation(next);
+                        }
+                        if (!next.Observed)
+                        {
+                            timing.ObserveArrival(next.EnqueuedAt * 1000.0 / Stopwatch.Frequency, DurationMilliseconds(next));
+                            next.Observed = true;
+                        }
+                        if (active.Count == 0 && Stopwatch.GetElapsedTime(bufferingSince).TotalMilliseconds < timing.TargetMilliseconds)
+                            break;
+                        double deviceMilliseconds = _device.PendingFrames * 1000.0 / next.Format.SampleRate;
+                        if (active.Count > 0 && deviceMilliseconds >= 120) break;
+                        double duration = DurationMilliseconds(next);
+                        timing.UpdateRate(deviceMilliseconds + waitingMilliseconds - duration, duration);
+                        _device.Start(timing.Resample(next.Format, next.Data));
+                        waiting.Dequeue();
+                        waitingMilliseconds -= duration;
+                        active.Enqueue(next);
+                        if (_log is not null && (lastReport == 0 || Stopwatch.GetElapsedTime(lastReport).TotalSeconds >= 5))
+                        {
+                            lastReport = Stopwatch.GetTimestamp();
+                            try
+                            {
+                                _log($"playout; targetMs={timing.TargetMilliseconds:F1}; bufferedMs={deviceMilliseconds + waitingMilliseconds + duration:F1}; correctionPpm={timing.RateCorrection * 1000000:F0}; inFlight={active.Count}");
+                            }
+                            catch { /* Diagnostics cannot interrupt native buffer ownership. */ }
+                        }
+                        bufferingSince = 0;
+                        submitting = null;
+                    }
                 }
                 catch (Exception error)
                 {
-                    // The caller may already have canceled; only the worker releases in-flight native buffers.
+                    // Native ownership stays on this worker, even if callers already cancelled.
                     try { _device.Reset(); }
                     catch (Exception resetError) { error = new AggregateException(error, resetError); }
                     CloseDevice();
                     opened = null;
-                    if (error is OperationCanceledException)
-                        command.Result.TrySetCanceled(command.Cancellation.IsCancellationRequested ? command.Cancellation : new CancellationToken(true));
-                    else
-                        command.Result.TrySetException(error);
+                    timing = new AudioPlayoutTiming();
+                    bufferingSince = 0;
+                    while (active.TryDequeue(out Command? command)) Finish(command, error);
+                    if (submitting is not null && waiting.TryPeek(out Command? first) && ReferenceEquals(first, submitting))
+                    {
+                        waiting.Dequeue();
+                        waitingMilliseconds -= DurationMilliseconds(submitting);
+                        Finish(submitting, error);
+                    }
+                }
+                if (active.Count == 0 && waiting.Count == 0)
+                {
+                    bufferingSince = 0;
+                    if (!await _commands.Reader.WaitToReadAsync().ConfigureAwait(false)) break;
+                }
+                else
+                {
+                    // Only active playback needs clock checks; idle outputs sleep on the channel.
+                    await Task.Delay(5).ConfigureAwait(false);
                 }
             }
         }
@@ -174,15 +265,35 @@ internal sealed class NativeAudioOutput : IAudioOutput
         }
     }
 
-    private TimeSpan PlaybackLimit(AudioFormat format, int length) => _stallAllowance +
-        TimeSpan.FromSeconds((double)length / format.BlockAlign / format.SampleRate);
+    private static double DurationMilliseconds(Command command) =>
+        command.Data!.Length * 1000.0 / command.Format.BlockAlign / command.Format.SampleRate;
+
+    private void ReleaseBudget(Command command)
+    {
+        lock (_budgetGate)
+        {
+            _queuedCount--;
+            _queuedBytes -= command.Data!.Length;
+            _queuedMilliseconds -= DurationMilliseconds(command);
+        }
+    }
+
+    private void Finish(Command command, Exception? error = null)
+    {
+        ReleaseBudget(command);
+        if (error is OperationCanceledException)
+            command.Result!.TrySetCanceled(command.Cancellation.IsCancellationRequested ? command.Cancellation : new CancellationToken(true));
+        else if (error is not null)
+            command.Result!.TrySetException(error);
+        else command.Result!.TrySetResult();
+    }
 
     private void CheckCancellation(Command command)
     {
         command.Cancellation.ThrowIfCancellationRequested();
         if (Volatile.Read(ref _disposed) != 0 || command.Generation != Volatile.Read(ref _generation))
             throw new OperationCanceledException("RDP audio playback was closed.");
-        TimeSpan deadline = PlaybackLimit(command.Format, command.Data!.Length);
+        TimeSpan deadline = _stallAllowance + command.QueueAllowance;
         if (Volatile.Read(ref command.TimedOut) != 0 || Stopwatch.GetElapsedTime(command.EnqueuedAt) >= deadline)
             throw new TimeoutException($"RDP audio device stalled for {deadline.TotalSeconds:F1} seconds.");
     }
@@ -201,5 +312,7 @@ internal sealed class NativeAudioOutput : IAudioOutput
         CancellationToken Cancellation, TaskCompletionSource? Result, long EnqueuedAt)
     {
         internal int TimedOut;
+        internal TimeSpan QueueAllowance;
+        internal bool Observed;
     }
 }

@@ -7,10 +7,15 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
     private const int Again = -11, Interrupted = -4, Underrun = -32;
     private readonly IAlsaApi _api = api ?? new SystemAlsaApi();
     private nint _pcm;
-    private nint _samples;
-    private int _length;
-    private int _offset;
+    private readonly Queue<Buffer> _buffers = new();
     private int _blockAlign;
+    private long _submittedFrames, _writtenFrames, _playedFrames;
+    private sealed class Buffer(byte[] data, long endFrame)
+    {
+        internal readonly byte[] Data = data;
+        internal readonly long EndFrame = endFrame;
+        internal int Offset;
+    }
 
     public void Open(AudioFormat format)
     {
@@ -32,44 +37,66 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
     {
         int state = _api.State(_pcm);
         // Hardware PCMs can underrun in the gap between packets; retain the handle and prepare again.
-        if (state is 1 or 4) Check(_api.Prepare(_pcm), "prepare output after underrun");
-        _samples = Marshal.AllocHGlobal(data.Length);
-        Marshal.Copy(data, 0, _samples, data.Length);
-        _length = data.Length;
-        _offset = 0;
+        if (state is 1 or 4)
+        {
+            _playedFrames = _writtenFrames;
+            Check(_api.Prepare(_pcm), "prepare output after underrun");
+        }
+        _submittedFrames += data.Length / _blockAlign;
+        _buffers.Enqueue(new Buffer(data, _submittedFrames));
     }
 
-    public bool IsComplete()
+    private unsafe void Pump()
     {
-        if (_offset < _length)
+        foreach (Buffer buffer in _buffers)
         {
-            nint written = _api.Write(_pcm, _samples + _offset, (nuint)((_length - _offset) / _blockAlign));
-            if (written is Again or Interrupted) return false;
+            if (buffer.Offset == buffer.Data.Length) continue;
+            nint written;
+            fixed (byte* samples = buffer.Data)
+                written = _api.Write(_pcm, (nint)(samples + buffer.Offset), (nuint)((buffer.Data.Length - buffer.Offset) / _blockAlign));
+            if (written is Again or Interrupted) return;
             if (written == Underrun)
             {
-                // XRUN can occur after Start's state check or between partial writes. Frames already
-                // accepted were consumed before the underrun; retry only the unwritten suffix.
+                // Accepted frames have played; retry only the unwritten suffix, across all buffers.
+                _playedFrames = _writtenFrames;
                 Check(_api.Prepare(_pcm), "recover output after underrun");
-                return false;
+                return;
             }
             Check((int)written, "write PCM samples");
-            _offset += checked((int)written * _blockAlign);
+            buffer.Offset += checked((int)written * _blockAlign);
+            _writtenFrames += (long)written;
             if (written > 0 && _api.State(_pcm) == 2)
                 Check(_api.Start(_pcm), "start output");
-            if (_offset < _length) return false;
+            if (buffer.Offset < buffer.Data.Length) return;
         }
-        // Delay includes samples still buffered for playback. Keep the PCM running between packets,
-        // rather than draining to SETUP each time. XRUN after the last write means all frames played.
+    }
+
+    private bool UpdatePosition()
+    {
+        if (_writtenFrames == _playedFrames) return true;
         int result = _api.Delay(_pcm, out nint remainingFrames);
         if (result == Underrun && _api.State(_pcm) == 4)
         {
-            ReleaseBuffer();
+            _playedFrames = _writtenFrames;
             return true;
         }
         if (result is Again or Interrupted) return false;
         Check(result, "query playback delay");
-        if (remainingFrames > 0) return false;
-        ReleaseBuffer();
+        _playedFrames = Math.Max(_playedFrames, _writtenFrames - Math.Max(0, (long)remainingFrames));
+        return true;
+    }
+
+    public long PendingFrames
+    {
+        get { UpdatePosition(); return Math.Max(0, _submittedFrames - _playedFrames); }
+    }
+
+    public bool IsComplete()
+    {
+        Pump();
+        if (!_buffers.TryPeek(out Buffer? buffer) || buffer.Offset < buffer.Data.Length ||
+            !UpdatePosition() || _playedFrames < buffer.EndFrame) return false;
+        _buffers.Dequeue();
         return true;
     }
 
@@ -97,9 +124,8 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
 
     private void ReleaseBuffer()
     {
-        if (_samples != 0) Marshal.FreeHGlobal(_samples);
-        _samples = 0;
-        _length = _offset = 0;
+        _buffers.Clear();
+        _submittedFrames = _writtenFrames = _playedFrames = 0;
     }
 
     private void Check(int result, string operation)
@@ -112,7 +138,7 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
     {
         public int Open(out nint pcm) => Native.snd_pcm_open(out pcm, "default", 0, 1);
         public int Configure(nint pcm, AudioFormat format) => Native.snd_pcm_set_params(pcm,
-            format.BitsPerSample == 8 ? 1 : 2, 3, format.Channels, format.SampleRate, 1, 100_000);
+            format.BitsPerSample == 8 ? 1 : 2, 3, format.Channels, format.SampleRate, 1, 40_000);
         public int Prepare(nint pcm) => Native.snd_pcm_prepare(pcm);
         public nint Write(nint pcm, nint data, nuint frames) => Native.snd_pcm_writei(pcm, data, frames);
         public int Start(nint pcm) => Native.snd_pcm_start(pcm);
