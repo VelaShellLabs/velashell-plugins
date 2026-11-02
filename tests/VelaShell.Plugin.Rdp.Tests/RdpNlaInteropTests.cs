@@ -67,8 +67,8 @@ public sealed class RdpNlaInteropTests
     [TestMethod]
     public Task NlaAuthenticatesAndReachesTheDesktop() => AuthenticateAndReach(forceManaged: false);
 
-    // On Windows the default path is native SSPI (SPNEGO); force the managed NTLM provider too so the
-    // cross-platform fallback keeps working. On non-Windows both runs use the managed path.
+    // On Windows this alternate path still uses SSPI's NTLM package: it does not prove Unix compatibility.
+    // ManagedNtlmTests also runs on Linux/macOS to exercise .NET's actual managed NTLM provider.
     [TestMethod]
     public Task ManagedNtlmAlsoAuthenticatesAndReachesTheDesktop() => AuthenticateAndReach(forceManaged: true);
 

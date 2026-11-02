@@ -13,6 +13,21 @@ permissions:
   contents: read
 
 jobs:
+  rdp-unix-authentication:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-quality: preview
+          dotnet-version: 11.0.x
+      # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
+      - name: Test portable RDP authentication
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests"
+
   build:
     runs-on: windows-latest
     env:
