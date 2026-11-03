@@ -91,7 +91,9 @@ public sealed class RdpPlugin : IVelaPlugin
         Pages =
         [
             new ProtocolSettingPage(RdpSettings.DrivesPage, loc["DrivesPage"]),
-            new ProtocolSettingPage(RdpSettings.ExperiencePage, loc["ExperiencePage"])
+            new ProtocolSettingPage(RdpSettings.ExperiencePage, loc["ExperiencePage"]),
+            new ProtocolSettingPage(RdpSettings.GatewayPage, loc["GatewayPage"]),
+            new ProtocolSettingPage(RdpSettings.RemoteAppPage, "RemoteApp")
         ],
         Fields = RdpSettings.Declare(loc, disks, printers, cameras, _wpdDevices),
         Features = WorkspaceFeatures.CertificateTrust | WorkspaceFeatures.SshTunnel,

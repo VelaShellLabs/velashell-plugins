@@ -187,6 +187,8 @@ internal sealed class OrderDecoder
     private readonly DeltaRect[] _deltaRects = new DeltaRect[MaxDeltaRectangles];
     private MemBltState _memBlt;
 
+    internal RemoteAppWindowDecoder? RemoteWindows { get; init; }
+
     /// <param name="sessionBpp">The session colour depth (8, 15, 16, 24 or 32): it decides how order colours decode.</param>
     /// <param name="target">The surface to draw on.</param>
     /// <param name="cellCacheSizes">Entries per bitmap-cache cell, as advertised in the bitmap cache capability.</param>
@@ -1038,7 +1040,7 @@ internal sealed class OrderDecoder
     /// nothing is drawn). Types whose size cannot be determined — composed desktop orders, which FreeRDP accepts
     /// without consuming anything, and unknown types — are rejected.
     /// </summary>
-    private static void SkipAltSecondary(ref ByteReader r, byte controlFlags)
+    private void SkipAltSecondary(ref ByteReader r, byte controlFlags)
     {
         int orderType = controlFlags >> 2;
         switch (orderType)
@@ -1127,7 +1129,8 @@ internal sealed class OrderDecoder
                         throw new RdpProtocolException($"Window order size {orderSize} is shorter than its header.");
                     }
 
-                    r.Skip(orderSize - 3);
+                    ReadOnlySpan<byte> windowData = r.Take(orderSize - 3);
+                    RemoteWindows?.Process(windowData);
                     break;
                 }
             case AltFrameMarker:

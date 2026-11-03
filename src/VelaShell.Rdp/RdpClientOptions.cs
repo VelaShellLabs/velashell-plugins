@@ -21,6 +21,15 @@ public sealed record RdpClientOptions
     /// <summary>Set for SSH/proxy tunnels that forward TCP only. Prevents direct UDP connections.</summary>
     public bool TcpTunnel { get; init; }
 
+    /// <summary>Optional RD Gateway. Target traffic stays inside this gateway; direct UDP is disabled.</summary>
+    public RdpGatewayOptions? Gateway { get; init; }
+
+    /// <summary>Launch a published RDS application using RAIL instead of a desktop.</summary>
+    public RemoteAppOptions? RemoteApp { get; init; }
+
+    /// <summary>Explicitly expose local PC/SC smart-card readers to the remote session. Disabled by default.</summary>
+    public bool SmartCardRedirection { get; init; }
+
     public string Username { get; init; } = "";
     public string Password { get; init; } = "";
 

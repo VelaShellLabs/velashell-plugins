@@ -25,8 +25,11 @@ internal static class RdpConnector
         {
             Host = request.Host,
             Port = request.Port,
-            Transport = request.Tunnel is null ? settings.Transport : RdpTransportMode.Tcp,
-            TcpTunnel = request.Tunnel is not null,
+            Transport = request.Tunnel is null && settings.Gateway is null ? settings.Transport : RdpTransportMode.Tcp,
+            TcpTunnel = request.Tunnel is not null || settings.Gateway is not null,
+            Gateway = settings.Gateway,
+            RemoteApp = settings.RemoteApp,
+            SmartCardRedirection = settings.SmartCardRedirection,
             AdaptiveNetwork = settings.AdaptiveNetwork,
             Username = request.Username,
             Password = request.Password,

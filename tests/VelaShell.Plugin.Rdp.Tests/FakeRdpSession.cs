@@ -2,8 +2,17 @@ using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
-internal sealed class FakeRdpSession : IRdpSession, IRdpAudioSource, IRdpNetworkSource
+internal sealed class FakeRdpSession : IRdpSession, IRdpAudioSource, IRdpNetworkSource, IRdpRemoteAppSource
 {
+    public bool IsRemoteApp { get; init; }
+    public IReadOnlyList<RemoteAppWindow> RemoteWindows { get; private set; } = [];
+    public event Action? RemoteWindowsChanged;
+    internal readonly List<string> RemoteCommands = [];
+    internal void EmitWindows(params RemoteAppWindow[] windows) { RemoteWindows = windows; RemoteWindowsChanged?.Invoke(); }
+    public Task ActivateWindowAsync(uint id, bool active, CancellationToken ct = default) { RemoteCommands.Add($"activate:{id}:{active}"); return Task.CompletedTask; }
+    public Task CloseWindowAsync(uint id, CancellationToken ct = default) { RemoteCommands.Add($"close:{id}"); return Task.CompletedTask; }
+    public Task MoveWindowAsync(uint id, int x, int y, int width, int height, CancellationToken ct = default) { RemoteCommands.Add($"move:{id}:{x}:{y}:{width}:{height}"); return Task.CompletedTask; }
+    public Task SetWindowStateAsync(uint id, bool maximized, CancellationToken ct = default) { RemoteCommands.Add($"maximize:{id}:{maximized}"); return Task.CompletedTask; }
     public RdpNetworkStatus NetworkStatus { get; private set; } = new();
     public event Action<RdpNetworkStatus>? NetworkChanged;
     internal void SetNetwork(RdpNetworkStatus status) { NetworkStatus = status; NetworkChanged?.Invoke(status); }

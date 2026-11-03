@@ -17,7 +17,8 @@ internal sealed record RdpConnectOptions(
     RdpPerformanceFlags Performance = RdpPerformanceFlags.DisableWallpaper | RdpPerformanceFlags.DisableFullWindowDrag | RdpPerformanceFlags.DisableMenuAnimations,
     bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default,
     RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false,
-    bool GraphicsPipeline = false)
+    bool GraphicsPipeline = false, RemoteAppOptions? RemoteApp = null,
+    RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -35,6 +36,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
 {
     private readonly RdpConnectOptions _options;
     private TcpClient? _tcp;
+    private RdpGatewayStream? _gateway;
     private RdpTransport _transport = null!;
     private McsLayer _mcs = null!;
     private ushort _ioChannel;
@@ -59,6 +61,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     // Replaced under _surfaceGate by classic activation or GFX updates; readers retain one surface reference.
     private volatile Framebuffer _framebuffer = new(1, 1);
     internal Framebuffer Framebuffer { get => _framebuffer; private set => _framebuffer = value; }
+    internal RemoteAppWindowDecoder? RemoteWindows { get; }
     internal event Action? FrameUpdated;
     internal event Action<ChannelPayload>? ChannelData;
     internal event Action<uint>? ErrorInfoReceived;
@@ -68,7 +71,13 @@ internal sealed partial class RdpConnection : IAsyncDisposable
 
     internal RdpConnection(RdpConnectOptions options)
     {
+        options.RemoteApp?.Validate();
+        if (options.RemoteApp is not null && options.GraphicsPipeline)
+        {
+            throw new ArgumentException("RemoteApp requires the classic RAIL graphics path.", nameof(options));
+        }
         _options = options;
+        RemoteWindows = options.RemoteApp is null ? null : new RemoteAppWindowDecoder();
         Network = new(options.AdaptiveNetwork);
         _autoDetect = new(Network);
         _width = options.Width;
@@ -98,10 +107,19 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     internal async Task ConnectAsync(CancellationToken ct)
     {
         Stage = RdpConnectStage.Tcp;
-        _tcp = new TcpClient { NoDelay = true };
-        await _tcp.ConnectAsync(_options.Host, _options.Port, ct).ConfigureAwait(false);
-        ConfigureKeepAlive(_tcp.Client, _options.KeepAlive);
-        _transport = new RdpTransport(_tcp.GetStream());
+        if (_options.Gateway is { } gateway)
+        {
+            _gateway = await RdpGatewayStream.ConnectAsync(gateway, _options.Host, _options.Port,
+                _options.Username, _options.Password, _options.Domain, _options.GatewayRedirections, ct).ConfigureAwait(false);
+            _transport = new RdpTransport(_gateway);
+        }
+        else
+        {
+            _tcp = new TcpClient { NoDelay = true };
+            await _tcp.ConnectAsync(_options.Host, _options.Port, ct).ConfigureAwait(false);
+            ConfigureKeepAlive(_tcp.Client, _options.KeepAlive);
+            _transport = new RdpTransport(_tcp.GetStream());
+        }
 
         // X.224 negotiation: offer TLS and NLA and let the server pick (NLA-only offers both too, as the spec
         // asks for PROTOCOL_SSL alongside PROTOCOL_HYBRID, and then insists on NLA), or TLS only.
@@ -136,7 +154,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         // MCS + GCC.
         Stage = RdpConnectStage.Mcs;
         bool extended = (negotiationFlags & 1) != 0;
-        _udpAdvertised = extended && _options.Transport == RdpTransportMode.Auto && !_options.TcpTunnel
+        _udpAdvertised = extended && _options.Transport == RdpTransportMode.Auto && !_options.TcpTunnel && _options.Gateway is null
             && _options.Channels.Any(c => c.Name == "drdynvc");
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
             (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor,
@@ -152,7 +170,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         // Client Info on the I/O channel.
         Stage = RdpConnectStage.Login;
         byte[] clientInfo = ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
-            (uint)_options.Performance, _options.AudioPlayback);
+            (uint)_options.Performance, _options.AudioPlayback, _options.RemoteApp is not null);
         try { await SendOnIoAsync(clientInfo, ct).ConfigureAwait(false); }
         finally { CryptographicOperations.ZeroMemory(clientInfo); }   // carries the password in the clear
 
@@ -247,6 +265,10 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         }
 
         Capabilities.DemandActive active = Capabilities.ReadDemandActive(ref r);
+        if (_options.RemoteApp is not null && ((active.RailSupport & 1) == 0 || active.WindowSupport == 0))
+        {
+            throw new RdpProtocolException("The server does not support RemoteApp/RAIL window negotiation.");
+        }
         _shareId = active.ShareId;
         ServerSupportsSuppressOutput = active.SuppressOutput;
         ServerSupportsRefreshRect = active.RefreshRect;
@@ -255,7 +277,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         if (active.Width > 0 && active.Height > 0) { _width = active.Width; _height = active.Height; }
 
         ushort user = _mcs.UserId;
-        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0, _options.DrawingOrders), ct).ConfigureAwait(false);
+        await SendOnIoAsync(Capabilities.BuildConfirmActive(_shareId, user, _width, _height, _options.Bpp, _channelsById.Count > 0, _options.DrawingOrders, _options.RemoteApp is not null), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.Synchronize(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.ControlCooperate(_shareId, user), ct).ConfigureAwait(false);
         await SendOnIoAsync(ControlPdus.RequestControl(_shareId, user), ct).ConfigureAwait(false);
@@ -515,14 +537,14 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             if (!_graphicsActive) { Framebuffer = new Framebuffer(_width, _height); }
             _orderSurface.Current = Framebuffer;
         }
-        if (!_options.DrawingOrders)
+        if (!_options.DrawingOrders && RemoteWindows is null)
         {
             return;
         }
 
         if (_orders is null || _ordersBpp != sessionBpp)
         {
-            _orders = new OrderDecoder(sessionBpp, _orderSurface, Capabilities.BitmapCacheCells);
+            _orders = new OrderDecoder(sessionBpp, _orderSurface, Capabilities.BitmapCacheCells) { RemoteWindows = RemoteWindows };
             _ordersBpp = sessionBpp;
         }
         else
@@ -687,6 +709,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         {
             _sendStop.Cancel();
             _tcp?.Close();
+            _gateway?.Dispose();
             throw;
         }
         finally { _ = channelGate.Release(); }
@@ -811,6 +834,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         _sendStop.Cancel();
         try { _tcp?.Close(); } catch { /* ignore */ }
         _tcp?.Dispose();
+        if (_gateway is { } gateway) { await gateway.DisposeAsync().ConfigureAwait(false); }
         await Task.WhenAll(_tunnelAttempts.Values).ConfigureAwait(false);
         foreach (RdpMultitransport tunnel in _tunnels.Values) { await tunnel.DisposeAsync().ConfigureAwait(false); }
         _writeGate.Dispose();
