@@ -4,7 +4,6 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Testing;
-using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Wire;
 
@@ -56,7 +55,7 @@ public sealed class RdpBackgroundSessionTests
     {
         var transport = new RdpTransport(new MemoryStream([]));
         RdpConnectionLostException lost = await Assert.ThrowsAsync<RdpConnectionLostException>(() => transport.ReadPduAsync(default));
-        Assert.IsInstanceOfType<IOException>(lost);
+        _ = Assert.IsInstanceOfType<IOException>(lost);
     }
 
     [TestMethod]
@@ -81,7 +80,7 @@ public sealed class RdpBackgroundSessionTests
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         var sessions = new List<FakeRdpSession>();
-        await using var provider = Provider(context, sessions);
+        await using RdpWorkspaceProvider provider = Provider(context, sessions);
         var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
         document.AutoReconnectDelays = [TimeSpan.FromMilliseconds(10)];
 
@@ -101,7 +100,7 @@ public sealed class RdpBackgroundSessionTests
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         var sessions = new List<FakeRdpSession>();
-        await using var provider = Provider(context, sessions);
+        await using RdpWorkspaceProvider provider = Provider(context, sessions);
         var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
         document.AutoReconnectDelays = [TimeSpan.FromMilliseconds(10)];
 
@@ -167,7 +166,7 @@ public sealed class RdpBackgroundSessionTests
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         var sessions = new List<FakeRdpSession>();
-        await using var provider = Provider(context, sessions);
+        await using RdpWorkspaceProvider provider = Provider(context, sessions);
         var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
         document.AutoReconnectDelays = [TimeSpan.FromMilliseconds(5)];
         document.AutoReconnectAttempts = 2;
@@ -188,7 +187,7 @@ public sealed class RdpBackgroundSessionTests
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         var sessions = new List<FakeRdpSession>();
-        await using var provider = Provider(context, sessions);
+        await using RdpWorkspaceProvider provider = Provider(context, sessions);
         var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
         document.AutoReconnectDelays = [TimeSpan.FromHours(1)];
 
@@ -214,7 +213,7 @@ public sealed class RdpBackgroundSessionTests
         RdpViewMetrics.ResetForTest();
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         var sessions = new List<FakeRdpSession>();
-        await using var provider = Provider(context, sessions);
+        await using RdpWorkspaceProvider provider = Provider(context, sessions);
         var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
         document.AutoReconnectDelays = [TimeSpan.FromMilliseconds(10)];
         var root = (ContentControl)document.CreateView();

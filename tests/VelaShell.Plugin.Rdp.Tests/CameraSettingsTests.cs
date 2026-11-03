@@ -13,7 +13,7 @@ public sealed class CameraSettingsTests
         Assert.IsNull(LocalCameras.Selected(RdpSettingsTests.Request(), new("en"),
             () => throw new AssertFailedException("Disabled camera must not enumerate.")));
         var camera = new RdpCameraDevice("camera-one", "Camera");
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => LocalCameras.Selected(
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => LocalCameras.Selected(
             RdpSettingsTests.Request(("camera", LocalCameras.Key(camera))), new("en"), () => []));
     }
 
@@ -21,7 +21,7 @@ public sealed class CameraSettingsTests
     public void SingleChoiceResolvesExactDeviceAndEnablesDvcWithFixedDesktop()
     {
         var camera = new RdpCameraDevice("camera-one", "Camera");
-        var field = RdpSettings.Declare(new("en"), [], cameras: [camera]).Single(f => f.Key == "camera");
+        ProtocolSettingField field = RdpSettings.Declare(new("en"), [], cameras: [camera]).Single(f => f.Key == "camera");
         Assert.AreEqual(ProtocolSettingKind.Choice, field.Kind);
         Assert.AreEqual("", field.DefaultValue);
         var settings = RdpSettings.From(RdpSettingsTests.Request(("camera", LocalCameras.Key(camera))), new("en"), [], enumerateCameras: () => [camera]);

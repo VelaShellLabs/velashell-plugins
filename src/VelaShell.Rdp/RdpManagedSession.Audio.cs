@@ -58,9 +58,16 @@ public sealed partial class RdpManagedSession : IRdpAudioSource
                 {
                     Task<bool> available = _audioQueue.Reader.WaitToReadAsync(_audioStop.Token).AsTask();
                     if (await Task.WhenAny(available, channel.PlaybackFailure).ConfigureAwait(false) == channel.PlaybackFailure)
+                    {
                         throw await channel.PlaybackFailure.ConfigureAwait(false);
-                    if (!await available.ConfigureAwait(false)) break;
-                    while (_audioQueue.Reader.TryRead(out var message))
+                    }
+
+                    if (!await available.ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    while (_audioQueue.Reader.TryRead(out (byte[] Data, long ReceivedAt) message))
                     {
                         _ = Interlocked.Add(ref _audioQueuedBytes, -message.Data.Length);
                         await channel.ProcessAsync(message.Data, message.ReceivedAt, _audioStop.Token).ConfigureAwait(false);
@@ -72,7 +79,7 @@ public sealed partial class RdpManagedSession : IRdpAudioSource
             catch (Exception ex) { FailAudio(ex); }
             finally
             {
-                while (_audioQueue.Reader.TryRead(out var pending))
+                while (_audioQueue.Reader.TryRead(out (byte[] Data, long ReceivedAt) pending))
                 {
                     _ = Interlocked.Add(ref _audioQueuedBytes, -pending.Data.Length);
                 }
@@ -101,7 +108,7 @@ public sealed partial class RdpManagedSession : IRdpAudioSource
             _audioFailure = error;
             handlers = _audioHandlers;
         }
-        _audioQueue?.Writer.TryComplete();
+        _ = (_audioQueue?.Writer.TryComplete());
         _audioStop?.Cancel();
         LogAudio($"playback stopped: {error.Message}");
         try { handlers?.Invoke(error); } catch { /* Audio errors must not stop the desktop. */ }

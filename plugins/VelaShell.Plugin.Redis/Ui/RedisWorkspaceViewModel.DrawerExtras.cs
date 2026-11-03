@@ -497,13 +497,13 @@ public sealed partial class RedisWorkspaceViewModel
             StatusMessage = Loc["Redis_BatchNothing"];
             return;
         }
-        string path = System.IO.Path.Combine(
+        string path = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "redis-export",
             $"pubsub-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.jsonl");
         try
         {
-            _ = System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             // 一行一条 JSON:给人看与喂给脚本都直接可用。
             IEnumerable<string> lines = Messages.Reverse().Select(message => System.Text.Json.JsonSerializer.Serialize(
                 new { at = message.At, channel = message.Channel, payload = message.Payload },
@@ -511,7 +511,7 @@ public sealed partial class RedisWorkspaceViewModel
                 {
                     Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                 }));
-            await System.IO.File.WriteAllLinesAsync(path, lines).ConfigureAwait(true);
+            await File.WriteAllLinesAsync(path, lines).ConfigureAwait(true);
             StatusMessage = Loc.Format("Redis_ExportDone",
                 Messages.Count.ToString("N0", CultureInfo.CurrentCulture),
                 new System.IO.FileInfo(path).Length.ToString("N0", CultureInfo.CurrentCulture) + " B",

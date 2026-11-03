@@ -15,9 +15,16 @@ internal static class LocalCameras
     internal static RdpCameraDevice? Selected(WorkspaceConnectRequest request, Loc loc, Func<IReadOnlyList<RdpCameraDevice>> enumerate)
     {
         string selection = request.GetString(SettingKey);
-        if (selection.Length == 0) return null;
+        if (selection.Length == 0)
+        {
+            return null;
+        }
+
         if (selection.Length != 64 || !selection.All(char.IsAsciiHexDigit))
+        {
             throw new ProtocolConnectionException(loc.Format("Invalid", loc["Camera"]));
+        }
+
         try
         {
             return enumerate().FirstOrDefault(camera => string.Equals(Key(camera), selection, StringComparison.Ordinal))

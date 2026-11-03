@@ -47,12 +47,20 @@ internal sealed partial class WaveOutDevice : IPcmDevice
         _buffers.Enqueue(buffer);
         if (buffer.Capacity < data.Length)
         {
-            if (buffer.Samples != 0) Marshal.FreeHGlobal(buffer.Samples);
+            if (buffer.Samples != 0)
+            {
+                Marshal.FreeHGlobal(buffer.Samples);
+            }
+
             buffer.Samples = 0;
             buffer.Samples = Marshal.AllocHGlobal(data.Length);
             buffer.Capacity = data.Length;
         }
-        if (buffer.Header == 0) buffer.Header = Marshal.AllocHGlobal((int)HeaderSize);
+        if (buffer.Header == 0)
+        {
+            buffer.Header = Marshal.AllocHGlobal((int)HeaderSize);
+        }
+
         Marshal.Copy(data, 0, buffer.Samples, data.Length);
         Marshal.StructureToPtr(new WaveHeader { Data = buffer.Samples, BufferLength = (uint)data.Length }, buffer.Header, false);
         Check(Native.waveOutPrepareHeader(_handle, buffer.Header, HeaderSize), "prepare PCM buffer");
@@ -85,20 +93,28 @@ internal sealed partial class WaveOutDevice : IPcmDevice
 
     public bool IsComplete()
     {
-        if (!_buffers.TryPeek(out Buffer? buffer) || (Marshal.ReadInt32(buffer.Header, FlagsOffset) & 1) == 0) return false;
+        if (!_buffers.TryPeek(out Buffer? buffer) || (Marshal.ReadInt32(buffer.Header, FlagsOffset) & 1) == 0)
+        {
+            return false;
+        }
+
         Unprepare(buffer);
-        _buffers.Dequeue();
+        _ = _buffers.Dequeue();
         _free.Push(buffer);
         return true;
     }
 
     public void Reset()
     {
-        if (_handle != 0) Check(Native.waveOutReset(_handle), "stop output");
+        if (_handle != 0)
+        {
+            Check(Native.waveOutReset(_handle), "stop output");
+        }
+
         while (_buffers.TryPeek(out Buffer? buffer))
         {
             Unprepare(buffer);
-            _buffers.Dequeue();
+            _ = _buffers.Dequeue();
             _free.Push(buffer);
         }
         _submittedFrames = _playedFrames = _positionRemainder = 0;
@@ -110,17 +126,31 @@ internal sealed partial class WaveOutDevice : IPcmDevice
         Reset();
         while (_free.TryPop(out Buffer? buffer))
         {
-            if (buffer.Header != 0) Marshal.FreeHGlobal(buffer.Header);
-            if (buffer.Samples != 0) Marshal.FreeHGlobal(buffer.Samples);
+            if (buffer.Header != 0)
+            {
+                Marshal.FreeHGlobal(buffer.Header);
+            }
+
+            if (buffer.Samples != 0)
+            {
+                Marshal.FreeHGlobal(buffer.Samples);
+            }
         }
-        if (_handle == 0) return;
+        if (_handle == 0)
+        {
+            return;
+        }
+
         Check(Native.waveOutClose(_handle), "close output");
         _handle = 0;
     }
 
     private void Unprepare(Buffer buffer)
     {
-        if (!buffer.Prepared) return;
+        if (!buffer.Prepared)
+        {
+            return;
+        }
         // A failed unprepare must retain memory that the driver could still own.
         Check(Native.waveOutUnprepareHeader(_handle, buffer.Header, HeaderSize), "release PCM buffer");
         buffer.Prepared = false;
@@ -135,7 +165,11 @@ internal sealed partial class WaveOutDevice : IPcmDevice
 
     private static unsafe void Check(uint result, string operation)
     {
-        if (result == 0) return;
+        if (result == 0)
+        {
+            return;
+        }
+
         Span<char> message = stackalloc char[256];
         message.Clear();
         fixed (char* pointer = message)

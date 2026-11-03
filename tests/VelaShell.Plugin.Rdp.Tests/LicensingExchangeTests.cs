@@ -21,7 +21,7 @@ public sealed class LicensingExchangeTests
         using var client = new Licensing("licensing-user", "licensing-machine");
         server.AcceptRequest(client.Process(server.Request()), "licensing-user", "licensing-machine");
         Assert.IsFalse(client.CanActivate);
-        server.AcceptChallenge(client.Process(server.Challenge()));
+        _ = server.AcceptChallenge(client.Process(server.Challenge()));
         Assert.IsFalse(client.CanActivate);
         Assert.IsNull(client.Process(server.IssueLicense()));
         Assert.IsTrue(client.CanActivate);
@@ -50,7 +50,7 @@ public sealed class LicensingExchangeTests
         using var wire = new LicensingTests.ScriptedStream(
             [.. LicensingTests.Frame(server.Request()), .. LicensingTests.Frame(LicensingStream.DemandActive)]);
         await using RdpConnection connection = LicensingTests.Connection(wire);
-        await Assert.ThrowsAsync<RdpProtocolException>(() => LicensingTests.Receive(connection));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => LicensingTests.Receive(connection));
         byte[] frame = wire.Output.ToArray();
         Assert.IsTrue(frame.Length > 15, "The initial licensing response must have been sent before activation was rejected.");
         int payloadOffset = (frame[13] & 0x80) == 0 ? 14 : 15;
@@ -67,7 +67,7 @@ public sealed class LicensingExchangeTests
         server.AcceptRequest(client.Process(server.Request()), "user", "machine");
         if (issuedLicense)
         {
-            server.AcceptChallenge(client.Process(server.Challenge()));
+            _ = server.AcceptChallenge(client.Process(server.Challenge()));
         }
         byte[] tampered = issuedLicense ? server.IssueLicense() : server.Challenge();
         tampered[^1] ^= 0x80;
@@ -181,7 +181,7 @@ public sealed class LicensingExchangeTests
             BigInteger ciphertext = new(encrypted.AsSpan(0, width), isUnsigned: true, isBigEndian: false);
             BigInteger modulus = new(key.Modulus, isUnsigned: true, isBigEndian: true);
             Assert.IsTrue(ciphertext < modulus);
-            BigInteger decrypted = BigInteger.ModPow(ciphertext,
+            var decrypted = BigInteger.ModPow(ciphertext,
                 new BigInteger(key.D!, isUnsigned: true, isBigEndian: true), modulus);
             byte[] premaster = new byte[48];
             Assert.IsTrue(decrypted.TryWriteBytes(premaster, out _, isUnsigned: true, isBigEndian: false),
@@ -314,7 +314,7 @@ public sealed class LicensingExchangeTests
 
         private byte[] X509Certificate()
         {
-            using RSA rootKey = RSA.Create(2048);
+            using var rootKey = RSA.Create(2048);
             var rootRequest = new CertificateRequest("CN=Licensing fixture root", rootKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             rootRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
             rootRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
@@ -391,7 +391,7 @@ public sealed class LicensingExchangeTests
             else
             {
                 Assert.AreEqual(1, Replies);
-                _server.AcceptChallenge(frame[payloadOffset..]);
+                _ = _server.AcceptChallenge(frame[payloadOffset..]);
                 next = [.. LicensingTests.Frame(_server.IssueLicense()), .. LicensingTests.Frame(DemandActive)];
             }
             Replies++;
@@ -430,7 +430,7 @@ public sealed class LicensingExchangeTests
         Assert.AreEqual((ushort)0, r.ReadUInt16());
         Assert.AreEqual(expectedType, r.ReadByte());
         Assert.AreEqual((byte)3, r.ReadByte());
-        Assert.AreEqual(packet.Length - 4, (int)r.ReadUInt16());
+        Assert.AreEqual(packet.Length - 4, r.ReadUInt16());
         return r;
     }
 

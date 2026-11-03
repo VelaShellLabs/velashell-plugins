@@ -20,16 +20,15 @@ internal sealed class AudioPlayoutTiming
         {
             double interval = arrivalMilliseconds - previous;
             if (interval >= 0 && interval < _lastDuration + 500)
+            {
                 _jitter += (Math.Abs(interval - _lastDuration) - _jitter) / 16;
+            }
         }
         _lastArrival = arrivalMilliseconds;
         _lastDuration = durationMilliseconds;
     }
 
-    internal void ResetDrift()
-    {
-        _filteredError = _integral = _fractionalFrames = RateCorrection = 0;
-    }
+    internal void ResetDrift() => _filteredError = _integral = _fractionalFrames = RateCorrection = 0;
 
     internal double UpdateRate(double bufferedMilliseconds, double durationMilliseconds)
     {
@@ -45,11 +44,18 @@ internal sealed class AudioPlayoutTiming
     internal byte[] Resample(AudioFormat format, byte[] data)
     {
         int frames = data.Length / format.BlockAlign;
-        if (frames == 0) return data;
+        if (frames == 0)
+        {
+            return data;
+        }
+
         double exactFrames = frames / (1 + RateCorrection) + _fractionalFrames;
         int outputFrames = Math.Max(1, (int)exactFrames);
         _fractionalFrames = Math.Max(0, exactFrames - outputFrames);
-        if (outputFrames == frames) return data;
+        if (outputFrames == frames)
+        {
+            return data;
+        }
 
         byte[] result = new byte[outputFrames * format.BlockAlign];
         int sampleBytes = format.BitsPerSample / 8;
@@ -65,7 +71,9 @@ internal sealed class AudioPlayoutTiming
                 int b = second * format.BlockAlign + channel * sampleBytes;
                 int destination = frame * format.BlockAlign + channel * sampleBytes;
                 if (sampleBytes == 1)
+                {
                     result[destination] = (byte)Math.Round(data[a] + (data[b] - data[a]) * fraction);
+                }
                 else
                 {
                     short left = BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(a));

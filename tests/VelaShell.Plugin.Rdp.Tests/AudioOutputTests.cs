@@ -36,7 +36,7 @@ public sealed class AudioOutputTests
         await device.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.IsFalse(play.IsCompleted);
         output.Close();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => play);
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => play);
         device.Complete = true;
         await output.PlayAsync(Stereo, new byte[192], default);
         Assert.AreEqual(2, device.Opens.Count);
@@ -78,7 +78,10 @@ public sealed class AudioOutputTests
         Assert.HasCount(1, device.Opens);
         output.Close();
         foreach (Task task in playing.Append(changed))
-            await Assert.ThrowsAsync<OperationCanceledException>(() => task.WaitAsync(TimeSpan.FromSeconds(2)));
+        {
+            _ = await Assert.ThrowsAsync<OperationCanceledException>(() => task.WaitAsync(TimeSpan.FromSeconds(2)));
+        }
+
         device.Complete = true;
         await output.PlayAsync(new(1, 8000, 8), new byte[160], default);
         Assert.AreEqual(4, device.Starts);
@@ -113,9 +116,13 @@ public sealed class AudioOutputTests
         using var output = new NativeAudioOutput(device);
         Task[] playing = Enumerable.Range(0, 3).Select(_ => output.PlayAsync(Stereo, new byte[3840], default)).ToArray();
         await device.MultipleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        await Assert.ThrowsExactlyAsync<IOException>(() => output.PlayAsync(Stereo, new byte[384000], default));
+        _ = await Assert.ThrowsExactlyAsync<IOException>(() => output.PlayAsync(Stereo, new byte[384000], default));
         output.Dispose();
-        foreach (Task task in playing) await Assert.ThrowsAsync<OperationCanceledException>(() => task);
+        foreach (Task task in playing)
+        {
+            _ = await Assert.ThrowsAsync<OperationCanceledException>(() => task);
+        }
+
         await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
@@ -131,7 +138,7 @@ public sealed class AudioOutputTests
             Task play = output.PlayAsync(Stereo, new byte[192], cancel.Token);
             await device.OpenEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
             cancel.Cancel();
-            await Assert.ThrowsAsync<OperationCanceledException>(() => play.WaitAsync(TimeSpan.FromSeconds(1)));
+            _ = await Assert.ThrowsAsync<OperationCanceledException>(() => play.WaitAsync(TimeSpan.FromSeconds(1)));
             var elapsed = Stopwatch.StartNew();
             output.Dispose();
             Assert.IsLessThan(TimeSpan.FromSeconds(1), elapsed.Elapsed);
@@ -151,7 +158,7 @@ public sealed class AudioOutputTests
     {
         var stalled = new FakeDevice();
         using var output = new NativeAudioOutput(stalled, TimeSpan.FromMilliseconds(50));
-        await Assert.ThrowsAsync<TimeoutException>(() => output.PlayAsync(Stereo, new byte[192], default));
+        _ = await Assert.ThrowsAsync<TimeoutException>(() => output.PlayAsync(Stereo, new byte[192], default));
         output.Dispose();
         await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.IsFalse(stalled.Opened);
@@ -175,7 +182,7 @@ public sealed class AudioOutputTests
         {
             Task play = output.PlayAsync(Stereo, new byte[192], default);
             await device.OpenEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            await Assert.ThrowsAsync<TimeoutException>(() => play);
+            _ = await Assert.ThrowsAsync<TimeoutException>(() => play);
             nativeCall.Set();
             await device.Closed.Task.WaitAsync(TimeSpan.FromSeconds(2));
             Assert.AreEqual(0, device.Starts);
@@ -193,30 +200,43 @@ public sealed class AudioOutputTests
     {
         var device = new FakeDevice();
         using var output = new NativeAudioOutput(device);
-        Assert.ThrowsExactly<ArgumentException>(() => output.PlayAsync(Stereo, new byte[3], default));
-        Assert.ThrowsExactly<ArgumentException>(() => output.PlayAsync(new(2, 96000, 16), new byte[4], default));
-        await Assert.ThrowsAsync<OperationCanceledException>(() => output.PlayAsync(Stereo, new byte[4], new CancellationToken(true)));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => output.PlayAsync(Stereo, new byte[3], default));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => output.PlayAsync(new(2, 96000, 16), new byte[4], default));
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => output.PlayAsync(Stereo, new byte[4], new CancellationToken(true)));
         await output.PlayAsync(Stereo, [], default);
         output.Dispose();
         await output.Completion.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.IsEmpty(device.Opens);
-        Assert.ThrowsExactly<ObjectDisposedException>(() => output.PlayAsync(Stereo, new byte[4], default));
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => output.PlayAsync(Stereo, new byte[4], default));
     }
 
     [TestMethod]
     public void PlatformAudioImportsResolveActualExports()
     {
         Type backend;
-        if (OperatingSystem.IsWindows()) backend = typeof(WaveOutDevice);
-        else if (OperatingSystem.IsMacOS()) backend = typeof(AudioQueueDevice);
-        else if (OperatingSystem.IsLinux()) backend = typeof(AlsaDevice);
+        if (OperatingSystem.IsWindows())
+        {
+            backend = typeof(WaveOutDevice);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            backend = typeof(AudioQueueDevice);
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            backend = typeof(AlsaDevice);
+        }
         else { Assert.Inconclusive("No native audio backend for this platform."); return; }
 
         Type native = backend.GetNestedType("Native", BindingFlags.NonPublic)!;
         foreach (MethodInfo method in native.GetMethods(BindingFlags.Static | BindingFlags.NonPublic))
         {
             LibraryImportAttribute? import = method.GetCustomAttribute<LibraryImportAttribute>();
-            if (import is null) continue;
+            if (import is null)
+            {
+                continue;
+            }
+
             nint library = NativeLibrary.Load(import.LibraryName);
             try
             {
@@ -241,7 +261,11 @@ public sealed class AudioOutputTests
         foreach (AudioFormat format in new[] { Stereo, new AudioFormat(1, 8000, 8) })
         {
             byte[] silence = new byte[format.SampleRate * format.BlockAlign / 10];
-            if (format.BitsPerSample == 8) Array.Fill(silence, (byte)128);
+            if (format.BitsPerSample == 8)
+            {
+                Array.Fill(silence, (byte)128);
+            }
+
             var elapsed = Stopwatch.StartNew();
             await output.PlayAsync(format, silence, default).WaitAsync(TimeSpan.FromSeconds(7));
             Assert.IsGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(50), elapsed.Elapsed,
@@ -272,7 +296,11 @@ public sealed class AudioOutputTests
                 foreach (AudioFormat format in new[] { Stereo, new AudioFormat(1, 8000, 8) })
                 {
                     byte[] silence = new byte[format.SampleRate * format.BlockAlign / 10];
-                    if (format.BitsPerSample == 8) Array.Fill(silence, (byte)128);
+                    if (format.BitsPerSample == 8)
+                    {
+                        Array.Fill(silence, (byte)128);
+                    }
+
                     await output.PlayAsync(format, silence, default).WaitAsync(TimeSpan.FromSeconds(7));
                     await output.PlayAsync(format, silence, default).WaitAsync(TimeSpan.FromSeconds(7));
                 }
@@ -308,7 +336,9 @@ public sealed class AudioOutputTests
             Assert.AreSequenceEqual(samples, api.Writes[0]);
             Assert.HasCount(4, api.Writes);
             foreach (byte[] write in api.Writes.Skip(1))
+            {
                 Assert.AreSequenceEqual(samples.AsSpan(8).ToArray(), write);
+            }
         }
         finally { device.Close(); }
         Assert.IsTrue(api.Closed);
@@ -334,7 +364,11 @@ public sealed class AudioOutputTests
             Assert.IsTrue(device.IsComplete());
             Assert.AreSequenceEqual(first, api.Writes[0]);
             Assert.AreSequenceEqual(second, api.Writes[1]);
-            foreach (byte[] retry in api.Writes.Skip(2)) Assert.AreSequenceEqual(second.AsSpan(4).ToArray(), retry);
+            foreach (byte[] retry in api.Writes.Skip(2))
+            {
+                Assert.AreSequenceEqual(second.AsSpan(4).ToArray(), retry);
+            }
+
             Assert.AreEqual(1, api.Prepares);
         }
         finally { device.Close(); }
@@ -374,7 +408,11 @@ public sealed class AudioOutputTests
             Marshal.Copy(data, samples, 0, samples.Length);
             Writes.Add(samples);
             int result = _results.Dequeue();
-            if (result == -32) _state = 4;
+            if (result == -32)
+            {
+                _state = 4;
+            }
+
             return result;
         }
         public int Start(nint pcm) { Starts++; _state = 3; return 0; }
@@ -401,30 +439,49 @@ public sealed class AudioOutputTests
 
         public void Open(AudioFormat format)
         {
-            OpenEntered.TrySetResult();
-            BlockOpen?.Wait(TimeSpan.FromSeconds(5));
+            _ = OpenEntered.TrySetResult();
+            _ = (BlockOpen?.Wait(TimeSpan.FromSeconds(5)));
             Opens.Add(format);
             Opened = true;
         }
         public void Start(byte[] data)
         {
-            if (StartError is not null) throw StartError;
+            if (StartError is not null)
+            {
+                throw StartError;
+            }
+
             Starts++;
-            Started.TrySetResult();
-            if (Starts >= 3) MultipleStarted.TrySetResult();
+            _ = Started.TrySetResult();
+            if (Starts >= 3)
+            {
+                _ = MultipleStarted.TrySetResult();
+            }
         }
         public long PendingFrames => 0;
         public bool IsComplete()
         {
-            if (Complete) return true;
-            if (Volatile.Read(ref PermittedCompletions) <= 0) return false;
-            Interlocked.Decrement(ref PermittedCompletions);
+            if (Complete)
+            {
+                return true;
+            }
+
+            if (Volatile.Read(ref PermittedCompletions) <= 0)
+            {
+                return false;
+            }
+
+            _ = Interlocked.Decrement(ref PermittedCompletions);
             return true;
         }
         public void Reset() { }
         public void Close()
         {
-            if (Opened) Closed.TrySetResult();
+            if (Opened)
+            {
+                _ = Closed.TrySetResult();
+            }
+
             Opened = false;
         }
     }

@@ -26,7 +26,10 @@ internal sealed class RdpVirtualFiles : IDisposable
     {
         Files = RdpClipboardCodec.DecodeFiles(RdpClipboardCodec.EncodeFiles(files));
         if (Files.Sum(f => f.Length) > RdpClipboardFiles.MaxTransferBytes)
+        {
             throw new InvalidDataException("Clipboard files exceed the 1 GiB transfer limit.");
+        }
+
         _read = read;
         _released = released;
         _progress = progress;
@@ -35,25 +38,35 @@ internal sealed class RdpVirtualFiles : IDisposable
     }
     internal async Task<byte[]> ReadAsync(uint index, long offset, int count)
     {
-        using var lease = Acquire();
+        using IDisposable lease = Acquire();
         _token.ThrowIfCancellationRequested();
         if (index >= Files.Count || Files[(int)index].IsDirectory || offset < 0 || offset > Files[(int)index].Length || count < 0)
+        {
             throw new InvalidDataException("Invalid virtual clipboard file range.");
-        var file = Files[(int)index];
+        }
+
+        RdpClipboardFile file = Files[(int)index];
         count = (int)Math.Min(Math.Min(count, RdpClipboardFiles.ChunkSize), file.Length - offset);
         lock (_gate)
         {
             if (!_started)
             {
                 _started = true;
-                if (_progress.Snapshot?.State != "Completed") _progress.Start(Files.Sum(f => f.Length));
+                if (_progress.Snapshot?.State != "Completed")
+                {
+                    _progress.Start(Files.Sum(f => f.Length));
+                }
             }
         }
         try
         {
             byte[] data = count == 0 ? [] : await _read(index, (ulong)offset, (uint)count, _token).ConfigureAwait(false);
             _token.ThrowIfCancellationRequested();
-            if (data.Length > count || (count > 0 && data.Length == 0)) throw new InvalidDataException("Invalid clipboard file block.");
+            if (data.Length > count || (count > 0 && data.Length == 0))
+            {
+                throw new InvalidDataException("Invalid clipboard file block.");
+            }
+
             _progress.Sent(index, offset, data.Length, file.Name, "Delivered");
             return data;
         }
@@ -80,7 +93,11 @@ internal sealed class RdpVirtualFiles : IDisposable
         {
             lock (_gate)
             {
-                if (_progress.Snapshot is null) _progress.Start(0, "Ready");
+                if (_progress.Snapshot is null)
+                {
+                    _progress.Start(0, "Ready");
+                }
+
                 _progress.Sent(0, 0, 0, "", "Delivered");
             }
         }
@@ -94,8 +111,14 @@ internal sealed class RdpVirtualFiles : IDisposable
                 $"Shell copy failed (0x{result:X8}).", force: true);
             Dispose();
         }
-        else if ((effects & 3) != 0) ConfirmShellCompletion();
-        else _progress.Finish("Cancelled", force: true);
+        else if ((effects & 3) != 0)
+        {
+            ConfirmShellCompletion();
+        }
+        else
+        {
+            _progress.Finish("Cancelled", force: true);
+        }
     }
     internal IDisposable Acquire()
     {
@@ -108,11 +131,23 @@ internal sealed class RdpVirtualFiles : IDisposable
     }
     internal void Retire()
     {
-        lock (_gate) { _retired = true; if (_leases == 0) Dispose(); }
+        lock (_gate)
+        {
+            _retired = true; if (_leases == 0)
+            {
+                Dispose();
+            }
+        }
     }
     private void ReleaseLease()
     {
-        lock (_gate) { if (--_leases == 0 && _retired) Dispose(); }
+        lock (_gate)
+        {
+            if (--_leases == 0 && _retired)
+            {
+                Dispose();
+            }
+        }
     }
     private sealed class Lease(RdpVirtualFiles owner) : IDisposable
     {
@@ -122,7 +157,11 @@ internal sealed class RdpVirtualFiles : IDisposable
     public void Dispose()
     {
         // Existing COM streams retain the cancelled token after registration resources are released.
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _cancel.Cancel();
         _cancel.Dispose();
         _progress.Finish("Cancelled");

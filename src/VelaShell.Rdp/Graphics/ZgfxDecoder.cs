@@ -42,7 +42,7 @@ internal sealed class ZgfxDecoder
     internal byte[] Decode(ReadOnlySpan<byte> input, int maxOutputBytes = MaxOutputBytes)
     {
         if (maxOutputBytes is < 0 or > MaxOutputBytes) { throw new ArgumentOutOfRangeException(nameof(maxOutputBytes)); }
-        if (input.Length < 2 || input.Length > MaxOutputBytes) { throw Error("Invalid message size."); }
+        if (input.Length is < 2 or > MaxOutputBytes) { throw Error("Invalid message size."); }
         if (input[0] == 0xe0)
         {
             int count = DecodeSegment(input[1..]);

@@ -42,7 +42,10 @@ internal ref struct RfxBits(ReadOnlySpan<byte> data)
         RfxGuard.Require(count is >= 0 and <= 24 && count <= Remaining, "Truncated RemoteFX entropy stream.");
         int result = 0;
         for (int i = 0; i < count; i++, _position++)
+        {
             result = (result << 1) | ((_data[_position >> 3] >> (7 - (_position & 7))) & 1);
+        }
+
         return result;
     }
     internal readonly void Finish(bool allowExtraByte = false)
@@ -67,7 +70,10 @@ internal static class RfxGuard
 {
     internal static void Require(bool condition, string message)
     {
-        if (!condition) throw new RdpProtocolException(message);
+        if (!condition)
+        {
+            throw new RdpProtocolException(message);
+        }
     }
     internal static void Destination(int width, int height, Span<byte> destination, int stride)
     {

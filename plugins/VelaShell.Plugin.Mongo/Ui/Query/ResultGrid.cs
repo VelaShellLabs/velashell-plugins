@@ -83,7 +83,7 @@ public sealed class ResultGrid : Control
 
     /// <summary>右键 / 双击 / Ctrl+C 某个单元格(冒泡,视图据此弹菜单或复制)。</summary>
     public static readonly RoutedEvent<ResultCellEventArgs> CellActivatedEvent =
-        RoutedEvent.Register<ResultGrid, ResultCellEventArgs>(nameof(CellActivated), Avalonia.Interactivity.RoutingStrategies.Bubble);
+        RoutedEvent.Register<ResultGrid, ResultCellEventArgs>(nameof(CellActivated), RoutingStrategies.Bubble);
 
     /// <summary>右键 / 双击 / Ctrl+C 某个单元格。</summary>
     public event EventHandler<ResultCellEventArgs>? CellActivated

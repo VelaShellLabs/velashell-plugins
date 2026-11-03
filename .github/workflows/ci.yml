@@ -26,7 +26,16 @@ jobs:
           dotnet-version: 11.0.x
       # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
       - name: Test portable RDP authentication, licensing and audio
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSspAsn1Tests|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests"
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSsp|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests"
+
+      - name: Test Kerberos CredSSP against an isolated Linux KDC
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq krb5-kdc krb5-admin-server
+          export PATH="/usr/sbin:$PATH"
+          bash scripts/Test-RdpKerberos.sh
 
       - name: Test managed GFX codecs and protocol on Unix
         run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --no-build --no-restore --nologo --filter "FullyQualifiedName~Gfx|FullyQualifiedName~Zgfx|FullyQualifiedName~PlanarTests"

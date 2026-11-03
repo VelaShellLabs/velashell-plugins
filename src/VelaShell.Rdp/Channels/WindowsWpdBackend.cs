@@ -276,27 +276,37 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
         internal struct Overlapped { internal nuint Internal, InternalHigh; internal uint Offset, OffsetHigh; internal nint Event; }
         [LibraryImport("setupapi.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         internal static partial nint SetupDiGetClassDevsW(ref Guid guid, string? enumerator, nint parent, uint flags);
-        [LibraryImport("setupapi.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("setupapi.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiEnumDeviceInterfaces(nint set, nint info, ref Guid guid, uint index, ref InterfaceData data);
-        [LibraryImport("setupapi.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("setupapi.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiGetDeviceInterfaceDetailW(nint set, ref InterfaceData data, nint detail, uint size, out uint required, ref DeviceInfo info);
-        [LibraryImport("setupapi.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("setupapi.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiGetDeviceRegistryPropertyW(nint set, ref DeviceInfo info, uint property, out uint type, [Out] byte[] data, uint size, out uint required);
-        [LibraryImport("setupapi.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("setupapi.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe partial bool SetupDiGetDeviceInstanceIdW(nint set, ref DeviceInfo info, char* instanceId, uint size, out uint required);
-        [LibraryImport("setupapi.dll")][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("setupapi.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiDestroyDeviceInfoList(nint set);
         [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         internal static partial SafeFileHandle CreateFileW(string path, uint access, uint share, nint security, uint disposition, uint flags, nint template);
-        [LibraryImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool ReadFile(SafeFileHandle handle, nint buffer, uint size, nint read, nint overlapped);
-        [LibraryImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool WriteFile(SafeFileHandle handle, nint buffer, uint size, nint written, nint overlapped);
-        [LibraryImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool DeviceIoControl(SafeFileHandle handle, uint code, nint input, uint inputSize, nint output, uint outputSize, nint returned, nint overlapped);
-        [LibraryImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool GetOverlappedResult(SafeFileHandle handle, nint overlapped, out uint count, [MarshalAs(UnmanagedType.Bool)] bool wait);
-        [LibraryImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool CancelIoEx(SafeFileHandle handle, nint overlapped);
     }
 }

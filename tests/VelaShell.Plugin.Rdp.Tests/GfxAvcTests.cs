@@ -19,7 +19,7 @@ public sealed class GfxAvcTests
         dispatcher.Decode(Request(11, Block(Fixture("predicted")), pixels));
         AssertPixel(pixels, 0, 0, 160, 160, 160, 17);
         dispatcher.DeleteSurface(1);
-        Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(11, Block(Fixture("predicted")), pixels)));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(11, Block(Fixture("predicted")), pixels)));
     }
 
     [TestMethod]
@@ -47,7 +47,7 @@ public sealed class GfxAvcTests
         dispatcher.Decode(Request((ushort)codec, Single(2, Block(Fixture("predicted"))), pixels));
         AssertPixel(pixels, 1, 1, 155, 75, 146, 0);
         dispatcher.Reset();
-        Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request((ushort)codec, Single(2, Block(Fixture("idr"))), pixels)));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request((ushort)codec, Single(2, Block(Fixture("idr"))), pixels)));
     }
 
     [TestMethod]
@@ -61,6 +61,7 @@ public sealed class GfxAvcTests
         main.Planes[1].AsSpan().Fill(128);
         main.Planes[2].AsSpan().Fill(128);
         for (int y = 0; y < 32; y++)
+        {
             for (int x = 0; x < 32; x++)
             {
                 byte u = Chroma(x, y), v = (byte)(256 - u);
@@ -90,6 +91,8 @@ public sealed class GfxAvcTests
                     aux.Planes[2][y / 2 * 16 + x / 2] = v;
                 }
             }
+        }
+
         var codec = new GfxAvcCodec(32, 32);
         GfxAvcRectangle[] rects = [new(0, 0, 32, 32)];
         codec.UpdateMain(main, rects);
@@ -97,6 +100,7 @@ public sealed class GfxAvcTests
         byte[] pixels = Enumerable.Repeat((byte)77, 32 * 32 * 4).ToArray();
         codec.Render(pixels, rects);
         for (int y = 0; y < 32; y++)
+        {
             for (int x = 0; x < 32; x++)
             {
                 byte[] expected = Chroma(x, y) switch
@@ -109,6 +113,7 @@ public sealed class GfxAvcTests
                 };
                 AssertBytes(expected, pixels.AsSpan((y * 32 + x) * 4, 4), $"({x},{y})");
             }
+        }
         // Rendering twice must not apply the inverse filter twice to persistent chroma.
         byte[] previous = pixels.ToArray();
         codec.Render(pixels, rects);
@@ -120,17 +125,17 @@ public sealed class GfxAvcTests
     {
         using var dispatcher = new GfxCodecDispatcher();
         byte[] pixels = new byte[16 * 16 * 4];
-        Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(11, Block(Fixture("idr"), 0, 0, 17, 16), pixels)));
-        Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(14, Single(3, Block(Fixture("idr"))), pixels)));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(11, Block(Fixture("idr"), 0, 0, 17, 16), pixels)));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(14, Single(3, Block(Fixture("idr"))), pixels)));
         // Baseline SPS declares a 4096x16 picture on a 16x16 surface.
         byte[] oversizedSps = [0, 0, 0, 1, 0x67, 0x42, 0, 0x1E, 0xDA, 0, 0x40, 0x39];
         var decoder = new ManagedH264Decoder(16, 16);
-        var error = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(oversizedSps));
+        RdpProtocolException error = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(oversizedSps));
         StringAssert.Contains(error.Message, "dimensions");
         for (int length = 0; length < 5; length++)
         {
             byte[] data = new byte[length];
-            Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(11, data, pixels)));
+            _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(11, data, pixels)));
         }
     }
 

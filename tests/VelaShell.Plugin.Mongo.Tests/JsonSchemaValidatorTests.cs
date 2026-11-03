@@ -232,7 +232,7 @@ public sealed class JsonSchemaValidatorTests
     {
         IReadOnlyList<SchemaViolation> found = Check(
             "{ additionalProperties: false, properties: { name: {} } }", "{ _id: 1, name: 'a', extra: true }");
-        Assert.AreSequenceEqual(new[] { "_id", "extra" }, [.. found.Select(static v => v.Path)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { "_id", "extra" }, [.. found.Select(static v => v.Path)], SequenceOrder.InAnyOrder);
         Assert.IsTrue(found.All(static v => v.Keyword == "additionalProperties"));
         Assert.IsEmpty(Check("{ additionalProperties: false, properties: { _id: {}, name: {} } }", "{ _id: 1, name: 'a' }"));
     }
@@ -301,7 +301,7 @@ public sealed class JsonSchemaValidatorTests
         Assert.IsEmpty(Check("{ properties: { v: { not: { bsonType: 'null' } } } }", "{ v: 1 }"));
 
         IReadOnlyList<SchemaViolation> all = Check("{ properties: { v: { allOf: [ { minimum: 5 }, { multipleOf: 2 } ] } } }", "{ v: 3 }");
-        Assert.AreSequenceEqual(new[] { "minimum", "multipleOf" }, [.. all.Select(static v => v.Keyword)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { "minimum", "multipleOf" }, [.. all.Select(static v => v.Keyword)], SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]

@@ -31,12 +31,12 @@ internal sealed class FakeRdpUdpServer : IAsyncDisposable, DatagramTransport
         var anyPeer = new IPEndPoint(_socket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
         SocketReceiveFromResult received = await _socket.ReceiveFromAsync(buffer, SocketFlags.None, anyPeer, Token);
         _socket.Connect(received.RemoteEndPoint);
-        RdpUdpPacket syn = RdpUdpPacket.Decode(buffer.AsSpan(0, received.ReceivedBytes));
+        var syn = RdpUdpPacket.Decode(buffer.AsSpan(0, received.ReceivedBytes));
         Assert.AreEqual(lossy, syn.Flags.HasFlag(RdpUdpFlags.Lossy));
         _state = new(lossy, 12345);
-        _state.Receive(syn with { Ack = 12345, Flags = syn.Flags | RdpUdpFlags.Ack }, Environment.TickCount64);
+        _ = _state.Receive(syn with { Ack = 12345, Flags = syn.Flags | RdpUdpFlags.Ack }, Environment.TickCount64);
         byte[] response = (_state.Syn() with { Ack = syn.InitialSequence, Flags = _state.Syn().Flags | RdpUdpFlags.Ack }).Encode();
-        await _socket.SendAsync(response, SocketFlags.None, Token);
+        _ = await _socket.SendAsync(response, SocketFlags.None, Token);
         _receive = ReceiveLoopAsync();
         _timer = TimerAsync();
     }
@@ -48,18 +48,18 @@ internal sealed class FakeRdpUdpServer : IAsyncDisposable, DatagramTransport
             while (true)
             {
                 int count = await _socket.ReceiveAsync(buffer, SocketFlags.None, Token);
-                RdpUdpPacket packet = RdpUdpPacket.Decode(buffer.AsSpan(0, count));
+                var packet = RdpUdpPacket.Decode(buffer.AsSpan(0, count));
                 List<byte[]> output;
                 lock (_gate)
                 {
                     if (packet.Flags.HasFlag(RdpUdpFlags.Data)) { _wirePayloads.Add(packet.Payload); }
                     output = _state.Receive(packet, Environment.TickCount64);
-                    while (_state.Read() is { } data) { _incoming.Writer.TryWrite(data); }
+                    while (_state.Read() is { } data) { _ = _incoming.Writer.TryWrite(data); }
                 }
                 await SendPacketsAsync(output);
             }
         }
-        catch (Exception ex) { _incoming.Writer.TryComplete(ex); }
+        catch (Exception ex) { _ = _incoming.Writer.TryComplete(ex); }
     }
     private async Task TimerAsync()
     {
@@ -72,7 +72,7 @@ internal sealed class FakeRdpUdpServer : IAsyncDisposable, DatagramTransport
                 lock (_gate)
                 {
                     output = _state.Tick(Environment.TickCount64);
-                    while (_state.Read() is { } data) { _incoming.Writer.TryWrite(data); }
+                    while (_state.Read() is { } data) { _ = _incoming.Writer.TryWrite(data); }
                 }
                 await SendPacketsAsync(output);
             }
@@ -80,7 +80,7 @@ internal sealed class FakeRdpUdpServer : IAsyncDisposable, DatagramTransport
         catch (OperationCanceledException) when (Token.IsCancellationRequested) { }
     }
     private async Task SendPacketsAsync(List<byte[]> packets)
-    { foreach (byte[] packet in packets) { await _socket.SendAsync(packet, SocketFlags.None, Token); } }
+    { foreach (byte[] packet in packets) { _ = await _socket.SendAsync(packet, SocketFlags.None, Token); } }
     internal async Task SendAsync(ReadOnlyMemory<byte> data)
     {
         byte[] copy = data.ToArray();

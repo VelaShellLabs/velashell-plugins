@@ -52,14 +52,14 @@ public sealed class LicensingTests
         {
             using var client = new Licensing("user", "machine");
             byte[] truncated = valid[..length];
-            Assert.Throws<RdpProtocolException>(() => client.Process(truncated));
+            _ = Assert.Throws<RdpProtocolException>(() => client.Process(truncated));
         }
         foreach (int offset in new[] { 0, 5, 6, 16, 18 })
         {
             using var client = new Licensing("user", "machine");
             byte[] corrupt = (byte[])valid.Clone();
             corrupt[offset] = 0x7F;
-            Assert.Throws<RdpProtocolException>(() => client.Process(corrupt));
+            _ = Assert.Throws<RdpProtocolException>(() => client.Process(corrupt));
         }
     }
 
@@ -70,7 +70,7 @@ public sealed class LicensingTests
     public void ChallengeAndLicenseBeforeRequestAreRejected(byte type)
     {
         using var client = new Licensing("user", "machine");
-        Assert.Throws<RdpProtocolException>(() => client.Process(Packet(type, [])));
+        _ = Assert.Throws<RdpProtocolException>(() => client.Process(Packet(type, [])));
     }
 
     [TestMethod]
@@ -81,7 +81,7 @@ public sealed class LicensingTests
         {
             Assert.IsNull(client.Process(Alert(12, 3)));
         }
-        Assert.Throws<RdpProtocolException>(() => client.Process(Alert(12, 3)));
+        _ = Assert.Throws<RdpProtocolException>(() => client.Process(Alert(12, 3)));
     }
 
     [TestMethod]
@@ -103,7 +103,7 @@ public sealed class LicensingTests
     {
         using var wire = new ScriptedStream([.. Frame(Alert(12, 3)), .. Frame([6, 0, 0x11, 0, 0xEA, 3])]);
         await using RdpConnection connection = Connection(wire);
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Receive(connection));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Receive(connection));
     }
 
     [TestMethod]
@@ -117,11 +117,11 @@ public sealed class LicensingTests
             Assert.AreSequenceEqual(Alert(1, 1), reply);
             Assert.IsNotNull(client.Failure);
             Assert.IsFalse(client.CanActivate);
-            Assert.Throws<RdpProtocolException>(() => client.Process(Alert(7, 2)));
+            _ = Assert.Throws<RdpProtocolException>(() => client.Process(Alert(7, 2)));
 
             using var wire = new ScriptedStream(Frame(request));
             await using RdpConnection connection = Connection(wire);
-            await Assert.ThrowsAsync<RdpProtocolException>(() => Receive(connection));
+            _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Receive(connection));
             byte[] output = wire.Output.ToArray();
             Assert.AreSequenceEqual(Alert(1, 1), output[14..]);
         }

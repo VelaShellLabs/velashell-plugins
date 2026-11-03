@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
+using VelaShell.Plugin.Mongo.Ui.GridFs;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 

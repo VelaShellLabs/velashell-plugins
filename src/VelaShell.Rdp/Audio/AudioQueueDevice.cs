@@ -47,18 +47,22 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
         }
         catch
         {
-            if (_queue == 0) _callbackRoot.Free();
+            if (_queue == 0)
+            {
+                _callbackRoot.Free();
+            }
+
             throw;
         }
     }
 
     public void Start(byte[] data)
     {
-        _free.TryPop(out Buffer? buffer);
+        _ = _free.TryPop(out Buffer? buffer);
         if (buffer is not null && buffer.Capacity < data.Length)
         {
             Check(Native.AudioQueueFreeBuffer(_queue, buffer.Pointer), "release PCM buffer");
-            _owned.TryRemove(buffer.Pointer, out _);
+            _ = _owned.TryRemove(buffer.Pointer, out _);
             buffer = null;
         }
         if (buffer is null)
@@ -74,7 +78,10 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
         Check(Native.AudioQueueEnqueueBufferWithParameters(_queue, buffer.Pointer, 0, 0, 0, 0, 0, 0, 0,
             out AudioTimeStamp start), "submit PCM buffer");
         if ((start.Flags & 1) == 0)
+        {
             throw new IOException("macOS AudioQueue did not provide a PCM playback start position.");
+        }
+
         buffer.EndSampleTime = _endSampleTime = start.SampleTime + data.Length / _blockAlign;
         if (!_started)
         {
@@ -95,15 +102,23 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
     {
         // Returned memory alone is not audible completion; keep each scheduled end position.
         if (!_buffers.TryPeek(out Buffer? buffer) || Volatile.Read(ref buffer.Returned) == 0 ||
-            PlaybackPosition() < buffer.EndSampleTime) return false;
-        _buffers.Dequeue();
+            PlaybackPosition() < buffer.EndSampleTime)
+        {
+            return false;
+        }
+
+        _ = _buffers.Dequeue();
         _free.Push(buffer);
         return true;
     }
 
     public void Reset()
     {
-        if (_queue != 0) Check(Native.AudioQueueStop(_queue, 1), "stop output");
+        if (_queue != 0)
+        {
+            Check(Native.AudioQueueStop(_queue, 1), "stop output");
+        }
+
         _started = false;
     }
 
@@ -119,20 +134,27 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
             _endSampleTime = 0;
             _started = false;
         }
-        if (_callbackRoot.IsAllocated) _callbackRoot.Free();
+        if (_callbackRoot.IsAllocated)
+        {
+            _callbackRoot.Free();
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void BufferReturned(nint userData, nint queue, nint buffer)
     {
         if (GCHandle.FromIntPtr(userData).Target is AudioQueueDevice device && device._owned.TryGetValue(buffer, out Buffer? owner))
+        {
             Volatile.Write(ref owner.Returned, 1);
+        }
     }
 
     private static void Check(int result, string operation)
     {
         if (result != 0)
+        {
             throw new IOException($"macOS AudioQueue could not {operation}: OSStatus {result} (0x{result:X8}).");
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

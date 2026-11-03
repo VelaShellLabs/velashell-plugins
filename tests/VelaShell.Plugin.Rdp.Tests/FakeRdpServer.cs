@@ -18,7 +18,7 @@ internal sealed class FakeRdpServer : IAsyncDisposable
 {
     private static readonly Lazy<X509Certificate2> SharedCertificate = new(() =>
     {
-        using RSA rsa = RSA.Create(2048);
+        using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=vela-fake-rdp", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using X509Certificate2 ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         // SChannel cannot serve TLS from an ephemeral key; a PFX round trip gives it a usable one.
@@ -112,7 +112,7 @@ internal sealed class FakeRdpConnection(NetworkStream net, X509Certificate2 cert
     private async Task SendNegotiationAsync(byte type, uint value, byte flags = 0)
     {
         byte[] pdu = [3, 0, 0, 19, 14, 0xD0, 0, 0, 0, 0, 0, type, flags, 8, 0, 0, 0, 0, 0];
-        BitConverter.TryWriteBytes(pdu.AsSpan(15), value);
+        _ = BitConverter.TryWriteBytes(pdu.AsSpan(15), value);
         await net.WriteAsync(pdu);
     }
 

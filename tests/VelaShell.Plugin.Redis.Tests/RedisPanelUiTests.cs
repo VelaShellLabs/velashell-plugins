@@ -549,7 +549,7 @@ public sealed class RedisPanelUiTests
                 Assert.AreEqual(2, viewModel.MatchedCount);
                 // 扁平列表:一行一个**完整键名**,两个键都在眼前,不必逐层点开。
                 Assert.AreSequenceEqual(
-                    [$"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(row => row.Display)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+                    [$"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(row => row.Display)], SequenceOrder.InAnyOrder);
                 Assert.DoesNotContain(row => row.IsGroup, viewModel.Rows, "两个键远低于折叠阈值。");
                 Assert.AreEqual("string", viewModel.Rows.Single(row => row.Display.EndsWith(":name", StringComparison.Ordinal)).TypeName);
                 Assert.AreEqual("hash", viewModel.Rows.Single(row => row.Display.EndsWith(":profile", StringComparison.Ordinal)).TypeName);

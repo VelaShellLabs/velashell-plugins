@@ -37,7 +37,7 @@ public sealed class ZgfxTests
         var decoder = new ZgfxDecoder();
         byte[] packet = Multipart(6, [4, 0x49, 0x4a, 0x4b], Compressed("10001 00011 0")[1..]);
         Assert.AreSequenceEqual(new byte[] { 0x49, 0x4a, 0x4b, 0x49, 0x4a, 0x4b }, decoder.Decode(packet));
-        Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(Compressed("10001 00001 0")));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(Compressed("10001 00001 0")));
     }
 
     [TestMethod]
@@ -49,7 +49,7 @@ public sealed class ZgfxTests
         {
             byte[] expected = new ZgfxDecoder().Decode(packet);
             Assert.AreSequenceEqual(expected, new ZgfxDecoder().Decode(packet, expected.Length));
-            Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(packet, expected.Length - 1));
+            _ = Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(packet, expected.Length - 1));
         }
     }
 
@@ -79,7 +79,7 @@ public sealed class ZgfxTests
         byte[] maximum = decoder.Decode(Compressed(prefix + Convert.ToString(32766, 2).PadLeft(15, '0')));
         Assert.AreEqual(65535, maximum.Length);
         Assert.IsTrue(maximum.All(b => b == 0x49));
-        Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(Compressed(prefix + new string('1', 15))));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(Compressed(prefix + new string('1', 15))));
     }
 
     [TestMethod]
@@ -97,16 +97,16 @@ public sealed class ZgfxTests
         ];
         foreach (byte[] packet in malformed)
         {
-            Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(packet), Convert.ToHexString(packet));
+            _ = Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(packet), Convert.ToHexString(packet));
         }
         var decoder = new ZgfxDecoder();
         _ = decoder.Decode([0xe0, 4, 0x49]);
         string tooLong = "10001 00001 " + new string('1', 15) + "0";
-        Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(Compressed(tooLong)));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(Compressed(tooLong)));
         string distanceTooFar = "10111101" + Convert.ToString(2_500_001 - 2_414_240, 2).PadLeft(21, '0') + "0";
-        Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(Compressed(distanceTooFar)));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(Compressed(distanceTooFar)));
         byte[] rawOverflow = new byte[65538]; rawOverflow[0] = 0xe0; rawOverflow[1] = 4;
-        Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(rawOverflow));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(rawOverflow));
     }
 
     internal static byte[] Compressed(string bits)

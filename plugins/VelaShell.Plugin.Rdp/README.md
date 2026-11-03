@@ -61,7 +61,7 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
 
 - **Wire** — TPKT/X.224 framing, fast-path frames, ASN.1 PER/BER (`Wire/`).
 - **Security** — `RdpTls` (OS trust / name / validity, or an exact SHA-256 leaf pin) and
-  `CredSsp` (NLA via NTLM + the TSRequest public-key binding) (`Security/`).
+  `CredSsp` (NLA via SPNEGO Kerberos/NTLM + the TSRequest public-key binding) (`Security/`).
 - **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Mcs/`).
 - **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
 - **Graphics** — interleaved-RLE and RDP 6.0 planar decode, GDI drawing orders with a bitmap cache
@@ -232,10 +232,10 @@ arguments.
 
 The advanced **security layer** setting (`security`) picks what is offered: `auto` (default) offers
 TLS and NLA and lets the server choose; `nla` insists on NLA; `tls` offers TLS only, so the server
-checks the password from the client info itself. In `auto`, a server that refuses NLA before any
-credentials are sent — it answers the first CredSSP message (the NTLM NEGOTIATE) with errorCode
-0x80090302 or a TLS abort, i.e. it does not accept incoming NTLM — is retried once with TLS only;
-if that is refused too (`HYBRID_REQUIRED_BY_SERVER`) the error explains the server-side fix. A wrong
+checks the password from the client info itself. In `auto`, a first-reply refusal or TLS abort permits
+one TLS-only retry only if the initial token is a recognizable NTLM Type 1 without credential proof
+(bare or an NTLM-only SPNEGO offer). A Kerberos AP-REQ already carries credential proof; its rejection
+or disconnection never permits this retry. Unknown or malformed tokens also fail closed. A wrong
 password is never retried. **Downgrade protection:** the X.224 negotiation is unauthenticated, so in
 `auto` a host that once logged on with NLA is remembered (plugin storage key `nla-host:<host>:<port>`)
 and later connections to it require NLA; if it then offers TLS only (`RdpNlaUnavailableException`)
@@ -244,8 +244,15 @@ man-in-the-middle forcing a weaker logon (set `tls` explicitly if the server rea
 Servers speaking CredSSP below v5 (before the CVE-2018-0886 fix) are refused and never retried as
 TLS. On Windows, NLA authenticates through the OS's native SSPI Negotiate package, like mstsc:
 a DNS host name is targeted as `TERMSRV/<host>` so Kerberos works for domain servers; an IP address
-keeps the null target. Other platforms fall back to managed NTLM. TLS 1.2/1.3 with renegotiation
-refused. Plaintext password copies (Client Info, TSCredentials) are wiped after sending, and the
+keeps the null target. Linux/macOS use .NET `NegotiateAuthentication` with `Package="Negotiate"`:
+SPNEGO tries system GSSAPI Kerberos and retains managed NTLM compatibility without `gss-ntlmssp`.
+`System.Net.Security.UseManagedNtlm=true` enables managed SPNEGO/NTLM while preserving Kerberos;
+embedding hosts must set it at startup, before another caller initializes authentication.
+Kerberos requires system GSSAPI libraries, a configured realm/KDC, working DNS and synchronized clocks.
+Use a DNS host with the correct `TERMSRV/<FQDN>` SPN and `user@REALM` or username plus realm;
+a NetBIOS short domain, IP address or unregistered alias may not work. SSH tunnels retain the original
+server name for the SPN. Domains disabling NTLM need working Kerberos; NLA-only mode forbids TLS fallback.
+TLS 1.2/1.3 with renegotiation refused. Plaintext password copies (Client Info, TSCredentials) are wiped after sending, and the
 options records never print the password. TLS uses OS
 trust/name/validity verification, or an explicitly approved
 exact SHA-256 leaf-certificate pin that replaces CA/name/expiry checks, identically in every mode.
@@ -313,8 +320,16 @@ stack against a real server — connection, TLS and leaf-pin trust, desktop rend
 mouse input, text and image clipboard round-trips, and drive-redirection read and write. NLA is
 verified live against the FreeRDP shadow server (`VELA_RDP_TEST_NLA_TARGET`): logon, wrong
 password without fallback, TLS-only refused by an NLA-only server. The security-layer fallback is
-covered by in-process fake-server tests (`FakeRdpServer`). A successful NLA logon against a real
-Windows server is still outstanding. Interleaved-RLE decode, MCS/GCC, capability exchange and the
+covered by in-process fake-server tests (`FakeRdpServer`). `ManagedNtlmTests` also verifies Unix
+SPNEGO/NTLM with mechanism-list MICs and multiple rounds. `CredSspNegotiationTests` verifies no TLS
+fallback after the first Kerberos proof. `KerberosNlaTests` asserts the actual Kerberos mechanism and
+completes CredSSP binding and credential encryption against an isolated MIT KDC on Linux, for both
+UPN and username-plus-realm credentials. After building the tests, run `PATH="/usr/sbin:$PATH" bash scripts/Test-RdpKerberos.sh`
+with MIT `krb5-kdc`, `krb5-admin-server`, Python 3 and OpenSSL installed; configuration and keys are temporary.
+The Ubuntu CI job runs this fixture; macOS CI includes the portable authentication regressions.
+Local Windows and Linux authentication tests passed after temporarily excluding four pre-existing
+unrelated test compilation failures (RemoteFX, dynamic channels, RDPGFX and WPD). macOS Kerberos and
+a successful NLA desktop logon against a real Windows AD server with NTLM disabled remain unverified. Interleaved-RLE decode, MCS/GCC, capability exchange and the
 channel wire formats follow MS-RDPBCGR / the published specs. Hardening, rendering, planar, pointer and
 input-batching behaviour is covered by `RdpHardeningTests` (incl. a real directory junction and a fake
 server sending oversized or pre-CVE-2018-0886 TSRequests), `RdpRenderingTests`, `PlanarTests` (FreeRDP

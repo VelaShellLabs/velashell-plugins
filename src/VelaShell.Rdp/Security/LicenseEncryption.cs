@@ -19,9 +19,9 @@ internal sealed class LicenseEncryption : IDisposable
         try
         {
             // MS-RDPBCGR 5.3.4.1 uses raw little-endian RSA, followed by eight zero padding bytes.
-            BigInteger encrypted = BigInteger.ModPow(new BigInteger(premaster, isUnsigned: true), exponent, modulus);
+            var encrypted = BigInteger.ModPow(new BigInteger(premaster, isUnsigned: true), exponent, modulus);
             EncryptedPreMasterSecret = new byte[size + 8];
-            encrypted.TryWriteBytes(EncryptedPreMasterSecret.AsSpan(0, size), out _, isUnsigned: true);
+            _ = encrypted.TryWriteBytes(EncryptedPreMasterSecret.AsSpan(0, size), out _, isUnsigned: true);
             (_macKey, _encryptionKey) = DeriveKeys(premaster, ClientRandom, serverRandom);
         }
         finally { CryptographicOperations.ZeroMemory(premaster); }
@@ -54,7 +54,7 @@ internal sealed class LicenseEncryption : IDisposable
             byte[] hash = SHA1.HashData(input);
             CryptographicOperations.ZeroMemory(input);
             byte[] salted = [.. secret, .. hash];
-            MD5.HashData(salted, result.AsSpan(i * 16, 16));
+            _ = MD5.HashData(salted, result.AsSpan(i * 16, 16));
             CryptographicOperations.ZeroMemory(salted);
             CryptographicOperations.ZeroMemory(hash);
         }

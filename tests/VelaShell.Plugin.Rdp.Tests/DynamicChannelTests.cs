@@ -93,7 +93,7 @@ public sealed class DynamicChannelTests
         await dvc.ProcessAsync([0x40, 1]);
         await dvc.ProcessAsync(Create(1));
         int before = sent.Count;
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => channels[0].SendAsync([9]));
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => channels[0].SendAsync([9]));
         await channels[0].CloseAsync();
         Assert.AreEqual(before, sent.Count);
         Assert.AreEqual(0, handlers[1].Closes);
@@ -112,7 +112,7 @@ public sealed class DynamicChannelTests
         var dvc = new DrdynvcChannel(async (bytes, _) =>
         {
             sent.Add(bytes);
-            if ((bytes[0] >> 4) == 2) { entered.TrySetResult(); await release.Task; }
+            if ((bytes[0] >> 4) == 2) { _ = entered.TrySetResult(); await release.Task; }
         }, default);
         dvc.RegisterListener("test", channel => { channels.Add(channel); return channels.Count == 1 ? first : new Handler(); });
         await dvc.ProcessAsync(Create(1)); await dvc.ProcessAsync(Create(2));
@@ -178,7 +178,11 @@ public sealed class DynamicChannelTests
         var receiver = new DrdynvcChannel((_, _) => Task.CompletedTask, CancellationToken.None);
         var handler = new Handler(); receiver.RegisterListener("test", _ => handler, 10000);
         await receiver.ProcessAsync(Create(7));
-        foreach (byte[] packet in packets) await receiver.ProcessAsync(packet);
+        foreach (byte[] packet in packets)
+        {
+            await receiver.ProcessAsync(packet);
+        }
+
         Assert.AreSequenceEqual(payload, handler.Messages.Single());
         await receiver.ProcessAsync([0x28, 7, 0xff, 0xff, 0xff, 0x7f, 1]);
         Assert.HasCount(1, handler.Messages);

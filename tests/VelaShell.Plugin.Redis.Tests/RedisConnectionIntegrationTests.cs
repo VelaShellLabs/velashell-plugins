@@ -310,7 +310,7 @@ public sealed class RedisConnectionIntegrationTests
         RedisElementPage page = await Require().ReadElementsAsync(new($"{_prefix}:tags"), "set", "0", 100);
 
         Assert.AreEqual(2, page.Total);
-        Assert.AreSequenceEqual(["vip", "beta"], [.. page.Rows.Select(r => r.Label)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["vip", "beta"], [.. page.Rows.Select(r => r.Label)], SequenceOrder.InAnyOrder);
         Assert.IsTrue(page.Rows.All(r => r.Value.Length == 0), "集合只有成员,没有值 —— 值列该是空的。");
     }
 

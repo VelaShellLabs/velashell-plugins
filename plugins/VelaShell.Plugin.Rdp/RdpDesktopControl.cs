@@ -43,7 +43,6 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private Window? _window;
     private TopLevel? _topLevel;
     private bool _attached;
-    private bool _shown = true;
 
     internal Func<Task>? PublishClipboard { get; set; }
     internal Action? OperationFailed { get; set; }
@@ -103,7 +102,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         Dispatcher.UIThread.Post(() =>
         {
             _ = Interlocked.Exchange(ref _framePending, 0);
-            if (_disposed != 0 || !_shown)
+            if (_disposed != 0 || !IsPresenting)
             {
                 return;   // hidden: changes keep accumulating until the view is shown again
             }
@@ -117,8 +116,8 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private RdpPointer? _pendingPointer;
     private int _pointerPending;
     private readonly Dictionary<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> _cursors = [];
-    private static Cursor? _noCursor;
-    private static Cursor NoCursor => _noCursor ??= new(StandardCursorType.None);   // created on first use, after platform init
+
+    private static Cursor NoCursor => field ??= new(StandardCursorType.None);   // created on first use, after platform init
 
     /// <summary>
     /// The server's pointer shape (I-beam over text, resize arrows, hidden while typing) replaces the local arrow over
@@ -154,7 +153,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
 
     private Cursor? CursorFor(RdpPointer pointer)
     {
-        if (_cursors.TryGetValue(pointer, out var cached))
+        if (_cursors.TryGetValue(pointer, out (Cursor Cursor, Bitmap Bitmap) cached))
         {
             return cached.Cursor;
         }
@@ -444,12 +443,12 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     private void UpdatePresentation()
     {
         bool shown = _attached && _window?.WindowState != WindowState.Minimized;
-        if (shown == _shown || _disposed != 0)
+        if (shown == IsPresenting || _disposed != 0)
         {
             return;
         }
 
-        _shown = shown;
+        IsPresenting = shown;
         Queue(async () =>
         {
             try { await _session.SetDisplayUpdatesAsync(shown); }
@@ -461,7 +460,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         }
     }
 
-    internal bool IsPresenting => _shown;
+    internal bool IsPresenting { get; private set; } = true;
 
     /// <summary>
     /// For a desktop created off screen (a reconnect while the tab is in the background): pause the server's display

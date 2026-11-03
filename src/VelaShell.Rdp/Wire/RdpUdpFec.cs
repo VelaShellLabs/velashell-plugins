@@ -13,7 +13,7 @@ internal sealed class RdpUdpFec
 
     private static byte[] BuildExponents()
     {
-        var result = new byte[510];
+        byte[] result = new byte[510];
         int value = 1;
         for (int i = 0; i < 255; i++)
         {
@@ -26,7 +26,7 @@ internal sealed class RdpUdpFec
 
     private static byte[] BuildLogarithms()
     {
-        var result = new byte[256];
+        byte[] result = new byte[256];
         for (int i = 0; i < 255; i++) { result[Exp[i]] = (byte)i; }
         return result;
     }
@@ -43,7 +43,7 @@ internal sealed class RdpUdpFec
         payload.CopyTo(source, 2);
         _sources.Add(sequence, source);
         _order.Enqueue(sequence);
-        while (_order.Count > 512) { _sources.Remove(_order.Dequeue()); }
+        while (_order.Count > 512) { _ = _sources.Remove(_order.Dequeue()); }
     }
 
     internal static byte[] Encode(uint start, IReadOnlyList<byte[]> sources, byte index)
@@ -75,7 +75,7 @@ internal sealed class RdpUdpFec
 
     internal IEnumerable<(uint Sequence, byte[] Payload)> Recover(uint next, int window)
     {
-        _equations.RemoveAll(p => RdpUdpPacket.Distance(unchecked(p.SourceSequence + p.FecRange), next) < 0);
+        _ = _equations.RemoveAll(p => RdpUdpPacket.Distance(unchecked(p.SourceSequence + p.FecRange), next) < 0);
         if (_equations.Count == 0) { yield break; }
         uint[] missing = _equations.SelectMany(p => Enumerable.Range(0, p.FecRange + 1)
             .Select(i => unchecked(p.SourceSequence + (uint)i))).Where(s => !_sources.ContainsKey(s)).Distinct().ToArray();

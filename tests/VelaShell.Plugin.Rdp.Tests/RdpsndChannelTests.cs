@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Audio;
 using VelaShell.Rdp.Channels;
+using VelaShell.Rdp.Mcs;
+using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
@@ -15,7 +17,9 @@ public sealed class RdpsndChannelTests
     {
         var options = new RdpClientOptions
         {
-            Host = "localhost", AudioPlayback = true, DynamicResolution = false,
+            Host = "localhost",
+            AudioPlayback = true,
+            DynamicResolution = false,
             Drives = drives ? [new DriveMapping("work", Path.GetTempPath())] : []
         };
         string[] names = [.. RdpManagedSession.BuildChannels(options).Select(c => c.Name)];
@@ -29,7 +33,7 @@ public sealed class RdpsndChannelTests
     {
         var output = new RecordingOutput();
         var sent = new List<byte[]>();
-        using var channel = Make(output, sent);
+        using RdpsndChannel channel = Make(output, sent);
         byte[] compressed = Format(tag: 6);
         byte[] pcm = Format();
         await Process(channel, Formats(8, compressed, pcm));
@@ -54,7 +58,7 @@ public sealed class RdpsndChannelTests
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new RecordingOutput { Completion = completed.Task };
         var sent = new List<byte[]>();
-        using var channel = Make(output, sent);
+        using RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(5, Format()));
         Assert.HasCount(1, sent); // versions before 6 have no quality mode
         byte[] info = [2, 0, 16, 0, 0xF0, 0xFF, 0, 0, 255, 0, 0, 0, 10, 11, 12, 13];
@@ -69,7 +73,7 @@ public sealed class RdpsndChannelTests
         Assert.AreSequenceEqual(new byte[] { 10, 11, 12, 13, 14, 15, 16, 17 }, output.Samples.Single().Data);
         Assert.AreEqual((byte)255, sent[^1][6]);
         ushort elapsed = unchecked((ushort)(U16(sent[^1], 4) - 0xFFF0));
-        Assert.IsTrue(elapsed >= 100 && elapsed < 10000);
+        Assert.IsTrue(elapsed is >= 100 and < 10000);
     }
 
     [TestMethod]
@@ -79,7 +83,7 @@ public sealed class RdpsndChannelTests
         var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new RecordingOutput { Completions = new Queue<Task>([first.Task, second.Task]) };
         var sent = new List<byte[]>();
-        using var channel = Make(output, sent);
+        using RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(8, Format()));
         byte[] one = Wave2(0, [1, 2, 3, 4]);
         byte[] two = Wave2(0, [5, 6, 7, 8]);
@@ -104,14 +108,14 @@ public sealed class RdpsndChannelTests
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new RecordingOutput { Completion = completion.Task };
         var sent = new List<byte[]>();
-        using var channel = Make(output, sent);
+        using RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(8, Format()));
         await channel.ProcessAsync(Wave2(0, [1, 2, 3, 4]), Environment.TickCount64, default);
         var error = new IOException("device removed");
         completion.SetException(error);
         Exception actual = await channel.PlaybackFailure.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.AreSame(error, actual);
-        await Assert.ThrowsExactlyAsync<IOException>(() => channel.DrainAsync());
+        _ = await Assert.ThrowsExactlyAsync<IOException>(channel.DrainAsync);
         Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
     }
 
@@ -122,7 +126,7 @@ public sealed class RdpsndChannelTests
         var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new RecordingOutput { Completions = new Queue<Task>([first.Task, second.Task]) };
         var sent = new List<byte[]>();
-        using var channel = Make(output, sent);
+        using RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(8, Format()));
         await channel.ProcessAsync(Wave2(0, [1, 2, 3, 4]), Environment.TickCount64, default);
         await channel.ProcessAsync(Wave2(0, [5, 6, 7, 8]), Environment.TickCount64, default);
@@ -140,12 +144,12 @@ public sealed class RdpsndChannelTests
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new RecordingOutput { Completion = completion.Task };
         var sent = new List<byte[]>();
-        var channel = Make(output, sent);
+        RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(8, Format()));
         await channel.ProcessAsync(Wave2(0, [1, 2, 3, 4]), Environment.TickCount64, default);
         channel.Dispose();
         completion.SetResult();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => channel.DrainAsync());
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(channel.DrainAsync);
         Assert.IsTrue(output.Disposed);
         Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
     }
@@ -154,13 +158,13 @@ public sealed class RdpsndChannelTests
     public async Task CloseDrainsThenRequiresRenegotiation()
     {
         var output = new RecordingOutput();
-        using var channel = Make(output, []);
+        using RdpsndChannel channel = Make(output, []);
         await Process(channel, Formats(8, Format()));
         await Process(channel, Wave2(0, [1, 2, 3, 4]));
         int previous = output.CloseCount;
         await Process(channel, Packet(1, []));
         Assert.AreEqual(previous + 1, output.CloseCount);
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3, 4])));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3, 4])));
         await Process(channel, Formats(8, Format(channels: 1, bits: 8)));
         await Process(channel, Wave2(0, [128, 129]));
         Assert.HasCount(2, output.Samples);
@@ -171,29 +175,29 @@ public sealed class RdpsndChannelTests
     public async Task DisabledCompanionChannelNegotiatesNoFormatsOrPlayback()
     {
         var sent = new List<byte[]>();
-        using var channel = Make(null, sent);
+        using RdpsndChannel channel = Make(null, sent);
         await Process(channel, Formats(8, Format()));
         Assert.AreEqual((ushort)0, U16(sent[0], 18));
         Assert.AreEqual(0u, BinaryPrimitives.ReadUInt32LittleEndian(sent[0].AsSpan(4)));
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3, 4])));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3, 4])));
     }
 
     [TestMethod]
     public async Task RejectsMalformedFormatsUnknownIndicesAndTruncatedWaves()
     {
-        using var channel = Make(new RecordingOutput(), []);
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Packet(7, new byte[19])));
+        using RdpsndChannel channel = Make(new RecordingOutput(), []);
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Packet(7, new byte[19])));
         byte[] extended = Format();
         extended[16] = 8;
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Formats(8, extended)));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Formats(8, extended)));
         byte[] badAlignment = Format();
         badAlignment[12] = 1;
-        await Assert.ThrowsAsync<IOException>(() => Process(channel, Formats(8, badAlignment)));
+        _ = await Assert.ThrowsAsync<IOException>(() => Process(channel, Formats(8, badAlignment)));
         await Process(channel, Formats(8, Format()));
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(1, [1, 2, 3, 4])));
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3])));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(1, [1, 2, 3, 4])));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3])));
         await Process(channel, new byte[] { 2, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4 });
-        await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, new byte[4]));
+        _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, new byte[4]));
     }
 
     [TestMethod]
@@ -201,13 +205,13 @@ public sealed class RdpsndChannelTests
     {
         var output = new RecordingOutput { Completion = new TaskCompletionSource().Task };
         var sent = new List<byte[]>();
-        using var channel = Make(output, sent);
+        using RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(8, Format()));
         using var stop = new CancellationTokenSource();
         Task playing = channel.ProcessAsync(Wave2(0, [1, 2, 3, 4]), Environment.TickCount64, stop.Token);
         stop.Cancel();
         await playing;
-        await Assert.ThrowsAsync<OperationCanceledException>(() => channel.DrainAsync());
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(channel.DrainAsync);
         Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
     }
 
@@ -222,7 +226,7 @@ public sealed class RdpsndChannelTests
         session.EnableAudio(true, () => output);
         session.ReceiveAudio([7, 0, 0, 0]);
         Exception result = await failure.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.IsInstanceOfType<RdpProtocolException>(result);
+        _ = Assert.IsInstanceOfType<RdpProtocolException>(result);
         Exception? replay = null;
         session.AudioPlaybackFailed += error => replay = error;
         Assert.AreSame(result, replay);
@@ -279,9 +283,9 @@ public sealed class RdpsndChannelTests
         wire.Position = 0;
         foreach (byte type in new byte[] { 7, 12, 5 })
         {
-            var frame = await transport.ReadPduAsync(default);
+            RdpFramePdu frame = await transport.ReadPduAsync(default);
             frame.Data[3] = 0x68;
-            var message = VelaShell.Rdp.Mcs.McsLayer.ParseSendDataIndication(frame.Data)!.Value;
+            McsData message = McsLayer.ParseSendDataIndication(frame.Data)!.Value;
             Assert.AreEqual(type, message.Payload[8]);
         }
         Assert.AreEqual(wire.Length, wire.Position);
@@ -309,8 +313,8 @@ public sealed class RdpsndChannelTests
             return;
         }
         var sent = new List<byte[]>();
-        using var output = AudioOutput.Create();
-        using var channel = Make(output, sent);
+        using IAudioOutput output = AudioOutput.Create();
+        using RdpsndChannel channel = Make(output, sent);
         await Process(channel, Formats(8, Format()));
         byte[] samples = new byte[44100 * 4 * 3 / 10];
         for (int frame = 0; frame < samples.Length / 4; frame++)
@@ -417,14 +421,14 @@ public sealed class RdpsndChannelTests
         public async Task PlayAsync(AudioFormat format, byte[] data, CancellationToken ct)
         {
             Samples.Add((format, data));
-            Started.TrySetResult();
+            _ = Started.TrySetResult();
             await (Completions?.Dequeue() ?? Completion).WaitAsync(ct);
         }
         internal TaskCompletionSource ClosedAfterPlayback { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public void Close()
         {
             CloseCount++;
-            if (Samples.Count > 0) { ClosedAfterPlayback.TrySetResult(); }
+            if (Samples.Count > 0) { _ = ClosedAfterPlayback.TrySetResult(); }
         }
         public void Dispose() => Disposed = true;
     }

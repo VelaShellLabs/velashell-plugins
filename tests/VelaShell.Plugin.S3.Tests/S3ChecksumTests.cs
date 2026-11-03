@@ -106,7 +106,7 @@ public sealed class S3ChecksumTests
             await Checksums.ComputeChecksumsAsync(SessionKey, RemoteChecksumAlgorithm.Sha256, paths);
 
         // 单个文件给不出只是那一项为 null —— 不抛,一个文件不该让整批回退;键就是请求里的路径原样。
-        Assert.AreSequenceEqual(paths, [.. result.Keys], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(paths, [.. result.Keys], SequenceOrder.InAnyOrder);
         Assert.IsTrue(result.Values.All(static value => value is null), string.Join(", ", result));
         AssertNoObjectWasDownloaded();
         AssertAllRequestsSigned();
@@ -167,11 +167,9 @@ public sealed class S3ChecksumTests
     }
 
     [TestMethod]
-    public void TheProtocolDoesNotOfferToSetModificationTimes()
-    {
+    public void TheProtocolDoesNotOfferToSetModificationTimes() =>
         // 刻意不兼实现 IProtocolLastWriteTime:S3 的 LastModified 是服务端写入时刻,协议上没有改它的操作;
         // 「复制对象自身 + 改元数据」会重写对象、换掉版本号与 ETag,LastModified 照样是复制那一刻。
         // 不实现,宿主就如实报「设不了修改时间」。这一条写成断言,免得日后有人「补齐」成那个不等价的做法。
         Assert.IsNotInstanceOfType<IProtocolLastWriteTime>(_service);
-    }
 }

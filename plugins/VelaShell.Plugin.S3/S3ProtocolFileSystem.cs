@@ -144,9 +144,8 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
     /// <param name="sessionId">会话标识。</param>
     /// <param name="remotePath">对象路径。</param>
     /// <param name="expiry">有效期。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>预签名 URL。</returns>
-    public Task<string> CreatePresignedUrlAsync(Guid sessionId, string remotePath, TimeSpan expiry, CancellationToken cancellationToken = default)
+    public Task<string> CreatePresignedUrlAsync(Guid sessionId, string remotePath, TimeSpan expiry)
     {
         S3Session session = Resolve(sessionId);
         var path = S3ObjectPath.Parse(remotePath);
@@ -167,7 +166,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
                 // **必须显式给**:SDK 的预签名一律按 HTTPS 出 URL,不看 config.UseHttp。
                 // 明文 HTTP 的自建端点(MinIO 常态)会因此拿到一条 https:// 的链接,
                 // 粘到浏览器里连不上,而错误看起来完全像是"这个功能坏了"。
-                Protocol = session.Client.Config.UseHttp ? Amazon.S3.Protocol.HTTP : Amazon.S3.Protocol.HTTPS,
+                Protocol = session.Client.Config.UseHttp ? Protocol.HTTP : Protocol.HTTPS,
             }));
         }
         catch (Exception ex)
@@ -218,7 +217,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         _keys.TryGetValue(sessionId, out Guid id) ? CloseSessionAsync(id, cancellationToken) : Task.CompletedTask;
 
     Task<string> IProtocolFileSystem.GetHomePathAsync(string sessionId, CancellationToken cancellationToken) =>
-        Guard(() => GetWorkingDirectoryAsync(Resolve(sessionId), cancellationToken));
+        Guard(() => GetWorkingDirectoryAsync(Resolve(sessionId)));
 
     async Task<IReadOnlyList<RemoteFileEntry>> IProtocolFileSystem.ListDirectoryAsync(string sessionId, string path, CancellationToken cancellationToken)
     {
@@ -279,7 +278,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
         Guard(() => CopyAsync(Resolve(sessionId), sourcePath, destinationPath, progress, cancellationToken));
 
     Task IProtocolFileSystem.SetPermissionsAsync(string sessionId, string path, short octalMode, CancellationToken cancellationToken) =>
-        Guard(() => SetPermissionsAsync(Resolve(sessionId), path, octalMode, cancellationToken));
+        Guard(() => SetPermissionsAsync(Resolve(sessionId)));
 
     /// <summary>
     /// 协议专属动作:复制分享链接(预签名 URL)、打开对象检视器、打开桶管理器。
@@ -298,7 +297,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
             {
                 case S3Actions.CopyShareLink:
                     // 7 天是预签名 URL 协议允许的最长有效期。
-                    string url = await CreatePresignedUrlAsync(id, path, TimeSpan.FromDays(7), cancellationToken).ConfigureAwait(false);
+                    string url = await CreatePresignedUrlAsync(id, path, TimeSpan.FromDays(7)).ConfigureAwait(false);
                     await actions.CopyShareLinkAsync(url, cancellationToken).ConfigureAwait(false);
                     break;
                 case S3Actions.InspectObject:
@@ -649,7 +648,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
     }
 
     /// <inheritdoc />
-    public Task<string> GetWorkingDirectoryAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    public Task<string> GetWorkingDirectoryAsync(Guid sessionId)
     {
         S3Session session = Resolve(sessionId);
         // 配了默认桶就直接落在桶内;否则落在根(桶列表)。
@@ -663,7 +662,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
     /// 后者会让用户以为自己刚刚改成功了一个根本不存在的权限。对象/桶的访问控制
     /// 走 ACL 与桶策略,见 <see cref="IS3ManagementService" />。
     /// </summary>
-    public Task SetPermissionsAsync(Guid sessionId, string remotePath, short octalMode, CancellationToken cancellationToken = default)
+    public Task SetPermissionsAsync(Guid sessionId)
     {
         _ = Resolve(sessionId);
         throw new VelaS3UnsupportedOperationException("S3 objects have no POSIX permissions; use ACLs or bucket policies instead.");
@@ -1339,7 +1338,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
                 Verb = HttpVerb.GET,
                 Expires = DateTime.UtcNow.AddHours(1),
                 // 见 CreatePresignedUrlAsync:不给这一条,明文端点会被签成 https:// 而连不上。
-                Protocol = session.Client.Config.UseHttp ? Amazon.S3.Protocol.HTTP : Amazon.S3.Protocol.HTTPS,
+                Protocol = session.Client.Config.UseHttp ? Protocol.HTTP : Protocol.HTTPS,
             });
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             if (offset > 0)

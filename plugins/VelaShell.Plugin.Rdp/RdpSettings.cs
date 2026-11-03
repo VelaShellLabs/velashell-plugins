@@ -349,14 +349,22 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         });
         fields.Add(new()
         {
-            Key = TransportKey, Label = loc["Transport"], Hint = loc["TransportHint"],
-            Kind = ProtocolSettingKind.Choice, DefaultValue = "auto", Page = ExperiencePage,
+            Key = TransportKey,
+            Label = loc["Transport"],
+            Hint = loc["TransportHint"],
+            Kind = ProtocolSettingKind.Choice,
+            DefaultValue = "auto",
+            Page = ExperiencePage,
             Choices = [new("auto", loc["TransportAuto"]), new("tcp", "TCP")]
         });
         fields.Add(new()
         {
-            Key = AdaptiveNetworkKey, Label = loc["AdaptiveNetwork"], Hint = loc["AdaptiveNetworkHint"],
-            Kind = ProtocolSettingKind.Boolean, DefaultValue = "true", Page = ExperiencePage
+            Key = AdaptiveNetworkKey,
+            Label = loc["AdaptiveNetwork"],
+            Hint = loc["AdaptiveNetworkHint"],
+            Kind = ProtocolSettingKind.Boolean,
+            DefaultValue = "true",
+            Page = ExperiencePage
         });
         // Experience toggles live on their own page, like mstsc's "Experience" tab. All unticked by
         // default: the responsiveness-first profile (no wallpaper, animations, themes or audio).

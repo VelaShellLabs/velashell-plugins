@@ -31,60 +31,103 @@ internal sealed class GfxAvcCodec
         ReadOnlySpan<byte> data = request.Data;
         if (request.CodecId == 11)
         {
-            var rectangles = ReadMetadata(ref data);
-            using var frame = _decoder.Decode(data);
-            foreach (var rect in rectangles)
+            GfxAvcRectangle[] rectangles = ReadMetadata(ref data);
+            using VideoFrame frame = _decoder.Decode(data);
+            foreach (GfxAvcRectangle rect in rectangles)
+            {
                 for (int y = rect.Top; y < rect.Bottom; y++)
+                {
                     for (int x = rect.Left; x < rect.Right; x++)
+                    {
                         WriteRgb(request.Destination.AsSpan((y * _width + x) * 4),
                             Sample(frame, 0, x, y), Sample(frame, 1, x / 2, y / 2), Sample(frame, 2, x / 2, y / 2));
+                    }
+                }
+            }
+
             return;
         }
-        if (data.Length < 4) throw new RdpProtocolException("Truncated AVC444 header.");
+        if (data.Length < 4)
+        {
+            throw new RdpProtocolException("Truncated AVC444 header.");
+        }
+
         uint info = BinaryPrimitives.ReadUInt32LittleEndian(data);
         int mode = (int)(info >> 30);
         int firstLength = (int)(info & 0x3FFFFFFF);
         data = data[4..];
-        if (mode == 3) throw new RdpProtocolException("Invalid AVC444 LC mode.");
+        if (mode == 3)
+        {
+            throw new RdpProtocolException("Invalid AVC444 LC mode.");
+        }
+
         if (mode == 0)
         {
             if (firstLength <= 0 || firstLength >= data.Length)
+            {
                 throw new RdpProtocolException("Invalid AVC444 first stream length.");
-            var main = data[..firstLength];
-            var auxiliary = data[firstLength..];
-            var mainRectangles = ReadMetadata(ref main);
-            var auxRectangles = ReadMetadata(ref auxiliary);
-            using (var frame = _decoder.Decode(main)) UpdateMain(frame, mainRectangles);
-            using (var frame = _decoder.Decode(auxiliary)) UpdateAuxiliary(frame, auxRectangles, request.CodecId == 15);
+            }
+
+            ReadOnlySpan<byte> main = data[..firstLength];
+            ReadOnlySpan<byte> auxiliary = data[firstLength..];
+            GfxAvcRectangle[] mainRectangles = ReadMetadata(ref main);
+            GfxAvcRectangle[] auxRectangles = ReadMetadata(ref auxiliary);
+            using (VideoFrame frame = _decoder.Decode(main))
+            {
+                UpdateMain(frame, mainRectangles);
+            }
+
+            using (VideoFrame frame = _decoder.Decode(auxiliary))
+            {
+                UpdateAuxiliary(frame, auxRectangles, request.CodecId == 15);
+            }
+
             Render(request.Destination, mainRectangles);
             Render(request.Destination, auxRectangles);
         }
         else
         {
-            var rectangles = ReadMetadata(ref data);
-            using var frame = _decoder.Decode(data);
-            if (mode == 1) UpdateMain(frame, rectangles);
-            else UpdateAuxiliary(frame, rectangles, request.CodecId == 15);
+            GfxAvcRectangle[] rectangles = ReadMetadata(ref data);
+            using VideoFrame frame = _decoder.Decode(data);
+            if (mode == 1)
+            {
+                UpdateMain(frame, rectangles);
+            }
+            else
+            {
+                UpdateAuxiliary(frame, rectangles, request.CodecId == 15);
+            }
+
             Render(request.Destination, rectangles);
         }
     }
 
     private GfxAvcRectangle[] ReadMetadata(ref ReadOnlySpan<byte> data)
     {
-        if (data.Length < 4) throw new RdpProtocolException("Truncated AVC region metadata.");
+        if (data.Length < 4)
+        {
+            throw new RdpProtocolException("Truncated AVC region metadata.");
+        }
+
         uint count = BinaryPrimitives.ReadUInt32LittleEndian(data);
         if (count > 65536 || count * 10L + 4 >= data.Length)
+        {
             throw new RdpProtocolException("Invalid AVC region count.");
+        }
+
         var rectangles = new GfxAvcRectangle[count];
         for (int i = 0; i < rectangles.Length; i++)
         {
-            var rect = data.Slice(4 + i * 8, 8);
+            ReadOnlySpan<byte> rect = data.Slice(4 + i * 8, 8);
             int left = BinaryPrimitives.ReadUInt16LittleEndian(rect);
             int top = BinaryPrimitives.ReadUInt16LittleEndian(rect[2..]);
             int right = BinaryPrimitives.ReadUInt16LittleEndian(rect[4..]);
             int bottom = BinaryPrimitives.ReadUInt16LittleEndian(rect[6..]);
             if (left >= right || top >= bottom || right > _width || bottom > _height)
+            {
                 throw new RdpProtocolException("AVC region exceeds the surface.");
+            }
+
             rectangles[i] = new(left, top, right, bottom);
         }
         data = data[(4 + rectangles.Length * 10)..];
@@ -94,8 +137,10 @@ internal sealed class GfxAvcCodec
     internal void UpdateMain(VideoFrame frame, ReadOnlySpan<GfxAvcRectangle> rectangles)
     {
         EnsurePlanes();
-        foreach (var rect in rectangles)
+        foreach (GfxAvcRectangle rect in rectangles)
+        {
             for (int y = rect.Top; y < rect.Bottom; y++)
+            {
                 for (int x = rect.Left; x < rect.Right; x++)
                 {
                     int index = y * _width + x;
@@ -104,19 +149,34 @@ internal sealed class GfxAvcCodec
                     _v![index] = Sample(frame, 2, x / 2, y / 2);
                     _valid![index] = 1;
                 }
+            }
+        }
     }
 
     internal void UpdateAuxiliary(VideoFrame frame, ReadOnlySpan<GfxAvcRectangle> rectangles, bool version2)
     {
-        if (_valid is null) throw new RdpProtocolException("AVC444 auxiliary update precedes its main picture.");
+        if (_valid is null)
+        {
+            throw new RdpProtocolException("AVC444 auxiliary update precedes its main picture.");
+        }
+
         if ((frame.Width & 15) != 0 || (frame.Height & 15) != 0)
+        {
             throw new RdpProtocolException("AVC444 auxiliary dimensions must be aligned to 16 pixels.");
-        foreach (var rect in rectangles)
+        }
+
+        foreach (GfxAvcRectangle rect in rectangles)
+        {
             for (int y = rect.Top; y < rect.Bottom; y++)
+            {
                 for (int x = rect.Left; x < rect.Right; x++)
                 {
                     int index = y * _width + x;
-                    if (_valid[index] == 0) throw new RdpProtocolException("AVC444 auxiliary region has no main picture.");
+                    if (_valid[index] == 0)
+                    {
+                        throw new RdpProtocolException("AVC444 auxiliary region has no main picture.");
+                    }
+
                     if (!version2)
                     {
                         if ((y & 1) != 0)
@@ -143,12 +203,16 @@ internal sealed class GfxAvcCodec
                         _v![index] = Sample(frame, plane, x / 4 + frame.Width / 4, y / 2);
                     }
                 }
+            }
+        }
     }
 
     internal void Render(Span<byte> destination, ReadOnlySpan<GfxAvcRectangle> rectangles)
     {
-        foreach (var rect in rectangles)
+        foreach (GfxAvcRectangle rect in rectangles)
+        {
             for (int y = rect.Top; y < rect.Bottom; y++)
+            {
                 for (int x = rect.Left; x < rect.Right; x++)
                 {
                     int index = y * _width + x;
@@ -158,13 +222,19 @@ internal sealed class GfxAvcCodec
                         u = ReverseFilter(_u, index, _width);
                         v = ReverseFilter(_v, index, _width);
                     }
-                    WriteRgb(destination.Slice(index * 4), _y![index], u, v);
+                    WriteRgb(destination[(index * 4)..], _y![index], u, v);
                 }
+            }
+        }
     }
 
     private void EnsurePlanes()
     {
-        if (_y is not null) return;
+        if (_y is not null)
+        {
+            return;
+        }
+
         int size = checked(_width * _height);
         _y = new byte[size];
         _u = new byte[size];

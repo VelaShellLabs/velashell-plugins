@@ -74,7 +74,7 @@ public sealed class RdpSecurityTests
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Auto));
 
         // The fake ends the second connection after TLS; reaching MCS proves the retry offered TLS only and used it.
-        var later = Assert.IsInstanceOfType<RdpConnectionException>(failure);
+        RdpConnectionException later = Assert.IsInstanceOfType<RdpConnectionException>(failure);
         Assert.AreEqual(RdpConnectStage.Mcs, later.Stage);
         Assert.AreSequenceEqual(new uint[] { 3, 1 }, [.. server.RequestedProtocols]);
     }
@@ -86,14 +86,14 @@ public sealed class RdpSecurityTests
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Auto));
 
-        var refused = Assert.IsInstanceOfType<RdpNlaRefusedException>(failure);
+        RdpNlaRefusedException refused = Assert.IsInstanceOfType<RdpNlaRefusedException>(failure);
         Assert.IsTrue(refused.ServerRequiresNla);
         Assert.AreEqual(NtlmRefused, refused.Status);
         Assert.AreSequenceEqual(new uint[] { 3, 1 }, [.. server.RequestedProtocols]);
 
         // A server policy, not a credentials problem: shown as a connection error with the server-side fix.
         Exception shown = RdpConnector.Translate(refused, new Loc("zh-Hans"));
-        var connectionError = Assert.IsInstanceOfType<ProtocolConnectionException>(shown);
+        ProtocolConnectionException connectionError = Assert.IsInstanceOfType<ProtocolConnectionException>(shown);
         Assert.Contains("与用户名和密码无关", connectionError.Message);
         Assert.Contains("0x80090302", connectionError.Message);
         Assert.Contains("限制 NTLM: 传入 NTLM 流量", connectionError.Message);
@@ -114,7 +114,7 @@ public sealed class RdpSecurityTests
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Nla));
 
-        var refused = Assert.IsInstanceOfType<RdpNlaRefusedException>(failure);
+        RdpNlaRefusedException refused = Assert.IsInstanceOfType<RdpNlaRefusedException>(failure);
         Assert.IsNull(refused.Status);
         Assert.IsFalse(refused.ServerRequiresNla);
         Assert.IsNotNull(refused.TlsTrace);
@@ -132,7 +132,7 @@ public sealed class RdpSecurityTests
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Nla));
 
         // Its own type, so a caller that pinned NLA for this host can tell a possible downgrade from other failures.
-        var failed = Assert.IsInstanceOfType<RdpNlaUnavailableException>(failure);
+        RdpNlaUnavailableException failed = Assert.IsInstanceOfType<RdpNlaUnavailableException>(failure);
         Assert.Contains("did not select NLA", failed.Message);
     }
 
@@ -143,7 +143,7 @@ public sealed class RdpSecurityTests
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Tls));
 
-        var failed = Assert.IsInstanceOfType<RdpConnectionException>(failure);
+        RdpConnectionException failed = Assert.IsInstanceOfType<RdpConnectionException>(failure);
         Assert.AreEqual(RdpNegotiationFailure.HybridRequiredByServer, failed.NegotiationFailure);
         Assert.AreSequenceEqual(new uint[] { 1 }, [.. server.RequestedProtocols]);
         var loc = new Loc("en");
@@ -157,15 +157,12 @@ public sealed class RdpSecurityTests
     [DataRow(" tls ", RdpSecurity.Tls)]
     public void SecurityLayerSettingIsParsed(string value, RdpSecurity expected)
     {
-        RdpSettings settings = RdpSettings.From(RdpSettingsTests.Request(("security", value)), new Loc("en"), []);
+        var settings = RdpSettings.From(RdpSettingsTests.Request(("security", value)), new Loc("en"), []);
         Assert.AreEqual(expected, settings.Security);
     }
 
     [TestMethod]
-    public void UnknownSecurityLayerIsRejected()
-    {
-        _ = Assert.Throws<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("security", "rdp")), new Loc("en"), []));
-    }
+    public void UnknownSecurityLayerIsRejected() => _ = Assert.Throws<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("security", "rdp")), new Loc("en"), []));
 
     [TestMethod]
     public void SecurityLayerIsAnAdvancedChoiceDefaultingToAuto()

@@ -446,7 +446,7 @@ public sealed partial class RedisWorkspaceViewModel
             "jsonl" => "jsonl",
             _ => "rdbdump"
         };
-        return System.IO.Path.Combine(
+        return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "redis-" + kind,
             $"{safe}-db{CurrentDatabase.ToString(CultureInfo.InvariantCulture)}.{extension}");
@@ -647,7 +647,7 @@ public sealed partial class RedisWorkspaceViewModel
             return string.Empty;
         }
         return trimmed is ['~', '/' or '\\', ..]
-            ? System.IO.Path.Combine(
+            ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), trimmed[2..])
             : trimmed;
     }

@@ -1,8 +1,8 @@
 using System.Buffers.Binary;
-using VelaShell.Rdp;
-using VelaShell.Rdp.Graphics;
-using VelaShell.Rdp.Channels;
 using System.Text;
+using VelaShell.Rdp;
+using VelaShell.Rdp.Channels;
+using VelaShell.Rdp.Graphics;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
@@ -32,10 +32,10 @@ public sealed class ManagedRdpGfxTests
         gfx.Feed(Packet(Confirm()));
         Assert.IsFalse(gfx.TryGetFrame(out _));
         Assert.IsNull(gfx.ReadResponse(), "Without persistent bitmaps there must be no cache-import request.");
-        Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Confirm())));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Confirm())));
         using var unsupported = new ManagedRdpGfx(2, 1); unsupported.Open();
         unsupported.Feed(Packet(Confirm(0xdeadbeef)));
-        Assert.ThrowsExactly<RdpProtocolException>(() => unsupported.Feed(Packet(Create(1, 2, 1))));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => unsupported.Feed(Packet(Create(1, 2, 1))));
         using var v101 = new ManagedRdpGfx(2, 1); v101.Open(); _ = v101.ReadResponse();
         v101.Feed(Packet(Command(19, w => { w.Write(0xa0100u); w.Write(16u); w.Write(new byte[16]); }),
             Create(1, 2, 1), Map(1), Start(1), Fill(1, 3, 0, 0, 2, 1), End(1)));
@@ -46,15 +46,15 @@ public sealed class ManagedRdpGfxTests
     [TestMethod]
     public void MultipleFramesShareOutputButMustBeCopiedBeforeAcknowledgement()
     {
-        using var gfx = Ready(3, 2);
+        using ManagedRdpGfx gfx = Ready(3, 2);
         gfx.Feed(Packet(Create(1, 3, 2), Map(1), Start(7), Fill(1, 0x00030201, 1, 1, 3, 2), End(7),
             Start(8), Fill(1, 0xff060504, 0, 0, 1, 1), End(8)));
-        Assert.ThrowsExactly<RdpProtocolException>(() => gfx.ReadResponse());
+        _ = Assert.ThrowsExactly<RdpProtocolException>(gfx.ReadResponse);
         Assert.IsTrue(gfx.TryGetFrame(out RdpGfxFrame first));
         byte[] snapshot = first.Pixels.ToArray();
         Assert.AreSequenceEqual(new byte[] { 1, 2, 3, 255 }, snapshot.AsSpan(16, 4).ToArray());
         Assert.AreEqual((byte)255, snapshot[3]);
-        Assert.ThrowsExactly<RdpProtocolException>(() => gfx.ReadResponse());
+        _ = Assert.ThrowsExactly<RdpProtocolException>(gfx.ReadResponse);
         Assert.IsTrue(gfx.TryGetFrame(out RdpGfxFrame second));
         Assert.AreSame(first.Pixels, second.Pixels);
         Assert.AreEqual(new RdpFrameRegion(0, 0, 1, 1), new(second.X, second.Y, second.W, second.H));
@@ -115,7 +115,7 @@ public sealed class ManagedRdpGfxTests
     [TestMethod]
     public void CompressedGraphicsMessageDecodesAvcIdrAndPredictedFrameBeforeAcknowledgement()
     {
-        using var gfx = Ready(16, 16);
+        using ManagedRdpGfx gfx = Ready(16, 16);
         var framebuffer = new Framebuffer(16, 16);
         byte[] Avc(string name) => Command(1, w =>
         {
@@ -131,7 +131,7 @@ public sealed class ManagedRdpGfxTests
         BinaryPrimitives.WriteUInt32BigEndian(compressed.AsSpan(2), 0x88000000u | ((uint)pdus.Length << 7));
         pdus.CopyTo(compressed, 6);
         gfx.Feed(compressed);
-        Assert.ThrowsExactly<RdpProtocolException>(() => gfx.ReadResponse());
+        _ = Assert.ThrowsExactly<RdpProtocolException>(gfx.ReadResponse);
         foreach (byte gray in new byte[] { 96, 160 })
         {
             Assert.IsTrue(gfx.TryGetFrame(out RdpGfxFrame frame));
@@ -151,7 +151,7 @@ public sealed class ManagedRdpGfxTests
     [TestMethod]
     public void FrameSpansMessagesAndPartialDrawingIsNotPresented()
     {
-        using var gfx = Ready(2, 1);
+        using ManagedRdpGfx gfx = Ready(2, 1);
         gfx.Feed(Packet(Create(1, 2, 1), Map(1), Start(1), Fill(1, 0xff000009, 0, 0, 2, 1)));
         Assert.IsFalse(gfx.TryGetFrame(out _)); Assert.IsNull(gfx.ReadResponse());
         gfx.Feed(Packet(End(1)));
@@ -163,7 +163,7 @@ public sealed class ManagedRdpGfxTests
     [TestMethod]
     public void OverlapCopiesUseOriginalSourceAndCacheSurvivesSurfaceDeletion()
     {
-        using var gfx = Ready(4, 1);
+        using ManagedRdpGfx gfx = Ready(4, 1);
         gfx.Feed(Packet(Create(1, 4, 1), Map(1), Start(1), Raw(1, 4, 1, [1, 2, 3, 4]),
             Command(6, w => { w.Write((ushort)1); w.Write(99UL); w.Write((ushort)1); Rect(w, 0, 0, 2, 1); }),
             Command(5, w => { w.Write((ushort)1); w.Write((ushort)1); Rect(w, 0, 0, 3, 1); w.Write((ushort)1); Point(w, 1, 0); }), End(1)));
@@ -174,14 +174,14 @@ public sealed class ManagedRdpGfxTests
         Assert.IsTrue(gfx.TryGetFrame(out frame));
         Assert.AreSequenceEqual(new byte[] { 1, 2, 1, 2 }, Blue(frame)); Drain(gfx);
         gfx.Feed(Packet(Command(8, w => w.Write((ushort)1))));
-        Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Start(3),
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Start(3),
             Command(7, w => { w.Write((ushort)1); w.Write((ushort)2); w.Write((ushort)1); Point(w, 0, 0); }))));
     }
 
     [TestMethod]
     public void ScaledMappingClipsToDesktopAndResizePreservesOffscreenPixels()
     {
-        using var gfx = Ready(4, 2);
+        using ManagedRdpGfx gfx = Ready(4, 2);
         gfx.Feed(Packet(Create(1, 2, 1), Command(23, w =>
         {
             w.Write((ushort)1); w.Write((ushort)0); w.Write(1u); w.Write(0u); w.Write(4u); w.Write(2u);
@@ -213,38 +213,38 @@ public sealed class ManagedRdpGfxTests
         ];
         foreach (byte[] pdu in invalid)
         {
-            using var gfx = Ready(2, 1);
-            Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(pdu)), Convert.ToHexString(pdu.AsSpan(0, Math.Min(20, pdu.Length))));
+            using ManagedRdpGfx gfx = Ready(2, 1);
+            _ = Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(pdu)), Convert.ToHexString(pdu.AsSpan(0, Math.Min(20, pdu.Length))));
         }
         using var premature = new ManagedRdpGfx(2, 1); premature.Open();
-        Assert.ThrowsExactly<RdpProtocolException>(() => premature.Feed(Packet(Create(1, 2, 1))));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => premature.Feed(Packet(Create(1, 2, 1))));
     }
 
     [TestMethod]
     public void CacheBudgetAndNegotiatedCodecRestrictionsAreEnforcedBeforeDecode()
     {
-        using var gfx = Ready(2, 1);
+        using ManagedRdpGfx gfx = Ready(2, 1);
         gfx.Feed(Packet(Create(1, 2048, 2048), Start(1), Command(6, w =>
         {
             w.Write((ushort)1); w.Write(1UL); w.Write((ushort)1); Rect(w, 0, 0, 2048, 2048);
         })));
-        Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Command(6, w =>
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => gfx.Feed(Packet(Command(6, w =>
         {
             w.Write((ushort)1); w.Write(2UL); w.Write((ushort)2); Rect(w, 0, 0, 1, 1);
         }))));
-        using var disabled = Ready(2, 1, flags: 0x22);
-        Assert.ThrowsExactly<RdpProtocolException>(() => disabled.Feed(Packet(Create(1, 2, 1), Start(1),
+        using ManagedRdpGfx disabled = Ready(2, 1, flags: 0x22);
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => disabled.Feed(Packet(Create(1, 2, 1), Start(1),
             Command(1, w => { w.Write((ushort)1); w.Write((ushort)11); w.Write((byte)0x20); Rect(w, 0, 0, 2, 1); w.Write(0u); }))));
     }
 
     [TestMethod]
     public void DisposalIsIdempotentAndStopsFurtherUse()
     {
-        var gfx = Ready(2, 1); gfx.Dispose(); gfx.Dispose();
-        Assert.ThrowsExactly<ObjectDisposedException>(() => gfx.Open());
-        Assert.ThrowsExactly<ObjectDisposedException>(() => gfx.Feed(Packet(Start(1))));
-        Assert.ThrowsExactly<ObjectDisposedException>(() => gfx.TryGetFrame(out _));
-        Assert.ThrowsExactly<ObjectDisposedException>(() => gfx.ReadResponse());
+        ManagedRdpGfx gfx = Ready(2, 1); gfx.Dispose(); gfx.Dispose();
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(gfx.Open);
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => gfx.Feed(Packet(Start(1))));
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => gfx.TryGetFrame(out _));
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(gfx.ReadResponse);
     }
 
     private static ManagedRdpGfx Ready(int width, int height, uint flags = 2)

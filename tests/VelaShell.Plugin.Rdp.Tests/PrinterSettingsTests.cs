@@ -10,7 +10,7 @@ public sealed class PrinterSettingsTests
     public void NoSelectionDoesNotEnumerateOrEnableAnyPrinter()
     {
         var printer = new PrinterMapping("Office", "Driver");
-        var selected = LocalPrinters.Selected(RdpSettingsTests.Request((LocalPrinters.Key(printer), "false")), new("en"),
+        IReadOnlyList<PrinterMapping> selected = LocalPrinters.Selected(RdpSettingsTests.Request((LocalPrinters.Key(printer), "false")), new("en"),
             () => throw new AssertFailedException("An unselected printer must not require discovery."));
         Assert.IsEmpty(selected);
     }
@@ -19,8 +19,8 @@ public sealed class PrinterSettingsTests
     public void FormAndOptionsPreserveExplicitSelection()
     {
         var printer = new PrinterMapping("Office", "Driver", true);
-        var fields = RdpSettings.Declare(new("en"), [], [printer]);
-        var field = fields.Single(f => f.Key == LocalPrinters.Key(printer));
+        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(new("en"), [], [printer]);
+        ProtocolSettingField field = fields.Single(f => f.Key == LocalPrinters.Key(printer));
         Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
         Assert.AreEqual("false", field.DefaultValue);
         Assert.AreEqual(RdpSettings.DrivesPage, field.Page);
@@ -42,7 +42,7 @@ public sealed class PrinterSettingsTests
         var plugin = new RdpPlugin(() => [], TimeSpan.FromHours(1), () =>
         {
             entered.Set();
-            release.Wait(TimeSpan.FromSeconds(10));
+            _ = release.Wait(TimeSpan.FromSeconds(10));
             return [new PrinterMapping("Office", "Driver")];
         });
         try
@@ -60,12 +60,12 @@ public sealed class PrinterSettingsTests
     {
         var first = new PrinterMapping("Office; East", "Driver", true);
         var other = new PrinterMapping("Office West", "Driver");
-        var selected = LocalPrinters.Selected(RdpSettingsTests.Request((LocalPrinters.Key(first), "true")), new("en"), () => [first, other]);
+        IReadOnlyList<PrinterMapping> selected = LocalPrinters.Selected(RdpSettingsTests.Request((LocalPrinters.Key(first), "true")), new("en"), () => [first, other]);
         Assert.HasCount(1, selected);
         Assert.AreSame(first, selected[0]);
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => LocalPrinters.Selected(
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => LocalPrinters.Selected(
             RdpSettingsTests.Request((LocalPrinters.Key(first), "true")), new("en"), () => [other]));
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => LocalPrinters.Selected(
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => LocalPrinters.Selected(
             RdpSettingsTests.Request((LocalPrinters.Key(first), "yes")), new("en"), () => [first]));
     }
 }

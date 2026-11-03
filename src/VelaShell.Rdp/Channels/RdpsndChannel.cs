@@ -16,10 +16,16 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
     internal async Task DrainAsync()
     {
         await _confirmations.ConfigureAwait(false);
-        if (_disposed) throw new OperationCanceledException("RDP audio channel was disposed.");
+        if (_disposed)
+        {
+            throw new OperationCanceledException("RDP audio channel was disposed.");
+        }
+
         _stop.Token.ThrowIfCancellationRequested();
         if (_failure.Task.IsCompletedSuccessfully)
+        {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(_failure.Task.Result);
+        }
     }
     private long _playedBlocks;
     private bool _receivedWave;
@@ -34,7 +40,11 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
     {
         ct.ThrowIfCancellationRequested();
         _stop.Token.ThrowIfCancellationRequested();
-        if (_failure.Task.IsCompletedSuccessfully) throw new IOException("RDP audio playback failed.", _failure.Task.Result);
+        if (_failure.Task.IsCompletedSuccessfully)
+        {
+            throw new IOException("RDP audio playback failed.", _failure.Task.Result);
+        }
+
         if (_pending is { } pending)
         {
             _pending = null;
@@ -160,12 +170,15 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
         }
         _receivedWave = true;
         if (Volatile.Read(ref _inFlight) >= 128)
+        {
             throw new IOException("RDP audio confirmation queue capacity exceeded.");
+        }
+
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, _stop.Token);
         Task playback;
         try { playback = output!.PlayAsync(format, data, lifetime.Token); }
         catch { lifetime.Dispose(); throw; }
-        Interlocked.Increment(ref _inFlight);
+        _ = Interlocked.Increment(ref _inFlight);
         _confirmations = ConfirmAsync(_confirmations, playback, timestamp, block, receivedAt, lifetime);
         return Task.CompletedTask;
     }
@@ -179,7 +192,11 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
             await playback.WaitAsync(lifetime.Token).ConfigureAwait(false);
             await previous.WaitAsync(lifetime.Token).ConfigureAwait(false);
             lifetime.Token.ThrowIfCancellationRequested();
-            if (_failure.Task.IsCompletedSuccessfully) return;
+            if (_failure.Task.IsCompletedSuccessfully)
+            {
+                return;
+            }
+
             byte[] confirm = new byte[4];
             BinaryPrimitives.WriteUInt16LittleEndian(confirm, unchecked((ushort)(timestamp + Environment.TickCount64 - receivedAt)));
             confirm[2] = block;
@@ -188,11 +205,14 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
         }
         catch (Exception error)
         {
-            if (!_stop.IsCancellationRequested) _failure.TrySetResult(error);
+            if (!_stop.IsCancellationRequested)
+            {
+                _ = _failure.TrySetResult(error);
+            }
         }
         finally
         {
-            Interlocked.Decrement(ref _inFlight);
+            _ = Interlocked.Decrement(ref _inFlight);
             lifetime.Dispose();
         }
     }
@@ -219,7 +239,11 @@ internal sealed class RdpsndChannel(Func<byte[], CancellationToken, Task> send, 
     }
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
         _stop.Cancel();
         output?.Dispose();

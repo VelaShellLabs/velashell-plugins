@@ -28,7 +28,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasCheckedKeys));
             if (!field)
             {
@@ -78,7 +78,7 @@ public sealed partial class RedisWorkspaceViewModel
         {
             if (!_checkedKeys.Remove(key))
             {
-                _checkedKeys.Add(key);
+                _ = _checkedKeys.Add(key);
             }
         }
         else
@@ -94,11 +94,11 @@ public sealed partial class RedisWorkspaceViewModel
             {
                 if (allChecked)
                 {
-                    _checkedKeys.Remove(member);
+                    _ = _checkedKeys.Remove(member);
                 }
                 else
                 {
-                    _checkedKeys.Add(member);
+                    _ = _checkedKeys.Add(member);
                 }
             }
         }

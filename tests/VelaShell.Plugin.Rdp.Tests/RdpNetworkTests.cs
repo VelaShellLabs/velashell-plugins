@@ -42,20 +42,20 @@ public sealed class RdpNetworkTests
         var monitor = new RdpNetworkMonitor(true);
         var detect = new RdpAutoDetect(monitor);
         Assert.AreSequenceEqual(new byte[] { 6, 1, 42, 0, 0, 0 }, detect.Process(Request(1), 1)!);
-        detect.Process(Request(0x1014), 10);
-        detect.Process(Request(2, [3,0,7,8,9]), 11);
+        _ = detect.Process(Request(0x1014), 10);
+        _ = detect.Process(Request(2, [3, 0, 7, 8, 9]), 11);
         detect.Observe(100);
-        byte[] result = detect.Process(Request(0x2B, [1,0,10]), 20)!;
+        byte[] result = detect.Process(Request(0x2B, [1, 0, 10]), 20)!;
         Assert.AreEqual(4u, BinaryPrimitives.ReadUInt32LittleEndian(result.AsSpan(10)));
         Assert.AreEqual(10u, BinaryPrimitives.ReadUInt32LittleEndian(result.AsSpan(6)));
-        detect.Process(Request(0x14), 30);
+        _ = detect.Process(Request(0x14), 30);
         detect.Observe(15);
-        detect.Process(Request(2, [3,0,7,8,9]), 31);
+        _ = detect.Process(Request(2, [3, 0, 7, 8, 9]), 31);
         result = detect.Process(Request(0x429), 40)!;
         Assert.AreEqual(15u, BinaryPrimitives.ReadUInt32LittleEndian(result.AsSpan(10)));
-        detect.Process(Request(0x880, [0xE8,3,0,0, 0x2C,1,0,0]), 50);
+        _ = detect.Process(Request(0x880, [0xE8, 3, 0, 0, 0x2C, 1, 0, 0]), 50);
         Assert.AreEqual(RdpNetworkQuality.Poor, monitor.Status.Quality);
-        Assert.ThrowsExactly<RdpProtocolException>(() => detect.Process(Request(2, [10,0,1]), 51));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => detect.Process(Request(2, [10, 0, 1]), 51));
     }
 
     [TestMethod]
@@ -64,8 +64,8 @@ public sealed class RdpNetworkTests
         var settings = RdpSettings.From(RdpSettingsTests.Request(("transport", "tcp"), ("adaptiveNetwork", "false")), new("en"), []);
         Assert.AreEqual(RdpTransportMode.Tcp, settings.Transport);
         Assert.IsFalse(settings.AdaptiveNetwork);
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("transport", "udp-only")), new("en"), []));
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("adaptiveNetwork", "maybe")), new("en"), []));
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("transport", "udp-only")), new("en"), []));
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("adaptiveNetwork", "maybe")), new("en"), []));
     }
 
     private sealed class Sink : IDynamicChannelHandler
@@ -80,7 +80,7 @@ public sealed class RdpNetworkTests
         var w = new ByteWriter();
         w.U8(0x80); w.U8(0); w.U32LE((uint)(8 + tunnels.Sum(t => 6 + t.Channels.Length * 4)));
         w.U16LE(3); w.U16LE((ushort)tunnels.Length);
-        foreach (var tunnel in tunnels)
+        foreach ((int Type, uint[] Channels) tunnel in tunnels)
         { w.U32LE((uint)tunnel.Type); w.U16LE((ushort)tunnel.Channels.Length); foreach (uint id in tunnel.Channels) { w.U32LE(id); } }
         return w.ToArray();
     }
@@ -99,7 +99,7 @@ public sealed class RdpNetworkTests
         await dvc.ProcessAsync(Sync((3, [1])));
         await channel!.SendAsync([9]);
         Assert.AreSequenceEqual(new byte[] { 0x30, 1, 9 }, udp.Single());
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => channel.SendAsync(new byte[601]));
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => channel.SendAsync(new byte[601]));
         Assert.HasCount(1, udp);
         await dvc.ProcessAsync([0x40, 1], 3);
         await dvc.ProcessAsync(create);
@@ -139,10 +139,10 @@ public sealed class RdpNetworkTests
         await dvc.ProcessAsync([0x60, 1, 2, 0xe0, 4, 10], 1);
         await dvc.ProcessAsync([0x70, 1, 0xe0, 4, 11], 1);
         Assert.AreSequenceEqual(new byte[] { 10, 11 }, sink.Messages[1]);
-        await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x60, 1, 2, 0xe0, 4, 10]));
-        await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x70, 1, 0xe0, 4, 11]));
-        await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x30, 1, 9]));
-        await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync(Sync((1, [1]), (3, [1]))));
+        _ = await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x60, 1, 2, 0xe0, 4, 10]));
+        _ = await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x70, 1, 0xe0, 4, 11]));
+        _ = await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync([0x30, 1, 9]));
+        _ = await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => dvc.ProcessAsync(Sync((1, [1]), (3, [1]))));
         await dvc.CloseAsync();
     }
 }

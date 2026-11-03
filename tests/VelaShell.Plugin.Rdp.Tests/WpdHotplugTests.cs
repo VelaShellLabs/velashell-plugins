@@ -14,7 +14,7 @@ public sealed class WpdHotplugTests
         internal bool Disposed;
         internal bool Fail;
         public IDisposable Register(Action<WpdDeviceChange> changed)
-        { if (Fail) throw new Win32Exception(5); Changed = changed; return this; }
+        { if (Fail) { throw new Win32Exception(5); } Changed = changed; return this; }
         public void Dispose() => Disposed = true;
         internal void Fire(string path, bool removed = false) => Changed!(new(path, removed));
     }
@@ -23,14 +23,18 @@ public sealed class WpdHotplugTests
         internal bool Disposed;
         internal TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task<WpdIoResult> ExecuteAsync(WpdIoRequest request, CancellationToken token)
-        { Started.TrySetResult(); await Task.Delay(Timeout.Infinite, token); return new(0, 0, []); }
+        { _ = Started.TrySetResult(); await Task.Delay(Timeout.Infinite, token); return new(0, 0, []); }
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
     }
     private static WpdLocalDevice Device(string path, string? identity = "serial-A") => new(path, "same friendly name", [1, 0, 0, 0], [], identity);
     private static byte[] Packet(params uint[] values)
     {
         byte[] bytes = new byte[values.Length * 4];
-        for (int i = 0; i < values.Length; i++) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(i * 4), values[i]);
+        for (int i = 0; i < values.Length; i++)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(i * 4), values[i]);
+        }
+
         return bytes;
     }
     private static async Task<byte[]> Next(Channel<byte[]> output) => await output.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
@@ -49,31 +53,31 @@ public sealed class WpdHotplugTests
             notifications.Fire("barrier");
             Assert.IsTrue(await enumerated.WaitAsync(TimeSpan.FromSeconds(5)));
         }
-        await using var backend = new WpdDeviceMonitor(["old-path"], () => { var snapshot = Volatile.Read(ref devices); enumerated.Release(); return snapshot; },
+        await using var backend = new WpdDeviceMonitor(["old-path"], () => { WpdLocalDevice[] snapshot = Volatile.Read(ref devices); _ = enumerated.Release(); return snapshot; },
             (device, _) => { openedPath = device.Path; var handle = new Handle(); handles.Add(handle); return handle; }, notifications, _ => { });
         await using var owner = new WpdRedirection(backend);
-        IDynamicChannelHandler control = owner.CreateControl(bytes => { output.Writer.TryWrite(bytes); return Task.CompletedTask; }, () => Task.CompletedTask);
-        await control.OnMessageAsync(Packet(20, 0x65, 1, 5, 1)); await Next(output);
-        await control.OnMessageAsync(Packet(8, 0x67)); await Next(output);
+        IDynamicChannelHandler control = owner.CreateControl(bytes => { _ = output.Writer.TryWrite(bytes); return Task.CompletedTask; }, () => Task.CompletedTask);
+        await control.OnMessageAsync(Packet(20, 0x65, 1, 5, 1)); _ = await Next(output);
+        await control.OnMessageAsync(Packet(8, 0x67)); _ = await Next(output);
         owner.StartMonitoring();
         await enumerated.WaitAsync();
         Volatile.Write(ref devices, []);
         notifications.Fire("old-path", true);
         byte[] removal = await Next(output);
         Assert.AreSequenceEqual(Packet(12, 0x68, 1), removal);
-        await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+        _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         notifications.Fire("old-path", true);
-        await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+        _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         await Barrier();
         Assert.IsFalse(output.Reader.TryRead(out _));
         Volatile.Write(ref devices, [Device("unselected", "serial-B"), Device("ambiguous", null)]);
         notifications.Fire("unselected");
-        await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+        _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         await Barrier();
         Assert.IsFalse(output.Reader.TryRead(out _));
         Volatile.Write(ref devices, [Device("duplicate-a"), Device("duplicate-b")]);
         notifications.Fire("duplicate-a");
-        await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+        _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         await Barrier();
         Assert.IsEmpty(backend.Devices);
         Assert.IsFalse(output.Reader.TryRead(out _));
@@ -82,14 +86,14 @@ public sealed class WpdHotplugTests
         byte[] addition = await Next(output);
         uint newId = BinaryPrimitives.ReadUInt32LittleEndian(addition.AsSpan(12));
         Assert.AreEqual(2u, newId);
-        await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+        _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         notifications.Fire("new-path");
-        await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+        _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         await Barrier();
         Assert.IsFalse(output.Reader.TryRead(out _));
         Assert.AreEqual(1, backend.Devices.Count);
-        Assert.Throws<Win32Exception>(() => backend.Open(1, new(0x80000000, 3, 3, 0x80)));
-        var file = owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask);
+        _ = Assert.Throws<Win32Exception>(() => backend.Open(1, new(0x80000000, 3, 3, 0x80)));
+        WpdFileChannel file = owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask);
         await file.OnMessageAsync(Packet(1, 4, newId, 0x80000000, 3, 3, 0x80));
         Assert.AreEqual("new-path", openedPath);
         await file.OnMessageAsync(Packet(2, 0, 4, 0, 0));
@@ -120,10 +124,10 @@ public sealed class WpdHotplugTests
         }, new Notifications(), _ => { });
         await using (owner = new WpdRedirection(backend))
         {
-            var control = owner.CreateControl(_ => Task.CompletedTask, () => Task.CompletedTask);
+            IDynamicChannelHandler control = owner.CreateControl(_ => Task.CompletedTask, () => Task.CompletedTask);
             await control.OnMessageAsync(Packet(20, 0x65, 1, 5, 1));
             await control.OnMessageAsync(Packet(8, 0x67));
-            var file = owner.CreateFile(_ => Task.CompletedTask, () => { closeStarted.TrySetResult(); return Task.CompletedTask; });
+            WpdFileChannel file = owner.CreateFile(_ => Task.CompletedTask, () => { _ = closeStarted.TrySetResult(); return Task.CompletedTask; });
             await file.OnMessageAsync(Packet(1, 4, 1, 0x80000000, 3, 3, 0x80));
             Assert.IsNotNull(removal);
             await removal.WaitAsync(TimeSpan.FromSeconds(5));
@@ -149,19 +153,19 @@ public sealed class WpdHotplugTests
             return [];
         }, (_, _) => handle, notifications, _ => { }))
         {
-            backend.Start(_ => { removed.TrySetResult(); return Task.CompletedTask; }, _ => Task.CompletedTask);
+            backend.Start(_ => { _ = removed.TrySetResult(); return Task.CompletedTask; }, _ => Task.CompletedTask);
             await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.IsEmpty(backend.Devices);
         }
         Assert.IsTrue(notifications.Disposed);
         notifications = new Notifications();
-        await using var activeBackend = new WpdDeviceMonitor(["selected"], () => { Interlocked.Increment(ref enumerations); return [Device("selected")]; }, (_, _) => handle, notifications, _ => { });
+        await using var activeBackend = new WpdDeviceMonitor(["selected"], () => { _ = Interlocked.Increment(ref enumerations); return [Device("selected")]; }, (_, _) => handle, notifications, _ => { });
         await using var owner = new WpdRedirection(activeBackend);
-        var control = owner.CreateControl(_ => Task.CompletedTask, () => Task.CompletedTask);
+        IDynamicChannelHandler control = owner.CreateControl(_ => Task.CompletedTask, () => Task.CompletedTask);
         await control.OnMessageAsync(Packet(20, 0x65, 1, 5, 1));
         await control.OnMessageAsync(Packet(8, 0x67));
         owner.StartMonitoring();
-        var file = owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask);
+        WpdFileChannel file = owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask);
         await file.OnMessageAsync(Packet(1, 4, 1, 0x80000000, 3, 3, 0x80));
         await file.OnMessageAsync(Packet(2, 0, 4, 0, 0));
         await handle.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -171,7 +175,7 @@ public sealed class WpdHotplugTests
         int before = enumerations;
         notifications.Fire("selected");
         Assert.AreEqual(before, enumerations);
-        Assert.Throws<InvalidOperationException>(() => owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask));
+        _ = Assert.Throws<InvalidOperationException>(() => owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask));
     }
 
     [TestMethod]
@@ -182,14 +186,14 @@ public sealed class WpdHotplugTests
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int additions = 0;
         using var enumerated = new SemaphoreSlim(0);
-        await using (var backend = new WpdDeviceMonitor(["selected"], () => { var snapshot = Volatile.Read(ref devices); enumerated.Release(); return snapshot; },
+        await using (var backend = new WpdDeviceMonitor(["selected"], () => { WpdLocalDevice[] snapshot = Volatile.Read(ref devices); _ = enumerated.Release(); return snapshot; },
             (_, _) => new Handle(), notifications, _ => { }))
         {
-            backend.Start(_ => { removed.TrySetResult(); return Task.CompletedTask; }, _ => { Interlocked.Increment(ref additions); return Task.CompletedTask; });
+            backend.Start(_ => { _ = removed.TrySetResult(); return Task.CompletedTask; }, _ => { _ = Interlocked.Increment(ref additions); return Task.CompletedTask; });
             await enumerated.WaitAsync();
             Volatile.Write(ref devices, []); notifications.Fire("selected", true);
             await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
+            _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
             Volatile.Write(ref devices, [Device("selected", null)]); notifications.Fire("selected");
             Assert.IsTrue(await enumerated.WaitAsync(TimeSpan.FromSeconds(5)));
             notifications.Fire("barrier");

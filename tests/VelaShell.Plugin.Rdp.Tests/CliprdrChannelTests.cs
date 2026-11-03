@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Text;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
+using VelaShell.Rdp.Mcs;
+using VelaShell.Rdp.Wire;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
@@ -32,7 +34,7 @@ public sealed class CliprdrChannelTests
         List<RdpClipboardEvent> received = [];
         var channel = new CliprdrChannel(pdu => { sent.Add(pdu); return Task.CompletedTask; }, received.Add);
         Assert.IsFalse(channel.SupportsClipboardLock);
-        Assert.Throws<InvalidOperationException>(() => channel.LockClipboardAsync(42, true, default));
+        _ = Assert.Throws<InvalidOperationException>(() => channel.LockClipboardAsync(42, true, default));
         await channel.ProcessAsync(Capabilities(0x16));
         Assert.IsTrue(channel.SupportsClipboardLock);
         await channel.LockClipboardAsync(42, true, default);
@@ -117,7 +119,7 @@ public sealed class CliprdrChannelTests
         Assert.IsFalse(offer.IsCompleted);
         await channel.ProcessAsync(Packet(3, accepted ? (ushort)1 : (ushort)2));
         if (accepted) { await offer; }
-        else { await Assert.ThrowsAsync<IOException>(() => offer); }
+        else { _ = await Assert.ThrowsAsync<IOException>(() => offer); }
         Assert.AreEqual(6u, BinaryPrimitives.ReadUInt32LittleEndian(sent[^1].AsSpan(4)));
     }
 
@@ -139,7 +141,7 @@ public sealed class CliprdrChannelTests
     [TestMethod]
     public async Task CompressedVirtualChannelAcknowledgementCompletesPublication()
     {
-        await using var connection = CreateConnection();
+        await using RdpConnection connection = CreateConnection();
         var channel = new CliprdrChannel(_ => Task.CompletedTask, _ => { });
         Task? processing = null;
         connection.ChannelData += value => processing = channel.ProcessAsync(value.Data);
@@ -162,13 +164,13 @@ public sealed class CliprdrChannelTests
         var channel = new CliprdrChannel(_ => Task.CompletedTask, _ => { });
         byte[] packet = Packet(2);
         BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(4), 6);
-        await Assert.ThrowsAsync<InvalidDataException>(() => channel.ProcessAsync(packet));
+        _ = await Assert.ThrowsAsync<InvalidDataException>(() => channel.ProcessAsync(packet));
     }
 
     [TestMethod]
     public async Task ClipboardChunksCarryShowProtocolIncludingContinuationChunks()
     {
-        await using var connection = CreateConnection();
+        await using RdpConnection connection = CreateConnection();
         using var wire = new MemoryStream();
         var transport = new VelaShell.Rdp.Wire.RdpTransport(wire);
         var mcs = new VelaShell.Rdp.Mcs.McsLayer(transport);
@@ -180,9 +182,9 @@ public sealed class CliprdrChannelTests
         wire.Position = 0;
         for (int index = 0; index < 2; index++)
         {
-            var frame = await transport.ReadPduAsync(default);
+            RdpFramePdu frame = await transport.ReadPduAsync(default);
             frame.Data[3] = 0x68; // Decode the client request with the symmetric indication parser.
-            var message = VelaShell.Rdp.Mcs.McsLayer.ParseSendDataIndication(frame.Data)!.Value;
+            McsData message = McsLayer.ParseSendDataIndication(frame.Data)!.Value;
             uint flags = BinaryPrimitives.ReadUInt32LittleEndian(message.Payload.AsSpan(4));
             Assert.AreEqual(index == 0 ? 0x11u : 0x12u, flags);
             Assert.AreEqual(1700u, BinaryPrimitives.ReadUInt32LittleEndian(message.Payload));
@@ -192,7 +194,7 @@ public sealed class CliprdrChannelTests
     [TestMethod]
     public async Task LargeClipboardMessagesAllowInputBetweenFragmentsWithoutInterleavingMessages()
     {
-        await using var connection = CreateConnection();
+        await using RdpConnection connection = CreateConnection();
         using var wire = new PausingWire();
         var transport = new VelaShell.Rdp.Wire.RdpTransport(wire);
         var mcs = new VelaShell.Rdp.Mcs.McsLayer(transport);
@@ -214,9 +216,9 @@ public sealed class CliprdrChannelTests
         for (int index = 0; index < clipboard.Length; index++)
         {
             using var source = new MemoryStream(clipboard[index]);
-            var packet = await new VelaShell.Rdp.Wire.RdpTransport(source).ReadPduAsync(default);
+            RdpFramePdu packet = await new VelaShell.Rdp.Wire.RdpTransport(source).ReadPduAsync(default);
             packet.Data[3] = 0x68;
-            byte[] payload = VelaShell.Rdp.Mcs.McsLayer.ParseSendDataIndication(packet.Data)!.Value.Payload;
+            byte[] payload = McsLayer.ParseSendDataIndication(packet.Data)!.Value.Payload;
             Assert.AreEqual(index == clipboard.Length - 1 ? 1u : 256u * 1024, BinaryPrimitives.ReadUInt32LittleEndian(payload));
             uint channelFlags = BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(4));
             Assert.AreEqual(index == clipboard.Length - 1 ? 0x13u : index == 0 ? 0x11u : index == clipboard.Length - 2 ? 0x12u : 0x10u, channelFlags);
@@ -227,20 +229,20 @@ public sealed class CliprdrChannelTests
     public async Task ClipboardQueueSaturationFailsExplicitlyWithoutWaitingForItsReader()
     {
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var connection = CreateConnection();
+        RdpConnection connection = CreateConnection();
         await using var session = (RdpManagedSession)Activator.CreateInstance(typeof(RdpManagedSession), flags, null, [connection], null)!;
         var queue = System.Threading.Channels.Channel.CreateBounded<byte[]>(1);
         typeof(RdpManagedSession).GetField("_cliprdrQueue", flags)!.SetValue(session, queue);
         var failed = new TaskCompletionSource<RdpClipboardEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.ClipboardEvent += value => { if (value.Kind == 10) { failed.TrySetResult(value); } };
+        session.ClipboardEvent += value => { if (value.Kind == 10) { _ = failed.TrySetResult(value); } };
         Deliver(connection, 8, 3, Packet(3, 1));
         Deliver(connection, 8, 3, Packet(3, 1));
-        var failure = await failed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        RdpClipboardEvent failure = await failed.Task.WaitAsync(TimeSpan.FromSeconds(1));
         Assert.Contains("queue capacity", Encoding.UTF8.GetString(failure.Data));
         RdpClipboardEvent? replayed = null;
         session.ClipboardEvent += value => replayed = value;
         Assert.AreEqual(10u, replayed!.Kind);
-        await Assert.ThrowsAsync<IOException>(() => session.OfferFormatsAsync("13\t\n", default));
+        _ = await Assert.ThrowsAsync<IOException>(() => session.OfferFormatsAsync("13\t\n", default));
     }
 
     private sealed class PausingWire : MemoryStream
@@ -275,7 +277,7 @@ public sealed class CliprdrChannelTests
         await offer;
         await channel.RequestFileAsync(17, 2, 2, 0x100000003, 1024);
         await channel.ProcessAsync(sent[^1]);
-        var request = events[^1];
+        RdpClipboardEvent request = events[^1];
         Assert.AreEqual(6u, request.Kind);
         Assert.AreEqual(17u, request.A);
         Assert.AreEqual(2u, request.B);
@@ -290,7 +292,7 @@ public sealed class CliprdrChannelTests
     [TestMethod]
     public async Task CompressedFragmentedFileDescriptorReachesClipboardIntact()
     {
-        await using var connection = CreateConnection();
+        await using RdpConnection connection = CreateConnection();
         List<RdpClipboardEvent> events = [];
         var channel = new CliprdrChannel(_ => Task.CompletedTask, events.Add);
         Task? processing = null;
@@ -327,7 +329,7 @@ public sealed class CliprdrChannelTests
         BinaryPrimitives.WriteUInt32LittleEndian(packet, length);
         BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(4), flags);
         data.CopyTo(packet, 8);
-        typeof(RdpConnection).GetMethod("ReassembleChannel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+        _ = typeof(RdpConnection).GetMethod("ReassembleChannel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .Invoke(connection, [(ushort)1004, "cliprdr", packet]);
     }
 

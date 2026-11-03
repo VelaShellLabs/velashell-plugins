@@ -8,9 +8,12 @@ internal static class GfxNsCodec
         var reader = new GfxClearReader(source);
         int[] lengths = [reader.Length(), reader.Length(), reader.Length(), reader.Length()];
         int loss = reader.Byte(), subsampling = reader.Byte();
-        reader.Take(2);
+        _ = reader.Take(2);
         if (loss is < 1 or > 7 || subsampling > 1)
+        {
             throw new RdpProtocolException("Invalid NSCodec color format.");
+        }
+
         int roundedWidth = (width + 7) & ~7;
         int yStride = subsampling != 0 ? roundedWidth : width;
         int cStride = subsampling != 0 ? roundedWidth / 2 : width;
@@ -20,15 +23,32 @@ internal static class GfxNsCodec
         for (int i = 0; i < 4; i++)
         {
             planes[i] = new byte[sizes[i]];
-            var encoded = reader.Take(lengths[i]);
-            if (encoded.IsEmpty) planes[i].AsSpan().Fill(255);
-            else if (encoded.Length < sizes[i]) DecodeRle(encoded, planes[i]);
-            else if (encoded.Length == sizes[i]) encoded.CopyTo(planes[i]);
-            else throw new RdpProtocolException("NSCodec plane exceeds its uncompressed size.");
+            ReadOnlySpan<byte> encoded = reader.Take(lengths[i]);
+            if (encoded.IsEmpty)
+            {
+                planes[i].AsSpan().Fill(255);
+            }
+            else if (encoded.Length < sizes[i])
+            {
+                DecodeRle(encoded, planes[i]);
+            }
+            else if (encoded.Length == sizes[i])
+            {
+                encoded.CopyTo(planes[i]);
+            }
+            else
+            {
+                throw new RdpProtocolException("NSCodec plane exceeds its uncompressed size.");
+            }
         }
-        if (!reader.Empty) throw new RdpProtocolException("Trailing NSCodec data.");
+        if (!reader.Empty)
+        {
+            throw new RdpProtocolException("Trailing NSCodec data.");
+        }
+
         int shift = loss - 1;
         for (int y = 0; y < height; y++)
+        {
             for (int x = 0; x < width; x++)
             {
                 int c = subsampling != 0 ? (y / 2) * cStride + x / 2 : y * cStride + x;
@@ -41,6 +61,7 @@ internal static class GfxNsCodec
                 destination[index + 2] = (byte)Math.Clamp(luma + co - cg, 0, 255);
                 destination[index + 3] = planes[3][y * width + x];
             }
+        }
     }
 
     private static void DecodeRle(ReadOnlySpan<byte> source, Span<byte> destination)
@@ -48,12 +69,20 @@ internal static class GfxNsCodec
         int input = 0, output = 0;
         while (destination.Length - output > 4)
         {
-            if (input >= source.Length) throw new RdpProtocolException("Truncated NSCodec plane.");
+            if (input >= source.Length)
+            {
+                throw new RdpProtocolException("Truncated NSCodec plane.");
+            }
+
             byte value = source[input++];
             int run = 1;
             if (destination.Length - output != 5)
             {
-                if (input >= source.Length) throw new RdpProtocolException("Truncated NSCodec run.");
+                if (input >= source.Length)
+                {
+                    throw new RdpProtocolException("Truncated NSCodec run.");
+                }
+
                 if (source[input] == value)
                 {
                     input++;
@@ -65,16 +94,25 @@ internal static class GfxNsCodec
                         run = reader.Length();
                         input += 4;
                     }
-                    else run = factor + 2;
+                    else
+                    {
+                        run = factor + 2;
+                    }
                 }
             }
             if (run == 0 || run > destination.Length - output - 4)
+            {
                 throw new RdpProtocolException("NSCodec run exceeds its plane.");
+            }
+
             destination.Slice(output, run).Fill(value);
             output += run;
         }
         if (destination.Length - output != 4 || source.Length - input != 4)
+        {
             throw new RdpProtocolException("Invalid NSCodec plane tail.");
+        }
+
         source[input..].CopyTo(destination[output..]);
     }
 }

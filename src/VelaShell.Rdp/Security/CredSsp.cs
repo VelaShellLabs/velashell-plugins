@@ -10,10 +10,9 @@ namespace VelaShell.Rdp.Security;
 /// <summary>
 /// CredSSP / NLA (MS-CSSP) over the established TLS channel, for servers that select
 /// PROTOCOL_HYBRID (Windows with Network Level Authentication). The authentication tokens and message
-/// sealing come from an <see cref="INlaSecurityContext"/> (native SPNEGO on Windows, managed NTLM
-/// elsewhere); the TSRequest envelope and the public-key binding (echo for peer version &lt; 5, SHA-256
-/// hash for &gt;= 5) follow MS-CSSP and mirror FreeRDP's nla.c. Credentials are sent only after the
-/// server's public-key echo verifies.
+/// sealing come from an <see cref="INlaSecurityContext"/> (SSPI on Windows, .NET SPNEGO on Unix).
+/// The TSRequest envelope and nonce-bound SHA-256 public-key binding follow MS-CSSP.
+/// Credentials are sent only after the server's public-key echo verifies.
 /// </summary>
 internal static class CredSsp
 {
@@ -30,30 +29,37 @@ internal static class CredSsp
     internal static async Task AuthenticateAsync(SslStream tls, string targetHost, string domain, string username,
         string password, CancellationToken ct)
     {
+        using INlaSecurityContext auth = NlaSecurityContext.Create(domain, username, password, targetHost);
+        await AuthenticateAsync(tls, domain, username, password, auth, ct).ConfigureAwait(false);
+    }
+
+    internal static async Task AuthenticateAsync(SslStream tls, string domain, string username,
+        string password, INlaSecurityContext auth, CancellationToken ct)
+    {
         byte[] publicKey = ServerPublicKey(tls);
         byte[] nonce = RandomNumberGenerator.GetBytes(32);
-        using INlaSecurityContext auth = NlaSecurityContext.Create(domain, username, password, targetHost);
 
         // Negotiation loop: exchange security-package tokens (one round for NTLM, possibly more for SPNEGO)
         // until the context is established; only then is pubKeyAuth attached. The 32-byte clientNonce rides on
         // every client TSRequest (v5+), as FreeRDP and mstsc send it.
         byte[] outToken = auth.Step([]);
         string authInfo = DescribeAuth(auth, outToken);
-        await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, null, nonce), ct).ConfigureAwait(false);
+        bool canRetryWithoutNla = !auth.IsComplete && IsNtlmNegotiate(outToken);
+        if (!auth.IsComplete)
+            await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, null, nonce), ct).ConfigureAwait(false);
 
-        uint peerVersion = 0;
+        uint peerVersion = ClientVersion;
         bool sawReply = false;
         while (!auth.IsComplete)
         {
-            // Nothing secret has been sent yet (no credentials, no proof), so a refusal on the first reply is
-            // server policy, not a password problem: a server that rejects our NLA answers with
-            // errorCode 0x80090302 (SEC_E_UNSUPPORTED_FUNCTION) or aborts the TLS session.
+            // Only an NTLM Type 1 is known to contain no credential proof. A Kerberos AP-REQ
+            // can authenticate in the very first token, so its refusal must never trigger TLS fallback.
             byte[] replyBytes;
             try
             {
                 replyBytes = await ReadDerAsync(tls, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (!sawReply && ex is IOException or RdpProtocolException)
+            catch (Exception ex) when (canRetryWithoutNla && !sawReply && ex is IOException or RdpProtocolException)
             {
                 throw new RdpNlaRefusedException(null, ex, auth: authInfo);
             }
@@ -61,7 +67,7 @@ internal static class CredSsp
             TsRequest reply = ParseTsRequest(replyBytes);
             if (reply.ErrorCode is { } refused && refused != 0)
             {
-                throw sawReply
+                throw sawReply || !canRetryWithoutNla
                     ? new RdpAuthenticationException($"The server rejected NLA (0x{refused:X8}).", refused)
                     : new RdpNlaRefusedException(refused, null, auth: authInfo);
             }
@@ -83,9 +89,8 @@ internal static class CredSsp
             }
         }
 
-        // Context established: send the final token (if any) together with the sealed public-key binding
-        // (the raw key for peer version < 5, the SHA-256 nonce-bound hash for >= 5).
-        byte[] binding = peerVersion < 5 ? publicKey : BindingHash(ClientServerHashMagic, nonce, publicKey);
+        // A context that completes immediately sends its token only once, with the v5+ binding.
+        byte[] binding = BindingHash(ClientServerHashMagic, nonce, publicKey);
         byte[] pubKeyAuth = auth.Seal(binding);
         await WriteAsync(tls, BuildTsRequest(ClientVersion, Nz(outToken), null, pubKeyAuth, nonce), ct).ConfigureAwait(false);
 
@@ -96,6 +101,9 @@ internal static class CredSsp
         {
             throw new RdpAuthenticationException($"The server rejected NLA (0x{error:X8}).", error);
         }
+
+        if (echo.Version < MinPeerVersion)
+            throw new RdpProtocolException($"The server speaks CredSSP v{echo.Version}; v{MinPeerVersion}+ is required.");
 
         if (echo.PubKeyAuth is null)
         {
@@ -116,13 +124,46 @@ internal static class CredSsp
 
     private static byte[]? Nz(byte[] token) => token.Length == 0 ? null : token;
 
+    // Fail closed: only recognize a bare Type 1, or a SPNEGO offer containing NTLM alone.
+    internal static bool IsNtlmNegotiate(byte[] token)
+    {
+        static bool IsType1(byte[] value) => value.Length >= 32 &&
+            value.AsSpan(0, 12).SequenceEqual("NTLMSSP\0\u0001\0\0\0"u8);
+
+        if (IsType1(token)) return true;
+        try
+        {
+            var reader = new AsnReader(token, AsnEncodingRules.DER);
+            AsnReader gss = reader.ReadSequence(new Asn1Tag(TagClass.Application, 0));
+            if (gss.ReadObjectIdentifier() != "1.3.6.1.5.5.2") return false;
+            AsnReader initWrapper = gss.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0));
+            AsnReader init = initWrapper.ReadSequence();
+            AsnReader mechsWrapper = init.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0));
+            AsnReader mechs = mechsWrapper.ReadSequence();
+            if (mechs.ReadObjectIdentifier() != "1.3.6.1.4.1.311.2.2.10") return false;
+            mechs.ThrowIfNotEmpty();
+            mechsWrapper.ThrowIfNotEmpty();
+            AsnReader inner = init.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 2));
+            bool isType1 = IsType1(inner.ReadOctetString());
+            inner.ThrowIfNotEmpty();
+            init.ThrowIfNotEmpty();
+            initWrapper.ThrowIfNotEmpty();
+            gss.ThrowIfNotEmpty();
+            reader.ThrowIfNotEmpty();
+            return isType1;
+        }
+        catch (AsnContentException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
-    /// Names the NLA provider and the shape of its first token, so a refusal's log line says whether the build
-    /// sent native SPNEGO (what Windows' own client sends) or bare NTLM — the exact thing a server may reject.
+    /// Names the provider and first token's envelope without logging credential material.
     /// </summary>
     private static string DescribeAuth(INlaSecurityContext auth, byte[] token)
     {
-        string provider = auth is SspiNegotiate ? "native SSPI" : "managed NTLM";
+        string provider = auth is SspiNegotiate ? "native SSPI" : ".NET Negotiate";
         string shape = token.Length == 0 ? "empty"
             : token.Length >= 8 && token.AsSpan(0, 7).SequenceEqual("NTLMSSP"u8) ? "bare NTLM"
             : token[0] == 0x60 ? "SPNEGO"

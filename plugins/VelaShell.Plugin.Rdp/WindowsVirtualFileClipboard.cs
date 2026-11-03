@@ -28,10 +28,7 @@ internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipb
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
     }
-    public async Task PublishAsync(RdpVirtualFiles files, uint? expectedSequence, CancellationToken ct)
-    {
-        await RetryClipboardAsync(() => PublishOnceAsync(files, expectedSequence, ct), ct).ConfigureAwait(false);
-    }
+    public async Task PublishAsync(RdpVirtualFiles files, uint? expectedSequence, CancellationToken ct) => await RetryClipboardAsync(() => PublishOnceAsync(files, expectedSequence, ct), ct).ConfigureAwait(false);
     internal static async Task RetryClipboardAsync(Func<Task> action, CancellationToken ct)
     {
         for (int attempt = 0; ; attempt++)
@@ -48,15 +45,26 @@ internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipb
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_work)
         {
-            if (_stopping) throw new ObjectDisposedException(nameof(WindowsVirtualFileClipboard));
+            if (_stopping)
+            {
+                throw new ObjectDisposedException(nameof(WindowsVirtualFileClipboard));
+            }
+
             _work.Enqueue(() =>
             {
                 try
                 {
                     ct.ThrowIfCancellationRequested();
-                    if (_stopping) throw new ObjectDisposedException(nameof(WindowsVirtualFileClipboard));
+                    if (_stopping)
+                    {
+                        throw new ObjectDisposedException(nameof(WindowsVirtualFileClipboard));
+                    }
+
                     if (expectedSequence is { } sequence && Native.GetClipboardSequenceNumber() != sequence)
+                    {
                         throw new IOException("The local clipboard changed before virtual files could be published.");
+                    }
+
                     var next = new WindowsVirtualFileDataObject(files);
                     int result = Native.OleSetClipboard(next);
                     if (result < 0) { next.Dispose(); Marshal.ThrowExceptionForHR(result); }
@@ -69,7 +77,7 @@ internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipb
                 }
                 catch (Exception ex) { done.SetException(ex); }
             });
-            _wake.Set();
+            _ = _wake.Set();
         }
         await done.Task.ConfigureAwait(false);
     }
@@ -80,14 +88,18 @@ internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipb
         try
         {
             Marshal.ThrowExceptionForHR(initialized);
-            _initialized.TrySetResult();
+            _ = _initialized.TrySetResult();
             while (!_stopping)
             {
-                while (_work.TryDequeue(out var action)) action();
-                while (Native.PeekMessage(out var message, 0, 0, 0, 1))
+                while (_work.TryDequeue(out Action? action))
                 {
-                    Native.TranslateMessage(ref message);
-                    Native.DispatchMessage(ref message);
+                    action();
+                }
+
+                while (Native.PeekMessage(out Native.Message message, 0, 0, 0, 1))
+                {
+                    _ = Native.TranslateMessage(ref message);
+                    _ = Native.DispatchMessage(ref message);
                 }
                 if (_data is { } data && Native.OleIsCurrentClipboard(data) != 0)
                 {
@@ -97,31 +109,52 @@ internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipb
                 }
                 // Keep cancelled descriptors inert until replaced. Clearing them here races the
                 // next remote copy's local-clipboard sequence check.
-                if (_data?.Files.Cancelled == true) _current = false;
-                _wake.WaitOne(20);
+                if (_data?.Files.Cancelled == true)
+                {
+                    _current = false;
+                }
+
+                _ = _wake.WaitOne(20);
             }
         }
-        catch (Exception ex) { _stopping = true; _initialized.TrySetException(ex); failure = ex; }
+        catch (Exception ex) { _stopping = true; _ = _initialized.TrySetException(ex); failure = ex; }
         finally
         {
-            while (_work.TryDequeue(out var action)) action();
+            while (_work.TryDequeue(out Action? action))
+            {
+                action();
+            }
+
             if (_data is { } data)
             {
                 data.Files.Dispose();
-                if (Native.OleIsCurrentClipboard(data) == 0) Native.OleSetClipboard(null);
+                if (Native.OleIsCurrentClipboard(data) == 0)
+                {
+                    _ = Native.OleSetClipboard(null);
+                }
             }
             _data = null;
             _current = false;
-            if (initialized >= 0) Native.OleUninitialize();
-            if (failure is null) _ended.TrySetResult();
-            else _ended.TrySetException(failure);
+            if (initialized >= 0)
+            {
+                Native.OleUninitialize();
+            }
+
+            if (failure is null)
+            {
+                _ = _ended.TrySetResult();
+            }
+            else
+            {
+                _ = _ended.TrySetException(failure);
+            }
         }
     }
     public async ValueTask DisposeAsync()
     {
         _data?.Files.Dispose();
         if (Interlocked.Exchange(ref _disposed, 1) != 0) { await _ended.Task.ConfigureAwait(false); return; }
-        lock (_work) { _stopping = true; _wake.Set(); }
+        lock (_work) { _stopping = true; _ = _wake.Set(); }
         try { await _ended.Task.ConfigureAwait(false); }
         finally { _wake.Dispose(); }
     }
@@ -143,9 +176,11 @@ internal sealed partial class WindowsVirtualFileClipboard : IRdpVirtualFileClipb
         // STGMEDIUM.pUnkForRelease uses runtime COM object marshalling, unsupported by LibraryImport.
         [DllImport("ole32.dll")] internal static extern void ReleaseStgMedium(ref STGMEDIUM medium);
         [LibraryImport("kernel32.dll")] internal static partial nint GlobalFree(nint memory);
-        [StructLayout(LayoutKind.Sequential)] internal struct Message
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Message
         { internal nint Window; internal uint Id; internal nuint WParam; internal nint LParam; internal uint Time; internal int X, Y; internal uint Private; }
-        [LibraryImport("user32.dll", EntryPoint = "PeekMessageA")][return: MarshalAs(UnmanagedType.Bool)]
+        [LibraryImport("user32.dll", EntryPoint = "PeekMessageA")]
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool PeekMessage(out Message message, nint window, uint min, uint max, uint remove);
         [LibraryImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] internal static partial bool TranslateMessage(ref Message message);
         [LibraryImport("user32.dll", EntryPoint = "DispatchMessageA")] internal static partial nint DispatchMessage(ref Message message);
@@ -199,34 +234,65 @@ internal sealed class WindowsVirtualFileDataObject : IVirtualFileDataObject, IDa
     internal static FORMATETC Format(short id, TYMED medium, int index = -1) => new() { cfFormat = id, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = index, tymed = medium };
     public int QueryGetData(ref FORMATETC format)
     {
-        if (Files.Cancelled) return unchecked((int)0x800401D0);
-        if (format.dwAspect != DVASPECT.DVASPECT_CONTENT) return unchecked((int)0x8004006B);
+        if (Files.Cancelled)
+        {
+            return unchecked((int)0x800401D0);
+        }
+
+        if (format.dwAspect != DVASPECT.DVASPECT_CONTENT)
+        {
+            return unchecked((int)0x8004006B);
+        }
+
         if (format.cfFormat == ContentsFormat)
         {
-            if (format.lindex < -1 || format.lindex >= Files.Files.Count || (format.lindex >= 0 && Files.Files[format.lindex].IsDirectory)) return unchecked((int)0x80040068);
+            if (format.lindex < -1 || format.lindex >= Files.Files.Count || (format.lindex >= 0 && Files.Files[format.lindex].IsDirectory))
+            {
+                return unchecked((int)0x80040068);
+            }
+
             return (format.tymed & TYMED.TYMED_ISTREAM) != 0 ? 0 : unchecked((int)0x80040069);
         }
         bool feedback;
-        lock (_gate) feedback = _feedback.ContainsKey(format.cfFormat);
+        lock (_gate)
+        {
+            feedback = _feedback.ContainsKey(format.cfFormat);
+        }
+
         if (format.cfFormat == DescriptorFormat || format.cfFormat == EffectFormat || feedback)
+        {
             return format.lindex == -1 && (format.tymed & TYMED.TYMED_HGLOBAL) != 0 ? 0 : unchecked((int)0x80040069);
+        }
+
         return unchecked((int)0x80040064);
     }
     public int GetData(ref FORMATETC format, out STGMEDIUM medium)
     {
         medium = default;
         int result = QueryGetData(ref format);
-        if (result < 0) return result;
+        if (result < 0)
+        {
+            return result;
+        }
+
         try { return GetDataCore(ref format, out medium); }
         catch (Exception ex) { return Marshal.GetHRForException(ex); }
     }
     private int GetDataCore(ref FORMATETC format, out STGMEDIUM medium)
     {
         medium = default;
-        lock (_gate) _lease ??= Files.Acquire();
+        lock (_gate)
+        {
+            _lease ??= Files.Acquire();
+        }
+
         if (format.cfFormat == ContentsFormat)
         {
-            if (format.lindex < 0) return unchecked((int)0x80040068);
+            if (format.lindex < 0)
+            {
+                return unchecked((int)0x80040068);
+            }
+
             lock (_gate)
             {
                 _lease ??= Files.Acquire();
@@ -236,22 +302,46 @@ internal sealed class WindowsVirtualFileDataObject : IVirtualFileDataObject, IDa
             return 0;
         }
         byte[] bytes;
-        lock (_gate) bytes = _feedback.TryGetValue(format.cfFormat, out var value) ? value : BitConverter.GetBytes(1u);
-        if (format.cfFormat == DescriptorFormat) bytes = RdpClipboardCodec.EncodeFiles(Files.Files);
+        lock (_gate)
+        {
+            bytes = _feedback.TryGetValue(format.cfFormat, out byte[]? value) ? value : BitConverter.GetBytes(1u);
+        }
+
+        if (format.cfFormat == DescriptorFormat)
+        {
+            bytes = RdpClipboardCodec.EncodeFiles(Files.Files);
+        }
+
         nint memory = WindowsVirtualFileClipboard.Native.GlobalAlloc(0x42, (nuint)bytes.Length);
-        if (memory == 0) throw new OutOfMemoryException();
+        if (memory == 0)
+        {
+            throw new OutOfMemoryException();
+        }
+
         nint address = WindowsVirtualFileClipboard.Native.GlobalLock(memory);
-        if (address == 0) { WindowsVirtualFileClipboard.Native.GlobalFree(memory); throw new OutOfMemoryException(); }
+        if (address == 0) { _ = WindowsVirtualFileClipboard.Native.GlobalFree(memory); throw new OutOfMemoryException(); }
         try { Marshal.Copy(bytes, 0, address, bytes.Length); }
-        finally { WindowsVirtualFileClipboard.Native.GlobalUnlock(memory); }
+        finally { _ = WindowsVirtualFileClipboard.Native.GlobalUnlock(memory); }
         medium = new() { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
-        if (format.cfFormat == DescriptorFormat) Files.DescriptorsDelivered();
+        if (format.cfFormat == DescriptorFormat)
+        {
+            Files.DescriptorsDelivered();
+        }
+
         return 0;
     }
     public IEnumFORMATETC EnumFormatEtc(DATADIR direction)
     {
-        if (direction == DATADIR.DATADIR_SET) return new Formats([Format(PerformedFormat, TYMED.TYMED_HGLOBAL), Format(LogicalPerformedFormat, TYMED.TYMED_HGLOBAL), Format(PasteSucceededFormat, TYMED.TYMED_HGLOBAL), Format(TargetClsidFormat, TYMED.TYMED_HGLOBAL)]);
-        if (direction != DATADIR.DATADIR_GET) throw new COMException("Invalid direction", unchecked((int)0x80070057));
+        if (direction == DATADIR.DATADIR_SET)
+        {
+            return new Formats([Format(PerformedFormat, TYMED.TYMED_HGLOBAL), Format(LogicalPerformedFormat, TYMED.TYMED_HGLOBAL), Format(PasteSucceededFormat, TYMED.TYMED_HGLOBAL), Format(TargetClsidFormat, TYMED.TYMED_HGLOBAL)]);
+        }
+
+        if (direction != DATADIR.DATADIR_GET)
+        {
+            throw new COMException("Invalid direction", unchecked((int)0x80070057));
+        }
+
         return new Formats([Format(DescriptorFormat, TYMED.TYMED_HGLOBAL), Format(ContentsFormat, TYMED.TYMED_ISTREAM), Format(EffectFormat, TYMED.TYMED_HGLOBAL)]);
     }
     public int GetCanonicalFormatEtc(ref FORMATETC input, out FORMATETC output) { output = input; output.ptd = 0; return 0x40130; }
@@ -260,21 +350,50 @@ internal sealed class WindowsVirtualFileDataObject : IVirtualFileDataObject, IDa
     {
         int size = format.cfFormat == TargetClsidFormat ? 16 :
             format.cfFormat == PerformedFormat || format.cfFormat == LogicalPerformedFormat || format.cfFormat == PasteSucceededFormat ? 4 : 0;
-        if (size == 0) return unchecked((int)0x80040064);
-        if (format.dwAspect != DVASPECT.DVASPECT_CONTENT) return unchecked((int)0x8004006B);
-        if (format.lindex != -1) return unchecked((int)0x80040068);
+        if (size == 0)
+        {
+            return unchecked((int)0x80040064);
+        }
+
+        if (format.dwAspect != DVASPECT.DVASPECT_CONTENT)
+        {
+            return unchecked((int)0x8004006B);
+        }
+
+        if (format.lindex != -1)
+        {
+            return unchecked((int)0x80040068);
+        }
+
         if ((format.tymed & TYMED.TYMED_HGLOBAL) == 0 || medium.tymed != TYMED.TYMED_HGLOBAL
             || medium.unionmember == 0 || WindowsVirtualFileClipboard.Native.GlobalSize(medium.unionmember) < (nuint)size)
+        {
             return unchecked((int)0x80040069);
+        }
+
         nint memory = WindowsVirtualFileClipboard.Native.GlobalLock(medium.unionmember);
-        if (memory == 0) return unchecked((int)0x80040069);
+        if (memory == 0)
+        {
+            return unchecked((int)0x80040069);
+        }
+
         byte[] value = new byte[size];
         try { Marshal.Copy(memory, value, 0, size); }
-        finally { WindowsVirtualFileClipboard.Native.GlobalUnlock(medium.unionmember); }
-        lock (_gate) _feedback[format.cfFormat] = value;
+        finally { _ = WindowsVirtualFileClipboard.Native.GlobalUnlock(medium.unionmember); }
+        lock (_gate)
+        {
+            _feedback[format.cfFormat] = value;
+        }
+
         if (format.cfFormat == PasteSucceededFormat && (BitConverter.ToUInt32(value) & 3) != 0)
+        {
             Files.ConfirmShellCompletion();
-        if (release) WindowsVirtualFileClipboard.Native.ReleaseStgMedium(ref medium);
+        }
+
+        if (release)
+        {
+            WindowsVirtualFileClipboard.Native.ReleaseStgMedium(ref medium);
+        }
         // Feedback describes a Shell effect/target; only EndOperation ends an async operation.
         // Neither feedback nor successful EndOperation owns the consumer's IStream references.
         return 0;
@@ -290,8 +409,16 @@ internal sealed class WindowsVirtualFileDataObject : IVirtualFileDataObject, IDa
         public int Next(int count, FORMATETC[] output, int[]? fetched)
         {
             int read = 0;
-            while (read < count && _position < formats.Length) output[read++] = formats[_position++];
-            if (fetched is { Length: > 0 }) fetched[0] = read;
+            while (read < count && _position < formats.Length)
+            {
+                output[read++] = formats[_position++];
+            }
+
+            if (fetched is { Length: > 0 })
+            {
+                fetched[0] = read;
+            }
+
             return read == count ? 0 : 1;
         }
         public int Skip(int count) { int next = Math.Min(formats.Length, _position + count); bool full = next - _position == count; _position = next; return full ? 0 : 1; }
@@ -319,11 +446,19 @@ internal sealed class VirtualFileStream : IVirtualFileStream, IDisposable
             try
             {
                 ObjectDisposedException.ThrowIf(_lease is null, this);
-                if (count < 0 || (buffer == 0 && count != 0)) throw new ArgumentOutOfRangeException(nameof(count));
+                if (count < 0 || (buffer == 0 && count != 0))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(count));
+                }
+
                 while (total < count)
                 {
                     byte[] data = files.ReadAsync(index, _position, Math.Min(count - total, RdpClipboardFiles.ChunkSize)).GetAwaiter().GetResult();
-                    if (data.Length == 0) break;
+                    if (data.Length == 0)
+                    {
+                        break;
+                    }
+
                     Marshal.Copy(data, 0, buffer + total, data.Length);
                     total += data.Length;
                     _position += data.Length;
@@ -331,12 +466,22 @@ internal sealed class VirtualFileStream : IVirtualFileStream, IDisposable
                 return total == count ? 0 : 1;
             }
             catch (Exception ex) { return Marshal.GetHRForException(ex); }
-            finally { if (read != 0) Marshal.WriteInt32(read, total); }
+            finally
+            {
+                if (read != 0)
+                {
+                    Marshal.WriteInt32(read, total);
+                }
+            }
         }
     }
     internal void Read(byte[] buffer, int count, nint read)
     {
-        if (count < 0 || count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(count));
+        if (count < 0 || count > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
         var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try { Marshal.ThrowExceptionForHR(Read(pin.AddrOfPinnedObject(), count, read)); }
         finally { pin.Free(); }
@@ -348,9 +493,16 @@ internal sealed class VirtualFileStream : IVirtualFileStream, IDisposable
     private void SeekCore(long move, int origin, nint position)
     {
         long next = checked((origin switch { 0 => 0, 1 => _position, 2 => files.Files[(int)index].Length, _ => throw new ArgumentOutOfRangeException(nameof(origin)) }) + move);
-        if (next < 0 || next > files.Files[(int)index].Length) throw new IOException("Invalid seek.");
+        if (next < 0 || next > files.Files[(int)index].Length)
+        {
+            throw new IOException("Invalid seek.");
+        }
+
         _position = next;
-        if (position != 0) Marshal.WriteInt64(position, next);
+        if (position != 0)
+        {
+            Marshal.WriteInt64(position, next);
+        }
     }
     public void Stat(out STATSTG stat, int flags) => stat = new() { type = 2, cbSize = files.Files[(int)index].Length, pwcsName = (flags & 1) == 0 ? files.Files[(int)index].Name : "", grfMode = 0 };
     public void Clone(out IVirtualFileStream stream)
@@ -368,13 +520,32 @@ internal sealed class VirtualFileStream : IVirtualFileStream, IDisposable
             {
                 Read(buffer, (int)Math.Min(buffer.Length, count - total), actual);
                 int size = Marshal.ReadInt32(actual);
-                if (size == 0) break;
+                if (size == 0)
+                {
+                    break;
+                }
+
                 target.Write(buffer, size, actual);
-                if (Marshal.ReadInt32(actual) != size) throw new IOException("Incomplete shell stream write.");
+                if (Marshal.ReadInt32(actual) != size)
+                {
+                    throw new IOException("Incomplete shell stream write.");
+                }
+
                 total += size;
             }
         }
-        finally { Marshal.FreeCoTaskMem(actual); if (read != 0) Marshal.WriteInt64(read, total); if (written != 0) Marshal.WriteInt64(written, total); }
+        finally
+        {
+            Marshal.FreeCoTaskMem(actual); if (read != 0)
+            {
+                Marshal.WriteInt64(read, total);
+            }
+
+            if (written != 0)
+            {
+                Marshal.WriteInt64(written, total);
+            }
+        }
     }
     public void Commit(int flags) { }
     public void Write(nint buffer, int count, nint written) => throw new COMException("Read-only", unchecked((int)0x80030005));

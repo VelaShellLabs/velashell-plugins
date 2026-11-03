@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Headless;
 using Avalonia.Threading;
 using VelaShell.PluginSdk.Testing;
 using VelaShell.Rdp;

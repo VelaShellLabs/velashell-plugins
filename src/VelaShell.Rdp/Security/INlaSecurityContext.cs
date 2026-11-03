@@ -8,8 +8,7 @@ namespace VelaShell.Rdp.Security;
 /// The security-package side of CredSSP/NLA: produces the authentication tokens carried in the TSRequest
 /// negoTokens and seals/unseals the public-key binding and the credentials. The CredSSP envelope, the leg
 /// sequence and the public-key binding live in <see cref="CredSsp" />; this abstracts only where the tokens
-/// come from, so Windows can use the native stack (SPNEGO, exactly like mstsc) while other platforms fall
-/// back to the managed NTLM.
+/// come from: Windows uses SSPI, while Unix uses .NET SPNEGO with system Kerberos and managed NTLM.
 /// </summary>
 internal interface INlaSecurityContext : IDisposable
 {
@@ -33,30 +32,26 @@ internal static class NlaSecurityContext
     internal static bool ForceManagedForTest;
 
     /// <summary>
-    /// The native Windows Negotiate (SPNEGO) provider on Windows — hardened servers reject the bare NTLM that
-    /// the managed stack emits, so this matches what Windows' own RDP client sends — and the managed NTLM
-    /// fallback elsewhere.
+    /// Uses SSPI on Windows and .NET Negotiate on Unix; both can negotiate Kerberos or NTLM.
     /// </summary>
     internal static INlaSecurityContext Create(string domain, string username, string password, string targetHost) =>
         OperatingSystem.IsWindows() && !ForceManagedForTest
             ? new SspiNegotiate(domain, username, password, targetHost)
-            : new ManagedNtlm(domain, username, password, targetHost);
+            : new NegotiateSecurityContext(domain, username, password, targetHost, ForceManagedForTest ? "NTLM" : "Negotiate");
 }
 
 /// <summary>
-/// The portable fallback: <see cref="NegotiateAuthentication" /> with the NTLM package. Works against servers
-/// that accept bare NTLM (and the local test servers); a server that requires SPNEGO refuses it, which on
-/// Windows never happens because <see cref="SspiNegotiate" /> is used instead.
+/// .NET SPNEGO uses system GSSAPI for Kerberos and managed NTLM when Kerberos is unavailable.
+/// The explicit NTLM package is retained for compatibility tests.
 /// </summary>
-internal sealed class ManagedNtlm : INlaSecurityContext
+internal sealed class NegotiateSecurityContext : INlaSecurityContext
 {
     private readonly NegotiateAuthentication _auth;
 
-    internal ManagedNtlm(string domain, string username, string password, string targetHost)
+    internal NegotiateSecurityContext(string domain, string username, string password, string targetHost, string package = "Negotiate")
     {
-        // On Linux, Package="NTLM" otherwise uses GSSAPI (and requires an installed NTLM provider).
-        // The host also sets this in runtimeconfig: .NET caches it at the first NegotiateAuthentication,
-        // which may belong to another plugin. This covers standalone use before that first call.
+        // This enables managed SPNEGO/NTLM without disabling GSSAPI Kerberos. The runtime caches
+        // the switch, so embedding hosts must also enable it in runtimeconfig before any auth API use.
         if (!OperatingSystem.IsWindows())
         {
             AppContext.SetSwitch("System.Net.Security.UseManagedNtlm", true);
@@ -64,7 +59,7 @@ internal sealed class ManagedNtlm : INlaSecurityContext
 
         _auth = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
         {
-            Package = "NTLM",
+            Package = package,
             Credential = new NetworkCredential(username, password, domain),
             TargetName = $"TERMSRV/{targetHost}",
             RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
@@ -82,7 +77,7 @@ internal sealed class ManagedNtlm : INlaSecurityContext
         }
         else if (status != NegotiateAuthenticationStatusCode.ContinueNeeded)
         {
-            throw new RdpProtocolException($"NLA negotiation failed ({status}).");
+            throw new RdpAuthenticationException($"NLA negotiation failed ({status}). For Kerberos, check the server DNS name, TERMSRV SPN, user realm, system GSSAPI configuration and KDC connectivity.");
         }
 
         return token ?? [];
@@ -91,8 +86,8 @@ internal sealed class ManagedNtlm : INlaSecurityContext
     public byte[] Seal(byte[] plaintext)
     {
         var output = new ArrayBufferWriter<byte>();
-        NegotiateAuthenticationStatusCode status = _auth.Wrap(plaintext, output, requestEncryption: true, out _);
-        return status == NegotiateAuthenticationStatusCode.Completed
+        NegotiateAuthenticationStatusCode status = _auth.Wrap(plaintext, output, requestEncryption: true, out bool encrypted);
+        return status == NegotiateAuthenticationStatusCode.Completed && encrypted
             ? output.WrittenSpan.ToArray()
             : throw new RdpProtocolException($"NLA wrap failed ({status}).");
     }
@@ -100,8 +95,8 @@ internal sealed class ManagedNtlm : INlaSecurityContext
     public byte[] Unseal(byte[] wrapped)
     {
         var output = new ArrayBufferWriter<byte>();
-        NegotiateAuthenticationStatusCode status = _auth.Unwrap(wrapped, output, out _);
-        return status == NegotiateAuthenticationStatusCode.Completed
+        NegotiateAuthenticationStatusCode status = _auth.Unwrap(wrapped, output, out bool encrypted);
+        return status == NegotiateAuthenticationStatusCode.Completed && encrypted
             ? output.WrittenSpan.ToArray()
             : throw new RdpProtocolException($"NLA unwrap failed ({status}).");
     }

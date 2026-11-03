@@ -17,7 +17,7 @@ internal static class RfxPrimitives
     {
         ReadOnlySpan<byte> packed = reader.Take(5);
         ReadOnlySpan<int> order = progressive ? [7, 8, 9, 4, 5, 6, 1, 2, 3, 0] : [8, 7, 9, 5, 4, 6, 2, 1, 3, 0];
-        var result = new int[10];
+        int[] result = new int[10];
         for (int i = 0; i < 10; i++)
         {
             int nibble = order[i];
@@ -31,7 +31,7 @@ internal static class RfxPrimitives
     internal static int[] Rlgr(ReadOnlySpan<byte> data, bool rlgr3)
     {
         var bits = new RfxBits(data);
-        var output = new int[4096];
+        int[] output = new int[4096];
         int position = 0, kp = 8, krp = 8;
         while (position < output.Length)
         {
@@ -43,11 +43,18 @@ internal static class RfxPrimitives
                     position = Math.Min(output.Length, position + (1 << k));
                     kp = Math.Min(80, kp + 4);
                     k = kp >> 3;
-                    if (position == output.Length) return output;
+                    if (position == output.Length)
+                    {
+                        return output;
+                    }
                 }
                 int run = bits.Read(k);
                 position = Math.Min(output.Length, position + run);
-                if (position == output.Length) return output;
+                if (position == output.Length)
+                {
+                    return output;
+                }
+
                 int sign = bits.Read(1);
                 int magnitude = Rice(ref bits, ref krp) + 1;
                 RfxGuard.Require(magnitude <= (sign == 0 ? 32767 : 32768), "RemoteFX coefficient overflow.");
@@ -68,9 +75,19 @@ internal static class RfxPrimitives
                     RfxGuard.Require(first <= value, "Invalid RemoteFX RLGR3 pair.");
                     int second = value - first;
                     output[position++] = Signed(first);
-                    if (position < output.Length) output[position++] = Signed(second);
-                    if (first != 0 && second != 0) kp = Math.Max(0, kp - 6);
-                    else if (first == 0 && second == 0) kp = Math.Min(80, kp + 6);
+                    if (position < output.Length)
+                    {
+                        output[position++] = Signed(second);
+                    }
+
+                    if (first != 0 && second != 0)
+                    {
+                        kp = Math.Max(0, kp - 6);
+                    }
+                    else if (first == 0 && second == 0)
+                    {
+                        kp = Math.Min(80, kp + 6);
+                    }
                 }
             }
         }
@@ -92,8 +109,15 @@ internal static class RfxPrimitives
             RfxGuard.Require(quotient <= (131070 >> kr), "Invalid RemoteFX Golomb code.");
         }
         int result = (quotient << kr) | bits.Read(kr);
-        if (quotient == 0) krp = Math.Max(0, krp - 2);
-        else if (quotient > 1) krp = Math.Min(80, krp + quotient);
+        if (quotient == 0)
+        {
+            krp = Math.Max(0, krp - 2);
+        }
+        else if (quotient > 1)
+        {
+            krp = Math.Min(80, krp + quotient);
+        }
+
         return result;
     }
 
@@ -101,7 +125,9 @@ internal static class RfxPrimitives
     {
         int start = reduced ? 4015 : 4032;
         for (int i = start + 1; i < component.Length; i++)
+        {
             component[i] = unchecked((short)(component[i] + component[i - 1]));
+        }
     }
 
     internal static int Scale(int value, int bitPosition)
@@ -119,8 +145,12 @@ internal static class RfxPrimitives
         ReadOnlySpan<int> lengths = BandLengths(reduced);
         int offset = 0;
         for (int band = 0; band < 10; band++)
+        {
             for (int i = 0; i < lengths[band]; i++, offset++)
+            {
                 component[offset] = Scale(component[offset], quant[band]);
+            }
+        }
     }
 
     internal static byte[] Pixels(int[][] components, bool reduced)
@@ -128,7 +158,7 @@ internal static class RfxPrimitives
         int[] y = InverseDwt(components[0], reduced);
         int[] cb = InverseDwt(components[1], reduced);
         int[] cr = InverseDwt(components[2], reduced);
-        var result = new byte[64 * 64 * 4];
+        byte[] result = new byte[64 * 64 * 4];
         for (int i = 0; i < 4096; i++)
         {
             long luma = ((long)y[i] + 4096) << 16;
@@ -144,7 +174,7 @@ internal static class RfxPrimitives
 
     private static int[] InverseDwt(int[] component, bool reduced)
     {
-        var matrix = new int[4096];
+        int[] matrix = new int[4096];
         int offset = 0;
         for (int level = 1; level <= 3; level++)
         {
@@ -169,9 +199,16 @@ internal static class RfxPrimitives
             }
             for (int col = 0; col < length; col++)
             {
-                for (int row = 0; row < length; row++) input[row] = matrix[row * 64 + col];
+                for (int row = 0; row < length; row++)
+                {
+                    input[row] = matrix[row * 64 + col];
+                }
+
                 InverseLine(input, output, length, reduced);
-                for (int row = 0; row < length; row++) matrix[row * 64 + col] = output[row];
+                for (int row = 0; row < length; row++)
+                {
+                    matrix[row * 64 + col] = output[row];
+                }
             }
         }
         return matrix;
@@ -215,10 +252,16 @@ internal static class RfxPrimitives
         int x = tileX * 64, y = tileY * 64;
         int left = Math.Max(x, rect.X), top = Math.Max(y, rect.Y);
         int right = Math.Min(x + 64, rect.X + rect.Width), bottom = Math.Min(y + 64, rect.Y + rect.Height);
-        if (left >= right || top >= bottom) return;
+        if (left >= right || top >= bottom)
+        {
+            return;
+        }
+
         for (int row = top; row < bottom; row++)
+        {
             pixels.AsSpan(((row - y) * 64 + left - x) * 4, (right - left) * 4)
                 .CopyTo(destination.Slice(row * stride + left * 4, (right - left) * 4));
+        }
     }
 }
 
@@ -246,7 +289,11 @@ internal ref struct RfxSrl(ReadOnlySpan<byte> data)
             if (_zeroes > 0) { _zeroes--; return 0; }
         }
         int sign = _bits.Read(1), magnitude = 1, max = (1 << bitCount) - 1;
-        while (magnitude < max && _bits.Read(1) == 0) magnitude++;
+        while (magnitude < max && _bits.Read(1) == 0)
+        {
+            magnitude++;
+        }
+
         _kp = Math.Max(0, _kp - 6);
         _unary = false;
         return sign == 0 ? magnitude : -magnitude;

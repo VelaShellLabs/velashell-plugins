@@ -196,12 +196,16 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     internal TimeSpan AutoReconnectStableAfter { get; set; } = TimeSpan.FromMinutes(1);
 
     private CancellationTokenSource? _autoCancel;
-    private Task? _autoReconnect;
     private int _autoAttempt;
     private long _attachedAt;
 
     /// <summary>The running automatic reconnect, if any (tests).</summary>
-    internal Task? AutoReconnectTask { get { lock (_disposeGate) { return _autoReconnect; } } }
+    internal Task? AutoReconnectTask
+    {
+        get { lock (_disposeGate) { return field; } }
+
+        private set;
+    }
 
     private void StartAutoReconnect(IRdpSession lost)
     {
@@ -226,7 +230,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             superseded = _autoCancel;
             _autoCancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             CancellationToken token = _autoCancel.Token;
-            _autoReconnect = Task.Run(() => AutoReconnectAsync(lost, token));
+            AutoReconnectTask = Task.Run(() => AutoReconnectAsync(lost, token));
         }
 
         superseded?.Cancel();

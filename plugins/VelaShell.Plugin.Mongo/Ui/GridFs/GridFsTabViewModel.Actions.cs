@@ -6,6 +6,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Bson;
 using VelaShell.Plugin.Mongo.Core;
+using VelaShell.Plugin.Mongo.Ui.GridFs;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 
