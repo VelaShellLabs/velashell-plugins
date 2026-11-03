@@ -5,7 +5,7 @@ namespace VelaShell.Rdp.Security;
 
 /// <summary>
 /// Drives the native Windows <b>Negotiate</b> security package for CredSSP/NLA, exactly as Windows' own RDP
-/// client does. The difference from the managed <see cref="ManagedNtlm" /> is the native package itself: with a
+/// client does. The difference from forcing the NTLM package is the native negotiation itself: with a
 /// DNS host name it targets <c>TERMSRV/&lt;host&gt;</c> so Negotiate can use Kerberos for domain servers; with an
 /// IP literal it keeps the null target (Kerberos is impossible there and Negotiate settles on NTLM either way —
 /// observed: explicit credentials give a bare NTLM first token even with the null target). Sealing uses the same
