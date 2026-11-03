@@ -32,6 +32,15 @@ public sealed class RdpdrChannelTests
         Assert.AreSequenceEqual(expected, names);
     }
 
+    [TestMethod]
+    public void SmartCardAloneRegistersDeviceAndCompanionSoundChannels()
+    {
+        var options = new RdpClientOptions { Host = "localhost", Clipboard = false, DynamicResolution = false };
+        Assert.IsEmpty(RdpManagedSession.BuildChannels(options));
+        string[] names = [.. RdpManagedSession.BuildChannels(options with { SmartCardRedirection = true }).Select(c => c.Name)];
+        Assert.AreSequenceEqual(new[] { "rdpdr", "rdpsnd" }, names);
+    }
+
     private static byte[] ServerAnnouncePdu(ushort minor)
     {
         byte[] p = new byte[12];

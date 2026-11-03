@@ -22,9 +22,69 @@ public sealed class RdpSettingsTests
     {
         var settings = RdpSettings.From(Request(), new("en"));
         Assert.IsFalse(settings.Clipboard);
+        Assert.IsFalse(settings.SmartCardRedirection);
+        Assert.IsNull(settings.Gateway);
         Assert.IsEmpty(settings.Drives);
         Assert.AreEqual(1920, settings.Width);
         Assert.AreEqual(1080, settings.Height);
+    }
+
+    [TestMethod]
+    public void GatewayCredentialsAndCertificateTrustStaySeparateFromDesktop()
+    {
+        var settings = RdpSettings.From(Request((RdpSettings.GatewayHostKey, "gateway.example"),
+            (RdpSettings.GatewayReuseCredentialsKey, "false"), (RdpSettings.GatewayUsernameKey, "gateway-user"),
+            (RdpSettings.GatewayPasswordKey, "gateway-secret"), (RdpSettings.GatewayDomainKey, "EDGE"),
+            (RdpSettings.GatewayPinKey, new string('b', 64)), (RdpSettings.TrustedThumbprintKey, new string('a', 64)),
+            (RdpSettings.SmartCardKey, "true")), new("en"), []);
+        Assert.IsNotNull(settings.Gateway);
+        Assert.IsFalse(settings.Gateway.UseRdpCredentials);
+        Assert.AreEqual("gateway-secret", settings.Gateway.Password);
+        Assert.AreEqual(new string('B', 64), Convert.ToHexString(settings.Gateway.CertificatePin!));
+        Assert.AreEqual(new string('A', 64), settings.CertificateSha256);
+        Assert.IsFalse(settings.ToString().Contains("gateway-secret", StringComparison.Ordinal));
+        Assert.IsTrue(settings.SmartCardRedirection);
+        ProtocolSettingField password = RdpSettings.Declare(new("en"), []).Single(f => f.Key == RdpSettings.GatewayPasswordKey);
+        Assert.IsTrue(password.IsSecret);
+        Assert.AreEqual(ProtocolSettingKind.Password, password.Kind);
+    }
+
+    [TestMethod]
+    [DataRow("gatewayHost", "https://gateway.example")]
+    [DataRow("gatewayPort", "0")]
+    [DataRow("gatewayCertificateSha256", "abc")]
+    [DataRow("gatewayUseRdpCredentials", "false")]
+    [DataRow("smartCard", "yes")]
+    public void RejectsInvalidGatewayAndSmartCardConfiguration(string key, string value)
+    {
+        var values = new Dictionary<string, string> { [RdpSettings.GatewayHostKey] = "gateway.example", [key] = value };
+        WorkspaceConnectRequest request = Request() with { Settings = values };
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(request, new("en"), []));
+    }
+
+    [TestMethod]
+    public void RemoteAppRequiresPublishedAliasAndPreservesArguments()
+    {
+        Assert.IsNull(RdpSettings.From(Request(), new("en"), []).RemoteApp);
+        var settings = RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "||notepad"),
+            (RdpSettings.RemoteAppArgumentsKey, "\"C:\\shared files\\note.txt\""),
+            (RdpSettings.RemoteAppWorkingDirectoryKey, "C:\\shared files")), new("en"), []);
+        Assert.IsNotNull(settings.RemoteApp);
+        Assert.AreEqual("||notepad", settings.RemoteApp.Program);
+        Assert.AreEqual("\"C:\\shared files\\note.txt\"", settings.RemoteApp.Arguments);
+        Assert.AreEqual("C:\\shared files", settings.RemoteApp.WorkingDirectory);
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "notepad.exe")), new("en"), []));
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppArgumentsKey, "orphan")), new("en"), []));
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "||app"),
+            (RdpSettings.RemoteAppArgumentsKey, "bad\0argument")), new("en"), []));
+    }
+
+    [TestMethod]
+    public void GatewayDoesNotSilentlyBypassAnSshJump()
+    {
+        WorkspaceConnectRequest request = Request((RdpSettings.GatewayHostKey, "gateway.example")) with
+        { Host = "127.0.0.1", Port = 12345, Tunnel = new("private.example", 3389, "Jump") };
+        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(request, new("en"), []));
     }
 
     [TestMethod]

@@ -7,7 +7,7 @@ namespace VelaShell.Rdp.Channels;
 /// File-system device redirection (MS-RDPEFS) over the static "rdpdr" channel: the announce /
 /// capability / client-id handshake, the device-list announce for each shared folder, and the
 /// Device I/O Request → I/O Completion loop that serves file operations via <see cref="DriveFile"/>.
-/// Matches FreeRDP's rdpdr/drive wire formats. Printers, ports, smart cards and audio are not offered.
+/// Additional selected devices implement their own I/O; smart cards are announced before logon.
 /// </summary>
 internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveMapping> mappings, Action<string>? log = null,
     IReadOnlyList<IRdpdrDevice>? additionalDevices = null, CancellationToken cancellationToken = default)
@@ -48,6 +48,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private uint _fileSequence = 1;
     private ushort _serverMinor;
     private bool _announced;
+    private bool _smartCardsAnnounced;
 
     /// <summary>The server's result code for the last device whose announce it rejected (0 = all accepted).</summary>
     internal uint LastDeviceRejection { get; private set; }
@@ -81,6 +82,9 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 _clientId = r.Remaining >= 4 ? r.U32LE() : 0;
                 // Windows can restart the channel handshake after logon; announce drives again in that round.
                 _announced = false;
+                _smartCardsAnnounced = false;
+                _devices.Clear();
+                _additionalById.Clear();
                 _ = Interlocked.Increment(ref _generation);
                 foreach (IRdpdrDevice device in _additional) { device.Reset(); }
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
@@ -95,6 +99,11 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 if (_serverMinor < UserLoggedOnMinVersion)
                 {
                     await AnnounceDevicesAsync().ConfigureAwait(false);
+                }
+                else if (!_announced && !_smartCardsAnnounced && _additional.Any(device => device.DeviceType == 0x20))
+                {
+                    await _send(BuildDeviceListAnnounce(smartCardsOnly: true)).ConfigureAwait(false);
+                    _smartCardsAnnounced = true;
                 }
 
                 break;
@@ -174,7 +183,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         w.U32LE(0x00000007);        // extendedPDU: REMOVE | DISPLAY_NAME | USER_LOGGEDON
         w.U32LE(0x00000001);        // extraFlags1: ENABLE_ASYNCIO
         w.U32LE(0);                 // extraFlags2
-        w.U32LE(0);                 // SpecialTypeDeviceCap
+        w.U32LE((uint)_additional.Count(device => device.DeviceType == 0x20)); // pre-logon smart-card devices
 
         // Drive capability set (version 2, header only).
         w.U16LE(CapDriveType);
@@ -189,18 +198,18 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         return w.ToArray();
     }
 
-    private byte[] BuildDeviceListAnnounce()
+    private byte[] BuildDeviceListAnnounce(bool smartCardsOnly = false)
     {
-        _devices.Clear();
-        _additionalById.Clear();
+        bool Include(IRdpdrDevice device) => smartCardsOnly ? device.DeviceType == 0x20 : !_smartCardsAnnounced || device.DeviceType != 0x20;
         ByteWriter w = Header(PakidDeviceListAnnounce);
-        w.U32LE((uint)(_mappings.Count + _additional.Count));
+        w.U32LE((uint)((smartCardsOnly ? 0 : _mappings.Count) + _additional.Count(Include)));
         uint deviceId = 1;
         // One 8-byte PreferredDosName buffer reused for every device: a stackalloc inside the loop
         // would grow the frame per mapping (CA2014). It is cleared at the top of each iteration.
         Span<byte> dos = stackalloc byte[8];
         foreach (DriveMapping mapping in _mappings)
         {
+            if (smartCardsOnly) { deviceId++; continue; }
             _devices[deviceId] = mapping;
             w.U32LE(DeviceTypeFilesystem);
             w.U32LE(deviceId);
@@ -222,6 +231,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         }
         foreach (IRdpdrDevice device in _additional)
         {
+            if (!Include(device)) { deviceId++; continue; }
             _additionalById.Add(deviceId, device);
             w.U32LE(device.DeviceType);
             w.U32LE(deviceId++);

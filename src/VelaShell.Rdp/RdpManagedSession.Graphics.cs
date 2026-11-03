@@ -11,7 +11,7 @@ public sealed partial class RdpManagedSession
     internal static IRdpGfxBackend? PrepareGraphics(RdpClientOptions options,
         Func<int, int, IRdpGfxBackend>? factory = null)
     {
-        if (!options.EnableGraphicsPipeline)
+        if (!options.EnableGraphicsPipeline || options.RemoteApp is not null)
         {
             GraphicsDiagnostic(options.GraphicsLog, "classic graphics selected; managed graphics pipeline disabled");
             return null;

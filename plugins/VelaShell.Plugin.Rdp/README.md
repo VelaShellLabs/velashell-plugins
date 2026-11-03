@@ -25,6 +25,33 @@ Desktop/scaled-output mappings are implemented; RemoteApp window mappings and Pr
 lifetimes and frame acknowledgements. Real Windows-server interoperability and 4K/video performance
 still require live-server validation; the CI matrix runs codec/protocol tests on all three OSes.
 
+## RD Gateway
+
+Set **RD Gateway** host and port (443 by default); the ordinary RDP host remains the internal destination.
+MS-TSGU RDGHTTP uses HTTPS/WebSocket, requiring a Windows Server 2016+ gateway with WebSocket enabled.
+Authentication uses HTTP Negotiate/Kerberos or NTLM, with reused RDP credentials or separate secret gateway
+credentials. Gateway TLS uses OS trust or its own explicit SHA-256 leaf pin; target TLS/NLA remains independent.
+Connections are TCP-only, cannot combine with SSH jumps, and never fall back to direct access. Gateway policy
+that denies a requested redirection fails the connection. Legacy RPC/HTTP, paired HTTP IN/OUT, gateway UDP,
+MFA/extended authentication, consent, NAP and reauthentication are unsupported. Packet and real loopback
+TLS/WebSocket tests pass; production RD Gateway and AD HTTP authentication remain unverified.
+
+## RemoteApp and smart cards
+
+On **RemoteApp**, set the published alias (`remoteAppProgram`, e.g. `||notepad`), optional arguments and working
+directory. Empty means an ordinary desktop. MS-RAIL handshake/execution and window orders drive an application-only
+workspace with focus, input, move/resize and close. RemoteApp forces classic graphics and fixed session dimensions;
+enhanced GFX window mappings, native top-level windows and tray integration are unsupported. Live RDS application
+interoperability remains unverified.
+
+On **Drive mapping**, `smartCard` explicitly enables all locally accessible PC/SC readers/cards (off by default).
+MS-RDPESC uses `rdpdr` with pre-logon announcement and companion `rdpsnd`. Windows needs the Smart Card service,
+Linux needs `libpcsclite.so.1` and pcsc-lite, and macOS uses PCSC.framework; reader drivers are required.
+Missing backend/service fails the opted-in connection. Contexts, readers, status/waits, transactions, APDU transmit,
+control and attribute reads are supported; management/cache/SetAttrib operations are not. No PIN/APDU logging or
+native driver bundling. This grants card-operation access to the remote environment, not smart-card NLA login.
+Protocol tests use fake cards; real cards and RDS interoperability still need validation.
+
 ## Remote audio playback
 
 Enable **Remote audio** on **Experience** (`audio`, off by default), then reconnect. `rdpsnd`

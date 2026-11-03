@@ -18,6 +18,15 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     internal IReadOnlyList<PrinterMapping> Printers { get; init; } = [];
     internal RdpCameraDevice? Camera { get; init; }
     internal IReadOnlyList<string> WpdDevices { get; init; } = [];
+    internal RdpGatewayOptions? Gateway { get; init; }
+    internal RemoteAppOptions? RemoteApp { get; init; }
+    internal bool SmartCardRedirection { get; init; }
+    internal const string GatewayPage = "gateway", RemoteAppPage = "remoteApp";
+    internal const string GatewayHostKey = "gatewayHost", GatewayPortKey = "gatewayPort",
+        GatewayReuseCredentialsKey = "gatewayUseRdpCredentials", GatewayUsernameKey = "gatewayUsername",
+        GatewayPasswordKey = "gatewayPassword", GatewayDomainKey = "gatewayDomain", GatewayPinKey = "gatewayCertificateSha256",
+        SmartCardKey = "smartCard", RemoteAppProgramKey = "remoteAppProgram", RemoteAppArgumentsKey = "remoteAppArguments",
+        RemoteAppWorkingDirectoryKey = "remoteAppWorkingDirectory";
     internal bool EnableGraphicsPipeline { get; init; } = true;
     internal const string GraphicsModeKey = "graphicsMode";
     internal RdpTransportMode Transport { get; init; } = RdpTransportMode.Auto;
@@ -107,6 +116,45 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             return value;
         }
         bool clipboard = Flag("clipboard");
+        RdpGatewayOptions? gateway = null;
+        string gatewayHost = request.GetString(GatewayHostKey).Trim();
+        if (gatewayHost.Length != 0)
+        {
+            if (request.Tunnel is not null) { throw new ProtocolConnectionException(loc["GatewaySshConflict"]); }
+            string gatewayPin = request.GetString(GatewayPinKey).Replace(":", "", StringComparison.Ordinal).Trim();
+            if (gatewayPin.Length != 0 && (gatewayPin.Length != 64 || !gatewayPin.All(char.IsAsciiHexDigit)))
+            {
+                Invalid(GatewayPinKey);
+            }
+            gateway = new RdpGatewayOptions
+            {
+                Host = gatewayHost,
+                Port = Number(GatewayPortKey, 443, 1, 65535),
+                UseRdpCredentials = Flag(GatewayReuseCredentialsKey, true),
+                Username = request.GetString(GatewayUsernameKey),
+                Password = request.GetString(GatewayPasswordKey),
+                Domain = request.GetString(GatewayDomainKey),
+                CertificatePin = gatewayPin.Length == 0 ? null : Convert.FromHexString(gatewayPin)
+            };
+            if (Uri.CheckHostName(gateway.Host) == UriHostNameType.Unknown || gateway.Host.Any(char.IsControl)) { Invalid(GatewayHostKey); }
+            if (!gateway.UseRdpCredentials && (string.IsNullOrWhiteSpace(gateway.Username) || gateway.Username.Contains('\0')
+                || gateway.Password.Contains('\0') || gateway.Domain.Any(char.IsControl))) { Invalid(GatewayUsernameKey); }
+        }
+
+        RemoteAppOptions? remoteApp = null;
+        string program = request.GetString(RemoteAppProgramKey).Trim();
+        string arguments = request.GetString(RemoteAppArgumentsKey);
+        string workingDirectory = request.GetString(RemoteAppWorkingDirectoryKey);
+        if (program.Length != 0 || arguments.Length != 0 || workingDirectory.Length != 0)
+        {
+            if (!program.StartsWith("||", StringComparison.Ordinal) || program.Length is <= 2 or > 260 || program.Any(char.IsControl))
+            {
+                Invalid(RemoteAppProgramKey);
+            }
+            if (arguments.Length > 8000 || arguments.Contains('\0')) { Invalid(RemoteAppArgumentsKey); }
+            if (workingDirectory.Length > 260 || workingDirectory.Contains('\0')) { Invalid(RemoteAppWorkingDirectoryKey); }
+            remoteApp = new RemoteAppOptions { Program = program, Arguments = arguments, WorkingDirectory = workingDirectory };
+        }
 
         // Experience toggles: each is phrased as "turn the feature on", so an unticked box (the default)
         // keeps the bandwidth-saving profile. Font smoothing is an enable bit; the rest are disable bits.
@@ -200,6 +248,9 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         return new(domain, Number("width", 1920, 320, 8192), Number("height", 1080, 200, 8192),
             Number("timeout", 15, 1, 120), clipboard, certificateHost, pin.ToUpperInvariant(), drives, security, audio, performance, colorDepth)
         {
+            Gateway = gateway,
+            RemoteApp = remoteApp,
+            SmartCardRedirection = Flag(SmartCardKey),
             EnableGraphicsPipeline = graphics,
             Transport = request.GetString(TransportKey).Trim().ToLowerInvariant() switch
             {
@@ -240,6 +291,17 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         List<ProtocolSettingField> fields =
         [
             new() { Key = "domain", Label = loc["Domain"], DefaultValue = "" },
+            new() { Key = GatewayHostKey, Label = loc["GatewayHost"], Hint = loc["GatewayHint"], DefaultValue = "", Page = GatewayPage },
+            new() { Key = GatewayPortKey, Label = loc["GatewayPort"], Kind = ProtocolSettingKind.Integer, DefaultValue = "443", Page = GatewayPage },
+            new() { Key = GatewayReuseCredentialsKey, Label = loc["GatewayReuseCredentials"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "true", Page = GatewayPage },
+            new() { Key = GatewayUsernameKey, Label = loc["User"], DefaultValue = "", Page = GatewayPage },
+            new() { Key = GatewayPasswordKey, Label = loc["Password"], Kind = ProtocolSettingKind.Password, IsSecret = true, DefaultValue = "", Page = GatewayPage },
+            new() { Key = GatewayDomainKey, Label = loc["Domain"], DefaultValue = "", Page = GatewayPage },
+            new() { Key = GatewayPinKey, Label = loc["GatewayPin"], Hint = loc["GatewayPinHint"], DefaultValue = "", Page = GatewayPage },
+            new() { Key = RemoteAppProgramKey, Label = loc["RemoteAppProgram"], Hint = loc["RemoteAppHint"], DefaultValue = "", Page = RemoteAppPage },
+            new() { Key = RemoteAppArgumentsKey, Label = loc["RemoteAppArguments"], DefaultValue = "", Page = RemoteAppPage },
+            new() { Key = RemoteAppWorkingDirectoryKey, Label = loc["RemoteAppWorkingDirectory"], DefaultValue = "", Page = RemoteAppPage },
+            new() { Key = SmartCardKey, Label = loc["SmartCard"], Hint = loc["SmartCardHint"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "false", Page = DrivesPage },
             new() { Key = PortsKey, Label = loc["Ports"], Hint = loc["PortsHint"], DefaultValue = "", Page = DrivesPage },
             new() { Key = "width", Label = loc["Width"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1920", IsAdvanced = true },
             new() { Key = "height", Label = loc["Height"], Kind = ProtocolSettingKind.Integer, DefaultValue = "1080", IsAdvanced = true },

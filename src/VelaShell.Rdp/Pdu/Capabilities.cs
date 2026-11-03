@@ -11,7 +11,7 @@ namespace VelaShell.Rdp.Pdu;
 internal static class Capabilities
 {
     /// <summary>The share id plus the server's active desktop size (0×0 when the caps omit a bitmap set).</summary>
-    internal readonly record struct DemandActive(uint ShareId, int Width, int Height, bool RefreshRect = false, bool SuppressOutput = false, int Bpp = 0);
+    internal readonly record struct DemandActive(uint ShareId, int Width, int Height, bool RefreshRect = false, bool SuppressOutput = false, int Bpp = 0, uint RailSupport = 0, uint WindowSupport = 0);
 
     /// <summary>Largest desktop area adopted from a server (8K UHD).</summary>
     internal const long MaxDesktopPixels = 7680L * 4320;
@@ -30,6 +30,7 @@ internal static class Capabilities
         r.Skip(lenSource);
         int width = 0, height = 0, bpp = 0;
         bool refreshRect = false, suppressOutput = false;
+        uint railSupport = 0, windowSupport = 0;
         if (r.Remaining >= 4)
         {
             ushort count = r.U16LE();
@@ -59,6 +60,12 @@ internal static class Capabilities
                     height = r.U16LE();
                     r.Skip(bodyLen - 12);
                 }
+                else if (type is 23 or 24 && bodyLen >= 4)
+                {
+                    uint level = r.U32LE();
+                    if (type == 23) { railSupport = level; } else { windowSupport = level; }
+                    r.Skip(bodyLen - 4);
+                }
                 else
                 {
                     r.Skip(bodyLen);
@@ -72,10 +79,10 @@ internal static class Capabilities
             width = height = 0;
         }
 
-        return new DemandActive(shareId, width, height, refreshRect, suppressOutput, bpp is 8 or 15 or 16 or 24 or 32 ? bpp : 0);
+        return new DemandActive(shareId, width, height, refreshRect, suppressOutput, bpp is 8 or 15 or 16 or 24 or 32 ? bpp : 0, railSupport, windowSupport);
     }
 
-    internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels, bool drawingOrders = false)
+    internal static byte[] BuildConfirmActive(uint shareId, ushort userId, int width, int height, int bpp, bool hasChannels, bool drawingOrders = false, bool remoteApp = false)
     {
         var caps = new ByteWriter(512);
         ushort count = 0;
@@ -87,6 +94,12 @@ internal static class Capabilities
         if (drawingOrders)
         {
             Set(BitmapCacheRev2);
+        }
+
+        if (remoteApp)
+        {
+            Set(w => { Header(w, 23, 8); w.U32LE(0x81); }); // RAIL + HandshakeEx; no enhanced GFX
+            Set(w => { Header(w, 24, 11); w.U32LE(2); w.U8(0); w.U16LE(0); }); // extended window metrics, no icon caches
         }
 
         Set(Pointer);

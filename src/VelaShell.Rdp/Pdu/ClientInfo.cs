@@ -32,7 +32,7 @@ internal static class ClientInfo
     /// TS_EXTENDED_INFO_PACKET.performanceFlags (desktop features to suppress); when
     /// <paramref name="audioPlayback"/> is <see langword="false" />, INFO_NOAUDIOPLAYBACK is set so the server plays no audio.
     /// </summary>
-    internal static byte[] Build(string domain, string username, string password, bool autoLogon, uint performanceFlags, bool audioPlayback)
+    internal static byte[] Build(string domain, string username, string password, bool autoLogon, uint performanceFlags, bool audioPlayback, bool remoteApp = false)
     {
         var w = new ByteWriter(2048);   // roomy enough that the password is never copied by a buffer resize
         // Basic Security Header: SEC_INFO_PKT.
@@ -41,6 +41,10 @@ internal static class ClientInfo
 
         uint flags = InfoMouse | InfoDisableCtrlAltDel | InfoUnicode | InfoMaximizeShell |
                      InfoLogonNotify | InfoEnableWindowsKey | InfoCompression | CompressionType64K;
+        if (remoteApp)
+        {
+            flags = (flags & ~InfoMaximizeShell) | 0x00008000; // INFO_RAIL; application starts through RAIL Execute
+        }
         if (!audioPlayback)
         {
             flags |= InfoNoAudioPlayback;

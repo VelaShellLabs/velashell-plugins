@@ -13,7 +13,7 @@ using VelaShell.Rdp;
 
 namespace VelaShell.Plugin.Rdp;
 
-internal sealed class RdpDesktopControl : Control, IAsyncDisposable
+internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
 {
     private readonly IRdpSession _session;
     private readonly Channel<Func<Task>> _input = Channel.CreateBounded<Func<Task>>(new BoundedChannelOptions(256)
@@ -85,6 +85,11 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _moveTimer.Tick += (_, _) => FlushPointerMove();
         _inputPump = ProcessInputAsync();
         session.FrameAvailable += OnFrame;
+        if (RemoteApp is { } remoteApp)
+        {
+            remoteApp.RemoteWindowsChanged += OnRemoteWindows;
+            OnRemoteWindows();
+        }
         if (session is IRdpPointerSource pointers)
         {
             pointers.PointerChanged += OnPointer;
@@ -258,7 +263,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     /// </summary>
     private void MatchRemoteToViewport()
     {
-        if (_disposed != 0 || !Fit)
+        if (_disposed != 0 || !Fit || RemoteApp is not null)
         {
             return;
         }
@@ -288,7 +293,11 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        if (_bitmap is { } bitmap)
+        if (RemoteApp is not null)
+        {
+            RenderRemoteApps(context);
+        }
+        else if (_bitmap is { } bitmap)
         {
             // 1:1 (the normal case): copy pixels exactly, no filtering at all. Real scaling: high-quality filter.
             Rect target = DesktopViewport;
@@ -401,6 +410,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
+        SetRemoteAppFocus(true);
         if (PublishClipboard is { } publish)
         {
             PublishOnFocus(publish);
@@ -409,6 +419,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     protected override void OnLostFocus(FocusChangedEventArgs e)
     {
         ReleaseInput();
+        SetRemoteAppFocus(false);
         base.OnLostFocus(e);
     }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -416,6 +427,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         base.OnAttachedToVisualTree(e);
         _window = TopLevel.GetTopLevel(this) as Window;
         _window?.Activated += OnWindowActivated;
+        _window?.Deactivated += OnWindowDeactivated;
         _window?.PropertyChanged += OnWindowPropertyChanged;
         _topLevel = TopLevel.GetTopLevel(this);
         _topLevel?.ScalingChanged += OnScalingChanged;
@@ -473,8 +485,14 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             UpdatePresentation();
         }
     }
+    private void OnWindowDeactivated(object? sender, EventArgs e)
+    {
+        ReleaseInput();
+        SetRemoteAppFocus(false);
+    }
     private void OnWindowActivated(object? sender, EventArgs e)
     {
+        if (IsFocused) { SetRemoteAppFocus(true); }
         // Returning from another application can retain keyboard focus on this desktop.
         if (IsFocused && IsEffectivelyVisible && IsEffectivelyEnabled && PublishClipboard is { } publish)
         {
@@ -483,7 +501,9 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        SetRemoteAppFocus(false);
         _window?.Activated -= OnWindowActivated;
+        _window?.Deactivated -= OnWindowDeactivated;
         _window?.PropertyChanged -= OnWindowPropertyChanged;
         _topLevel?.ScalingChanged -= OnScalingChanged;
         _window = null; _topLevel = null; ReleaseInput();
@@ -543,6 +563,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     }
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        if (RemoteAppPressed(e)) { return; }
         if (!Coordinates(e, false))
         {
             return;
@@ -569,6 +590,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     }
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
+        if (RemoteAppReleased(e)) { return; }
         _ = Coordinates(e, true);
         uint button = e.InitialPressMouseButton switch { MouseButton.Left => 0x1000u, MouseButton.Right => 0x2000u, MouseButton.Middle => 0x4000u, _ => 0 };
         if (_buttons.Remove(button))
@@ -582,6 +604,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { ReleaseInput(); base.OnPointerCaptureLost(e); }
     protected override void OnPointerMoved(PointerEventArgs e)
     {
+        if (RemoteAppMoved(e)) { return; }
         if (!Coordinates(e, _buttons.Count != 0))
         {
             return;
@@ -616,6 +639,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
             return false;
         }
 
+        if (!captured && RemoteApp is not null && HitRemoteWindow(x, y) is null) { return false; }
         _mouseX = x;
         _mouseY = y;
         return true;
@@ -661,6 +685,8 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
     }
     internal void ReleaseInput()
     {
+        _remoteDrag = null;
+        _remoteDragPreview = null;
         foreach (uint key in _keys) { uint captured = key; Queue(() => _session.KeyAsync(captured, false)); }
         _keys.Clear();
         foreach (uint button in _buttons)
@@ -679,6 +705,7 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         if (_disposed != 0) { await _inputPump; return; }
 
         _window?.Activated -= OnWindowActivated;
+        _window?.Deactivated -= OnWindowDeactivated;
         _window?.PropertyChanged -= OnWindowPropertyChanged;
         _topLevel?.ScalingChanged -= OnScalingChanged;
         _window = null; _topLevel = null; ReleaseInput();
@@ -687,6 +714,8 @@ internal sealed class RdpDesktopControl : Control, IAsyncDisposable
         _deferredMove = null;
         _ = Interlocked.Exchange(ref _disposed, 1);
         _session.FrameAvailable -= OnFrame;
+        if (RemoteApp is { } remoteApp) { remoteApp.RemoteWindowsChanged -= OnRemoteWindows; }
+        _remoteWindows = [];
         if (_session is IRdpPointerSource pointers)
         {
             pointers.PointerChanged -= OnPointer;

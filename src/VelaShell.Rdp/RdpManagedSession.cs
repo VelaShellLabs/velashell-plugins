@@ -10,7 +10,7 @@ namespace VelaShell.Rdp;
 /// a single background task pumps the connection while frames are coalesced and snapshotted on
 /// demand, and input, clipboard and dynamic-resolution requests are forwarded to the wire.
 /// </summary>
-public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, IRdpNetworkSource
+public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, IRdpNetworkSource, IRdpRemoteAppSource
 {
     internal RdpConnection Connection { get; }
     private readonly CancellationTokenSource _stop = new();
@@ -202,29 +202,47 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     internal static IReadOnlyList<ChannelDef> BuildChannels(RdpClientOptions options, bool graphicsReady = false)
     {
         var channels = new List<ChannelDef>();
+        if (options.RemoteApp is not null)
+        {
+            options.RemoteApp.Validate();
+            channels.Add(new ChannelDef("rail", 0xC0800000));
+        }
         if (options.Clipboard)
         {
             channels.Add(new ChannelDef("cliprdr", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
         }
 
         // MS-RDPEA 2.1, Windows note: without RDPDR, the server sends nothing on RDPSND.
-        if (options.AudioPlayback || options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
+        if (options.AudioPlayback || options.SmartCardRedirection || options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
         {
             channels.Add(new ChannelDef("rdpdr", 0xC0800000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP
         }
 
         // Windows device redirection also needs the sound channel registered, even without playback.
-        if (options.AudioPlayback || options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
+        if (options.AudioPlayback || options.SmartCardRedirection || options.Drives.Count > 0 || options.Ports.Count > 0 || options.Printers.Count > 0)
         {
             channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
-        if (graphicsReady || options.DynamicResolution || options.Camera is not null || options.WpdDevices.Count != 0)
+        if (graphicsReady || (options.DynamicResolution && options.RemoteApp is null) || options.Camera is not null || options.WpdDevices.Count != 0)
         {
             channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic graphics, display control and device channels
         }
 
         return channels;
+    }
+
+    internal static uint GatewayRedirections(RdpClientOptions options)
+    {
+        uint flags = 0;
+        if (options.Drives.Count != 0) { flags |= 1; }
+        if (options.Printers.Count != 0) { flags |= 2; }
+        if (options.Ports.Count != 0) { flags |= 4; }
+        if (options.Clipboard) { flags |= 8; }
+        if (options.WpdDevices.Count != 0 || options.Camera is not null) { flags |= 0x10; }
+        // These have no individual RDG policy bit, but are still subject to DISABLE_ALL.
+        if (options.SmartCardRedirection || options.AudioPlayback) { flags |= 0x20; }
+        return flags;
     }
 
     private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
@@ -239,7 +257,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
                 options.Domain, options.Width, options.Height, backend is not null ? 32 : options.ColorDepth, options.CertificatePin,
                 string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
                 options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
-                options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null);
+                options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null,
+                options.RemoteApp, options.Gateway, GatewayRedirections(options));
             session = new RdpManagedSession(new RdpConnection(connectOptions))
             {
                 _driveLog = options.DriveRedirectionLog,
@@ -259,6 +278,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         session.LogAudio($"configured playback={options.AudioPlayback}; requested={channels.Any(channel => channel.Name == "rdpsnd")}; backend={(OperatingSystem.IsWindows() ? "WinMM" : OperatingSystem.IsMacOS() ? "AudioQueue" : "ALSA")}");
         try
         {
+            if (options.RemoteApp is { } remoteApp) { session.EnableRemoteApp(remoteApp, options.Width, options.Height); }
             if (channels.Any(channel => channel.Name == "rdpsnd"))
             {
                 session.EnableAudio(options.AudioPlayback);
@@ -273,7 +293,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             }
             if (channels.Any(channel => channel.Name == "rdpdr"))
             {
-                session.EnableDrives(options.Drives, options.Ports, options.Printers);
+                session.EnableDrives(options.Drives, options.Ports, options.Printers, options.SmartCardRedirection);
             }
             using var connectStop = CancellationTokenSource.CreateLinkedTokenSource(ct, session._stop.Token);
             await session.Connection.ConnectAsync(connectStop.Token).ConfigureAwait(false);
@@ -306,6 +326,11 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         // PumpLoopAsync yields at the first ReadPduAsync, so this returns immediately; no Task.Run needed.
         session._pump = session.PumpLoopAsync();
         session._keepAlive = session.KeepAliveLoopAsync(options.KeepAliveInterval);
+        if (session._rail is { } rail)
+        {
+            try { await rail.Launched.WaitAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false); }
+            catch { await session.DisposeAsync().ConfigureAwait(false); throw; }
+        }
         return session;
     }
 
@@ -317,7 +342,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         // the real bound; the count only caps per-entry overhead for tiny PDUs.
         _drdynvcQueue = Channel.CreateBounded<ChannelPayload>(new BoundedChannelOptions(16384) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         _drdynvc = new DrdynvcChannel((pdu, token) => Connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token,
-            options.DynamicResolution, LogDrive, Connection.WaitForTunnelAsync, Connection.EnableTunnelReading, Connection.SendTunnelAsync);
+            options.DynamicResolution && options.RemoteApp is null, LogDrive, Connection.WaitForTunnelAsync, Connection.EnableTunnelReading, Connection.SendTunnelAsync);
         if (options.Camera is { } camera)
         {
             _ = new CameraChannel(_drdynvc, camera, () => OperatingSystem.IsWindows()
@@ -351,18 +376,34 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         _cliprdrWorker = DrainCliprdrAsync();
     }
 
-    private void EnableDrives(IReadOnlyList<DriveMapping> mappings, IReadOnlyList<PortMapping> ports, IReadOnlyList<PrinterMapping> printers)
+    private void EnableDrives(IReadOnlyList<DriveMapping> mappings, IReadOnlyList<PortMapping> ports,
+        IReadOnlyList<PrinterMapping> printers, bool smartCards)
     {
-        _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
-        _rdpdr = new RdpdrChannel(pdu => Connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive,
-            [.. ports.Select(p => (IRdpdrDevice)new PortDevice(p))
-, .. printers.Select((p, i) => (IRdpdrDevice)new PrinterDevice(p, i + 1))], _stop.Token);
+        var devices = new List<IRdpdrDevice>();
+        try
+        {
+            if (smartCards) { devices.Add(new SmartCardDevice()); }
+            devices.AddRange(ports.Select(p => (IRdpdrDevice)new PortDevice(p)));
+            devices.AddRange(printers.Select((p, i) => (IRdpdrDevice)new PrinterDevice(p, i + 1)));
+            _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+            _rdpdr = new RdpdrChannel(pdu => Connection.SendVirtualChannelAsync("rdpdr", pdu, _stop.Token), mappings, LogDrive,
+                devices, _stop.Token);
+        }
+        catch
+        {
+            foreach (IRdpdrDevice device in devices) { device.Dispose(); }
+            throw;
+        }
         _rdpdrWorker = DrainRdpdrAsync();
     }
 
     private void OnChannelData(ChannelPayload payload)
     {
-        if (payload.ChannelName == "cliprdr")
+        if (payload.ChannelName == "rail")
+        {
+            ReceiveRail(payload.Data);
+        }
+        else if (payload.ChannelName == "cliprdr")
         {
             if (_clipboardFailure is not null) { return; }
             long queued = Interlocked.Add(ref _clipboardQueuedBytes, payload.Data.Length);
@@ -607,6 +648,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             Volatile.Write(ref _isConnected, 0);
             _stop.Cancel();
             failure = DisconnectCause(_dynamicChannelFailure ?? failure, Volatile.Read(ref _errorInfo));
+            _rail?.Stop(failure ?? new RdpProtocolException("RemoteApp session ended before launch completed."));
+            Connection.RemoteWindows?.Clear();
             if (Volatile.Read(ref _disposed) == 0) { try { Disconnected?.Invoke(failure); } catch { /* ignore */ } }
         }
     }
@@ -665,6 +708,11 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         _ = (_rdpdrQueue?.Writer.TryComplete());
         _ = (_drdynvcQueue?.Writer.TryComplete());
         _ = (_audioQueue?.Writer.TryComplete());
+        _ = (_railQueue?.Writer.TryComplete());
+        _rail?.Stop();
+        if (_railWorker is { } railWorker) { await railWorker.ConfigureAwait(false); }
+        Connection.RemoteWindows?.Clear();
+        RemoteWindowsChanged = null;
         if (_audioWorker is { } audioWorker) { await audioWorker.ConfigureAwait(false); }
         _audioStop?.Dispose();
         lock (_audioGate) { _audioHandlers = null; }
