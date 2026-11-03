@@ -269,7 +269,8 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
                 Label = DiskLabel(loc, disk),
                 Kind = ProtocolSettingKind.Boolean,
                 DefaultValue = "false",
-                Page = DrivesPage
+                Page = DrivesPage,
+                SelectionGroup = new("drives", loc["DriveGroup"])
             });
         }
 
@@ -278,11 +279,12 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             fields.Add(new()
             {
                 Key = LocalPrinters.Key(printer),
-                Label = $"{loc["Printers"]}: {printer.PrinterName}",
+                Label = printer.PrinterName,
                 Hint = loc["PrintersHint"],
                 Kind = ProtocolSettingKind.Boolean,
                 DefaultValue = "false",
-                Page = DrivesPage
+                Page = DrivesPage,
+                SelectionGroup = new("printers", loc["Printers"])
             });
         }
 
@@ -291,11 +293,12 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             fields.Add(new()
             {
                 Key = LocalWpdDevices.Key(device),
-                Label = $"{loc["WpdDevices"]}: {device.Name}",
+                Label = device.Name,
                 Hint = loc["WpdHint"],
                 Kind = ProtocolSettingKind.Boolean,
                 DefaultValue = "false",
-                Page = DrivesPage
+                Page = DrivesPage,
+                SelectionGroup = new("wpd", loc["WpdDevices"])
             });
         }
 

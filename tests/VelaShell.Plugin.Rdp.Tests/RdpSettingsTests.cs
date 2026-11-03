@@ -1,6 +1,7 @@
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
+using VelaShell.Rdp.Channels;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 
@@ -175,6 +176,60 @@ public sealed class RdpSettingsTests
         Assert.AreEqual("自定义文件夹", custom.Label);
         List<string> keys = [.. fields.Select(field => field.Key)];
         Assert.IsTrue(keys.IndexOf("drive:C") < keys.IndexOf("drive:E") && keys.IndexOf("drive:E") < keys.IndexOf("drives"));
+    }
+
+    [TestMethod]
+    [DataRow("en")]
+    [DataRow("zh-Hans")]
+    [DataRow("zh-Hant")]
+    [DataRow("ja")]
+    [DataRow("ko")]
+    public void DeviceCheckboxGroupsPreserveKeysAndDefaultToOff(string locale)
+    {
+        var loc = new Loc(locale);
+        LocalDisk[] disks = [new("C", "C", @"C:\", LocalDiskKind.Fixed), new("E", "E", @"E:\", LocalDiskKind.Removable)];
+        var printer = new PrinterMapping("Office", "Driver");
+        var wpd = new RdpWpdDevice("portable-device", "Phone");
+        var camera = new RdpCameraDevice("camera-one", "Camera");
+        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(loc, disks, [printer], [camera], [wpd]);
+        (string Key, string Group, string Label)[] expected =
+        [
+            ("drive:C", "drives", loc["DriveGroup"]),
+            ("drive:E", "drives", loc["DriveGroup"]),
+            (LocalPrinters.Key(printer), "printers", loc["Printers"]),
+            (LocalWpdDevices.Key(wpd), "wpd", loc["WpdDevices"])
+        ];
+        Assert.HasCount(expected.Length, fields.Where(field => field.SelectionGroup is not null).ToArray());
+        foreach ((string key, string group, string label) in expected)
+        {
+            ProtocolSettingField field = fields.Single(field => field.Key == key);
+            Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
+            Assert.AreEqual("false", field.DefaultValue);
+            Assert.AreEqual(RdpSettings.DrivesPage, field.Page);
+            Assert.AreEqual(new ProtocolSettingGroup(group, label), field.SelectionGroup);
+        }
+        Assert.AreEqual(printer.PrinterName, fields.Single(field => field.Key == LocalPrinters.Key(printer)).Label);
+        Assert.AreEqual(wpd.Name, fields.Single(field => field.Key == LocalWpdDevices.Key(wpd)).Label);
+
+        ProtocolSettingField cameraField = fields.Single(field => field.Key == LocalCameras.SettingKey);
+        Assert.IsNull(cameraField.SelectionGroup);
+        Assert.AreEqual(ProtocolSettingKind.Choice, cameraField.Kind);
+        Assert.AreEqual("", cameraField.DefaultValue);
+        Assert.AreSequenceEqual(new[] { "", LocalCameras.Key(camera) }, cameraField.Choices.Select(choice => choice.Value).ToArray());
+        foreach (string key in new[] { RdpSettings.PortsKey, "drives" })
+        {
+            ProtocolSettingField field = fields.Single(field => field.Key == key);
+            Assert.IsNull(field.SelectionGroup);
+            Assert.AreEqual(ProtocolSettingKind.Text, field.Kind);
+            Assert.AreEqual("", field.DefaultValue);
+        }
+
+        var settings = RdpSettings.From(Request(expected.Select(field => (field.Key, "false")).ToArray()), loc, disks,
+            () => [printer], () => [camera], () => [wpd]);
+        Assert.IsEmpty(settings.Drives);
+        Assert.IsEmpty(settings.Printers);
+        Assert.IsEmpty(settings.WpdDevices);
+        Assert.IsNull(settings.Camera);
     }
 
     [TestMethod]
