@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using VelaShell.Plugin.Mongo.Bson;
+using VelaShell.Plugin.Mongo.Ui.GridFs;
 
 namespace VelaShell.Plugin.Mongo.Ui;
 

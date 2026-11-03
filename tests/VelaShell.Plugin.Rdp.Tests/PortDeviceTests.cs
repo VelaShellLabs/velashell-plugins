@@ -24,7 +24,7 @@ public sealed class PortDeviceTests
         Assert.AreEqual("COM3", settings.Ports[0].Name);
         var options = new RdpClientOptions { Host = "unused", Ports = settings.Ports, DynamicResolution = false };
         Assert.HasCount(2, RdpManagedSession.BuildChannels(options));
-        Assert.Throws<ArgumentException>(() => new RdpClientOptions { Host = "unused", Ports = [new("COM1"), new("com1")] });
+        _ = Assert.Throws<ArgumentException>(() => new RdpClientOptions { Host = "unused", Ports = [new("COM1"), new("com1")] });
     }
 
     [TestMethod]
@@ -105,7 +105,7 @@ public sealed class PortDeviceTests
         RdpdrIoResult timeout = await device.ProcessAsync(new(id, 14, 0, Control(PortControl.GetLine, [], 3)), default)
             .WaitAsync(TimeSpan.FromSeconds(3));
         Assert.AreEqual(0xC00000B5u, timeout.Status);
-        await device.ProcessAsync(new(id, 2, 0, new byte[32]), default);
+        _ = await device.ProcessAsync(new(id, 2, 0, new byte[32]), default);
         RdpdrIoResult cancelled = await read.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.AreEqual(0xC0000120u, cancelled.Status);
         RdpdrIoResult waitCancelled = await wait.WaitAsync(TimeSpan.FromSeconds(3));

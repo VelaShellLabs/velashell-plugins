@@ -20,12 +20,12 @@ public sealed class RdpGfxTests
             (_, _) => throw new AssertFailedException("Classic must not initialize the graphics backend.")));
         Assert.IsFalse(RdpManagedSession.BuildChannels(options, false).Any(c => c.Name == "drdynvc"));
         Assert.AreEqual(0, EarlyFlags(false) & 0x100);
-        using var ready = RdpManagedSession.PrepareGraphics(options);
-        Assert.IsInstanceOfType<ManagedRdpGfx>(ready);
+        using IRdpGfxBackend? ready = RdpManagedSession.PrepareGraphics(options);
+        _ = Assert.IsInstanceOfType<ManagedRdpGfx>(ready);
         Assert.IsTrue(RdpManagedSession.BuildChannels(options, ready is not null).Any(c => c.Name == "drdynvc"));
         Assert.AreEqual(0x103, EarlyFlags(ready is not null));
         Assert.IsTrue(log.Any(line => line.Contains("managed graphics pipeline ready", StringComparison.Ordinal)));
-        Assert.ThrowsExactly<RdpProtocolException>(() => RdpManagedSession.PrepareGraphics(options,
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpManagedSession.PrepareGraphics(options,
             (_, _) => throw new RdpProtocolException("Initialization failed")));
     }
 
@@ -66,9 +66,9 @@ public sealed class RdpGfxTests
         Assert.AreSequenceEqual(new byte[] { 20, 21, 22, 23, 24, 25, 26, 27 }, destination.AsSpan(16, 8).ToArray());
         Assert.AreSequenceEqual(new byte[] { 0, 0, 0, 255 }, destination.AsSpan(12, 4).ToArray());
         frame.Stride = 11;
-        Assert.ThrowsExactly<RdpProtocolException>(() => framebuffer.Blit(frame));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => framebuffer.Blit(frame));
         frame = backend.Frame; frame.X = int.MaxValue;
-        Assert.ThrowsExactly<RdpProtocolException>(() => framebuffer.Blit(frame));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => framebuffer.Blit(frame));
     }
 
     [TestMethod]
@@ -104,7 +104,7 @@ public sealed class RdpGfxTests
         var dvc = new DrdynvcChannel(async (packet, _) =>
         {
             if ((packet[0] >> 4) != 3) { return; }
-            entered.TrySetResult();
+            _ = entered.TrySetResult();
             await release.Task;
             Assert.AreSequenceEqual(new byte[] { 0x30, 1, 7, 8, 9 }, packet);
         }, stop.Token);
@@ -139,7 +139,7 @@ public sealed class RdpGfxTests
         await dvc.ProcessAsync(Create(1));
         if (!failOpen) { await dvc.ProcessAsync([0x30, 1, 9]); }
         Assert.IsTrue(stop.IsCancellationRequested);
-        Assert.IsInstanceOfType<RdpProtocolException>(failure);
+        _ = Assert.IsInstanceOfType<RdpProtocolException>(failure);
         await dvc.CloseAsync();
         Assert.AreEqual(1, backend.Disposals);
     }

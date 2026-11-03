@@ -132,7 +132,7 @@ internal sealed partial class DrdynvcChannel
             int cb = id <= 255 ? 0 : id <= 65535 ? 1 : 2;
             var w = new ByteWriter(5); w.U8((byte)(0x40 | cb)); WriteVariable(w, id, cb);
             try { await _send(w.ToArray(), _ct).ConfigureAwait(false); }
-            finally { _routes.Remove(id); }
+            finally { _ = _routes.Remove(id); }
         }
         finally
         {
@@ -258,7 +258,7 @@ internal sealed partial class DrdynvcChannel
             }
             if (PduChannel(pdu) is { } id)
             {
-                lock (_lock) { if (!_instances.ContainsKey(id)) { _routes.Remove(id); } }
+                lock (_lock) { if (!_instances.ContainsKey(id)) { _ = _routes.Remove(id); } }
             }
         }
         finally { _ = _sendGate.Release(); }

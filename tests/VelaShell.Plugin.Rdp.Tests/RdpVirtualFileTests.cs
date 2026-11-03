@@ -20,27 +20,27 @@ public sealed class RdpVirtualFileTests
         nint buffer = Marshal.AllocCoTaskMem(16), fetched = Marshal.AllocCoTaskMem(8);
         try
         {
-            var get = Method<GetData>(unknown, 3);
-            var format = WindowsVirtualFileDataObject.Format(WindowsVirtualFileDataObject.DescriptorFormat, TYMED.TYMED_HGLOBAL);
+            GetData get = Method<GetData>(unknown, 3);
+            FORMATETC format = WindowsVirtualFileDataObject.Format(WindowsVirtualFileDataObject.DescriptorFormat, TYMED.TYMED_HGLOBAL);
             Marshal.ThrowExceptionForHR(get(unknown, ref format, out descriptor));
             Assert.AreEqual(TYMED.TYMED_HGLOBAL, descriptor.tymed);
             nint memory = WindowsVirtualFileClipboard.Native.GlobalLock(descriptor.unionmember);
             byte[] descriptors = new byte[4 + 3 * 592];
             try { Marshal.Copy(memory, descriptors, 0, descriptors.Length); }
-            finally { WindowsVirtualFileClipboard.Native.GlobalUnlock(descriptor.unionmember); }
+            finally { _ = WindowsVirtualFileClipboard.Native.GlobalUnlock(descriptor.unionmember); }
             Assert.AreSequenceEqual([.. files.Files], [.. RdpClipboardCodec.DecodeFiles(descriptors)]);
             format = WindowsVirtualFileDataObject.Format(WindowsVirtualFileDataObject.ContentsFormat, TYMED.TYMED_ISTREAM, 1);
             Marshal.ThrowExceptionForHR(get(unknown, ref format, out stream));
             Assert.AreEqual(0, reads);
             Assert.IsNull(progress.Snapshot);
-            var read = Method<Read>(stream.unionmember, 3);
+            Read read = Method<Read>(stream.unionmember, 3);
             Marshal.ThrowExceptionForHR(read(stream.unionmember, buffer, 3, fetched));
             Assert.AreEqual(3, Marshal.ReadInt32(fetched));
             Assert.AreEqual(1, reads);
             byte[] bytes = new byte[3];
             Marshal.Copy(buffer, bytes, 0, bytes.Length);
             Assert.AreSequenceEqual(new byte[] { 1, 2, 3 }, bytes);
-            var seek = Method<Seek>(stream.unionmember, 5);
+            Seek seek = Method<Seek>(stream.unionmember, 5);
             Marshal.ThrowExceptionForHR(seek(stream.unionmember, 1, 0, fetched));
             Marshal.ThrowExceptionForHR(read(stream.unionmember, buffer, 3, fetched));
             Assert.AreEqual(4L, progress.Snapshot!.Bytes);
@@ -50,9 +50,17 @@ public sealed class RdpVirtualFileTests
         }
         finally
         {
-            if (descriptor.unionmember != 0) ReleaseStgMedium(ref descriptor);
-            if (stream.unionmember != 0) ReleaseStgMedium(ref stream);
-            Marshal.Release(unknown);
+            if (descriptor.unionmember != 0)
+            {
+                ReleaseStgMedium(ref descriptor);
+            }
+
+            if (stream.unionmember != 0)
+            {
+                ReleaseStgMedium(ref stream);
+            }
+
+            _ = Marshal.Release(unknown);
             Marshal.FreeCoTaskMem(buffer);
             Marshal.FreeCoTaskMem(fetched);
         }
@@ -80,16 +88,20 @@ public sealed class RdpVirtualFileTests
         {
             Assert.AreEqual(0, Marshal.QueryInterface(unknown, in iid, out capability));
             data.StartOperation(null);
-            var contents = WindowsVirtualFileDataObject.Format(WindowsVirtualFileDataObject.ContentsFormat, TYMED.TYMED_ISTREAM, 0);
+            FORMATETC contents = WindowsVirtualFileDataObject.Format(WindowsVirtualFileDataObject.ContentsFormat, TYMED.TYMED_ISTREAM, 0);
             Marshal.ThrowExceptionForHR(data.GetData(ref contents, out stream));
             files.Retire();
             nint address = WindowsVirtualFileClipboard.Native.GlobalLock(memory);
             Marshal.WriteInt32(address, 1);
-            WindowsVirtualFileClipboard.Native.GlobalUnlock(memory);
+            _ = WindowsVirtualFileClipboard.Native.GlobalUnlock(memory);
             var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
-            var format = WindowsVirtualFileDataObject.Format(unchecked((short)WindowsVirtualFileClipboard.Native.RegisterClipboardFormat(name)), TYMED.TYMED_HGLOBAL);
+            FORMATETC format = WindowsVirtualFileDataObject.Format(unchecked((short)WindowsVirtualFileClipboard.Native.RegisterClipboardFormat(name)), TYMED.TYMED_HGLOBAL);
             Marshal.ThrowExceptionForHR(Method<SetData>(unknown, 7)(unknown, ref format, ref medium, release ? 1 : 0));
-            if (release) memory = 0;
+            if (release)
+            {
+                memory = 0;
+            }
+
             Assert.IsFalse(files.Cancelled);
             data.InOperation(out bool active);
             Assert.IsTrue(active);
@@ -97,7 +109,7 @@ public sealed class RdpVirtualFileTests
             Marshal.ThrowExceptionForHR(Method<GetData>(unknown, 3)(unknown, ref format, out feedback));
             address = WindowsVirtualFileClipboard.Native.GlobalLock(feedback.unionmember);
             try { Assert.AreEqual(1, Marshal.ReadInt32(address)); }
-            finally { WindowsVirtualFileClipboard.Native.GlobalUnlock(feedback.unionmember); }
+            finally { _ = WindowsVirtualFileClipboard.Native.GlobalUnlock(feedback.unionmember); }
             Marshal.ThrowExceptionForHR(Method<Read>(stream.unionmember, 3)(stream.unionmember, buffer, 1, read));
             data.EndOperation(0, null, 1);
             Assert.IsFalse(files.Cancelled, "A successful EndOperation cannot close a separately owned stream.");
@@ -105,15 +117,34 @@ public sealed class RdpVirtualFileTests
             Assert.AreEqual(3, Marshal.ReadByte(buffer));
             Assert.AreEqual("Completed", progress.Snapshot!.State);
             Assert.AreEqual(2L, progress.Snapshot.Bytes);
-            if (!release) Assert.IsGreaterThanOrEqualTo((nuint)size, WindowsVirtualFileClipboard.Native.GlobalSize(memory));
+            if (!release)
+            {
+                Assert.IsGreaterThanOrEqualTo((nuint)size, WindowsVirtualFileClipboard.Native.GlobalSize(memory));
+            }
         }
         finally
         {
-            if (stream.unionmember != 0) ReleaseStgMedium(ref stream);
-            if (feedback.unionmember != 0) ReleaseStgMedium(ref feedback);
-            if (capability != 0) Marshal.Release(capability);
-            Marshal.Release(unknown);
-            if (memory != 0) WindowsVirtualFileClipboard.Native.GlobalFree(memory);
+            if (stream.unionmember != 0)
+            {
+                ReleaseStgMedium(ref stream);
+            }
+
+            if (feedback.unionmember != 0)
+            {
+                ReleaseStgMedium(ref feedback);
+            }
+
+            if (capability != 0)
+            {
+                _ = Marshal.Release(capability);
+            }
+
+            _ = Marshal.Release(unknown);
+            if (memory != 0)
+            {
+                _ = WindowsVirtualFileClipboard.Native.GlobalFree(memory);
+            }
+
             Marshal.FreeCoTaskMem(buffer); Marshal.FreeCoTaskMem(read);
         }
     }
@@ -124,14 +155,14 @@ public sealed class RdpVirtualFileTests
         var progress = new RdpClipboardTransfer();
         using var files = new RdpVirtualFiles([new("directory", true, 0), new("empty", false, 0), new("a", false, 2), new("b", false, 3)],
             (_, _, count, _) => Task.FromResult(new byte[count]), progress, default);
-        await files.ReadAsync(1, 0, 1);
-        await files.ReadAsync(3, 0, 3);
+        _ = await files.ReadAsync(1, 0, 1);
+        _ = await files.ReadAsync(3, 0, 3);
         Assert.AreEqual("Transferring", progress.Snapshot!.State);
-        await files.ReadAsync(2, 0, 2);
+        _ = await files.ReadAsync(2, 0, 2);
         Assert.AreEqual("Delivered", progress.Snapshot.State);
         Assert.AreEqual(5L, progress.Snapshot.Bytes);
-        await files.ReadAsync(2, 2, 1);
-        await files.ReadAsync(3, 0, 3);
+        _ = await files.ReadAsync(2, 2, 1);
+        _ = await files.ReadAsync(3, 0, 3);
         files.Dispose();
         Assert.AreEqual("Delivered", progress.Snapshot.State);
         Assert.AreEqual(5L, progress.Snapshot.Bytes);
@@ -148,7 +179,7 @@ public sealed class RdpVirtualFileTests
         files.BeginOperation();
         Assert.AreEqual("Delivered", progress.Snapshot!.State);
         files.EndOperation(0, 1);
-        await files.ReadAsync(1, 0, 1);
+        _ = await files.ReadAsync(1, 0, 1);
         Assert.AreEqual("Completed", progress.Snapshot.State);
         files.BeginOperation();
         Assert.AreEqual("Delivered", progress.Snapshot.State);
@@ -184,11 +215,11 @@ public sealed class RdpVirtualFileTests
         nint unknown = Marshal.GetComInterfaceForObject(data, typeof(IVirtualFileDataObject));
         nint memory = WindowsVirtualFileClipboard.Native.GlobalAlloc(0x42, 4);
         int exceptions = 0;
-        EventHandler<System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs> observed = (_, e) => { if (e.Exception is COMException) exceptions++; };
+        void observed(object? _, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e) { if (e.Exception is COMException) { exceptions++; } }
         AppDomain.CurrentDomain.FirstChanceException += observed;
         try
         {
-            var format = WindowsVirtualFileDataObject.Format(1, TYMED.TYMED_HGLOBAL);
+            FORMATETC format = WindowsVirtualFileDataObject.Format(1, TYMED.TYMED_HGLOBAL);
             var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
             Assert.AreEqual(unchecked((int)0x80040064), Method<SetData>(unknown, 7)(unknown, ref format, ref medium, 1));
             Assert.IsGreaterThanOrEqualTo((nuint)4, WindowsVirtualFileClipboard.Native.GlobalSize(memory));
@@ -201,8 +232,8 @@ public sealed class RdpVirtualFileTests
         finally
         {
             AppDomain.CurrentDomain.FirstChanceException -= observed;
-            Marshal.Release(unknown);
-            WindowsVirtualFileClipboard.Native.GlobalFree(memory);
+            _ = Marshal.Release(unknown);
+            _ = WindowsVirtualFileClipboard.Native.GlobalFree(memory);
         }
     }
 
@@ -243,17 +274,21 @@ public sealed class RdpVirtualFileTests
         int calls = 0;
         await WindowsVirtualFileClipboard.RetryClipboardAsync(() =>
         {
-            if (++calls < 3) throw new COMException("Busy", unchecked((int)0x800401D0));
+            if (++calls < 3)
+            {
+                throw new COMException("Busy", unchecked((int)0x800401D0));
+            }
+
             return Task.CompletedTask;
         }, default);
         Assert.AreEqual(3, calls);
         calls = 0;
-        await Assert.ThrowsAsync<COMException>(() => WindowsVirtualFileClipboard.RetryClipboardAsync(() =>
+        _ = await Assert.ThrowsAsync<COMException>(() => WindowsVirtualFileClipboard.RetryClipboardAsync(() =>
         { calls++; throw new COMException("Busy", unchecked((int)0x800401D0)); }, default));
         Assert.AreEqual(8, calls);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => WindowsVirtualFileClipboard.RetryClipboardAsync(() => throw new AssertFailedException("Must not retry after cancellation."), cancelled.Token));
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => WindowsVirtualFileClipboard.RetryClipboardAsync(() => throw new AssertFailedException("Must not retry after cancellation."), cancelled.Token));
     }
 
     [TestMethod]
@@ -277,7 +312,7 @@ public sealed class RdpVirtualFileTests
     [TestMethod]
     public void VirtualDescriptorsRejectUnsafePathsAndTransferLimitBeforeReading()
     {
-        Task<byte[]> NoRead(uint index, ulong offset, uint length, CancellationToken ct) => throw new AssertFailedException("Metadata must not read content.");
+        static Task<byte[]> NoRead(uint index, ulong offset, uint length, CancellationToken ct) => throw new AssertFailedException("Metadata must not read content.");
         _ = Assert.Throws<InvalidDataException>(() => new RdpVirtualFiles([new("..\\escape", false, 1)], NoRead, new(), default));
         _ = Assert.Throws<InvalidDataException>(() => new RdpVirtualFiles([new("large", false, RdpClipboardFiles.MaxTransferBytes + 1)], NoRead, new(), default));
     }

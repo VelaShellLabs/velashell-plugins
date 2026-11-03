@@ -65,7 +65,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(IsStringDirty));
             RaiseUnsavedState();
             SaveStringCommand.RaiseCanExecuteChanged();
@@ -163,7 +163,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             EditLabel = field?.Label ?? string.Empty;
             EditValue = field?.Value ?? string.Empty;
             EditScore = field?.ScoreText ?? string.Empty;
@@ -183,7 +183,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
         }
     } = string.Empty;
@@ -194,7 +194,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
         }
     } = string.Empty;
@@ -205,7 +205,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
         }
     } = string.Empty;
@@ -216,7 +216,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
             AddElementCommand.RaiseCanExecuteChanged();
         }
@@ -228,7 +228,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
             AddElementCommand.RaiseCanExecuteChanged();
         }
@@ -240,7 +240,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
             AddElementCommand.RaiseCanExecuteChanged();
         }
@@ -362,7 +362,7 @@ public sealed partial class RedisWorkspaceViewModel
                     // 改了字段名等于"删旧的、加新的" —— 如实按两步做,而不是假装有 rename。
                     if (!string.Equals(row.Label, EditLabel, StringComparison.Ordinal))
                     {
-                        await _connection.DeleteHashFieldAsync(key, row.Label).ConfigureAwait(true);
+                        _ = await _connection.DeleteHashFieldAsync(key, row.Label).ConfigureAwait(true);
                     }
                     await _connection.SetHashFieldAsync(key, EditLabel, EditValue).ConfigureAwait(true);
                     break;
@@ -372,8 +372,8 @@ public sealed partial class RedisWorkspaceViewModel
                 case "set":
                     if (!string.Equals(row.Label, EditLabel, StringComparison.Ordinal))
                     {
-                        await _connection.RemoveSetMemberAsync(key, row.Label).ConfigureAwait(true);
-                        await _connection.AddSetMemberAsync(key, EditLabel).ConfigureAwait(true);
+                        _ = await _connection.RemoveSetMemberAsync(key, row.Label).ConfigureAwait(true);
+                        _ = await _connection.AddSetMemberAsync(key, EditLabel).ConfigureAwait(true);
                     }
                     break;
                 case "zset":
@@ -384,9 +384,9 @@ public sealed partial class RedisWorkspaceViewModel
                     }
                     if (!string.Equals(row.Label, EditLabel, StringComparison.Ordinal))
                     {
-                        await _connection.RemoveSortedMemberAsync(key, row.Label).ConfigureAwait(true);
+                        _ = await _connection.RemoveSortedMemberAsync(key, row.Label).ConfigureAwait(true);
                     }
-                    await _connection.SetSortedMemberAsync(key, EditLabel, score).ConfigureAwait(true);
+                    _ = await _connection.SetSortedMemberAsync(key, EditLabel, score).ConfigureAwait(true);
                     break;
                 default:
                     return;
@@ -406,16 +406,16 @@ public sealed partial class RedisWorkspaceViewModel
             switch (info.Type)
             {
                 case "hash":
-                    await _connection.DeleteHashFieldAsync(key, row.Label).ConfigureAwait(true);
+                    _ = await _connection.DeleteHashFieldAsync(key, row.Label).ConfigureAwait(true);
                     break;
                 case "list":
-                    await _connection.RemoveListValueAsync(key, row.Value).ConfigureAwait(true);
+                    _ = await _connection.RemoveListValueAsync(key, row.Value).ConfigureAwait(true);
                     break;
                 case "set":
-                    await _connection.RemoveSetMemberAsync(key, row.Label).ConfigureAwait(true);
+                    _ = await _connection.RemoveSetMemberAsync(key, row.Label).ConfigureAwait(true);
                     break;
                 case "zset":
-                    await _connection.RemoveSortedMemberAsync(key, row.Label).ConfigureAwait(true);
+                    _ = await _connection.RemoveSortedMemberAsync(key, row.Label).ConfigureAwait(true);
                     break;
                 default:
                     return;
@@ -439,10 +439,10 @@ public sealed partial class RedisWorkspaceViewModel
                     await _connection.SetHashFieldAsync(key, NewLabel, NewValue).ConfigureAwait(true);
                     break;
                 case "list" when NewValue.Length > 0:
-                    await _connection.PushListAsync(key, NewValue, atHead: false).ConfigureAwait(true);
+                    _ = await _connection.PushListAsync(key, NewValue, atHead: false).ConfigureAwait(true);
                     break;
                 case "set" when NewValue.Length > 0:
-                    await _connection.AddSetMemberAsync(key, NewValue).ConfigureAwait(true);
+                    _ = await _connection.AddSetMemberAsync(key, NewValue).ConfigureAwait(true);
                     break;
                 case "zset" when NewValue.Length > 0:
                     if (!double.TryParse(NewScore, NumberStyles.Float, CultureInfo.InvariantCulture, out double score))
@@ -450,7 +450,7 @@ public sealed partial class RedisWorkspaceViewModel
                         StatusMessage = Loc["Redis_ScoreInvalid"];
                         return;
                     }
-                    await _connection.SetSortedMemberAsync(key, NewValue, score).ConfigureAwait(true);
+                    _ = await _connection.SetSortedMemberAsync(key, NewValue, score).ConfigureAwait(true);
                     break;
                 default:
                     return;
@@ -487,7 +487,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(TtlPreview));
             RaiseUnsavedState();
             ApplyTtlCommand.RaiseCanExecuteChanged();
@@ -534,7 +534,7 @@ public sealed partial class RedisWorkspaceViewModel
         }
         await GuardedAsync("EXPIRE", async () =>
         {
-            await _connection.ExpireAsync(key, ttl).ConfigureAwait(true);
+            _ = await _connection.ExpireAsync(key, ttl).ConfigureAwait(true);
             TtlDraft = string.Empty;
             await ReloadSelectedAsync().ConfigureAwait(true);
         }).ConfigureAwait(true);
@@ -548,7 +548,7 @@ public sealed partial class RedisWorkspaceViewModel
         }
         await GuardedAsync("PERSIST", async () =>
         {
-            await _connection.PersistAsync(key).ConfigureAwait(true);
+            _ = await _connection.PersistAsync(key).ConfigureAwait(true);
             await ReloadSelectedAsync().ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
@@ -561,7 +561,7 @@ public sealed partial class RedisWorkspaceViewModel
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaiseUnsavedState();
             RenameCommand.RaiseCanExecuteChanged();
         }
@@ -600,7 +600,7 @@ public sealed partial class RedisWorkspaceViewModel
             {
                 return;
             }
-            await _connection.RenameAsync(key, target, overwrite: true).ConfigureAwait(true);
+            _ = await _connection.RenameAsync(key, target, overwrite: true).ConfigureAwait(true);
             await AfterKeyRenamedAsync(target).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
@@ -633,7 +633,7 @@ public sealed partial class RedisWorkspaceViewModel
         }
         await GuardedAsync("UNLINK", async () =>
         {
-            await _connection.DeleteAsync([key]).ConfigureAwait(true);
+            _ = await _connection.DeleteAsync([key]).ConfigureAwait(true);
             SelectedRow = null;
             await ScanAsync(restart: true).ConfigureAwait(true);
         }).ConfigureAwait(true);
@@ -693,7 +693,7 @@ public sealed partial class RedisWorkspaceViewModel
     /// <summary>把一段计时格式化成状态条那一格要的形状。</summary>
     private static string Elapsed(long startedTimestamp) =>
         $"{System.Diagnostics.Stopwatch.GetElapsedTime(startedTimestamp).TotalMilliseconds
-            .ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)} ms";
+            .ToString("0.#", CultureInfo.CurrentCulture)} ms";
 
     /// <summary>写完之后重读一次当前键(元信息 + 内容),让界面反映服务端的真实状态。</summary>
     private async Task ReloadSelectedAsync()

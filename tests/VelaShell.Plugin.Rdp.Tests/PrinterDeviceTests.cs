@@ -25,7 +25,7 @@ public sealed class PrinterDeviceTests
     public async Task CreateWriteCloseUsesPrinterResponseLengthsAndCompletesShortWrites()
     {
         var backend = new FakeBackend { WriteLimit = 2 };
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         byte[] create = [.. Enumerable.Repeat((byte)0xFF, 32)];
         Put(create, 28, 0);
         RdpdrIoResult opened = await Request(device, 0, 0, create);
@@ -56,7 +56,7 @@ public sealed class PrinterDeviceTests
     public async Task PathBearingCreateAndUnsupportedIoNeverReachBackend()
     {
         var backend = new FakeBackend();
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         byte[] create = new byte[32];
         Put(create, 28, 2);
         RdpdrIoResult path = await Request(device, 0, 0, create);
@@ -74,7 +74,7 @@ public sealed class PrinterDeviceTests
     public async Task MultipleJobsAreIsolatedAndBounded()
     {
         var backend = new FakeBackend();
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         RdpdrIoResult[] opened = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Request(device, 0, 0, new byte[32])));
         uint[] ids = [.. opened.Select(result => Get(result.Body))];
         Assert.AreEqual(4, ids.Distinct().Count());
@@ -97,7 +97,7 @@ public sealed class PrinterDeviceTests
     public async Task WriteFailureOrZeroProgressAbortsAndReleases(bool throws)
     {
         var backend = new FakeBackend { WriteLimit = throws ? 2 : 0, FailWrite = throws };
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         uint id = await Open(device);
         RdpdrIoResult result = await Request(device, id, 4, Write([1, 2, 3]));
         Assert.AreEqual(0xC0000185u, result.Status);
@@ -112,7 +112,7 @@ public sealed class PrinterDeviceTests
     public async Task EndFailureAbortsInsteadOfAcknowledgingCompletion()
     {
         var backend = new FakeBackend { FailComplete = true };
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         uint id = await Open(device);
         RdpdrIoResult result = await Request(device, id, 2, new byte[32]);
         Assert.AreEqual(0xC0000185u, result.Status);
@@ -124,7 +124,7 @@ public sealed class PrinterDeviceTests
     public async Task MalformedWriteAndJobLimitAbortBeforeAdditionalNativeWrites()
     {
         var backend = new FakeBackend { Capture = false };
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         uint id = await Open(device);
         byte[] block = Write(new byte[PrinterDevice.MaxWriteLength]);
         for (int index = 0; index < PrinterDevice.MaxJobLength / PrinterDevice.MaxWriteLength; index++)
@@ -154,7 +154,7 @@ public sealed class PrinterDeviceTests
     public async Task CancellationAfterStartCleansNewJobWithoutAbortingAnotherFileId()
     {
         var backend = new FakeBackend();
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         uint original = await Open(device);
         using var cancellation = new CancellationTokenSource();
         backend.OnStart = cancellation.Cancel;
@@ -169,7 +169,7 @@ public sealed class PrinterDeviceTests
     public async Task CancelledWriteAbortsAndCleanupContinuesWhenAbortFails()
     {
         var backend = new FakeBackend { FailAbort = true };
-        using var device = Make(backend);
+        using PrinterDevice device = Make(backend);
         uint id = await Open(device);
         _ = await Open(device);
         using var cancellation = new CancellationTokenSource();
@@ -189,14 +189,14 @@ public sealed class PrinterDeviceTests
     {
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var backend = new FakeBackend { BeforeWrite = () => { entered.Set(); release.Wait(TimeSpan.FromSeconds(10)); } };
-        await using var device = Make(backend);
+        var backend = new FakeBackend { BeforeWrite = () => { entered.Set(); _ = release.Wait(TimeSpan.FromSeconds(10)); } };
+        await using PrinterDevice device = Make(backend);
         uint id = await Open(device);
         Task<RdpdrIoResult> writing = Request(device, id, 4, Write([1]));
         Assert.IsTrue(entered.Wait(TimeSpan.FromSeconds(5)));
         try
         {
-            Task reset = Task.Run(device.Reset);
+            var reset = Task.Run(device.Reset);
             await reset.WaitAsync(TimeSpan.FromSeconds(2));
             Task<RdpdrIoResult> reopened = Request(device, 0, 0, new byte[32]);
             Assert.IsFalse(reopened.IsCompleted);
@@ -217,8 +217,8 @@ public sealed class PrinterDeviceTests
     {
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var backend = new FakeBackend { BeforeWrite = () => { entered.Set(); release.Wait(TimeSpan.FromSeconds(10)); } };
-        await using var device = Make(backend);
+        var backend = new FakeBackend { BeforeWrite = () => { entered.Set(); _ = release.Wait(TimeSpan.FromSeconds(10)); } };
+        await using PrinterDevice device = Make(backend);
         uint id = await Open(device);
         var pending = new List<Task<RdpdrIoResult>> { Request(device, id, 4, Write([0])) };
         try
@@ -236,7 +236,7 @@ public sealed class PrinterDeviceTests
     public async Task ChannelAnnouncesPrinterDosNameAndLegacyCapability()
     {
         var sent = new List<byte[]>();
-        await using var device = Make(new FakeBackend());
+        await using PrinterDevice device = Make(new FakeBackend());
         var channel = new RdpdrChannel(data => { sent.Add(data); return Task.CompletedTask; }, [], additionalDevices: [device]);
         byte[] announce = new byte[12];
         BinaryPrimitives.WriteUInt16LittleEndian(announce, 0x4472);
@@ -261,11 +261,11 @@ public sealed class PrinterDeviceTests
     [TestMethod]
     public void MappingValidationRejectsAmbiguousOrMalformedAnnouncements()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new PrinterMapping("x\0y", "driver"));
-        Assert.ThrowsExactly<ArgumentException>(() => new PrinterMapping("queue", ""));
-        Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([new("queue", "driver"), new("QUEUE", "driver")]));
-        Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([new("a", "d", true), new("b", "d", true)]));
-        Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([.. Enumerable.Range(0, 17).Select(i => new PrinterMapping($"q{i}", "d"))]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new PrinterMapping("x\0y", "driver"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new PrinterMapping("queue", ""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([new("queue", "driver"), new("QUEUE", "driver")]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([new("a", "d", true), new("b", "d", true)]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PrinterMapping.Validate([.. Enumerable.Range(0, 17).Select(i => new PrinterMapping($"q{i}", "d"))]));
     }
 
     [TestMethod]

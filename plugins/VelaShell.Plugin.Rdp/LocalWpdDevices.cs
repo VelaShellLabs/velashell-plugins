@@ -18,17 +18,39 @@ internal static class LocalWpdDevices
         var selected = new HashSet<string>(StringComparer.Ordinal);
         foreach ((string key, string value) in request.Settings)
         {
-            if (!key.StartsWith(KeyPrefix, StringComparison.Ordinal)) continue;
+            if (!key.StartsWith(KeyPrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             if (!bool.TryParse(value, out bool enabled))
+            {
                 throw new ProtocolConnectionException(loc.Format("Invalid", loc["WpdDevices"]));
-            if (enabled) selected.Add(key);
+            }
+
+            if (enabled)
+            {
+                _ = selected.Add(key);
+            }
         }
-        if (selected.Count == 0) return [];
-        if (selected.Count > 32) throw new ProtocolConnectionException(loc.Format("Invalid", loc["WpdDevices"]));
+        if (selected.Count == 0)
+        {
+            return [];
+        }
+
+        if (selected.Count > 32)
+        {
+            throw new ProtocolConnectionException(loc.Format("Invalid", loc["WpdDevices"]));
+        }
+
         try
         {
             string[] ids = [.. enumerate().Where(device => selected.Contains(Key(device))).Select(device => device.Id).Distinct(StringComparer.OrdinalIgnoreCase)];
-            if (ids.Length != selected.Count) throw new IOException("A selected WPD interface is unavailable.");
+            if (ids.Length != selected.Count)
+            {
+                throw new IOException("A selected WPD interface is unavailable.");
+            }
+
             return ids;
         }
         catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or ArgumentException)

@@ -41,7 +41,11 @@ public sealed class CameraChannelTests
             byte[] added = Sent.Last();
             Assert.AreEqual((byte)5, added[3]);
             int offset = 4;
-            while (added[offset] != 0 || added[offset + 1] != 0) offset += 2;
+            while (added[offset] != 0 || added[offset + 1] != 0)
+            {
+                offset += 2;
+            }
+
             offset += 2;
             string name = Encoding.ASCII.GetString(added.AsSpan(offset, added.Length - offset - 1));
             await Dvc.ProcessAsync(Create(2, name));
@@ -54,7 +58,11 @@ public sealed class CameraChannelTests
     [TestMethod]
     public void AsyncCallbackExposesNativeComInterfaceWithoutOpeningCamera()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var callback = new WindowsCameraBackend.ReaderCallback();
         nint unknown = System.Runtime.InteropServices.Marshal.GetIUnknownForObject(callback);
         try
@@ -62,9 +70,12 @@ public sealed class CameraChannelTests
             Guid iid = typeof(IMfCameraReaderCallback).GUID;
             int result = System.Runtime.InteropServices.Marshal.QueryInterface(unknown, in iid, out nint native);
             Assert.AreEqual(0, result);
-            if (native != 0) System.Runtime.InteropServices.Marshal.Release(native);
+            if (native != 0)
+            {
+                _ = System.Runtime.InteropServices.Marshal.Release(native);
+            }
         }
-        finally { System.Runtime.InteropServices.Marshal.Release(unknown); }
+        finally { _ = System.Runtime.InteropServices.Marshal.Release(unknown); }
     }
 
     [TestMethod]
@@ -98,7 +109,11 @@ public sealed class CameraChannelTests
         Assert.AreSequenceEqual(new byte[] { 1, 19, 0, 4, 0, 0, 0 }, h.LastMessage);
         h.Backend.Next.SetResult([0xff, 0xd8, 0xff, 0xd9]);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!h.Sent.Any(x => x.Length > 3 && x[3] == 18)) await Task.Delay(10, timeout.Token);
+        while (!h.Sent.Any(x => x.Length > 3 && x[3] == 18))
+        {
+            await Task.Delay(10, timeout.Token);
+        }
+
         Assert.AreSequenceEqual(new byte[] { 1, 18, 0, 0xff, 0xd8, 0xff, 0xd9 }, h.LastMessage);
         h.Backend.Next = new(TaskCreationOptions.RunContinuationsAsynchronously);
         await h.Request(1, 17, 0); await h.Request(1, 16);

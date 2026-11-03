@@ -50,11 +50,22 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
     {
         foreach (Buffer buffer in _buffers)
         {
-            if (buffer.Offset == buffer.Data.Length) continue;
+            if (buffer.Offset == buffer.Data.Length)
+            {
+                continue;
+            }
+
             nint written;
             fixed (byte* samples = buffer.Data)
+            {
                 written = _api.Write(_pcm, (nint)(samples + buffer.Offset), (nuint)((buffer.Data.Length - buffer.Offset) / _blockAlign));
-            if (written is Again or Interrupted) return;
+            }
+
+            if (written is Again or Interrupted)
+            {
+                return;
+            }
+
             if (written == Underrun)
             {
                 // Accepted frames have played; retry only the unwritten suffix, across all buffers.
@@ -64,23 +75,37 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
             }
             Check((int)written, "write PCM samples");
             buffer.Offset += checked((int)written * _blockAlign);
-            _writtenFrames += (long)written;
+            _writtenFrames += written;
             if (written > 0 && _api.State(_pcm) == 2)
+            {
                 Check(_api.Start(_pcm), "start output");
-            if (buffer.Offset < buffer.Data.Length) return;
+            }
+
+            if (buffer.Offset < buffer.Data.Length)
+            {
+                return;
+            }
         }
     }
 
     private bool UpdatePosition()
     {
-        if (_writtenFrames == _playedFrames) return true;
+        if (_writtenFrames == _playedFrames)
+        {
+            return true;
+        }
+
         int result = _api.Delay(_pcm, out nint remainingFrames);
         if (result == Underrun && _api.State(_pcm) == 4)
         {
             _playedFrames = _writtenFrames;
             return true;
         }
-        if (result is Again or Interrupted) return false;
+        if (result is Again or Interrupted)
+        {
+            return false;
+        }
+
         Check(result, "query playback delay");
         _playedFrames = Math.Max(_playedFrames, _writtenFrames - Math.Max(0, (long)remainingFrames));
         return true;
@@ -88,21 +113,29 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
 
     public long PendingFrames
     {
-        get { UpdatePosition(); return Math.Max(0, _submittedFrames - _playedFrames); }
+        get { _ = UpdatePosition(); return Math.Max(0, _submittedFrames - _playedFrames); }
     }
 
     public bool IsComplete()
     {
         Pump();
         if (!_buffers.TryPeek(out Buffer? buffer) || buffer.Offset < buffer.Data.Length ||
-            !UpdatePosition() || _playedFrames < buffer.EndFrame) return false;
-        _buffers.Dequeue();
+            !UpdatePosition() || _playedFrames < buffer.EndFrame)
+        {
+            return false;
+        }
+
+        _ = _buffers.Dequeue();
         return true;
     }
 
     public void Reset()
     {
-        if (_pcm != 0) Check(_api.Drop(_pcm), "stop output");
+        if (_pcm != 0)
+        {
+            Check(_api.Drop(_pcm), "stop output");
+        }
+
         ReleaseBuffer();
     }
 
@@ -119,7 +152,10 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
             Check(dropped, "stop output");
             Check(closed, "close output");
         }
-        else ReleaseBuffer();
+        else
+        {
+            ReleaseBuffer();
+        }
     }
 
     private void ReleaseBuffer()
@@ -131,7 +167,9 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
     private void Check(int result, string operation)
     {
         if (result < 0)
+        {
             throw new IOException($"Linux ALSA could not {operation}: {_api.Error(result)} (error {result}). Check the system default playback device and its PulseAudio/PipeWire ALSA configuration.");
+        }
     }
 
     private sealed class SystemAlsaApi : IAlsaApi

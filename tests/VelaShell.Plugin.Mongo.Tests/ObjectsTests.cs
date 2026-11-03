@@ -141,7 +141,7 @@ public sealed class ObjectsTests
         IReadOnlyCollection<string> orders = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "orders");
         IReadOnlyCollection<string> system = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "system.profile");
 
-        Assert.AreSequenceEqual(new[] { "find", "insert", "listIndexes" }, [.. orders], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { "find", "insert", "listIndexes" }, [.. orders], SequenceOrder.InAnyOrder);
         Assert.IsEmpty(system);
     }
 

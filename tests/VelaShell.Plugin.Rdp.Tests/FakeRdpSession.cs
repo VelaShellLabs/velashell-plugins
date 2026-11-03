@@ -31,7 +31,7 @@ internal sealed class FakeRdpSession : IRdpSession, IRdpAudioSource, IRdpNetwork
         if (_latest is not { } frame) { return new(width, height, default, false); }
         if (frame.Width != width || frame.Height != height) { return new(frame.Width, frame.Height, default, true); }
         if (!_pending && !full) { return new(width, height, default, false); }
-        for (int row = 0; row < height; row++) { frame.Pixels.AsSpan(row * width * 4, width * 4).CopyTo(destination.Slice(row * stride)); }
+        for (int row = 0; row < height; row++) { frame.Pixels.AsSpan(row * width * 4, width * 4).CopyTo(destination[(row * stride)..]); }
         _pending = false;
         return new(width, height, new(0, 0, width, height), false);
     }

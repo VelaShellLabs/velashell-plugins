@@ -24,7 +24,7 @@ internal static class LocalPrinters
             {
                 throw new ProtocolConnectionException(loc.Format("Invalid", loc["Printers"]));
             }
-            if (enabled) { selected.Add(key); }
+            if (enabled) { _ = selected.Add(key); }
         }
         if (selected.Count == 0) { return []; }
         if (selected.Count > 16) { throw new ProtocolConnectionException(loc.Format("Invalid", loc["Printers"])); }

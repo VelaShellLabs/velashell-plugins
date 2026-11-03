@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using VelaShell.PluginSdk.Testing;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Mcs;
@@ -225,8 +226,16 @@ public sealed class RdpManagedInteropTests
         byte[] pin = await LearnPinAsync(target);
         await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(new RdpClientOptions
         {
-            Host = target.Host, Port = target.Port, Username = User, Password = Pass, Width = 1024, Height = 768,
-            ColorDepth = 32, CertificatePin = pin, DynamicResolution = false, KeepAliveInterval = TimeSpan.FromSeconds(1),
+            Host = target.Host,
+            Port = target.Port,
+            Username = User,
+            Password = Pass,
+            Width = 1024,
+            Height = 768,
+            ColorDepth = 32,
+            CertificatePin = pin,
+            DynamicResolution = false,
+            KeepAliveInterval = TimeSpan.FromSeconds(1),
         });
         byte[] surface = new byte[1024 * 768 * 4];
         for (int i = 0; i < 80 && CountDistinct(surface) <= 1; i++)
@@ -287,8 +296,8 @@ public sealed class RdpManagedInteropTests
         Assert.IsNotNull(reconnecting, "the loss did not start an automatic reconnect");
         await reconnecting.WaitAsync(TimeSpan.FromSeconds(60));
 
-        foreach (var entry in context.CollectingLog.Entries) { Console.WriteLine($"{entry.Level}: {entry.Message}"); }
-        Assert.AreEqual(VelaShell.PluginSdk.Protocols.ProtocolSessionState.Connected, document.Status.State);
+        foreach (CapturedLogEntry entry in context.CollectingLog.Entries) { Console.WriteLine($"{entry.Level}: {entry.Message}"); }
+        Assert.AreEqual(PluginSdk.Protocols.ProtocolSessionState.Connected, document.Status.State);
         Assert.AreEqual(2, relay.Accepted);
         Assert.Contains(e => e.Message.Contains("connection lost") && e.Message.Contains("reconnecting automatically"), context.CollectingLog.Entries);
         Assert.Contains(e => e.Message.Contains("reconnected automatically (attempt 1)"), context.CollectingLog.Entries);
@@ -370,8 +379,16 @@ public sealed class RdpManagedInteropTests
         {
             await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(new RdpClientOptions
             {
-                Host = target.Host, Port = target.Port, Username = User, Password = Pass, Width = 1024, Height = 768,
-                ColorDepth = 32, CertificatePin = pin, DynamicResolution = false, DrawingOrders = orders,
+                Host = target.Host,
+                Port = target.Port,
+                Username = User,
+                Password = Pass,
+                Width = 1024,
+                Height = 768,
+                ColorDepth = 32,
+                CertificatePin = pin,
+                DynamicResolution = false,
+                DrawingOrders = orders,
             });
             byte[] surface = new byte[1024 * 768 * 4];
             DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
@@ -426,8 +443,16 @@ public sealed class RdpManagedInteropTests
         {
             await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(new RdpClientOptions
             {
-                Host = target.Host, Port = target.Port, Username = User, Password = Pass, Width = 1024, Height = 768,
-                ColorDepth = 32, CertificatePin = pin, DynamicResolution = false, DrawingOrders = orders,
+                Host = target.Host,
+                Port = target.Port,
+                Username = User,
+                Password = Pass,
+                Width = 1024,
+                Height = 768,
+                ColorDepth = 32,
+                CertificatePin = pin,
+                DynamicResolution = false,
+                DrawingOrders = orders,
             });
             byte[] surface = new byte[1024 * 768 * 4];
             await Task.Delay(2000);
@@ -679,7 +704,7 @@ public sealed class RdpManagedInteropTests
         psi.ArgumentList.Add("-d"); psi.ArgumentList.Add("Debian"); psi.ArgumentList.Add("-u"); psi.ArgumentList.Add("root");
         psi.ArgumentList.Add("--"); psi.ArgumentList.Add("bash"); psi.ArgumentList.Add("-lc");
         psi.ArgumentList.Add($"su - {User} -c 'export DISPLAY={display}; export XAUTHORITY=/home/{User}/.Xauthority; printf %s \"{text}\" | xclip -selection clipboard; sleep 0.4'");
-        using Process p = System.Diagnostics.Process.Start(psi)!;
+        using Process p = Process.Start(psi)!;
         _ = p.WaitForExit(8000);
     }
 
@@ -887,7 +912,7 @@ public sealed class RdpManagedInteropTests
         psi.ArgumentList.Add("-d"); psi.ArgumentList.Add("Debian"); psi.ArgumentList.Add("-u"); psi.ArgumentList.Add("root");
         psi.ArgumentList.Add("--"); psi.ArgumentList.Add("bash"); psi.ArgumentList.Add("-lc");
         psi.ArgumentList.Add($"su - {User} -c 'export DISPLAY={display}; export XAUTHORITY=/home/{User}/.Xauthority; {command}'");
-        using Process p = System.Diagnostics.Process.Start(psi)!;
+        using Process p = Process.Start(psi)!;
         string output = p.StandardOutput.ReadToEnd();
         _ = p.WaitForExit(8000);
         return output;

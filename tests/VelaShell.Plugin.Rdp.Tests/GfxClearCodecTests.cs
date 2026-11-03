@@ -19,9 +19,9 @@ public sealed class GfxClearCodecTests
         byte[] replay = new byte[16];
         codec.Decode([3, 1, 12, 0], 2, 2, replay, 8);
         AssertBytes(pixels.AsSpan(16, 8), replay.AsSpan(8, 8));
-        Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode([3, 1, 12, 0], 2, 2, replay, 8));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode([3, 1, 12, 0], 2, 2, replay, 8));
         codec.Reset();
-        Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode([3, 0, 12, 0], 2, 2, replay, 8));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode([3, 0, 12, 0], 2, 2, replay, 8));
     }
 
     [TestMethod]
@@ -56,7 +56,7 @@ public sealed class GfxClearCodecTests
         codec.Decode(Packet(0, 0, [], [], Subcodec(0, 0, 4, 1, 2, rlex)), 4, 1, pixels, 16);
         AssertBytes(new byte[] { 1, 2, 3, 255, 1, 2, 3, 255, 1, 2, 3, 255, 9, 8, 7, 255 }, pixels);
         rlex[^1] = 3;
-        Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode(Packet(0, 1, [], [], Subcodec(0, 0, 4, 1, 2, rlex)), 4, 1, pixels, 16));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode(Packet(0, 1, [], [], Subcodec(0, 0, 4, 1, 2, rlex)), 4, 1, pixels, 16));
     }
 
     [TestMethod]
@@ -85,9 +85,9 @@ public sealed class GfxClearCodecTests
         for (int i = 0; i < packet.Length; i++)
         {
             byte[] truncated = packet[..i];
-            Assert.ThrowsExactly<RdpProtocolException>(() => new GfxClearCodec().Decode(truncated, 4, 1, pixels, 16));
+            _ = Assert.ThrowsExactly<RdpProtocolException>(() => new GfxClearCodec().Decode(truncated, 4, 1, pixels, 16));
         }
-        Assert.ThrowsExactly<RdpProtocolException>(() => new GfxClearCodec().Decode(Packet(0, 0, [1, 2, 3, 0], [], []), 4, 1, pixels, 16));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => new GfxClearCodec().Decode(Packet(0, 0, [1, 2, 3, 0], [], []), 4, 1, pixels, 16));
     }
 
     [TestMethod]
@@ -103,13 +103,17 @@ public sealed class GfxClearCodecTests
         AssertBytes(new byte[] { 5, 1, 10, 77 }, pixels.AsSpan(0, 4));
         dispatcher.Decode(Request(0, Enumerable.Repeat((byte)42, 16).ToArray()));
         AssertBytes(new byte[] { 42, 42, 42, 77 }, pixels.AsSpan(0, 4));
-        Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(12, [0x4C, 0x41, 1, 0, 0, 5])));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(12, [0x4C, 0x41, 1, 0, 0, 5])));
     }
 
     private static byte[] Packet(byte flags, byte sequence, byte[] residual, byte[] bands, byte[] subcodecs, ushort glyph = 0) => Bytes(w =>
     {
         w.Write(flags); w.Write(sequence);
-        if ((flags & 1) != 0) w.Write(glyph);
+        if ((flags & 1) != 0)
+        {
+            w.Write(glyph);
+        }
+
         w.Write(residual.Length); w.Write(bands.Length); w.Write(subcodecs.Length);
         w.Write(residual); w.Write(bands); w.Write(subcodecs);
     });

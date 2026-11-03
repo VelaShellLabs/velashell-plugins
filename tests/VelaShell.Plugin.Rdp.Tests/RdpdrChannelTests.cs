@@ -97,7 +97,7 @@ public sealed class RdpdrChannelTests
         await channel.ProcessAsync(Pdu(ClientIdConfirm));
         Assert.DoesNotContain(IsDeviceListAnnounce, sent, "A real Windows host ignores a drive announced before the user logs on.");
         await channel.ProcessAsync(Pdu(UserLoggedOn));
-        Assert.ContainsSingle(IsDeviceListAnnounce, sent);
+        _ = Assert.ContainsSingle(IsDeviceListAnnounce, sent);
     }
 
     [TestMethod]
@@ -106,7 +106,7 @@ public sealed class RdpdrChannelTests
         (RdpdrChannel channel, List<byte[]> sent) = Make();
         await channel.ProcessAsync(ServerAnnouncePdu(0x0005));   // never sends PAKID_CORE_USER_LOGGEDON
         await channel.ProcessAsync(Pdu(ClientIdConfirm));
-        Assert.ContainsSingle(IsDeviceListAnnounce, sent);
+        _ = Assert.ContainsSingle(IsDeviceListAnnounce, sent);
     }
 
     [TestMethod]
@@ -207,6 +207,6 @@ public sealed class RdpdrChannelTests
         await channel.ProcessAsync(Pdu(ClientIdConfirm));
         await channel.ProcessAsync(Pdu(UserLoggedOn));
         await channel.ProcessAsync(Pdu(UserLoggedOn));
-        Assert.ContainsSingle(IsDeviceListAnnounce, sent);
+        _ = Assert.ContainsSingle(IsDeviceListAnnounce, sent);
     }
 }

@@ -173,7 +173,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(ServerSummary));
         }
     } = -1;
@@ -196,7 +196,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         set
         {
             RedisDatabaseOption? previous = field;
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             if (value is null || !SupportsDatabases || value.Index == _connection.Database)
             {
                 return;
@@ -225,7 +225,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(MatchEcho));
         }
     } = string.Empty;
@@ -236,7 +236,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(IsPrefixMode));
             RaisePropertyChanged(nameof(IsContainsMode));
             RaisePropertyChanged(nameof(IsGlobMode));
@@ -259,7 +259,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(MatchEcho));
         }
     } = string.Empty;
@@ -282,7 +282,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
                 .Append(_connection.Settings.ScanCount.ToString(CultureInfo.InvariantCulture));
             if (!string.IsNullOrEmpty(TypeFilter))
             {
-                builder.Append(" TYPE ").Append(TypeFilter);
+                _ = builder.Append(" TYPE ").Append(TypeFilter);
             }
             return builder.ToString();
         }
@@ -311,7 +311,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             ContinueScanCommand.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(ScanStatus));
         }
@@ -323,7 +323,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             ContinueScanCommand.RaiseCanExecuteChanged();
         }
     }
@@ -334,7 +334,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(ScanStatus));
             RaisePropertyChanged(nameof(IsEmpty));
         }
@@ -394,7 +394,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
                 RaisePropertyChanged();
                 return;
             }
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             if (field?.Key is { } key)
             {
                 _ = LoadKeyAsync(key);
@@ -415,7 +415,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasSelection));
             RaisePropertyChanged(nameof(SelectedKeyText));
             RaisePropertyChanged(nameof(SelectedTypeText));
@@ -531,7 +531,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(IsTextFormat));
             RaisePropertyChanged(nameof(IsEscapedFormat));
             RaisePropertyChanged(nameof(IsJsonFormat));
@@ -567,7 +567,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(ValueFormatNotice));
             RaisePropertyChanged(nameof(HasValueFormatNotice));
         }
@@ -668,7 +668,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             LoadMoreCommand.RaiseCanExecuteChanged();
         }
     }
@@ -679,7 +679,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             LoadMoreCommand.RaiseCanExecuteChanged();
         }
     }
@@ -690,7 +690,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             // 状态条中间那格是它的派生:有错显示错,没错明说"没有" —— 一格空白读不出
             // "系统正常"还是"这一格坏了"。
             RaisePropertyChanged(nameof(ErrorSummary));
@@ -711,7 +711,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         get;
         private set
         {
-            SetProperty(ref field, value);
+            _ = SetProperty(ref field, value);
             RaisePropertyChanged(nameof(HasDeploymentWarning));
         }
     } = string.Empty;
@@ -1006,7 +1006,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
             {
                 return null;
             }
-            _expandedGroups.Add(blocking.Id);
+            _ = _expandedGroups.Add(blocking.Id);
             RebuildRows();
         }
         return null;
@@ -1022,7 +1022,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         }
         if (!_expandedGroups.Remove(row.Id))
         {
-            _expandedGroups.Add(row.Id);
+            _ = _expandedGroups.Add(row.Id);
         }
         RebuildRows();
     }
@@ -1035,7 +1035,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         var path = new System.Text.StringBuilder();
         foreach (string segment in segments)
         {
-            path.Append(segment).Append(delimiter);
+            _ = path.Append(segment).Append(delimiter);
             Breadcrumb.Add(new(segment, path.ToString()));
         }
         RaisePropertyChanged(nameof(HasBreadcrumb));

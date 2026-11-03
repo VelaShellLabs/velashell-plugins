@@ -10,8 +10,8 @@ public sealed class RdpUdpTests
     {
         var left = new RdpUdpState(lossy, a);
         var right = new RdpUdpState(lossy, b);
-        left.Receive(right.Syn() with { Ack = a, Flags = right.Syn().Flags | RdpUdpFlags.Ack }, 0);
-        right.Receive(left.Syn() with { Ack = b, Flags = left.Syn().Flags | RdpUdpFlags.Ack }, 0);
+        _ = left.Receive(right.Syn() with { Ack = a, Flags = right.Syn().Flags | RdpUdpFlags.Ack }, 0);
+        _ = right.Receive(left.Syn() with { Ack = b, Flags = left.Syn().Flags | RdpUdpFlags.Ack }, 0);
         return (left, right);
     }
     private static void Deliver(RdpUdpState sender, RdpUdpState receiver, IEnumerable<byte[]> packets, long now)
@@ -19,26 +19,26 @@ public sealed class RdpUdpTests
         foreach (byte[] packet in packets)
         {
             foreach (byte[] ack in receiver.Receive(RdpUdpPacket.Decode(packet), now))
-            { sender.Receive(RdpUdpPacket.Decode(ack), now + 1); }
+            { _ = sender.Receive(RdpUdpPacket.Decode(ack), now + 1); }
         }
     }
 
     [TestMethod]
     public void DatagramGoldenBytesAndMalformedFlags()
     {
-        byte[] data = [0,0,0,5, 0,16, 0,12, 0,1,1,0, 0,0,0,9, 0,0,0,8, 0xAB];
-        RdpUdpPacket packet = RdpUdpPacket.Decode(data);
+        byte[] data = [0, 0, 0, 5, 0, 16, 0, 12, 0, 1, 1, 0, 0, 0, 0, 9, 0, 0, 0, 8, 0xAB];
+        var packet = RdpUdpPacket.Decode(data);
         Assert.AreEqual(8u, packet.SourceSequence);
         Assert.AreSequenceEqual(data, packet.Encode());
-        Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0,0,0,0,0,0,0,16]));
-        Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0,0,0,0,0,0,0,4,0,1,0x41,0]));
-        Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0,0,0,0,0,0,0,4,0,1,0,0]));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 16]));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0x41, 0]));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0]));
     }
 
     [TestMethod]
     public void ReliableReordersRetransmitsAndSuppressesDuplicatesAcrossSequenceWrap()
     {
-        var (a, b) = Pair(a: uint.MaxValue - 1, b: uint.MaxValue - 1);
+        (RdpUdpState? a, RdpUdpState? b) = Pair(a: uint.MaxValue - 1, b: uint.MaxValue - 1);
         byte[] first = a.Send([1], 1)!.Single();
         byte[] second = a.Send([2], 2)!.Single();
         Deliver(a, b, [second], 20);
@@ -52,16 +52,16 @@ public sealed class RdpUdpTests
         Deliver(a, b, [first, second], 630);
         Assert.IsNull(b.Read());
         Assert.AreEqual(0, a.Outstanding);
-        var repeat = b.Syn() with { Ack = uint.MaxValue - 1, Flags = RdpUdpFlags.Syn | RdpUdpFlags.Ack };
-        a.Receive(repeat, 640);
+        RdpUdpPacket repeat = b.Syn() with { Ack = uint.MaxValue - 1, Flags = RdpUdpFlags.Syn | RdpUdpFlags.Ack };
+        _ = a.Receive(repeat, 640);
         Assert.IsTrue(a.Established);
-        Assert.ThrowsExactly<RdpProtocolException>(() => a.Receive(repeat with { InitialSequence = 8 }, 641));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(() => a.Receive(repeat with { InitialSequence = 8 }, 641));
     }
 
     [TestMethod]
     public void LossyFecRecoversMissingPacketBeforeOrderedDelivery()
     {
-        var (a, b) = Pair(lossy: true, a: 253);
+        (RdpUdpState? a, RdpUdpState? b) = Pair(lossy: true, a: 253);
         b.RequireCompleteDelivery = true;
         List<byte[]> packets = [];
         for (byte i = 1; i <= 4; i++) { packets.AddRange(a.Send([i, 9], i)!); }
@@ -77,11 +77,11 @@ public sealed class RdpUdpTests
     [TestMethod]
     public void LossySkipsExpiredGapAndDiscardsLatePacket()
     {
-        var (a, b) = Pair(lossy: true);
+        (RdpUdpState? a, RdpUdpState? b) = Pair(lossy: true);
         byte[] first = a.Send([1], 0)!.Single();
         byte[] second = a.Send([2], 1)!.Single();
         Deliver(a, b, [second], 10);
-        b.Tick(211);
+        _ = b.Tick(211);
         Assert.AreSequenceEqual(new byte[] { 2 }, b.Read()!);
         Deliver(a, b, [first], 212);
         Assert.IsNull(b.Read());
@@ -91,18 +91,18 @@ public sealed class RdpUdpTests
     [TestMethod]
     public void ApplicationGapCannotSpliceLaterDvcFragmentsIntoIncompleteMessages()
     {
-        var (a, b) = Pair(lossy: true);
+        (RdpUdpState? a, RdpUdpState? b) = Pair(lossy: true);
         b.RequireCompleteDelivery = true;
-        a.Send([0x20, 1, 2, 7], 0);
+        _ = a.Send([0x20, 1, 2, 7], 0);
         Deliver(a, b, a.Send([0x30, 1, 8], 1)!, 10);
-        Assert.ThrowsExactly<IOException>(() => b.Tick(211));
+        _ = Assert.ThrowsExactly<IOException>(() => b.Tick(211));
         Assert.IsNull(b.Read(), "Continuation after a lost DATA_FIRST must never reach the channel parser.");
     }
 
     [TestMethod]
     public void ReceiveWindowBoundsQueuesAndReopensAfterDrain()
     {
-        var (a, b) = Pair();
+        (RdpUdpState? a, RdpUdpState? b) = Pair();
         for (int i = 0; i < RdpUdpState.Capacity; i++)
         {
             List<byte[]>? packets = a.Send([(byte)i], i * 5);
@@ -111,7 +111,7 @@ public sealed class RdpUdpTests
         }
         Assert.IsNull(a.Send([9], 1300));
         for (int i = 0; i < RdpUdpState.Capacity; i++) { Assert.AreSequenceEqual(new byte[] { (byte)i }, b.Read()!); }
-        foreach (byte[] ack in b.Tick(3000)) { a.Receive(RdpUdpPacket.Decode(ack), 3001); }
+        foreach (byte[] ack in b.Tick(3000)) { _ = a.Receive(RdpUdpPacket.Decode(ack), 3001); }
         Assert.IsNotNull(a.Send([9], 3002));
     }
 
@@ -129,17 +129,17 @@ public sealed class RdpUdpTests
         var recovered = fec.Recover(11, 256).ToDictionary(p => p.Sequence, p => p.Payload);
         Assert.AreSequenceEqual(data[1], recovered[11]);
         Assert.AreSequenceEqual(data[2], recovered[12]);
-        Assert.ThrowsExactly<ArgumentException>(() => RdpUdpFec.Encode(10, data, 12));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => RdpUdpFec.Encode(10, data, 12));
     }
 
     [TestMethod]
     public void ReliableRetryLimitAndPeerSilenceFailDeterministically()
     {
-        var (a, _) = Pair();
-        a.Send([1], 0);
-        for (int i = 1; i <= 4; i++) { a.Tick(i * 500); }
-        Assert.ThrowsExactly<IOException>(() => a.Tick(2500));
-        var (b, _) = Pair();
-        Assert.ThrowsExactly<IOException>(() => b.Tick(65000));
+        (RdpUdpState? a, _) = Pair();
+        _ = a.Send([1], 0);
+        for (int i = 1; i <= 4; i++) { _ = a.Tick(i * 500); }
+        _ = Assert.ThrowsExactly<IOException>(() => a.Tick(2500));
+        (RdpUdpState? b, _) = Pair();
+        _ = Assert.ThrowsExactly<IOException>(() => b.Tick(65000));
     }
 }

@@ -145,7 +145,7 @@ public sealed class CollectionTests
         after["invoice"] = new BsonDocument("title", "上海云帆");
 
         List<(string Path, BsonValue? Value)> diff = DocumentDiff.Compute(before, after);
-        Assert.AreSequenceEqual(new[] { "customer.name", "items", "status", "invoice" }, [.. diff.Select(static d => d.Path)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { "customer.name", "items", "status", "invoice" }, [.. diff.Select(static d => d.Path)], SequenceOrder.InAnyOrder);
         Assert.IsNull(diff.Single(static d => d.Path == "status").Value, "a removed field becomes $unset");
     }
 

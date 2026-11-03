@@ -103,7 +103,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
-            var settings = await Task.Run(() => RdpSettings.From(request, Loc), linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
+            RdpSettings settings = await Task.Run(() => RdpSettings.From(request, Loc), linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
             IRdpSession session = await _factory(request, settings, Loc, linked.Token).ConfigureAwait(false);
             RdpWorkspaceDocument? document = null;
             lock (_gate)

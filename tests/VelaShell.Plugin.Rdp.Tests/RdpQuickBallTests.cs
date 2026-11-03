@@ -22,7 +22,7 @@ public sealed class RdpQuickBallTests
     public void FanOpensInwardsWithEveryActionInsideTheViewAndNothingOverlapping(int width, int height) => Run(async () =>
     {
         using var context = new TestPluginContext();
-        await using var view = Open(new FakeRdpSession(), context, out Window window, width, height);
+        await using RdpWorkspaceView view = Open(new FakeRdpSession(), context, out Window window, width, height);
         RdpQuickBall quick = view.QuickBall;
         foreach (bool right in new[] { true, false })
         {
@@ -45,11 +45,11 @@ public sealed class RdpQuickBallTests
                 shapes.Add((id, Circle(c, s * Item)));
                 shapes.Add((id, new Rect(c.X - s * (Box - 10) / 2, c.Y + s * (Item / 2 + 4), s * (Box - 10), s * 14)));    // label pill
             }
-            foreach (var a in shapes)
+            foreach ((string Id, Rect Shape) in shapes)
             {
-                foreach (var b in shapes.Where(b => b.Id != a.Id))
+                foreach ((string Id, Rect Shape) b in shapes.Where(b => b.Id != Id))
                 {
-                    Assert.IsFalse(a.Shape.Intersects(b.Shape), $"{a.Id} {a.Shape} overlaps {b.Id} {b.Shape} ({width}×{height}, right={right})");
+                    Assert.IsFalse(Shape.Intersects(b.Shape), $"{Id} {Shape} overlaps {b.Id} {b.Shape} ({width}×{height}, right={right})");
                 }
             }
             quick.Collapse();
@@ -71,7 +71,7 @@ public sealed class RdpQuickBallTests
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
-        await using var view = Open(session, context, out Window window);
+        await using RdpWorkspaceView view = Open(session, context, out Window window);
         view.QuickBall.Expand();
         Click(view, id);
         await WaitFor(() => session.Input.Count == expected.Split(' ').Length);
@@ -85,7 +85,7 @@ public sealed class RdpQuickBallTests
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
-        await using var view = Open(session, context, out Window window);
+        await using RdpWorkspaceView view = Open(session, context, out Window window);
         RdpQuickBall quick = view.QuickBall;
 
         // A short single line (a password) goes straight through.
@@ -127,7 +127,7 @@ public sealed class RdpQuickBallTests
         Assert.AreEqual("'" + new string('b', 150) + "'", session.Input[0]);
 
         // Over the limit or empty: refused with a status-bar notice, nothing typed.
-        foreach ((string? text, string notice) in new[] { (new string('c', RdpWorkspaceView.TypeLimit + 1), "too long"), ((string?)null, "no text") })
+        foreach ((string? text, string notice) in new[] { (new string('c', RdpWorkspaceView.TypeLimit + 1), "too long"), (null, "no text") })
         {
             session.Input.Clear();
             context.FakeClipboard.Text = text;
@@ -146,8 +146,8 @@ public sealed class RdpQuickBallTests
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
-        await using var view = Open(session, context, out Window window);
-        view.Desktop.Focus();
+        await using RdpWorkspaceView view = Open(session, context, out Window window);
+        _ = view.Desktop.Focus();
         view.QuickBall.Expand();
         PressEscape(view.Desktop);
         Assert.IsFalse(view.QuickBall.IsExpanded);
@@ -165,7 +165,7 @@ public sealed class RdpQuickBallTests
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
-        await using var view = Open(session, context, out Window window);
+        await using RdpWorkspaceView view = Open(session, context, out Window window);
         RdpQuickBall quick = view.QuickBall;
         Point start = quick.BallCenter;
         Assert.AreEqual(1000 - RdpQuickBall.EdgeGap - RdpQuickBall.BallSize / 2, start.X);
@@ -199,7 +199,7 @@ public sealed class RdpQuickBallTests
     public void BallRingsSitAboveTheButtonFollowTheAccentAndAnimateBetweenStates() => Run(async () =>
     {
         using var context = new TestPluginContext();
-        await using var view = Open(new FakeRdpSession(), context, out Window window);
+        await using RdpWorkspaceView view = Open(new FakeRdpSession(), context, out Window window);
         // A user accent like the one in the bug report (Material pink): the ring must use it, whatever it is.
         var accent = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#E91E63"));
         window.Resources["VelaAccent"] = accent;
@@ -207,7 +207,7 @@ public sealed class RdpQuickBallTests
         RdpQuickBall quick = view.QuickBall;
         Button button = Find<Button>(view, "RdpQuickBall");
         Border body = Find<Border>(view, "RdpQuickBallBody"), ring = Find<Border>(view, "RdpQuickBallRing"), halo = Find<Border>(view, "RdpQuickBallHalo");
-        var layers = ((Panel)body.Parent!).Children;
+        Controls layers = ((Panel)body.Parent!).Children;
         // The hover fill (the button) exactly fills the body, and both rings are separate layers above it,
         // so the fill can no longer slide over half of the ring.
         Assert.AreEqual(new Rect(0, 0, RdpQuickBall.BallSize, RdpQuickBall.BallSize), button.Bounds);
@@ -227,7 +227,7 @@ public sealed class RdpQuickBallTests
         quick.Expand();
         await Animate();
         Assert.AreEqual(1d, ring.Opacity, 0.01);
-        var glyphs = ((Panel)button.Content!).Children;
+        Controls glyphs = ((Panel)button.Content!).Children;
         Assert.AreEqual(0d, glyphs[0].Opacity, 0.01, "keyboard glyph fades out");
         Assert.AreEqual(1d, glyphs[1].Opacity, 0.01, "× fades in");
         quick.SetPointerOver(false);
@@ -258,7 +258,7 @@ public sealed class RdpQuickBallTests
     public void DisconnectFoldsAndHidesTheBall() => Run(async () =>
     {
         using var context = new TestPluginContext();
-        await using var view = Open(new FakeRdpSession(), context, out Window window);
+        await using RdpWorkspaceView view = Open(new FakeRdpSession(), context, out Window window);
         view.QuickBall.Expand();
         view.SetConnected(false);
         Assert.IsFalse(view.QuickBall.IsExpanded);
@@ -287,7 +287,10 @@ public sealed class RdpQuickBallTests
 
     private static void PressEscape(Control target) => target.RaiseEvent(new KeyEventArgs
     {
-        RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape, PhysicalKey = PhysicalKey.Escape, Source = target
+        RoutedEvent = InputElement.KeyDownEvent,
+        Key = Key.Escape,
+        PhysicalKey = PhysicalKey.Escape,
+        Source = target
     });
 
     private static void StringAssertContains(string? text, string part) =>

@@ -129,17 +129,17 @@ internal sealed record SerialConfig(
             },
             StopBits: request.GetString(SerialFields.StopBits, "1") switch
             {
-                "1.5" => System.IO.Ports.StopBits.OnePointFive,
-                "2" => System.IO.Ports.StopBits.Two,
-                _ => System.IO.Ports.StopBits.One
+                "1.5" => StopBits.OnePointFive,
+                "2" => StopBits.Two,
+                _ => StopBits.One
             },
             Parity: request.GetString(SerialFields.Parity, "none") switch
             {
-                "even" => System.IO.Ports.Parity.Even,
-                "odd" => System.IO.Ports.Parity.Odd,
-                "mark" => System.IO.Ports.Parity.Mark,
-                "space" => System.IO.Ports.Parity.Space,
-                _ => System.IO.Ports.Parity.None
+                "even" => Parity.Even,
+                "odd" => Parity.Odd,
+                "mark" => Parity.Mark,
+                "space" => Parity.Space,
+                _ => Parity.None
             },
             Handshake: request.GetString(SerialFields.FlowControl, "none") switch
             {

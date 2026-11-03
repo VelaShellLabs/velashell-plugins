@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Formats.Asn1;
+using System.Net.Security;
 using System.Text;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Graphics;
-using VelaShell.Rdp.Mcs;
 using VelaShell.Rdp.Pdu;
 using VelaShell.Rdp.Wire;
 
@@ -36,7 +36,7 @@ public sealed class RdpHardeningTests
         {
             string share = Path.Combine(root, "share");
             File.WriteAllBytes(Path.Combine(share, "big.bin"), new byte[3 * 1024 * 1024]);
-            DriveFile file = DriveFile.Create(share, "\\big.bin", GenericRead, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\big.bin", GenericRead, FileOpen, 0, 0);
             byte[] data = file.Read(0, uint.MaxValue);   // used to allocate ~4 GB and spin in ByteWriter growth
             file.Close();
             Assert.HasCount(DriveFile.MaxIo, data);
@@ -52,7 +52,7 @@ public sealed class RdpHardeningTests
     [DataRow("\\bad\0name")]
     public void DrivePathsCannotStepOutOfTheMapping(string path)
     {
-        var denied = Assert.Throws<DriveStatusException>(() => DriveFile.ResolvePath("C:\\share", path));
+        DriveStatusException denied = Assert.Throws<DriveStatusException>(() => DriveFile.ResolvePath("C:\\share", path));
         Assert.AreEqual(NtStatus.AccessDenied, denied.Status);
     }
 
@@ -97,11 +97,11 @@ public sealed class RdpHardeningTests
                 Assert.Inconclusive("Cannot create a directory link here.");
             }
 
-            var created = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\link\\planted.txt", GenericWrite, FileCreate, 0, 0));
+            DriveStatusException created = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\link\\planted.txt", GenericWrite, FileCreate, 0, 0));
             Assert.AreEqual(NtStatus.AccessDenied, created.Status);
 
-            DriveFile file = DriveFile.Create(share, "\\inside.txt", GenericWrite, FileCreate, 0, 0);
-            var renamed = Assert.Throws<DriveStatusException>(() => file.Rename("\\link\\moved.txt"));
+            var file = DriveFile.Create(share, "\\inside.txt", GenericWrite, FileCreate, 0, 0);
+            DriveStatusException renamed = Assert.Throws<DriveStatusException>(() => file.Rename("\\link\\moved.txt"));
             Assert.AreEqual(NtStatus.AccessDenied, renamed.Status);
             file.Close();
 
@@ -118,14 +118,14 @@ public sealed class RdpHardeningTests
         {
             string share = Path.Combine(root, "share");
             File.WriteAllText(Path.Combine(share, "a.txt"), "hello");
-            DriveFile readOnly = DriveFile.Create(share, "\\a.txt", GenericRead, FileOpen, 0, 0);
+            var readOnly = DriveFile.Create(share, "\\a.txt", GenericRead, FileOpen, 0, 0);
             _ = readOnly.Read(0, 5);
-            var denied = Assert.Throws<DriveStatusException>(() => readOnly.Write(0, "x"u8));
+            DriveStatusException denied = Assert.Throws<DriveStatusException>(() => readOnly.Write(0, "x"u8));
             Assert.AreEqual(NtStatus.AccessDenied, denied.Status);
             readOnly.Close();
 
-            DriveFile writable = DriveFile.Create(share, "\\a.txt", GenericWrite, FileOpen, 0, 0);
-            var full = Assert.Throws<DriveStatusException>(() => writable.Write((ulong)DriveFile.MaxWriteGap + 1000, "x"u8));
+            var writable = DriveFile.Create(share, "\\a.txt", GenericWrite, FileOpen, 0, 0);
+            DriveStatusException full = Assert.Throws<DriveStatusException>(() => writable.Write((ulong)DriveFile.MaxWriteGap + 1000, "x"u8));
             Assert.AreEqual(NtStatus.DiskFull, full.Status);
             writable.Close();
             Assert.AreEqual(5, new FileInfo(Path.Combine(share, "a.txt")).Length);
@@ -149,11 +149,14 @@ public sealed class RdpHardeningTests
         }
 
         // Unprivileged Windows: a junction needs no symlink privilege.
-        using Process? mklink = Process.Start(new ProcessStartInfo("cmd.exe", ["/c", "mklink", "/J", link, target])
+        using var mklink = Process.Start(new ProcessStartInfo("cmd.exe", ["/c", "mklink", "/J", link, target])
         {
-            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
         });
-        mklink?.WaitForExit(10_000);
+        _ = (mklink?.WaitForExit(10_000));
         return Directory.Exists(link) && new DirectoryInfo(link).LinkTarget is not null;
     }
 
@@ -232,7 +235,7 @@ public sealed class RdpHardeningTests
         await using var server = new FakeRdpServer(async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Hybrid);
-            await using var ssl = await connection.StartTlsAsync();
+            await using SslStream ssl = await connection.StartTlsAsync();
             _ = await FakeRdpConnection.ReadDerAsync(ssl);
             await ssl.WriteAsync(new byte[] { 0x30, 0x84, 0x7F, 0xFF, 0xFF, 0xFF });   // SEQUENCE of ~2 GB
             await ssl.FlushAsync();
@@ -249,7 +252,7 @@ public sealed class RdpHardeningTests
         await using var server = new FakeRdpServer(async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Hybrid);
-            await using var ssl = await connection.StartTlsAsync();
+            await using SslStream ssl = await connection.StartTlsAsync();
             _ = await FakeRdpConnection.ReadDerAsync(ssl);
             await ssl.WriteAsync(TsRequest(version: 3, token: [0x4E, 0x54]));
             await ssl.FlushAsync();

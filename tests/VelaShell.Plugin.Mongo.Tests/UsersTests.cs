@@ -404,7 +404,7 @@ public sealed class UsersTests
             BsonDocument info = await RoleDocAsync(admin, role);
             BsonDocument privilege = info["privileges"].AsBsonArray.Single().AsBsonDocument;
             Assert.AreEqual(db, privilege["resource"]["db"].AsString);
-            Assert.AreSequenceEqual(new[] { "find", "insert" }, [.. privilege["actions"].AsBsonArray.Select(a => a.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+            Assert.AreSequenceEqual(new[] { "find", "insert" }, [.. privilege["actions"].AsBsonArray.Select(a => a.AsString)], SequenceOrder.InAnyOrder);
             Assert.AreSequenceEqual(new[] { "read@logs" }, Roles(info));
 
             // 有人持有它 → 编辑器里列出持有者。
@@ -427,11 +427,11 @@ public sealed class UsersTests
             existing.Actions.First(a => a.Name == "update").IsChecked = true;
             editor.Inherits.Rows.First(r => r.Database == "logs").Cells[0].IsChecked = false;
             Assert.AreSequenceEqual(
-                new[] { "revokeRolesFromRole", "grantPrivilegesToRole", "revokePrivilegesFromRole" }, [.. editor.Commands.Select(c => c.Command.GetElement(0).Name)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+                new[] { "revokeRolesFromRole", "grantPrivilegesToRole", "revokePrivilegesFromRole" }, [.. editor.Commands.Select(c => c.Command.GetElement(0).Name)], SequenceOrder.InAnyOrder);
             await tab.SaveRoleAsync(editor);
 
             info = await RoleDocAsync(admin, role);
-            Assert.AreSequenceEqual(new[] { "find", "update" }, [.. info["privileges"].AsBsonArray.Single()["actions"].AsBsonArray.Select(a => a.AsString)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+            Assert.AreSequenceEqual(new[] { "find", "update" }, [.. info["privileges"].AsBsonArray.Single()["actions"].AsBsonArray.Select(a => a.AsString)], SequenceOrder.InAnyOrder);
             Assert.AreEqual(0, info["roles"].AsBsonArray.Count);
 
             // 删除:确认框里列出持有者,要手打角色名。

@@ -77,7 +77,11 @@ internal sealed class NativeAudioOutput : IAudioOutput
             throw new ArgumentException("RDP audio requires frame-aligned PCM8/PCM16, 1–2 channels, 8000–48000 Hz.", nameof(format));
         }
 
-        if (ct.IsCancellationRequested) return Task.FromCanceled(ct);
+        if (ct.IsCancellationRequested)
+        {
+            return Task.FromCanceled(ct);
+        }
+
         var command = new Command(Volatile.Read(ref _generation), format, data, ct,
             new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), Stopwatch.GetTimestamp());
         lock (_budgetGate)
@@ -85,7 +89,10 @@ internal sealed class NativeAudioOutput : IAudioOutput
             double duration = DurationMilliseconds(command);
             if (_queuedCount >= 128 || _queuedBytes + data.Length > 1024 * 1024 ||
                 (_queuedCount > 0 && _queuedMilliseconds + duration > 2000))
+            {
                 return Task.FromException(new IOException("RDP audio output queue capacity exceeded."));
+            }
+
             _queuedCount++;
             _queuedBytes += data.Length;
             _queuedMilliseconds += duration;
@@ -118,17 +125,25 @@ internal sealed class NativeAudioOutput : IAudioOutput
 
     public void Close()
     {
-        if (Volatile.Read(ref _disposed) != 0) return;
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
         int generation = Interlocked.Increment(ref _generation);
         // A full queue already wakes the worker, which also observes the generation change.
-        _commands.Writer.TryWrite(new Command(generation, default, null, default, null, 0));
+        _ = _commands.Writer.TryWrite(new Command(generation, default, null, default, null, 0));
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        Interlocked.Increment(ref _generation);
-        _commands.Writer.TryComplete();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _ = Interlocked.Increment(ref _generation);
+        _ = _commands.Writer.TryComplete();
     }
 
     private async Task RunAsync()
@@ -147,14 +162,22 @@ internal sealed class NativeAudioOutput : IAudioOutput
             {
                 while (_commands.Reader.TryRead(out Command? incoming))
                 {
-                    if (incoming.Result is null) continue;
+                    if (incoming.Result is null)
+                    {
+                        continue;
+                    }
+
                     waiting.Enqueue(incoming);
                     waitingMilliseconds += DurationMilliseconds(incoming);
                 }
                 Command? submitting = null;
                 try
                 {
-                    foreach (Command command in active) CheckCancellation(command);
+                    foreach (Command command in active)
+                    {
+                        CheckCancellation(command);
+                    }
+
                     if (opened is not null && deviceGeneration != Volatile.Read(ref _generation))
                     {
                         CloseDevice();
@@ -166,7 +189,7 @@ internal sealed class NativeAudioOutput : IAudioOutput
                     {
                         Command completed = active.Peek();
                         CheckCancellation(completed);
-                        active.Dequeue();
+                        _ = active.Dequeue();
                         Finish(completed);
                     }
                     if (active.Count == 0 && bufferingSince == 0)
@@ -185,14 +208,18 @@ internal sealed class NativeAudioOutput : IAudioOutput
                         }
                         if (next.Data!.Length == 0)
                         {
-                            waiting.Dequeue();
+                            _ = waiting.Dequeue();
                             Finish(next);
                             submitting = null;
                             continue;
                         }
                         if (opened != next.Format)
                         {
-                            if (active.Count > 0) break;
+                            if (active.Count > 0)
+                            {
+                                break;
+                            }
+
                             _device.Close();
                             opened = null;
                             _device.Open(next.Format);
@@ -208,13 +235,20 @@ internal sealed class NativeAudioOutput : IAudioOutput
                             next.Observed = true;
                         }
                         if (active.Count == 0 && Stopwatch.GetElapsedTime(bufferingSince).TotalMilliseconds < timing.TargetMilliseconds)
+                        {
                             break;
+                        }
+
                         double deviceMilliseconds = _device.PendingFrames * 1000.0 / next.Format.SampleRate;
-                        if (active.Count > 0 && deviceMilliseconds >= 120) break;
+                        if (active.Count > 0 && deviceMilliseconds >= 120)
+                        {
+                            break;
+                        }
+
                         double duration = DurationMilliseconds(next);
-                        timing.UpdateRate(deviceMilliseconds + waitingMilliseconds - duration, duration);
+                        _ = timing.UpdateRate(deviceMilliseconds + waitingMilliseconds - duration, duration);
                         _device.Start(timing.Resample(next.Format, next.Data));
-                        waiting.Dequeue();
+                        _ = waiting.Dequeue();
                         waitingMilliseconds -= duration;
                         active.Enqueue(next);
                         if (_log is not null && (lastReport == 0 || Stopwatch.GetElapsedTime(lastReport).TotalSeconds >= 5))
@@ -239,10 +273,14 @@ internal sealed class NativeAudioOutput : IAudioOutput
                     opened = null;
                     timing = new AudioPlayoutTiming();
                     bufferingSince = 0;
-                    while (active.TryDequeue(out Command? command)) Finish(command, error);
+                    while (active.TryDequeue(out Command? command))
+                    {
+                        Finish(command, error);
+                    }
+
                     if (submitting is not null && waiting.TryPeek(out Command? first) && ReferenceEquals(first, submitting))
                     {
-                        waiting.Dequeue();
+                        _ = waiting.Dequeue();
                         waitingMilliseconds -= DurationMilliseconds(submitting);
                         Finish(submitting, error);
                     }
@@ -250,7 +288,10 @@ internal sealed class NativeAudioOutput : IAudioOutput
                 if (active.Count == 0 && waiting.Count == 0)
                 {
                     bufferingSince = 0;
-                    if (!await _commands.Reader.WaitToReadAsync().ConfigureAwait(false)) break;
+                    if (!await _commands.Reader.WaitToReadAsync().ConfigureAwait(false))
+                    {
+                        break;
+                    }
                 }
                 else
                 {
@@ -282,20 +323,32 @@ internal sealed class NativeAudioOutput : IAudioOutput
     {
         ReleaseBudget(command);
         if (error is OperationCanceledException)
-            command.Result!.TrySetCanceled(command.Cancellation.IsCancellationRequested ? command.Cancellation : new CancellationToken(true));
+        {
+            _ = command.Result!.TrySetCanceled(command.Cancellation.IsCancellationRequested ? command.Cancellation : new CancellationToken(true));
+        }
         else if (error is not null)
-            command.Result!.TrySetException(error);
-        else command.Result!.TrySetResult();
+        {
+            _ = command.Result!.TrySetException(error);
+        }
+        else
+        {
+            _ = command.Result!.TrySetResult();
+        }
     }
 
     private void CheckCancellation(Command command)
     {
         command.Cancellation.ThrowIfCancellationRequested();
         if (Volatile.Read(ref _disposed) != 0 || command.Generation != Volatile.Read(ref _generation))
+        {
             throw new OperationCanceledException("RDP audio playback was closed.");
+        }
+
         TimeSpan deadline = _stallAllowance + command.QueueAllowance;
         if (Volatile.Read(ref command.TimedOut) != 0 || Stopwatch.GetElapsedTime(command.EnqueuedAt) >= deadline)
+        {
             throw new TimeoutException($"RDP audio device stalled for {deadline.TotalSeconds:F1} seconds.");
+        }
     }
 
     private void CloseDevice()

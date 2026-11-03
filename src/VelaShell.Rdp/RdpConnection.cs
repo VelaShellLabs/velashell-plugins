@@ -446,12 +446,12 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     /// <summary>Applies MPPC bulk decompression when the flags mark the payload compressed; otherwise passthrough.</summary>
     private ReadOnlySpan<byte> Decompress(ReadOnlySpan<byte> data, byte compressionFlags)
     {
-        if ((compressionFlags & (Graphics.Mppc.PacketCompressed | Graphics.Mppc.PacketAtFront | Graphics.Mppc.PacketFlushed)) == 0)
+        if ((compressionFlags & (Mppc.PacketCompressed | Mppc.PacketAtFront | Mppc.PacketFlushed)) == 0)
         {
             return data;
         }
 
-        _mppc ??= new Graphics.Mppc((compressionFlags & Graphics.Mppc.CompressionTypeMask) == 1 ? 1 : 0);
+        _mppc ??= new Graphics.Mppc((compressionFlags & Mppc.CompressionTypeMask) == 1 ? 1 : 0);
         ReadOnlySpan<byte> result = _mppc.Decompress(data, compressionFlags, out bool passthrough);
         // Valid until the next Decompress call; the caller consumes it before then.
         return passthrough ? data : result;

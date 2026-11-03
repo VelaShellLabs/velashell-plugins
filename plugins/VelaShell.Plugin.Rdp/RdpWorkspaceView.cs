@@ -1,12 +1,10 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
-using Avalonia.Styling;
 using Avalonia.Threading;
 using VelaShell.PluginSdk;
 using VelaShell.Rdp;
@@ -22,7 +20,6 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private readonly Border _footer;
     private readonly TextBlock _status = new() { Name = "RdpStatus", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
     private readonly IPluginContext _context;
-    private readonly RdpQuickBall _quick;
     private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(6) };
     private string? _notice;
     private string? _armedTyping;
@@ -54,7 +51,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _loc = loc;
         _context = context;
         _network = session as IRdpNetworkSource;
-        if (_network is not null) { _network.NetworkChanged += OnNetworkChanged; }
+        _network?.NetworkChanged += OnNetworkChanged;
         // No document header: the only toolbar action (Ctrl+Alt+Delete) moved into the floating remote-keys
         // button, so the remote desktop gets the full height above the 24px status bar.
         RowDefinitions = [with("*,24")];
@@ -70,11 +67,11 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _transferTimer.Tick += (_, _) => UpdateTransfers();
         if (settings.Clipboard) { _transferTimer.Start(); }
         Desktop.OperationFailed = () => { _failed = true; UpdateStatus(); };
-        _quick = new RdpQuickBall(QuickActions(), loc) { Folded = () => { _armedTyping = null; _ = Desktop.Focus(); } };
+        QuickBall = new RdpQuickBall(QuickActions(), loc) { Folded = () => { _armedTyping = null; _ = Desktop.Focus(); } };
         // Esc folds an open fan; it must not also reach the remote desktop, which has keyboard focus.
         AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (_quick.IsExpanded && e.Key == Key.Escape) { _quick.Collapse(); e.Handled = true; }
+            if (QuickBall.IsExpanded && e.Key == Key.Escape) { QuickBall.Collapse(); e.Handled = true; }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); _notice = null; UpdateStatus(); };
         // Each transfer is one compact group — direction · size · name, a 3px bar, the state, × — like the
@@ -99,13 +96,13 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _overlay = BuildOverlay();
         SetRow(_footer, 1);
         Children.Add(scroller);
-        Children.Add(_quick);
+        Children.Add(QuickBall);
         Children.Add(_overlay);
         Children.Add(_footer);
         ApplyLocale(loc);
     }
 
-    internal RdpQuickBall QuickBall => _quick;
+    internal RdpQuickBall QuickBall { get; }
 
     /// <summary>
     /// What the floating button offers: combinations the local OS keeps for itself (there is no global keyboard
@@ -154,10 +151,10 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         if (typed.Length == 0) { ShowNotice(_loc["TypeClipboardEmpty"]); return true; }
         if (typed.Length > TypeLimit) { ShowNotice(_loc.Format("TypeClipboardTooLong", typed.Length, TypeLimit)); return true; }
         bool lines = typed.Contains('\n');
-        if ((lines || typed.Length > TypeConfirmLength) && !(_quick.IsArmed("TypeClipboard") && _armedTyping == typed))
+        if ((lines || typed.Length > TypeConfirmLength) && !(QuickBall.IsArmed("TypeClipboard") && _armedTyping == typed))
         {
             _armedTyping = typed;
-            _quick.Arm("TypeClipboard");
+            QuickBall.Arm("TypeClipboard");
             ShowNotice(_loc.Format(lines ? "TypeClipboardConfirmLines" : "TypeClipboardConfirm", typed.Length));
             return false;
         }
@@ -189,7 +186,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _download.Update(download, upload: false, _connected, _loc);
         _upload.Update(upload, upload: true, _connected, _loc);
         // Poll at 10 Hz only while bytes are moving; idle, once a second is enough to notice a new transfer start.
-        TimeSpan interval = TimeSpan.FromMilliseconds(download?.Active == true || upload?.Active == true ? 100 : 1000);
+        var interval = TimeSpan.FromMilliseconds(download?.Active == true || upload?.Active == true ? 100 : 1000);
         if (_transferTimer.Interval != interval)
         {
             _transferTimer.Interval = interval;
@@ -209,14 +206,14 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             var slots = Children.Skip(1).Where(child => child.IsVisible).ToList();
             double width = availableSize.Width, height = 0;
             var natural = new Dictionary<Control, double>();
-            foreach (var slot in slots)
+            foreach (Control? slot in slots)
             {
                 slot.Measure(new Size(double.PositiveInfinity, availableSize.Height));
                 natural[slot] = slot.DesiredSize.Width;
             }
             double remaining = width;
             int left = slots.Count;
-            foreach (var slot in slots.OrderBy(slot => natural[slot]))
+            foreach (Control? slot in slots.OrderBy(slot => natural[slot]))
             {
                 slot.Measure(new Size(Math.Max(0, Math.Min(natural[slot], remaining / left)), availableSize.Height));
                 remaining -= slot.DesiredSize.Width;
@@ -231,7 +228,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         protected override Size ArrangeOverride(Size finalSize)
         {
             double right = finalSize.Width;
-            foreach (var slot in Children.Skip(1).Where(child => child.IsVisible).Reverse())
+            foreach (Control? slot in Children.Skip(1).Where(child => child.IsVisible).Reverse())
             {
                 right -= slot.DesiredSize.Width;
                 slot.Arrange(new Rect(right, 0, slot.DesiredSize.Width, finalSize.Height));
@@ -265,7 +262,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             // Same bar as the host's transfer panel: 3px, rounded, border-primary track. Fixed width so the
             // bars of two transfers line up and do not jump as the name or the state text changes.
             Bar = new() { Name = name + "Bar", Width = 72, MinWidth = 0, Height = 3, MinHeight = 3, Maximum = 100, CornerRadius = new CornerRadius(2), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            Bar[!ProgressBar.BackgroundProperty] = new DynamicResourceExtension("VelaBorderPrimary");
+            Bar[!Avalonia.Controls.Primitives.TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("VelaBorderPrimary");
             State[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiMonoFont");
             State[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize10");
             Cancel = BuildCancelButton(cancelName);
@@ -296,7 +293,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             {
                 // Any slack beyond the desired size goes to the text, so the right-hand parts stay put.
                 double x = 0, slack = Math.Max(0, finalSize.Width - Children.Sum(child => child.DesiredSize.Width));
-                foreach (var child in Children)
+                foreach (Control child in Children)
                 {
                     double width = child.DesiredSize.Width + (child == Children[1] ? slack : 0);
                     child.Arrange(new Rect(x, 0, width, finalSize.Height));
@@ -314,10 +311,20 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         {
             var button = new Button
             {
-                Name = name, Focusable = false, Width = 16, Height = 16, MinWidth = 0, MinHeight = 0,
-                Padding = new Thickness(0), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(3),
-                Background = Brushes.Transparent, Margin = new Thickness(6, 0, 0, 0), Cursor = new Cursor(StandardCursorType.Hand),
-                HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                Name = name,
+                Focusable = false,
+                Width = 16,
+                Height = 16,
+                MinWidth = 0,
+                MinHeight = 0,
+                Padding = new Thickness(0),
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(3),
+                Background = Brushes.Transparent,
+                Margin = new Thickness(6, 0, 0, 0),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Content = new RdpGlyph { Data = CancelIcon, Width = 10, Height = 10 }
             };
@@ -363,7 +370,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             if (_tone == token) { return; }
             _tone = token;
             State[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(token);
-            Bar[!ProgressBar.ForegroundProperty] = new DynamicResourceExtension(token);
+            Bar[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension(token);
         }
 
         private static string FormatSize(long bytes)
@@ -384,9 +391,9 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _reconnect.Height = 28;
         _reconnect.Padding = new Thickness(16, 0);
         _reconnect.HorizontalAlignment = HorizontalAlignment.Center;
-        _reconnect[!Button.ForegroundProperty] = new DynamicResourceExtension("VelaTextPrimary");
-        _reconnect[!Button.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
-        _reconnect[!Button.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize12");
+        _reconnect[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("VelaTextPrimary");
+        _reconnect[!Avalonia.Controls.Primitives.TemplatedControl.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
+        _reconnect[!Avalonia.Controls.Primitives.TemplatedControl.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize12");
         _reconnect.Click += OnReconnectClick;
         var card = new Border
         {
@@ -425,7 +432,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     internal void ApplyLocale(Loc loc)
     {
         _loc = loc;
-        _quick.ApplyLocale(loc);
+        QuickBall.ApplyLocale(loc);
         _reconnect.Content = loc["ReconnectButton"];
         UpdateTransfers();
         SetAudioError(_audioError);
@@ -436,8 +443,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         if (!connected) { _clipboard.StopTransfers(); UpdateTransfers(); }
         _disconnectDetail = connected ? null : detail;
         Desktop.IsEnabled = connected;
-        if (!connected) { _quick.Collapse(); ClearNotice(); }
-        _quick.IsVisible = connected;
+        if (!connected) { QuickBall.Collapse(); ClearNotice(); }
+        QuickBall.IsVisible = connected;
         _overlay.IsVisible = !connected;
         if (!connected && !_reconnecting)
         {
@@ -474,8 +481,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     }
     public async ValueTask DisposeAsync()
     {
-        Interlocked.Exchange(ref _disposed, 1);
-        if (_network is not null) { _network.NetworkChanged -= OnNetworkChanged; }
+        _ = Interlocked.Exchange(ref _disposed, 1);
+        _network?.NetworkChanged -= OnNetworkChanged;
         _transferTimer.Stop();
         _noticeTimer.Stop();
         try { await _clipboard.DisposeAsync(); }

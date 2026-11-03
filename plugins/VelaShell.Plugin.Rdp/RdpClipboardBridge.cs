@@ -111,7 +111,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 if (_formatResponse is { } response && value.B == _requestedFormat)
                 {
                     _formatResponse = null;
-                    _formatDrained?.TrySetResult();
+                    _ = (_formatDrained?.TrySetResult());
                     _formatDrained = null;
                     if (value.A != 0)
                     {
@@ -144,7 +144,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                         : new InvalidDataException("Invalid clipboard file response flags. " + detail));
                 }
             }
-            else _context.Log.Debug($"RDP clipboard ignored late/unmatched file response: streamId={value.A} responseFlags=0x{flags:X4} responseLength={value.Data.Length}");
+            else
+            {
+                _context.Log.Debug($"RDP clipboard ignored late/unmatched file response: streamId={value.A} responseFlags=0x{flags:X4} responseLength={value.Data.Length}");
+            }
+
             return;
         }
         if (value.Kind is 3 or 9)
@@ -163,7 +167,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             }
             lock (_requestGate)
             {
-                if (_stopping) return;
+                if (_stopping)
+                {
+                    return;
+                }
+
                 _receiveCancellation?.Cancel();
                 _remoteFiles?.Retire();
                 _remoteFormats = formats;
@@ -192,7 +200,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                             await PublishLocalAsync(_stopToken).ConfigureAwait(false);
                             break;
                         case 3:
-                            if (value.A != unchecked((uint)Volatile.Read(ref _generation))) break;
+                            if (value.A != unchecked((uint)Volatile.Read(ref _generation)))
+                            {
+                                break;
+                            }
+
                             await ReceiveAsync(true, _stopToken).ConfigureAwait(false);
                             break;
                     }
@@ -317,7 +329,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 _upload = _localProgress = new();
                 if (Paths.Length > 0) { _upload.Start(0, "Preparing"); }
             }
-            finally { _localGate.Release(); }
+            finally { _ = _localGate.Release(); }
             ct = preparing.Token;
             if (Paths.Length > 0)
             {
@@ -330,7 +342,10 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             {
                 if (files is not null && localSequence is { } sequence && OperatingSystem.IsWindows()
                     && WindowsVirtualFileClipboard.Native.GetClipboardSequenceNumber() != sequence)
+                {
                     throw new OperationCanceledException("Local clipboard changed while preparing file descriptions.", ct);
+                }
+
                 if (files is not null) { _upload.Start(files.Entries.Sum(f => f.Length), "Ready"); }
                 _localFiles = files;
                 _localFilesSequence = files is null ? null : localSequence;
@@ -341,7 +356,6 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 {
                     formats += $"{RdpClipboardCodec.FileContents}\tFileContents\n";
                 }
-
             }
             finally { _ = _localGate.Release(); }
             await _transport.OfferFormatsAsync(formats, ct).ConfigureAwait(false);
@@ -408,12 +422,14 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                     void ReleaseVersion()
                     {
                         if (Interlocked.Exchange(ref released, 1) == 0 && unlocked is { } completion && version is { } id)
+                        {
                             _ = ReleaseAsync(id, completion);
+                        }
                     }
                     async Task ReleaseAsync(uint id, TaskCompletionSource completion)
                     {
                         try { await UnlockAsync(id).ConfigureAwait(false); }
-                        finally { completion.TrySetResult(); }
+                        finally { _ = completion.TrySetResult(); }
                     }
                     try
                     {
@@ -433,14 +449,23 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                         }
                         await lockSend.ConfigureAwait(false);
                         if (version is { } lockedId)
+                        {
                             _context.Log.Debug($"RDP clipboard LOCK sent: operation={generation} clipDataId={lockedId} (protocol has no lock ACK)");
+                        }
+
                         CheckReceive(generation, ct);
                         byte[] descriptors = await RequestFormatAsync(fileFormat, ct).ConfigureAwait(false);
                         CheckReceive(generation, ct);
                         await ReceiveFilesAsync(RdpClipboardCodec.DecodeFiles(descriptors), generation, localFingerprint, localSequence, version, ReleaseVersion, ct).ConfigureAwait(false);
                         handedOff = true;
                     }
-                    finally { if (!handedOff) ReleaseVersion(); }
+                    finally
+                    {
+                        if (!handedOff)
+                        {
+                            ReleaseVersion();
+                        }
+                    }
                 }
                 return;
             }
@@ -540,7 +565,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            if (_download.Snapshot?.Active != true) _download.Finish("Cancelled");
+            if (_download.Snapshot?.Active != true)
+            {
+                _download.Finish("Cancelled");
+            }
+
             throw;
         }
         catch (Exception ex)
@@ -579,32 +608,47 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         source = new RdpVirtualFiles(files, async (index, offset, length, token) =>
         {
             if (version is null && generation != Volatile.Read(ref _generation))
+            {
                 throw new IOException("The peer did not negotiate clipboard version locks and changed its file source.");
+            }
+
             _download = progress;
             byte[] bytes = await RequestFileAsync(index, offset, length, version, generation, progress, token).ConfigureAwait(false);
             _download = progress;
             token.ThrowIfCancellationRequested();
-            if (version is null) CheckGeneration(generation);
+            if (version is null)
+            {
+                CheckGeneration(generation);
+            }
+
             return bytes;
         }, progress, _stopToken, () =>
         {
-            if (source is not null) _remoteSources.TryRemove(source, out _);
+            if (source is not null)
+            {
+                _ = _remoteSources.TryRemove(source, out _);
+            }
+
             releaseVersion();
         });
         try
         {
-            if (_virtualClipboard is not WindowsVirtualFileClipboard) await OnUiAsync(async () =>
+            if (_virtualClipboard is not WindowsVirtualFileClipboard)
             {
-                var clipboard = TopLevel.GetTopLevel(_owner)?.Clipboard ?? throw new IOException("System clipboard is unavailable.");
+                _ = await OnUiAsync(async () =>
+            {
+                IClipboard clipboard = TopLevel.GetTopLevel(_owner)?.Clipboard ?? throw new IOException("System clipboard is unavailable.");
                 await CheckLocalClipboardAsync(clipboard, localFingerprint);
                 CheckReceive(generation, ct);
                 return true;
             }).ConfigureAwait(false);
+            }
+
             Task publication;
             lock (_requestGate)
             {
                 CheckReceive(generation, ct);
-                _remoteSources.TryAdd(source, 0);
+                _ = _remoteSources.TryAdd(source, 0);
                 _remoteFiles?.Retire();
                 _remoteFiles = source;
                 _download = progress;
@@ -627,7 +671,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             _stopToken.ThrowIfCancellationRequested();
             drain = _formatDrained?.Task;
         }
-        if (drain is null) return;
+        if (drain is null)
+        {
+            return;
+        }
+
         try { await drain.WaitAsync(_formatResponseTimeout, ct).ConfigureAwait(false); }
         catch (TimeoutException)
         {
@@ -661,7 +709,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         catch
         {
             // Finish the caller, but only the actual response may free the protocol slot.
-            response.TrySetCanceled();
+            _ = response.TrySetCanceled();
             _ = response.Task.Exception;
             throw;
         }
@@ -676,14 +724,26 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         {
             ct.ThrowIfCancellationRequested();
             _stopToken.ThrowIfCancellationRequested();
-            if (version is null) CheckGeneration(generation);
+            if (version is null)
+            {
+                CheckGeneration(generation);
+            }
+
             long next = Interlocked.Increment(ref _stream);
             // Never reuse an ID in this connection: an arbitrarily late response must stay unmatched.
-            if (next > uint.MaxValue) throw new IOException("Clipboard request identifiers exhausted; reconnect before another transfer.");
+            if (next > uint.MaxValue)
+            {
+                throw new IOException("Clipboard request identifiers exhausted; reconnect before another transfer.");
+            }
+
             uint stream = (uint)next;
             var response = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
             var request = new FileRequest(generation, index, offset, length, version, attempt, response);
-            if (!_fileRequests.TryAdd(stream, request)) throw new IOException("Clipboard stream collision.");
+            if (!_fileRequests.TryAdd(stream, request))
+            {
+                throw new IOException("Clipboard stream collision.");
+            }
+
             bool retry = false;
             try
             {
@@ -694,14 +754,22 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 catch (TimeoutException) when (!ct.IsCancellationRequested && !_stop.IsCancellationRequested)
                 {
                     _context.Log.Warn("RDP clipboard response timeout: " + FileRequestDetail(stream, request) + $" timeoutMs={_fileResponseTimeout.TotalMilliseconds} retry={attempt < 3}");
-                    if (attempt >= 3) throw;
+                    if (attempt >= 3)
+                    {
+                        throw;
+                    }
+
                     retry = true;
                 }
             }
             finally { _ = _fileRequests.TryRemove(stream, out _); }
             if (retry)
             {
-                if (version is null) CheckGeneration(generation);
+                if (version is null)
+                {
+                    CheckGeneration(generation);
+                }
+
                 progress.Retry();
                 await Task.Delay(_fileRetryDelay * attempt, ct).ConfigureAwait(false);
             }
@@ -716,7 +784,9 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             bool found = _localData.TryGetValue(format, out byte[]? data);
             await _transport.RespondFormatAsync(data ?? [], found, _stopToken).ConfigureAwait(false);
             if (found && format == RdpClipboardCodec.FileGroup && _localProgress.Snapshot?.Total == 0)
+            {
                 _localProgress.Sent(0, 0, 0, "");
+            }
         }
         finally { _ = _localGate.Release(); }
     }
@@ -729,17 +799,32 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         await _localGate.WaitAsync(_stopToken).ConfigureAwait(false);
         try
         {
-            if (request.Data.Length is not (16 or 20)) throw new InvalidDataException("Invalid clipboard file request.");
+            if (request.Data.Length is not (16 or 20))
+            {
+                throw new InvalidDataException("Invalid clipboard file request.");
+            }
+
             LocalVersion? version = null;
             if (request.Data.Length == 20 && !_localVersions.TryGetValue(BinaryPrimitives.ReadUInt32LittleEndian(request.Data.AsSpan(16)), out version))
+            {
                 throw new InvalidDataException("Unknown clipboard version.");
-            var source = version?.Files ?? _localFiles;
+            }
+
+            RdpClipboardFiles? source = version?.Files ?? _localFiles;
             requestCancellation = version?.Cancellation ?? _uploadCancellation;
             CancellationToken ct = requestCancellation?.Token ?? _stopToken;
-            var progress = requestProgress = version?.Progress ?? _localProgress;
+            RdpClipboardTransfer progress = requestProgress = version?.Progress ?? _localProgress;
             ct.ThrowIfCancellationRequested();
-            if (version is null && LocalFileOwnershipChanged()) throw new OperationCanceledException("Local clipboard ownership changed.", ct);
-            if (source is null || request.B >= source.Entries.Count) throw new InvalidDataException("Invalid clipboard file request.");
+            if (version is null && LocalFileOwnershipChanged())
+            {
+                throw new OperationCanceledException("Local clipboard ownership changed.", ct);
+            }
+
+            if (source is null || request.B >= source.Entries.Count)
+            {
+                throw new InvalidDataException("Invalid clipboard file request.");
+            }
+
             RdpClipboardFile file = source.Entries[(int)request.B];
             uint flags = BinaryPrimitives.ReadUInt32LittleEndian(request.Data);
             ulong offset = BinaryPrimitives.ReadUInt64LittleEndian(request.Data.AsSpan(4));
@@ -777,8 +862,8 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
     {
         lock (_requestGate)
         {
-            if (upload) { _uploadCancellation?.Cancel(); foreach (var version in _localVersions.Values) version.Cancellation.Cancel(); _upload.Finish("Cancelled"); }
-            else { _receiveCancellation?.Cancel(); foreach (var source in _remoteSources.Keys) source.Dispose(); _download.Finish("Cancelled"); }
+            if (upload) { _uploadCancellation?.Cancel(); foreach (LocalVersion version in _localVersions.Values) { version.Cancellation.Cancel(); } _upload.Finish("Cancelled"); }
+            else { _receiveCancellation?.Cancel(); foreach (RdpVirtualFiles source in _remoteSources.Keys) { source.Dispose(); } _download.Finish("Cancelled"); }
         }
     }
 
@@ -786,7 +871,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
     {
         lock (_requestGate)
         {
-            if (_stopping) return;
+            if (_stopping)
+            {
+                return;
+            }
+
             _stopping = true;
             _stop.Cancel();
         }
@@ -810,7 +899,10 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             while (await timer.WaitForNextTickAsync(_stopToken).ConfigureAwait(false))
             {
                 if (_receivedFileGeneration == Volatile.Read(ref _generation) && _virtualClipboard?.IsCurrent == false)
+                {
                     _remoteFiles?.Retire();
+                }
+
                 if (_localProgress.IsStalled(TimeSpan.FromSeconds(30)) && !IsLocalLocked(_localFiles))
                 {
                     _localProgress.Finish("TimedOut", "The remote clipboard stopped requesting file data.");
@@ -829,11 +921,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                     if (cancelled)
                     {
                         RetireLocalFiles();
-                        _localData.Remove(RdpClipboardCodec.FileGroup);
+                        _ = _localData.Remove(RdpClipboardCodec.FileGroup);
                         _lastPublishedFingerprint = null;
                     }
                 }
-                finally { _localGate.Release(); }
+                finally { _ = _localGate.Release(); }
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
@@ -841,7 +933,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         {
             await _localGate.WaitAsync().ConfigureAwait(false);
             try { DisposeLocalVersions(); RetireLocalFiles(); _localData.Clear(); }
-            finally { _localGate.Release(); }
+            finally { _ = _localGate.Release(); }
         }
     }
 
@@ -862,9 +954,13 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
     {
         lock (_requestGate)
         {
-            foreach (var version in _localVersions.Values.Distinct().Where(v => v.Cancellation.IsCancellationRequested))
+            foreach (LocalVersion? version in _localVersions.Values.Distinct().Where(v => v.Cancellation.IsCancellationRequested))
             {
-                foreach (var entry in _localVersions.Where(p => ReferenceEquals(p.Value.Files, version.Files))) _localVersions.TryRemove(entry.Key, out _);
+                foreach (KeyValuePair<uint, LocalVersion> entry in _localVersions.Where(p => ReferenceEquals(p.Value.Files, version.Files)))
+                {
+                    _ = _localVersions.TryRemove(entry.Key, out _);
+                }
+
                 if (!ReferenceEquals(version.Files, _localFiles)) { version.Files.Dispose(); version.Cancellation.Dispose(); }
             }
         }
@@ -873,10 +969,13 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
     {
         lock (_requestGate)
         {
-            foreach (var version in _localVersions.Values.Distinct())
+            foreach (LocalVersion? version in _localVersions.Values.Distinct())
             {
                 version.Cancellation.Cancel(); version.Files.Dispose();
-                if (!ReferenceEquals(version.Cancellation, _uploadCancellation)) version.Cancellation.Dispose();
+                if (!ReferenceEquals(version.Cancellation, _uploadCancellation))
+                {
+                    version.Cancellation.Dispose();
+                }
             }
             _localVersions.Clear();
         }
@@ -891,17 +990,22 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 if (locked)
                 {
                     if (!_transport.SupportsClipboardLock || _localVersions.ContainsKey(id) || _localVersions.Count >= 8)
+                    {
                         throw new InvalidDataException("Invalid or excessive clipboard version locks.");
+                    }
+
                     if (_localFiles is not null && _uploadCancellation is not null)
-                        _localVersions.TryAdd(id, new(_localFiles, _uploadCancellation, _localProgress));
+                    {
+                        _ = _localVersions.TryAdd(id, new(_localFiles, _uploadCancellation, _localProgress));
+                    }
                 }
-                else if (_localVersions.TryRemove(id, out var version) && !ReferenceEquals(version.Files, _localFiles) && !IsLocalLocked(version.Files))
+                else if (_localVersions.TryRemove(id, out LocalVersion? version) && !ReferenceEquals(version.Files, _localFiles) && !IsLocalLocked(version.Files))
                 {
                     version.Files.Dispose(); version.Cancellation.Cancel(); version.Cancellation.Dispose();
                 }
             }
         }
-        finally { _localGate.Release(); }
+        finally { _ = _localGate.Release(); }
     }
 
     private async Task UnlockAsync(uint id)
@@ -912,7 +1016,13 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             _context.Log.Debug($"RDP clipboard UNLOCK: clipDataId={id}");
             await _transport.LockClipboardAsync(id, false, timeout.Token).ConfigureAwait(false);
         }
-        catch (Exception ex) { if (!_stop.IsCancellationRequested) _context.Log.Warn("Could not release the remote clipboard version.", ex); }
+        catch (Exception ex)
+        {
+            if (!_stop.IsCancellationRequested)
+            {
+                _context.Log.Warn("Could not release the remote clipboard version.", ex);
+            }
+        }
     }
 
     private bool LocalFileOwnershipChanged() => _localFiles is not null && _localFilesSequence is { } sequence
@@ -1000,7 +1110,11 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         {
             try
             {
-                if (Dispatcher.UIThread.CheckAccess()) return await action().ConfigureAwait(false);
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    return await action().ConfigureAwait(false);
+                }
+
                 return await Dispatcher.UIThread.InvokeAsync(action);
             }
             catch (COMException ex) when (ex.HResult == unchecked((int)0x800401D0) && attempt < 7)
@@ -1031,7 +1145,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
 
         await Task.WhenAll(_worker, _requestWorker, _maintenance).ConfigureAwait(false);
         await _receiveGate.WaitAsync().ConfigureAwait(false);
-        _receiveGate.Release();
+        _ = _receiveGate.Release();
         await _operations.WaitAsync().ConfigureAwait(false);
         try
         {

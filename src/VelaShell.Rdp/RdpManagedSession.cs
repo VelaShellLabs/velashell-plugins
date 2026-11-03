@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using VelaShell.Rdp.Channels;
+using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Mcs;
 
 namespace VelaShell.Rdp;
@@ -228,7 +229,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
 
     private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
     {
-        var backend = PrepareGraphics(options);
+        IRdpGfxBackend? backend = PrepareGraphics(options);
         IReadOnlyList<ChannelDef> channels;
         RdpManagedSession session;
         try

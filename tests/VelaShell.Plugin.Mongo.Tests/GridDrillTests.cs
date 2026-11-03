@@ -385,7 +385,7 @@ public sealed class GridDrillTests
         {
             Width = 900,
             Height = 500,
-            Content = new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto }
+            Content = new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto }
         };
         window.Show();
         await Screens.PumpAsync(5);

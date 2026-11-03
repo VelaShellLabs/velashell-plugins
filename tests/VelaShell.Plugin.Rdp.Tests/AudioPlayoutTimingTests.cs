@@ -11,11 +11,23 @@ public sealed class AudioPlayoutTimingTests
     {
         var timing = new AudioPlayoutTiming();
         double arrival = 0;
-        for (int i = 0; i < 100; i++) timing.ObserveArrival(arrival += 20, 20);
+        for (int i = 0; i < 100; i++)
+        {
+            timing.ObserveArrival(arrival += 20, 20);
+        }
+
         double stable = timing.TargetMilliseconds;
-        for (int i = 0; i < 100; i++) timing.ObserveArrival(arrival += i % 2 == 0 ? 5 : 35, 20);
+        for (int i = 0; i < 100; i++)
+        {
+            timing.ObserveArrival(arrival += i % 2 == 0 ? 5 : 35, 20);
+        }
+
         Assert.IsTrue(timing.TargetMilliseconds > stable + 30 && timing.TargetMilliseconds <= 80);
-        for (int i = 0; i < 200; i++) timing.ObserveArrival(arrival += 20, 20);
+        for (int i = 0; i < 200; i++)
+        {
+            timing.ObserveArrival(arrival += 20, 20);
+        }
+
         Assert.IsTrue(timing.TargetMilliseconds < stable + 1);
         timing.ObserveArrival(arrival + 10000, 20);
         Assert.IsTrue(timing.TargetMilliseconds < stable + 1, "Idle time is not network jitter.");
@@ -32,7 +44,7 @@ public sealed class AudioPlayoutTimingTests
         {
             double rate = timing.UpdateRate(queued, 20);
             queued += 20 / (1 + rate) - 20 / (1 + clockError);
-            Assert.IsTrue(queued > 0 && queued < 80, $"Buffer escaped its operating range at packet {i}: {queued} ms.");
+            Assert.IsTrue(queued is > 0 and < 80, $"Buffer escaped its operating range at packet {i}: {queued} ms.");
             Assert.IsTrue(Math.Abs(rate) <= 0.005);
         }
         Assert.AreEqual(clockError, timing.RateCorrection, 0.0001);
@@ -50,9 +62,16 @@ public sealed class AudioPlayoutTimingTests
     {
         var timing = new AudioPlayoutTiming();
         var format = new AudioFormat((ushort)channels, 48000, (ushort)bits);
-        for (int i = 0; i < 10000; i++) timing.UpdateRate(occupancy, 20);
+        for (int i = 0; i < 10000; i++)
+        {
+            _ = timing.UpdateRate(occupancy, 20);
+        }
+
         byte[] input = new byte[32 * format.BlockAlign];
-        if (bits == 8) Array.Fill(input, (byte)128);
+        if (bits == 8)
+        {
+            Array.Fill(input, (byte)128);
+        }
         else
         {
             for (int i = 0; i < 32; i++)
@@ -67,7 +86,10 @@ public sealed class AudioPlayoutTimingTests
             byte[] output = timing.Resample(format, input);
             Assert.AreEqual(0, output.Length % format.BlockAlign);
             totalFrames += output.Length / format.BlockAlign;
-            if (bits == 8) Assert.IsTrue(output.All(value => value == 128));
+            if (bits == 8)
+            {
+                Assert.IsTrue(output.All(value => value == 128));
+            }
             else
             {
                 for (int i = 0; i < output.Length; i += 4)

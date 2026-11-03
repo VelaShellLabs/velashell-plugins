@@ -65,8 +65,14 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         if (!_frameReady) { frame = default; return false; }
         frame = new RdpGfxFrame
         {
-            Pixels = _output, Width = _width, Height = _height, Stride = _width * 4,
-            X = _dirty.Left, Y = _dirty.Top, W = _dirty.Width, H = _dirty.Height
+            Pixels = _output,
+            Width = _width,
+            Height = _height,
+            Stride = _width * 4,
+            X = _dirty.Left,
+            Y = _dirty.Top,
+            W = _dirty.Width,
+            H = _dirty.Height
         };
         _frameReady = false;
         _dirty = default;
@@ -91,7 +97,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
             if (BinaryPrimitives.ReadUInt16LittleEndian(remaining[2..]) != 0) { throw Error("Invalid reserved PDU flags."); }
             uint length = BinaryPrimitives.ReadUInt32LittleEndian(remaining[4..]);
             if (length < 8 || length > remaining.Length) { throw Error("Invalid PDU length."); }
-            var reader = new Reader(remaining.Slice(8, (int)length - 8));
+            var reader = new Reader(remaining[8..(int)length]);
             if (!_confirmed && command != 0x13) { throw Error("Graphics command precedes capability confirmation."); }
             Process(command, ref reader);
             reader.End();
@@ -107,41 +113,41 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
             case 1: WireToSurface(ref reader, progressive: false); break;
             case 2: WireToSurface(ref reader, progressive: true); break;
             case 3:
-            {
-                ushort id = reader.U16(); _ = GetSurface(id);
-                uint context = reader.U32(); reader.End();
-                if (!_contexts.Remove((id, context))) { throw Error("Unknown encoding context."); }
-                _codecs.DeleteContext(id, context);
-                break;
-            }
+                {
+                    ushort id = reader.U16(); _ = GetSurface(id);
+                    uint context = reader.U32(); reader.End();
+                    if (!_contexts.Remove((id, context))) { throw Error("Unknown encoding context."); }
+                    _codecs.DeleteContext(id, context);
+                    break;
+                }
             case 4: SolidFill(ref reader); break;
             case 5: SurfaceToSurface(ref reader); break;
             case 6: SurfaceToCache(ref reader); break;
             case 7: CacheToSurface(ref reader); break;
             case 8:
-            {
-                ushort slot = reader.U16(); reader.End();
-                if (!_cache.Remove(slot, out CacheEntry? entry)) { throw Error("Cannot evict an unknown cache entry."); }
-                _cacheBytes -= entry.Pixels.Length;
-                break;
-            }
+                {
+                    ushort slot = reader.U16(); reader.End();
+                    if (!_cache.Remove(slot, out CacheEntry? entry)) { throw Error("Cannot evict an unknown cache entry."); }
+                    _cacheBytes -= entry.Pixels.Length;
+                    break;
+                }
             case 9: CreateSurface(ref reader); break;
             case 10:
-            {
-                ushort id = reader.U16(); reader.End();
-                Surface surface = GetSurface(id);
-                _codecs.DeleteSurface(id);
-                _contexts.RemoveWhere(context => context.Surface == id);
-                _surfaces.Remove(id); _surfaceBytes -= surface.Pixels.Length;
-                break;
-            }
+                {
+                    ushort id = reader.U16(); reader.End();
+                    Surface surface = GetSurface(id);
+                    _codecs.DeleteSurface(id);
+                    _ = _contexts.RemoveWhere(context => context.Surface == id);
+                    _ = _surfaces.Remove(id); _surfaceBytes -= surface.Pixels.Length;
+                    break;
+                }
             case 11:
-            {
-                _ = reader.U32(); uint id = reader.U32(); reader.End();
-                if (_inFrame) { throw Error("Nested logical frame."); }
-                _frameId = id; _inFrame = true;
-                break;
-            }
+                {
+                    _ = reader.U32(); uint id = reader.U32(); reader.End();
+                    if (_inFrame) { throw Error("Nested logical frame."); }
+                    _frameId = id; _inFrame = true;
+                    break;
+                }
             case 12: EndFrame(ref reader); break;
             case 14: ResetGraphics(ref reader); break;
             case 15: MapOutput(ref reader, scaled: false); break;
@@ -210,7 +216,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         { throw Error("Encoding context budget exceeded."); }
         _codecs.Decode(new GfxDecodeRequest(id, context, codec, format, rectangle.Left, rectangle.Top,
             rectangle.Right, rectangle.Bottom, reader.Bytes((int)length).ToArray(), surface.Pixels, surface.Width, surface.Height));
-        if (progressive) { _contexts.Add((id, context)); }
+        if (progressive) { _ = _contexts.Add((id, context)); }
         // AVC metadata may describe updates outside the wire command's bounding rectangle.
         surface.Dirty = Rect.Union(surface.Dirty, codec is 11 or 14 or 15 ? new(0, 0, surface.Width, surface.Height) : rectangle);
     }
@@ -465,7 +471,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         internal Reader(ReadOnlySpan<byte> data) { _data = data; }
         internal readonly int Remaining => _data.Length - _position;
         internal readonly void Require(int count) { if (count < 0 || count > Remaining) { throw Error("Truncated PDU body."); } }
-        internal ReadOnlySpan<byte> Bytes(int count) { Require(count); var result = _data.Slice(_position, count); _position += count; return result; }
+        internal ReadOnlySpan<byte> Bytes(int count) { Require(count); ReadOnlySpan<byte> result = _data.Slice(_position, count); _position += count; return result; }
         internal byte U8() => Bytes(1)[0];
         internal ushort U16() => BinaryPrimitives.ReadUInt16LittleEndian(Bytes(2));
         internal uint U32() => BinaryPrimitives.ReadUInt32LittleEndian(Bytes(4));

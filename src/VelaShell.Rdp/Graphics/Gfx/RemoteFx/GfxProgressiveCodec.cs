@@ -26,30 +26,39 @@ internal sealed class GfxProgressiveSurfaceState(GfxProgressiveMemoryBudget? bud
 
     internal void Check(GfxProgressiveCodec codec, int tiles, int contextTiles)
     {
-        _contexts.TryGetValue(codec, out int previous);
+        _ = _contexts.TryGetValue(codec, out int previous);
         _budget.Check((long)Tiles.Count * TileBytes + (long)previous * ContextTileBytes,
             (long)tiles * TileBytes + (long)contextTiles * ContextTileBytes);
     }
 
     internal void Commit(GfxProgressiveCodec codec, Dictionary<int, GfxProgressiveTile> tiles, int contextTiles)
     {
-        _contexts.TryGetValue(codec, out int previous);
+        _ = _contexts.TryGetValue(codec, out int previous);
         _budget.Replace((long)Tiles.Count * TileBytes + (long)previous * ContextTileBytes,
             (long)tiles.Count * TileBytes + (long)contextTiles * ContextTileBytes);
         Tiles = tiles;
-        if (contextTiles == 0) _contexts.Remove(codec);
-        else _contexts[codec] = contextTiles;
+        if (contextTiles == 0)
+        {
+            _ = _contexts.Remove(codec);
+        }
+        else
+        {
+            _contexts[codec] = contextTiles;
+        }
     }
 
     internal void ResetContext(GfxProgressiveCodec codec)
     {
-        if (_contexts.Remove(codec, out int previous)) _budget.Replace((long)previous * ContextTileBytes, 0);
+        if (_contexts.Remove(codec, out int previous))
+        {
+            _budget.Replace((long)previous * ContextTileBytes, 0);
+        }
     }
 
     internal void Reset()
     {
         long bytes = (long)Tiles.Count * TileBytes;
-        foreach (var pair in _contexts)
+        foreach (KeyValuePair<GfxProgressiveCodec, int> pair in _contexts)
         {
             bytes += (long)pair.Value * ContextTileBytes;
             pair.Key.ClearContextState();
@@ -69,7 +78,10 @@ internal sealed class GfxProgressiveCodec
     private Dictionary<int, ProgressiveState> _states = [];
 
     internal GfxProgressiveCodec() : this(new GfxProgressiveSurfaceState()) { }
-    internal GfxProgressiveCodec(GfxProgressiveSurfaceState surface) => _surface = surface;
+    internal GfxProgressiveCodec(GfxProgressiveSurfaceState surface)
+    {
+        _surface = surface;
+    }
 
     internal void Reset()
     {
@@ -96,35 +108,40 @@ internal sealed class GfxProgressiveCodec
         bool begun = false, ended = false;
         while (reader.Remaining > 0)
         {
-            var block = reader.Block(out ushort type);
+            RfxReader block = reader.Block(out ushort type);
             switch (type)
             {
                 case 0xCCC0:
-                    block.UInt32();
-                    block.UInt16();
+                    _ = block.UInt32();
+                    _ = block.UInt16();
                     break;
                 case 0xCCC1:
                     RfxGuard.Require(!begun, "Nested or duplicate RemoteFX Progressive frame.");
-                    block.UInt32();
-                    block.UInt16(); // Region count can exceed the number actually transmitted.
+                    _ = block.UInt32();
+                    _ = block.UInt16(); // Region count can exceed the number actually transmitted.
                     begun = true;
                     break;
                 case 0xCCC2:
                     ended = begun;
                     break;
                 case 0xCCC3:
-                    block.Byte();
+                    _ = block.Byte();
                     RfxGuard.Require(block.UInt16() == 64, "Invalid RemoteFX Progressive tile size.");
-                    block.Byte();
+                    _ = block.Byte();
                     break;
                 case 0xCCC4:
                     if (begun && !ended)
+                    {
                         Region(ref block, width, height, tiles, states, rectangles);
+                    }
                     else
-                        block.Take(block.Remaining); // The protocol requires ignoring out-of-frame regions.
+                    {
+                        _ = block.Take(block.Remaining); // The protocol requires ignoring out-of-frame regions.
+                    }
+
                     break;
                 default:
-                    block.Take(block.Remaining);
+                    _ = block.Take(block.Remaining);
                     break;
             }
             block.End();
@@ -133,13 +150,24 @@ internal sealed class GfxProgressiveCodec
         foreach (RfxRect rect in rectangles)
         {
             for (int y = rect.Y / 64; y <= (rect.Y + rect.Height - 1) / 64; y++)
+            {
                 for (int x = rect.X / 64; x <= (rect.X + rect.Width - 1) / 64; x++)
+                {
                     RfxGuard.Require(tiles.ContainsKey(Key(x, y)), "RemoteFX Progressive region has no tile data.");
+                }
+            }
         }
         foreach (RfxRect rect in rectangles)
+        {
             for (int y = rect.Y / 64; y <= (rect.Y + rect.Height - 1) / 64; y++)
+            {
                 for (int x = rect.X / 64; x <= (rect.X + rect.Width - 1) / 64; x++)
+                {
                     RfxPrimitives.Copy(tiles[Key(x, y)].Pixels, x, y, rect, destination, stride);
+                }
+            }
+        }
+
         _surface.Commit(this, tiles, states.Count);
         _states = states;
     }
@@ -155,20 +183,28 @@ internal sealed class GfxProgressiveCodec
         int tileCount = reader.UInt16(), tileSize = reader.Length32();
         RfxGuard.Require(rectangleCount > 0 && rectangleCount <= reader.Remaining / 8 && quantCount <= 7,
             "Invalid RemoteFX Progressive region counts.");
-        for (int i = 0; i < rectangleCount; i++) rectangles.Add(RfxRect.Read(ref reader, width, height));
-        var quants = new int[quantCount][];
-        for (int i = 0; i < quantCount; i++) quants[i] = RfxPrimitives.Quant(ref reader, progressive: true);
-        var progressive = new int[progressiveCount][][];
+        for (int i = 0; i < rectangleCount; i++)
+        {
+            rectangles.Add(RfxRect.Read(ref reader, width, height));
+        }
+
+        int[][] quants = new int[quantCount][];
+        for (int i = 0; i < quantCount; i++)
+        {
+            quants[i] = RfxPrimitives.Quant(ref reader, progressive: true);
+        }
+
+        int[][][] progressive = new int[progressiveCount][][];
         for (int i = 0; i < progressiveCount; i++)
         {
-            reader.Byte();
+            _ = reader.Byte();
             progressive[i] = [RfxPrimitives.Quant(ref reader, true, true), RfxPrimitives.Quant(ref reader, true, true), RfxPrimitives.Quant(ref reader, true, true)];
         }
         var data = new RfxReader(reader.Take(tileSize));
         RfxGuard.Require(tileCount <= data.Remaining / 22, "Truncated RemoteFX Progressive tiles.");
         for (int i = 0; i < tileCount; i++)
         {
-            var tile = data.Block(out ushort type);
+            RfxReader tile = data.Block(out ushort type);
             RfxGuard.Require(type is 0xCCC5 or 0xCCC6 or 0xCCC7, "Invalid RemoteFX Progressive tile type.");
             int[] indices = [tile.Byte(), tile.Byte(), tile.Byte()];
             RfxGuard.Require(indices.All(index => index < quantCount), "Invalid RemoteFX Progressive quantization index.");
@@ -186,9 +222,11 @@ internal sealed class GfxProgressiveCodec
             {
                 bitPositions[c] = new int[10];
                 for (int band = 0; band < 10; band++)
+                {
                     bitPositions[c][band] = quants[indices[c]][band] + (quality == 255 ? 0 : progressive[quality][c][band]);
+                }
             }
-            tiles.TryGetValue(key, out GfxProgressiveTile? previous);
+            _ = tiles.TryGetValue(key, out GfxProgressiveTile? previous);
             RfxGuard.Require(!(upgrade || difference) || (previous is not null && previous.Reduced == reduced),
                 "RemoteFX Progressive difference or upgrade has no matching reference tile.");
             int[][] coefficients;
@@ -220,17 +258,33 @@ internal sealed class GfxProgressiveCodec
                 {
                     coefficients[c] = RfxPrimitives.Rlgr(tile.Take(lengths[c]), rlgr3: false);
                     signs[c] = new sbyte[4096];
-                    for (int n = 0; n < 4096; n++) signs[c][n] = (sbyte)Math.Sign(coefficients[c][n]);
+                    for (int n = 0; n < 4096; n++)
+                    {
+                        signs[c][n] = (sbyte)Math.Sign(coefficients[c][n]);
+                    }
+
                     RfxPrimitives.Differential(coefficients[c], reduced);
                     RfxPrimitives.Dequantize(coefficients[c], bitPositions[c], reduced);
                     if (difference)
-                        for (int n = 0; n < 4096; n++) coefficients[c][n] = Add(previous!.Coefficients[c][n], coefficients[c][n]);
+                    {
+                        for (int n = 0; n < 4096; n++)
+                        {
+                            coefficients[c][n] = Add(previous!.Coefficients[c][n], coefficients[c][n]);
+                        }
+                    }
                 }
-                tile.Take(tailLength); // Reserved, explicitly ignored by MS-RDPEGFX.
+                _ = tile.Take(tailLength); // Reserved, explicitly ignored by MS-RDPEGFX.
             }
             tile.End();
-            if (type == 0xCCC5) states.Remove(key);
-            else states[key] = new ProgressiveState(signs, bitPositions, reduced);
+            if (type == 0xCCC5)
+            {
+                _ = states.Remove(key);
+            }
+            else
+            {
+                states[key] = new ProgressiveState(signs, bitPositions, reduced);
+            }
+
             tiles[key] = new GfxProgressiveTile(coefficients, RfxPrimitives.Pixels(coefficients, reduced), reduced);
         }
         data.End();
@@ -249,10 +303,20 @@ internal sealed class GfxProgressiveCodec
             RfxGuard.Require(count is >= 0 and <= 23, "Invalid RemoteFX Progressive quality progression.");
             for (int n = 0; n < lengths[band]; n++, offset++)
             {
-                if (count == 0) continue;
+                if (count == 0)
+                {
+                    continue;
+                }
+
                 int input;
-                if (band == 9) input = raw.Read(count);
-                else if (signs[offset] != 0) input = raw.Read(count) * signs[offset];
+                if (band == 9)
+                {
+                    input = raw.Read(count);
+                }
+                else if (signs[offset] != 0)
+                {
+                    input = raw.Read(count) * signs[offset];
+                }
                 else
                 {
                     input = srl.Read(count);

@@ -924,7 +924,7 @@ internal sealed class LoopbackS3Server : IDisposable
             {
                 yield break;
             }
-            yield return System.Net.WebUtility.HtmlDecode(xml[start..end]);
+            yield return WebUtility.HtmlDecode(xml[start..end]);
             index = end + close.Length;
         }
     }

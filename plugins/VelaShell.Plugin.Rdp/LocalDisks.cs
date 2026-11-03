@@ -102,7 +102,7 @@ internal static class LocalDisks
                 break;
             }
 
-            disks.Add(new(mount, ShareName(System.IO.Path.GetFileName(mount), taken), mount, LocalDiskKind.Mount));
+            disks.Add(new(mount, ShareName(Path.GetFileName(mount), taken), mount, LocalDiskKind.Mount));
         }
         return disks;
     }

@@ -526,7 +526,11 @@ public sealed class RdpClipboardTests
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("13\t\n"));
         await Until(() => transport.FormatRequests == 1);
-        for (int i = 0; i < 8; i++) transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
+        for (int i = 0; i < 8; i++)
+        {
+            transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
+        }
+
         Task receive = bridge.ReceiveRemoteAsync();
         await Task.Delay(50);
         Assert.AreEqual(1, transport.FormatRequests);
@@ -558,15 +562,23 @@ public sealed class RdpClipboardTests
         window.Show();
         await window.Clipboard!.SetTextAsync("local");
         var unlock = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var transport = new ClipboardTransport { DelayResponses = true, SupportsClipboardLock = true,
-            LockHook = (_, locked) => locked ? Task.CompletedTask : unlock.Task };
+        var transport = new ClipboardTransport
+        {
+            DelayResponses = true,
+            SupportsClipboardLock = true,
+            LockHook = (_, locked) => locked ? Task.CompletedTask : unlock.Task
+        };
         var clipboard = new VirtualClipboard();
         var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
         await Until(() => transport.FormatRequests == 1);
-        for (int i = 0; i < 8; i++) transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
+        for (int i = 0; i < 8; i++)
+        {
+            transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
+        }
+
         bridge.StopTransfers();
         Task first = bridge.DisposeAsync().AsTask();
         Task second = bridge.DisposeAsync().AsTask();
@@ -597,15 +609,22 @@ public sealed class RdpClipboardTests
         var window = new Window { Content = new Border() };
         window.Show();
         await window.Clipboard!.SetTextAsync("local");
-        var transport = new ClipboardTransport { DelayResponses = true,
-            FormatRequestHook = timeout ? null : _ => Task.FromCanceled(new CancellationToken(true)) };
+        var transport = new ClipboardTransport
+        {
+            DelayResponses = true,
+            FormatRequestHook = timeout ? null : _ => Task.FromCanceled(new CancellationToken(true))
+        };
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true,
             formatResponseTimeout: TimeSpan.FromMilliseconds(300));
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("13\t\n"));
         await Until(() => transport.FormatRequests == 1);
-        if (timeout) await Until(() => ((CollectingLogger)context.Log).Entries.Any(e => e.Exception is TimeoutException));
+        if (timeout)
+        {
+            await Until(() => ((CollectingLogger)context.Log).Entries.Any(e => e.Exception is TimeoutException));
+        }
+
         transport.FormatRequestHook = null;
         transport.Emit(3, data: Encoding.UTF8.GetBytes("13\t\n"));
         await Task.Delay(50);
@@ -659,7 +678,9 @@ public sealed class RdpClipboardTests
         var transport = new ClipboardTransport
         {
             RemoteFiles = [new("large.bin", false, 3L * RdpClipboardFiles.ChunkSize)],
-            FileData = new byte[3 * RdpClipboardFiles.ChunkSize], HoldAfterFirstBlock = true, SupportsClipboardLock = true
+            FileData = new byte[3 * RdpClipboardFiles.ChunkSize],
+            HoldAfterFirstBlock = true,
+            SupportsClipboardLock = true
         };
         var clipboard = new VirtualClipboard();
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard);
@@ -667,14 +688,24 @@ public sealed class RdpClipboardTests
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
         await Until(() => clipboard.Source is not null);
-        await clipboard.Source!.ReadAsync(0, 0, RdpClipboardFiles.ChunkSize);
+        _ = await clipboard.Source!.ReadAsync(0, 0, RdpClipboardFiles.ChunkSize);
         Task<byte[]> pending = clipboard.Source.ReadAsync(0, RdpClipboardFiles.ChunkSize, RdpClipboardFiles.ChunkSize);
         await Until(() => transport.FileRequests.Count == 2);
-        Assert.AreEqual((long)RdpClipboardFiles.ChunkSize, bridge.DownloadProgress!.Bytes);
+        Assert.AreEqual(RdpClipboardFiles.ChunkSize, bridge.DownloadProgress!.Bytes);
         await bridge.PublishLocalAsync().WaitAsync(TimeSpan.FromSeconds(1));
-        if (cancellation == 0) bridge.CancelTransfer(false);
-        else if (cancellation == 1) bridge.StopTransfers();
-        else await bridge.DisposeAsync();
+        if (cancellation == 0)
+        {
+            bridge.CancelTransfer(false);
+        }
+        else if (cancellation == 1)
+        {
+            bridge.StopTransfers();
+        }
+        else
+        {
+            await bridge.DisposeAsync();
+        }
+
         _ = await Assert.ThrowsAsync<OperationCanceledException>(() => pending);
         await Until(() => transport.Locks.Count == 2);
         Assert.AreEqual((transport.Locks[0].Id, false), transport.Locks[1]);
@@ -698,8 +729,11 @@ public sealed class RdpClipboardTests
         var retrySent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         transport.FileRequestHook = (stream, _, _, _) =>
         {
-            if (first == 0) first = stream;
-            else { second = stream; retrySent.TrySetResult(); }
+            if (first == 0)
+            {
+                first = stream;
+            }
+            else { second = stream; _ = retrySent.TrySetResult(); }
         };
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard,
             TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(30));
@@ -721,7 +755,7 @@ public sealed class RdpClipboardTests
         Assert.AreSequenceEqual(new byte[] { 2, 3, 4, 5 }, bytes);
         Assert.AreEqual(4L, bridge.DownloadProgress.Bytes);
         Assert.HasCount(2, transport.FileRequests);
-        Assert.IsTrue(transport.FileRequests.All(r => r == (1u, (ulong)offset, 4u)));
+        Assert.IsTrue(transport.FileRequests.All(r => r == (1u, offset, 4u)));
         Assert.IsTrue(transport.RequestedVersions.All(v => v == transport.Locks[0].Id));
         transport.Emit(7, first, 0);
         Assert.AreEqual(4L, bridge.DownloadProgress.Bytes);
@@ -762,7 +796,7 @@ public sealed class RdpClipboardTests
         await window.Clipboard!.ClearAsync();
         var transport = new ClipboardTransport { SupportsClipboardLock = outcome != "sourceChanged", RemoteFiles = [new("data", false, 4)] };
         var clipboard = new VirtualClipboard();
-        transport.FileRequestHook = (stream, _, _, _) => { if (outcome == "rejected") transport.Emit(7, stream, 0); };
+        transport.FileRequestHook = (stream, _, _, _) => { if (outcome == "rejected") { transport.Emit(7, stream, 0); } };
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard,
             TimeSpan.FromMilliseconds(40), TimeSpan.FromMilliseconds(80));
         transport.Emit(2);
@@ -774,13 +808,32 @@ public sealed class RdpClipboardTests
         if (outcome is "cancelled" or "disconnected" or "sourceChanged")
         {
             await Until(() => bridge.DownloadProgress?.State == "Retrying");
-            if (outcome == "cancelled") bridge.CancelTransfer(false);
-            else if (outcome == "disconnected") bridge.StopTransfers();
-            else transport.Emit(9);
+            if (outcome == "cancelled")
+            {
+                bridge.CancelTransfer(false);
+            }
+            else if (outcome == "disconnected")
+            {
+                bridge.StopTransfers();
+            }
+            else
+            {
+                transport.Emit(9);
+            }
         }
-        if (outcome == "exhausted") await Assert.ThrowsAsync<TimeoutException>(() => pending);
-        else if (outcome is "cancelled" or "disconnected") await Assert.ThrowsAsync<OperationCanceledException>(() => pending);
-        else await Assert.ThrowsAsync<IOException>(() => pending);
+        if (outcome == "exhausted")
+        {
+            _ = await Assert.ThrowsAsync<TimeoutException>(() => pending);
+        }
+        else if (outcome is "cancelled" or "disconnected")
+        {
+            _ = await Assert.ThrowsAsync<OperationCanceledException>(() => pending);
+        }
+        else
+        {
+            _ = await Assert.ThrowsAsync<IOException>(() => pending);
+        }
+
         Assert.HasCount(expectedRequests, transport.FileRequests);
         Assert.AreEqual(0L, bridge.DownloadProgress!.Bytes);
         Assert.AreEqual(outcome == "exhausted" ? "TimedOut" : outcome is "cancelled" or "disconnected" ? "Cancelled" : "Failed", bridge.DownloadProgress.State);
@@ -890,7 +943,11 @@ public sealed class RdpClipboardTests
         public Task RequestFormatAsync(uint format, CancellationToken cancellationToken)
         {
             FormatRequests++;
-            if (FormatRequestHook is { } hook) return hook(format);
+            if (FormatRequestHook is { } hook)
+            {
+                return hook(format);
+            }
+
             if (!DelayResponses)
             {
                 Emit(5, 1, format, RemotePayload ?? (format == 13 ? RdpClipboardCodec.EncodeText(RemoteText) : RdpClipboardCodec.EncodeFiles(RemoteFiles)));

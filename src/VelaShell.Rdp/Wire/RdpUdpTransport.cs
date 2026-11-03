@@ -36,7 +36,7 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
             byte[] syn = transport._state.Syn().Encode();
             for (int attempt = 0; attempt < 5; attempt++)
             {
-                await transport._socket.SendAsync(syn, SocketFlags.None, ct).ConfigureAwait(false);
+                _ = await transport._socket.SendAsync(syn, SocketFlags.None, ct).ConfigureAwait(false);
                 try
                 {
                     await transport._connected.Task.WaitAsync(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
@@ -101,12 +101,12 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
             while (!_stop.IsCancellationRequested)
             {
                 int size = await _socket.ReceiveAsync(buffer, SocketFlags.None, _stop.Token).ConfigureAwait(false);
-                RdpUdpPacket packet = RdpUdpPacket.Decode(buffer.AsSpan(0, size));
+                var packet = RdpUdpPacket.Decode(buffer.AsSpan(0, size));
                 List<byte[]> output;
                 lock (_gate)
                 {
                     output = _state.Receive(packet, Environment.TickCount64);
-                    if (_state.Established) { _connected.TrySetResult(); }
+                    if (_state.Established) { _ = _connected.TrySetResult(); }
                     Pulse();
                 }
                 await SendPacketsAsync(output, _stop.Token).ConfigureAwait(false);
@@ -134,13 +134,13 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
     {
         try
         {
-            foreach (byte[] packet in packets) { await _socket.SendAsync(packet, SocketFlags.None, ct).ConfigureAwait(false); }
+            foreach (byte[] packet in packets) { _ = await _socket.SendAsync(packet, SocketFlags.None, ct).ConfigureAwait(false); }
         }
         catch (Exception ex) { Fail(ex); throw; }
     }
 
     private static TaskCompletionSource NewPulse() => new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private void Pulse() { TaskCompletionSource old = _changed; _changed = NewPulse(); old.TrySetResult(); }
+    private void Pulse() { TaskCompletionSource old = _changed; _changed = NewPulse(); _ = old.TrySetResult(); }
     private void CheckFailure()
     {
         if (_failure is not null) { throw new IOException("RDP-UDP connection closed.", _failure); }
@@ -148,7 +148,7 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
     }
     private void Fail(Exception error)
     {
-        lock (_gate) { _failure ??= error; _connected.TrySetException(error); Pulse(); }
+        lock (_gate) { _failure ??= error; _ = _connected.TrySetException(error); Pulse(); }
         _stop.Cancel();
     }
 

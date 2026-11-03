@@ -36,7 +36,9 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
 
     internal RdpUdpPacket Syn() => new(uint.MaxValue, Capacity, RdpUdpFlags.Syn | (lossy ? RdpUdpFlags.Lossy : 0))
     {
-        InitialSequence = _initial, UpMtu = 1232, DownMtu = 1232
+        InitialSequence = _initial,
+        UpMtu = 1232,
+        DownMtu = 1232
     };
 
     internal List<byte[]> Receive(RdpUdpPacket packet, long now)
@@ -50,7 +52,7 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
             {
                 _next = unchecked(packet.InitialSequence + 1);
                 _highest = _ackFloor = _peerInitial = packet.InitialSequence;
-                _received.Add(_highest);
+                _ = _received.Add(_highest);
                 _history.Enqueue(_highest);
                 _window = packet.Window;
                 Established = true;
@@ -86,7 +88,7 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
                     else if (newer >= 3 && _sent.TryGetValue(sequence, out Sent? missing) && now - missing.Time >= RttMilliseconds)
                     {
                         Reduce(now);
-                        if (lossy) { _sent.Remove(sequence); }
+                        if (lossy) { _ = _sent.Remove(sequence); }
                         else { output.Add(Retransmit(sequence, missing, now)); }
                     }
                 }
@@ -118,9 +120,9 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
         int distance = RdpUdpPacket.Distance(sequence, _next);
         if (distance < 0 || distance >= Capacity || _received.Contains(sequence) || _pending.Count + _delivered.Count >= Capacity) { return; }
         _pending.Add(sequence, payload);
-        _received.Add(sequence);
+        _ = _received.Add(sequence);
         _history.Enqueue(sequence);
-        while (_history.Count > Capacity) { _received.Remove(_history.Dequeue()); }
+        while (_history.Count > Capacity) { _ = _received.Remove(_history.Dequeue()); }
         _fec.AddSource(sequence, payload);
         if (RdpUdpPacket.Distance(sequence, _highest) > 0) { _highest = sequence; }
         if (distance > 0 && _gapSince < 0) { _gapSince = now; }
@@ -158,7 +160,10 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
                 RdpUdpPacket fec = Ack(now) with
                 {
                     Flags = RdpUdpFlags.Ack | RdpUdpFlags.Data | RdpUdpFlags.Fec | RdpUdpFlags.AckOfAcks,
-                    CodedSequence = unchecked(++_coded), SourceSequence = _fecStart, FecRange = 3, FecIndex = index,
+                    CodedSequence = unchecked(++_coded),
+                    SourceSequence = _fecStart,
+                    FecRange = 3,
+                    FecIndex = index,
                     Payload = RdpUdpFec.Encode(_fecStart, _fecSend, index)
                 };
                 output.Add(fec.Encode());
@@ -178,7 +183,7 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
         {
             if (now - sent.Time < timeout) { continue; }
             Reduce(now);
-            if (lossy) { _sent.Remove(sequence); }
+            if (lossy) { _ = _sent.Remove(sequence); }
             else { output.Add(Retransmit(sequence, sent, now)); }
         }
         while (_acked != _source && !_sent.ContainsKey(unchecked(_acked + 1))) { _acked = unchecked(_acked + 1); }

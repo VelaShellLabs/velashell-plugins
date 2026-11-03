@@ -79,10 +79,10 @@ public sealed class RdpNlaInteropTests
         Assert.HasCount(32, pin, "Could not learn the server's leaf certificate.");
         WorkspaceConnectRequest request = Request(target, pin, RdpManagedInteropTests.Pass);
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
 
         IRdpSession session;
-        VelaShell.Rdp.Security.NlaSecurityContext.ForceManagedForTest = forceManaged;
+        NlaSecurityContext.ForceManagedForTest = forceManaged;
         try
         {
             session = await RdpConnector.ConnectAsync(request, settings, loc, default);
@@ -95,7 +95,7 @@ public sealed class RdpNlaInteropTests
         }
         finally
         {
-            VelaShell.Rdp.Security.NlaSecurityContext.ForceManagedForTest = false;
+            NlaSecurityContext.ForceManagedForTest = false;
         }
 
         try
@@ -124,7 +124,7 @@ public sealed class RdpNlaInteropTests
         byte[] pin = await LearnPinAsync(target);
         WorkspaceConnectRequest request = Request(target, pin, "definitely-not-the-password");
         var loc = new Loc("en");
-        RdpSettings settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc);
         Exception? failure = null;
         try
         {
@@ -139,7 +139,7 @@ public sealed class RdpNlaInteropTests
         Assert.IsNotNull(failure, "A wrong password must not connect.");
         // Still a credentials error under the default Auto security layer: a rejected password is never
         // retried with TLS (the retry is only for servers that refuse NLA before credentials are sent).
-        Assert.IsInstanceOfType<ProtocolAuthenticationException>(failure, Chain(failure));
+        _ = Assert.IsInstanceOfType<ProtocolAuthenticationException>(failure, Chain(failure));
     }
 
     [TestMethod]

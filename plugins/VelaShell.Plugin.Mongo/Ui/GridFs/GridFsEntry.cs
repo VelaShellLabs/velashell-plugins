@@ -3,7 +3,7 @@ using Avalonia.Media.Imaging;
 using VelaShell.Plugin.Mongo.Bson;
 using VelaShell.Plugin.Mongo.Core;
 
-namespace VelaShell.Plugin.Mongo.Ui;
+namespace VelaShell.Plugin.Mongo.Ui.GridFs;
 
 /// <summary>文件表里一行的种类。</summary>
 internal enum GridFsEntryKind
@@ -287,7 +287,9 @@ internal sealed class GridFsTransfer
     public long ChunkTotal => Math.Max(1, (Size + ChunkSize - 1) / ChunkSize);
 
     // 必须是真字段:Sink 在驱动线程上用 Interlocked.Exchange 写它,属性(含 field 关键字)取不了 ref。
+#pragma warning disable IDE0032 // 使用自动属性
     private long _bytes;
+#pragma warning restore IDE0032 // 使用自动属性
 
     /// <summary>已走过的字节(任意线程写,UI 定时读)。</summary>
     public long Bytes => Interlocked.Read(ref _bytes);

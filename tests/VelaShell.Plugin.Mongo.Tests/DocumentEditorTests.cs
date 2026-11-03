@@ -561,7 +561,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(10, schema.Sampled);
 
         List<string> added = vm.FillFrom(schema);
-        Assert.AreSequenceEqual(new[] { "note", "invoice", "customer.vip", "invoice.title", "invoice.amount" }, added, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { "note", "invoice", "customer.vip", "invoice.title", "invoice.amount" }, added, SequenceOrder.InAnyOrder);
         Assert.AreEqual(BsonKind.Null, Row(vm, "note").Kind);
         Assert.AreEqual(BsonKind.Object, Row(vm, "invoice").Kind);
         Assert.AreEqual(BsonKind.String, Row(vm, "invoice.title").Kind);
@@ -770,7 +770,7 @@ public sealed class DocumentEditorTests
         after["customer"] = new BsonDocument { ["name"] = "张伟", ["id"] = before["customer"]["id"], ["level"] = "SVIP" };
         after["paid"] = "yes";
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(before, after);
-        Assert.AreSequenceEqual(new[] { "customer", "paid", "tags" }, [.. plan.Set.Names], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { "customer", "paid", "tags" }, [.. plan.Set.Names], SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -818,7 +818,7 @@ public sealed class DocumentEditorTests
         Assert.AreSequenceEqual(new[] { 2 }, [.. removed]);
         Assert.AreSequenceEqual(new[] { 2 }, [.. added]);
         (_, added) = DocumentEditorDiff.Lines([], ["a", "b"]);
-        Assert.AreSequenceEqual(new[] { 1, 2 }, [.. added], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(new[] { 1, 2 }, [.. added], SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]

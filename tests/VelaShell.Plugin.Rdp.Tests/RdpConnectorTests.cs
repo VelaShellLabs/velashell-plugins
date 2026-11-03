@@ -13,7 +13,7 @@ public sealed class RdpConnectorTests
     {
         var loc = new Loc("zh-Hans");
         Exception translated = RdpConnector.Translate(new RdpAuthenticationException("rejected", 0xC000006D), loc);
-        var auth = Assert.IsInstanceOfType<ProtocolAuthenticationException>(translated);
+        ProtocolAuthenticationException auth = Assert.IsInstanceOfType<ProtocolAuthenticationException>(translated);
         Assert.Contains("用户名或密码不正确", auth.Message);
         Assert.Contains("C000006D", auth.Message);
     }
@@ -48,7 +48,7 @@ public sealed class RdpConnectorTests
         var tls = new IOException("The decryption operation failed, see inner exception.",
             new Win32Exception(unchecked((int)0x80090330), "The specified data could not be decrypted."));
         Exception translated = RdpConnector.Translate(new RdpConnectionException(RdpConnectStage.Nla, tls), new Loc("zh-Hans"));
-        var failure = Assert.IsInstanceOfType<ProtocolConnectionException>(translated);
+        ProtocolConnectionException failure = Assert.IsInstanceOfType<ProtocolConnectionException>(translated);
         Assert.Contains("「NLA 身份验证」", failure.Message);
         Assert.Contains("The decryption operation failed", failure.Message);
         Assert.Contains("0x80090330", failure.Message);

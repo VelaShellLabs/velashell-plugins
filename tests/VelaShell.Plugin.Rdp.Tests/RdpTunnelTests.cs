@@ -6,7 +6,6 @@ using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Tls;
 using Org.BouncyCastle.Tls.Crypto;
 using Org.BouncyCastle.Tls.Crypto.Impl.BC;
-using VelaShell.Rdp;
 using VelaShell.Rdp.Wire;
 using BcCertificate = Org.BouncyCastle.Tls.Certificate;
 
@@ -17,7 +16,7 @@ public sealed class RdpTunnelTests
 {
     private static readonly Lazy<X509Certificate2> Certificate = new(() =>
     {
-        using RSA rsa = RSA.Create(2048);
+        using var rsa = RSA.Create(2048);
         var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using X509Certificate2 ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         return X509CertificateLoader.LoadPkcs12(ephemeral.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.Exportable);
@@ -26,7 +25,11 @@ public sealed class RdpTunnelTests
     {
         private readonly BcTlsCrypto _crypto;
         internal DtlsServer() : this(new BcTlsCrypto(new SecureRandom())) { }
-        private DtlsServer(BcTlsCrypto crypto) : base(crypto) => _crypto = crypto;
+        private DtlsServer(BcTlsCrypto crypto) : base(crypto)
+        {
+            _crypto = crypto;
+        }
+
         protected override ProtocolVersion[] GetSupportedVersions() => [ProtocolVersion.DTLSv12];
         protected override int[] GetSupportedCipherSuites() => [CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
         protected override TlsCredentialedSigner GetRsaSignerCredentials()
@@ -56,7 +59,7 @@ public sealed class RdpTunnelTests
         catch { await serving.WaitAsync(TimeSpan.FromSeconds(5)); throw; }
         await using RdpMultitransport tunnel = connected;
         var delivered = System.Threading.Channels.Channel.CreateBounded<byte[]>(2);
-        tunnel.Start(bytes => { delivered.Writer.TryWrite(bytes); return Task.CompletedTask; }, ex => delivered.Writer.TryComplete(ex));
+        tunnel.Start(bytes => { _ = delivered.Writer.TryWrite(bytes); return Task.CompletedTask; }, ex => delivered.Writer.TryComplete(ex));
         Assert.IsFalse(tunnel.Reading);
         Assert.IsFalse(delivered.Reader.TryPeek(out _));
         tunnel.EnableReading();
@@ -102,11 +105,11 @@ public sealed class RdpTunnelTests
             Assert.AreEqual((byte)0, request[0]);
             Assert.AreEqual(42u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(request.AsSpan(4)));
             Assert.AreSequenceEqual(cookie, request.AsSpan(12).ToArray());
-            await WriteFrameAsync(tls, dtls, [1,4,0], server.Token);
+            await WriteFrameAsync(tls, dtls, [1, 4, 0], server.Token);
             await WriteFrameAsync(tls, dtls, [4,0,0,0,0,
                 .. RdpMultitransport.Frame(2, [0x30,1,9]), .. RdpMultitransport.Frame(2, [0x30,1,8])], server.Token);
             byte[] response = await ReadFrameAsync(tls, dtls, server.Token);
-            Assert.AreSequenceEqual(new byte[] { 2,3,0,4,0x30,1,7 }, response);
+            Assert.AreSequenceEqual(new byte[] { 2, 3, 0, 4, 0x30, 1, 7 }, response);
         }
         catch (Exception) when (rejectCertificate) { }
         catch (Exception ex) { Console.Error.WriteLine(ex); throw; }
@@ -151,7 +154,7 @@ public sealed class RdpTunnelTests
         var peer = new System.Net.IPEndPoint(server.Endpoint.Address.MapToIPv6(), server.Endpoint.Port);
         try
         {
-            await using var transport = await RdpUdpTransport.ConnectAsync(peer, lossy, server.Token);
+            await using RdpUdpTransport transport = await RdpUdpTransport.ConnectAsync(peer, lossy, server.Token);
             await accepting;
             await transport.SendAsync(new byte[] { 1, 2, 3 }, server.Token);
             byte[] received = await server.ReadAsync(server.Token);
@@ -173,6 +176,6 @@ public sealed class RdpTunnelTests
     {
         await using var silent = new FakeRdpUdpServer();
         using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(80));
-        await Assert.ThrowsAsync<OperationCanceledException>(() => RdpUdpTransport.ConnectAsync(silent.Endpoint, false, stop.Token));
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => RdpUdpTransport.ConnectAsync(silent.Endpoint, false, stop.Token));
     }
 }

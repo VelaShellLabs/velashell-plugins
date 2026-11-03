@@ -70,7 +70,7 @@ internal sealed partial class RdpConnection
         }
         catch (Exception) when (!_sendStop.IsCancellationRequested)
         {
-            _tunnels.TryRemove(type, out _);
+            _ = _tunnels.TryRemove(type, out _);
             if (tunnel is not null) { await tunnel.DisposeAsync().ConfigureAwait(false); }
             Network.Transport(_tunnels.ContainsKey(1), _tunnels.ContainsKey(3), true);
             if (announced) { _tcp?.Close(); }

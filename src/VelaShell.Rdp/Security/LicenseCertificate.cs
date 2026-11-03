@@ -23,7 +23,7 @@ internal static class LicenseCertificate
         {
             var r = new ByteReader(certificate);
             uint version = r.U32LE() & 0x7FFFFFFF;
-            var key = version switch
+            (BigInteger Modulus, BigInteger Exponent, int Size) key = version switch
             {
                 1 => Proprietary(certificate, ref r),
                 2 => X509(ref r),
@@ -61,10 +61,12 @@ internal static class LicenseCertificate
         BigInteger modulus = new(key.Take(size), isUnsigned: true);
         RequireZeros(key.Take(8));
         byte[] hash = MD5.HashData(certificate[..r.Position]);
+#pragma warning disable IDE0078 // 使用模式匹配(可能会更改代码含义)
         if (r.U16LE() != 8 || r.U16LE() != 72)
         {
             throw new RdpProtocolException("Invalid proprietary RDP licensing signature length.");
         }
+#pragma warning restore IDE0078 // 使用模式匹配(可能会更改代码含义)
         BigInteger signature = new(r.Take(64), isUnsigned: true);
         RequireZeros(r.Take(8));
         if (signature >= SigningModulus)
@@ -72,7 +74,7 @@ internal static class LicenseCertificate
             throw new RdpProtocolException("Invalid proprietary RDP licensing signature.");
         }
         byte[] actual = new byte[64];
-        BigInteger.ModPow(signature, 0xC0887B5B, SigningModulus).TryWriteBytes(actual, out _, isUnsigned: true);
+        _ = BigInteger.ModPow(signature, 0xC0887B5B, SigningModulus).TryWriteBytes(actual, out _, isUnsigned: true);
         byte[] expected = new byte[64];
         hash.CopyTo(expected, 0);
         expected.AsSpan(17, 45).Fill(0xFF);
@@ -108,7 +110,7 @@ internal static class LicenseCertificate
             // The licensing CA can be private/self-signed. Its provenance is the authenticated TLS
             // channel; validate the supplied chain without installing roots or downloading certificates.
             chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-            chain.ChainPolicy.CustomTrustStore.Add(certificates[0]);
+            _ = chain.ChainPolicy.CustomTrustStore.Add(certificates[0]);
             chain.ChainPolicy.ExtraStore.AddRange(certificates.ToArray());
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
             chain.ChainPolicy.DisableCertificateDownloads = true;

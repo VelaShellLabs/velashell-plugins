@@ -101,8 +101,8 @@ public sealed class RdpHeadlessTests
             foreach (string name in new[] { "ClipboardDownload", "ClipboardUpload" })
             {
                 var controls = footer.GetVisualDescendants().OfType<Control>().ToList();
-                var bar = controls.OfType<ProgressBar>().Single(control => control.Name == name + "Bar");
-                var cancel = controls.OfType<Button>().Single(control => control.Name == "Cancel" + name);
+                ProgressBar bar = controls.OfType<ProgressBar>().Single(control => control.Name == name + "Bar");
+                Button cancel = controls.OfType<Button>().Single(control => control.Name == "Cancel" + name);
                 var slot = (Control)cancel.Parent!;
                 Assert.IsLessThanOrEqualTo(cancel.Bounds.Left, bar.Bounds.Right, $"Overlap at width {width}: {name} bar {bar.Bounds} cancel {cancel.Bounds} visible {cancel.IsVisible}");
                 Assert.IsLessThanOrEqualTo(slot.Bounds.Width, cancel.Bounds.Right, $"Cancel clipped at width {width}");
@@ -127,11 +127,11 @@ public sealed class RdpHeadlessTests
         desktop.PublishClipboard = () => publish.Task;
         var window = new Window { Content = desktop };
         window.Show();
-        desktop.Focus();
+        _ = desktop.Focus();
         var input = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         desktop.Queue(() => { input.SetResult(); return Task.CompletedTask; });
         try { await input.Task.WaitAsync(TimeSpan.FromSeconds(1)); }
-        finally { publish.TrySetResult(); window.Close(); }
+        finally { _ = publish.TrySetResult(); window.Close(); }
     });
 
     [TestMethod]
@@ -175,7 +175,7 @@ public sealed class RdpHeadlessTests
         var request = new TextInputMethodClientRequestedEventArgs { RoutedEvent = InputElement.TextInputMethodClientRequestedEvent };
         desktop.RaiseEvent(request);
         Assert.IsNotNull(request.Client);
-        foreach (var (key, physicalKey, preedit, text) in new[]
+        foreach ((Key key, PhysicalKey physicalKey, string? preedit, string? text) in new[]
         {
             (Key.C, PhysicalKey.C, "ceshi", "测试"),
             (Key.S, PhysicalKey.S, "shuru", "输入")

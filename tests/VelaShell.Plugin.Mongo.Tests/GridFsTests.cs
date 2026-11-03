@@ -3,6 +3,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Ui;
+using VelaShell.Plugin.Mongo.Ui.GridFs;
 
 namespace VelaShell.Plugin.Mongo.Tests;
 
@@ -110,7 +111,7 @@ public sealed class GridFsTests
         try
         {
             IReadOnlyList<GridFsUploadItem> items = GridFsTabViewModel.ExpandPaths([folder, loose]);
-            Assert.AreSequenceEqual(new[] { "SKU-1/main.jpg", "SKU-1/detail/d1.jpg", "loose.txt" }, [.. items.Select(static i => i.Relative)], Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+            Assert.AreSequenceEqual(new[] { "SKU-1/main.jpg", "SKU-1/detail/d1.jpg", "loose.txt" }, [.. items.Select(static i => i.Relative)], SequenceOrder.InAnyOrder);
             Assert.AreEqual(3L, items.Single(static i => i.Relative == "SKU-1/main.jpg").Size);
         }
         finally
@@ -330,7 +331,7 @@ public sealed class GridFsTests
         IMongoCollection<BsonDocument> files = temp.Connection.Collection(temp.Database, "fs.files");
         IMongoCollection<BsonDocument> chunks = temp.Connection.Collection(temp.Database, "fs.chunks");
         List<BsonValue> left = [.. (await files.Find(FilterDefinition<BsonDocument>.Empty).ToListAsync()).Select(static d => d["_id"])];
-        Assert.AreSequenceEqual(new BsonValue[] { ids[2], ids[3], ids[4] }, left, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder, "only v1 and v2 are gone");
+        Assert.AreSequenceEqual(new BsonValue[] { ids[2], ids[3], ids[4] }, left, SequenceOrder.InAnyOrder, "only v1 and v2 are gone");
         Assert.AreEqual(0L, await chunks.CountDocumentsAsync(new BsonDocument("files_id", new BsonDocument("$in", new BsonArray { ids[0], ids[1] }))),
             "their chunks went with them");
         Assert.AreEqual(ids[4], details.Versions[0].File.Id, "the latest stays the latest");

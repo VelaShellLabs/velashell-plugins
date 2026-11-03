@@ -37,7 +37,7 @@ internal sealed class RdpMultitransport : IAsyncDisposable
         var tunnel = new RdpMultitransport(lossy, monitor, ct);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(tunnel._stop.Token);
         timeout.CancelAfter(TimeSpan.FromSeconds(12));
-        using var registration = timeout.Token.Register(tunnel._stop.Cancel);
+        using CancellationTokenRegistration registration = timeout.Token.Register(tunnel._stop.Cancel);
         try
         {
             tunnel._udp = await RdpUdpTransport.ConnectAsync(peer, lossy, timeout.Token).ConfigureAwait(false);
@@ -107,7 +107,7 @@ internal sealed class RdpMultitransport : IAsyncDisposable
     internal static byte[] Frame(byte action, byte[] payload, byte[]? autoDetectResponse = null)
     {
         int header = 4 + (autoDetectResponse is null ? 0 : autoDetectResponse.Length + 2);
-        var result = new byte[header + payload.Length];
+        byte[] result = new byte[header + payload.Length];
         result[0] = action;
         BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(1), checked((ushort)payload.Length));
         result[3] = checked((byte)header);
@@ -133,7 +133,7 @@ internal sealed class RdpMultitransport : IAsyncDisposable
                 await Task.Run(() => dtls.Send(frame, 0, frame.Length), linked.Token).ConfigureAwait(false);
             }
         }
-        finally { _write.Release(); }
+        finally { _ = _write.Release(); }
     }
 
     private async Task<byte[]> ReadFrameAsync(CancellationToken ct)
@@ -199,6 +199,6 @@ internal sealed class RdpMultitransport : IAsyncDisposable
             catch (Exception ex) when (ex is IOException or OperationCanceledException or ObjectDisposedException) { }
             try { _dtls?.Close(); } catch (Exception ex) when (ex is IOException or OperationCanceledException or ObjectDisposedException) { }
         }
-        finally { _write.Release(); _stop.Dispose(); }
+        finally { _ = _write.Release(); _stop.Dispose(); }
     }
 }

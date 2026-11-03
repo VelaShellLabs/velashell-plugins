@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
+using System.Net.Security;
 using System.Reflection;
+using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Mcs;
 using VelaShell.Rdp.Wire;
@@ -15,7 +17,7 @@ public sealed class RdpMessageChannelTests
         var initiate = new ByteWriter();
         initiate.U16LE(2); initiate.U16LE(0); initiate.U32LE(42);
         initiate.U16LE(1); initiate.U16LE(0); initiate.Bytes(new byte[16]);
-        byte[] demand = [6,0,0x11,0,0xEA,3];
+        byte[] demand = [6, 0, 0x11, 0, 0xEA, 3];
         using var wire = new LicensingTests.ScriptedStream([
             .. LicensingTests.Frame([0,0x10,0,0,6,0,7,0,1,0], 1007),
             .. LicensingTests.Frame(initiate.ToArray(), 1007), .. LicensingTests.Frame(demand)]);
@@ -29,8 +31,8 @@ public sealed class RdpMessageChannelTests
         byte[] output = wire.Output.ToArray();
         int firstLength = BinaryPrimitives.ReadUInt16BigEndian(output.AsSpan(2));
         Assert.AreEqual((ushort)1007, BinaryPrimitives.ReadUInt16BigEndian(output.AsSpan(10)));
-        Assert.AreSequenceEqual(new byte[] { 0,0x20,0,0,6,1,7,0,0,0 }, output.AsSpan(14, firstLength - 14).ToArray());
-        Assert.AreSequenceEqual(new byte[] { 4,0,0,0,42,0,0,0,4,0x40,0,0x80 }, output.AsSpan(firstLength + 14).ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0, 0x20, 0, 0, 6, 1, 7, 0, 0, 0 }, output.AsSpan(14, firstLength - 14).ToArray());
+        Assert.AreSequenceEqual(new byte[] { 4, 0, 0, 0, 42, 0, 0, 0, 4, 0x40, 0, 0x80 }, output.AsSpan(firstLength + 14).ToArray());
     }
 
     [TestMethod]
@@ -45,20 +47,20 @@ public sealed class RdpMessageChannelTests
         await using var server = new FakeRdpServer(async peer =>
         {
             await peer.SelectAsync(FakeRdpConnection.Ssl, extended ? (byte)1 : (byte)0);
-            using var tls = await peer.StartTlsAsync();
+            using SslStream tls = await peer.StartTlsAsync();
             byte[] header = new byte[4]; await tls.ReadExactlyAsync(header, stop.Token);
             byte[] body = new byte[BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2)) - 4];
             await tls.ReadExactlyAsync(body, stop.Token);
             captured.SetResult(body);
         });
-        var request = RdpSettingsTests.Request(("transport", mode), ("security", "tls"),
+        WorkspaceConnectRequest request = RdpSettingsTests.Request(("transport", mode), ("security", "tls"),
             ("trustedThumbprint", Convert.ToHexString(FakeRdpServer.Pin))) with
         { Host = "127.0.0.1", Port = server.Port, Tunnel = jump ? new("localhost", 3389, "Jump") : null };
         var settings = RdpSettings.From(request, new("en"), []);
-        await Assert.ThrowsAsync<VelaShell.PluginSdk.Protocols.ProtocolConnectionException>(
+        _ = await Assert.ThrowsAsync<VelaShell.PluginSdk.Protocols.ProtocolConnectionException>(
             () => RdpConnector.ConnectAsync(request, settings, new("en"), stop.Token));
         byte[] gcc = await captured.Task.WaitAsync(stop.Token);
-        Assert.AreEqual(expectUdp, gcc.AsSpan().IndexOf(new byte[] { 10,0xC0,8,0,5,2,0,0 }) >= 0);
+        Assert.AreEqual(expectUdp, gcc.AsSpan().IndexOf(new byte[] { 10, 0xC0, 8, 0, 5, 2, 0, 0 }) >= 0);
     }
 
     [TestMethod]
@@ -68,10 +70,10 @@ public sealed class RdpMessageChannelTests
             messageChannel: true, multitransport: true, adaptiveNetwork: true);
         byte[] legacy = GccData.BuildClientData(800, 600, 32, 1, "test", 0, [],
             messageChannel: false, multitransport: true, adaptiveNetwork: true);
-        byte[] extensions = [6,0xC0,8,0,0,0,0,0,10,0xC0,8,0,5,2,0,0];
+        byte[] extensions = [6, 0xC0, 8, 0, 0, 0, 0, 0, 10, 0xC0, 8, 0, 5, 2, 0, 0];
         Assert.IsTrue(enabled.AsSpan().EndsWith(extensions));
         Assert.IsFalse(legacy.AsSpan().EndsWith(extensions));
-        int core = enabled.AsSpan().IndexOf(new byte[] { 1,0xC0,0xD8,0,4,0,8,0 });
+        int core = enabled.AsSpan().IndexOf(new byte[] { 1, 0xC0, 0xD8, 0, 4, 0, 8, 0 });
         Assert.IsGreaterThanOrEqualTo(0, core);
         Assert.AreEqual(0xA0, BinaryPrimitives.ReadUInt16LittleEndian(enabled.AsSpan(core + 144)) & 0xA0);
         Assert.AreEqual((byte)7, enabled[core + 210]);

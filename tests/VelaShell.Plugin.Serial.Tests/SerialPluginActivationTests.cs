@@ -106,7 +106,7 @@ public sealed class SerialPluginActivationTests
 
         string[] mainForm = [.. descriptor.Fields.Where(field => !field.IsAdvanced).Select(field => field.Key)];
         Assert.AreSequenceEqual(
-            ["baudRate", "dataBits", "stopBits", "parity", "flowControl", "enterMode"], mainForm, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+            ["baudRate", "dataBits", "stopBits", "parity", "flowControl", "enterMode"], mainForm, SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -138,7 +138,7 @@ public sealed class SerialPluginActivationTests
                 "velashell.serial.resetBoard",
                 "velashell.serial.toggleDtr",
                 "velashell.serial.toggleRts"
-            ], ids, Microsoft.VisualStudio.TestTools.UnitTesting.SequenceOrder.InAnyOrder);
+            ], ids, SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]

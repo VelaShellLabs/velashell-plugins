@@ -27,8 +27,7 @@ internal sealed class WindowsPrinterBackend : IPrinterBackend
         // A server never chooses an OpenPrinter target. Resolve only an existing locally installed selection.
         PrinterNative.QueueInfo? selected = PrinterNative.Enumerate().FirstOrDefault(queue =>
             queue.IsSupported && string.Equals(queue.Name, printer.PrinterName, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(queue.Driver, printer.DriverName, StringComparison.Ordinal));
-        if (selected is null) { throw new IOException("The selected printer queue or driver is no longer available."); }
+            && string.Equals(queue.Driver, printer.DriverName, StringComparison.Ordinal)) ?? throw new IOException("The selected printer queue or driver is no longer available.");
         if (!PrinterNative.OpenPrinterW(selected.Name, out PrinterNative.PrinterHandle handle, IntPtr.Zero))
         {
             int error = Marshal.GetLastPInvokeError();

@@ -256,18 +256,18 @@ public sealed class RdpSettingsTests
     {
         var loc = new Loc("zh-Hans");
         string example = RdpSettings.CustomFolderExamples().Single;
-        var invalid = Assert.ThrowsExactly<ProtocolConnectionException>(
+        ProtocolConnectionException invalid = Assert.ThrowsExactly<ProtocolConnectionException>(
             () => RdpSettings.From(Request(("drives", "docs=relative")), loc, []));
         Assert.Contains("「docs=relative」", invalid.Message);
         Assert.Contains(example, invalid.Message);
 
         string work = TempDir("work");
-        var duplicate = Assert.ThrowsExactly<ProtocolConnectionException>(
+        ProtocolConnectionException duplicate = Assert.ThrowsExactly<ProtocolConnectionException>(
             () => RdpSettings.From(Request(("drives", $"work={work};WORK={work}")), loc, []));
         Assert.Contains("「WORK」", duplicate.Message);
 
         string tooMany = string.Join(';', Enumerable.Range(0, 33).Select(i => $"d{i}={work}"));
-        var limit = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request(("drives", tooMany)), loc, []));
+        ProtocolConnectionException limit = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request(("drives", tooMany)), loc, []));
         Assert.Contains("32", limit.Message);
     }
 

@@ -22,7 +22,11 @@ internal sealed class RdpClipboardTransfer
     {
         lock (_gate)
         {
-            if (_progress?.Active == true) _progress = _progress with { State = "Retrying" };
+            if (_progress?.Active == true)
+            {
+                _progress = _progress with { State = "Retrying" };
+            }
+
             _lastActivity = Environment.TickCount64;
         }
     }
@@ -50,11 +54,11 @@ internal sealed class RdpClipboardTransfer
         {
             _lastActivity = Environment.TickCount64;
             if (_progress is null || (!_progress.Active && _progress.State is not ("Ready" or "Sent" or "Delivered" or "Completed"))) { return; }
-            if (!_ranges.TryGetValue(index, out var ranges)) { ranges = []; _ranges.Add(index, ranges); }
+            if (!_ranges.TryGetValue(index, out List<(long Start, long End)>? ranges)) { ranges = []; _ranges.Add(index, ranges); }
             long end = checked(offset + length), removed = 0;
             for (int i = ranges.Count - 1; i >= 0; i--)
             {
-                var range = ranges[i];
+                (long Start, long End) range = ranges[i];
                 if (range.End < offset || range.Start > end) { continue; }
                 offset = Math.Min(offset, range.Start);
                 end = Math.Max(end, range.End);
@@ -75,7 +79,9 @@ internal sealed class RdpClipboardTransfer
         lock (_gate)
         {
             if (_progress is { } progress && (progress.Active || progress.State is "Ready" or "Sent" or "Delivered"))
+            {
                 _progress = progress with { State = "Completed" };
+            }
         }
     }
     internal void Finish(string state, string? error = null, bool force = false)

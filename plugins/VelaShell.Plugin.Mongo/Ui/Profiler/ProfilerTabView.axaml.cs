@@ -47,10 +47,10 @@ public sealed partial class ProfilerTabView : UserControl
         if (sender is CodeEditor editor)
         {
             editor.Editor.Options.AllowScrollBelowDocument = false;
-            editor.Editor.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
+            editor.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
             // CodeEditor 在构造里把字号绑到了 VelaFontSize12,AXAML 里写的字号压不过它;
             // 设计稿的样本代码是 10px,挂进可视树之后再绑一次(它会把字号转给里面那个编辑器)。
-            editor[!TemplatedControl.FontSizeProperty] = editor.GetResourceObservable("VelaFontSize10").ToBinding();
+            editor[!FontSizeProperty] = editor.GetResourceObservable("VelaFontSize10").ToBinding();
             // 左边还有一列诊断标记边栏(只读块里永远是空的),内边距就不再另加 8px,字与设计稿的 8px 缩进对齐。
             editor.Editor.Padding = new Thickness(0, 6, 8, 6);
         }

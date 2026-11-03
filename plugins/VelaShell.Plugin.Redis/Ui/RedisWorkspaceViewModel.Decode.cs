@@ -136,14 +136,14 @@ public sealed partial class RedisWorkspaceViewModel
         // 文件名从键名来,非法字符换成下划线:键名里的冒号在 Windows 上是不能进路径的。
         string safe = new([.. key.Display.Select(ch =>
             char.IsLetterOrDigit(ch) || ch is '-' or '_' or '.' ? ch : '_')]);
-        string path = System.IO.Path.Combine(
+        string path = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "redis-export",
             safe.Length > 120 ? safe[..120] : safe);
         try
         {
-            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-            await System.IO.File.WriteAllBytesAsync(path, _valueBytes).ConfigureAwait(true);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllBytesAsync(path, _valueBytes).ConfigureAwait(true);
             StatusMessage = Loc.Format("Redis_ValueSaved", key.Display,
                 _valueBytes.Length.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) + " B", path);
         }
