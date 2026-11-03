@@ -126,6 +126,7 @@ internal sealed class Loc(string locale)
         ["Clipboard"] = ["Bidirectional clipboard: text, images and files", "双向剪贴板：文本、图像与文件", "雙向剪貼簿：文字、影像與檔案", "双方向クリップボード：テキスト・画像・ファイル", "양방향 클립보드: 텍스트, 이미지 및 파일"],
         ["ClipboardHint"] = ["Disabled by default. Enabling allows this desktop to read and replace your clipboard, including files.", "默认关闭。启用后远程桌面可读取和替换本地剪贴板，包括文件。", "預設關閉。啟用後遠端桌面可讀取和取代本機剪貼簿，包括檔案。", "初期設定は無効です。有効にするとリモート側がファイルを含むクリップボードを読み書きできます。", "기본적으로 꺼져 있습니다. 사용하면 원격 데스크톱이 파일을 포함한 클립보드를 읽고 바꿀 수 있습니다."],
         ["DrivesPage"] = ["Drive mapping", "磁盘映射", "磁碟對應", "ドライブのマッピング", "드라이브 매핑"],
+        ["DriveGroup"] = ["Drives", "驱动器", "磁碟機", "ドライブ", "드라이브"],
         ["Camera"] = ["Camera", "摄像头", "攝影機", "カメラ", "카메라"],
         ["CameraNone"] = ["Off", "关闭", "關閉", "無効", "꺼짐"],
         ["CameraHint"] = ["Off by default. Share one Windows camera with remote apps (native MJPEG only). Capture starts only after the server activates it and requests frames.", "默认关闭。向远端应用共享一台 Windows 摄像头（仅原生 MJPEG）。服务器激活并请求帧后才开始采集。", "預設關閉。向遠端應用程式共用一台 Windows 攝影機（僅原生 MJPEG）。伺服器啟用並要求影格後才開始擷取。", "初期設定は無効です。Windows カメラを1台共有します（ネイティブ MJPEG のみ）。サーバーの有効化とフレーム要求で撮影します。", "기본적으로 꺼져 있습니다. Windows 카메라 한 대를 공유합니다(기본 MJPEG만 지원). 서버가 활성화하고 프레임을 요청하면 캡처합니다."],
