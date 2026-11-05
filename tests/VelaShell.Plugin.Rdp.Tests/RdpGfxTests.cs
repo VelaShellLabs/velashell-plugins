@@ -101,7 +101,7 @@ public sealed class RdpGfxTests
         var surface = new Framebuffer(3, 2);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var dvc = new DrdynvcChannel(async (packet, _) =>
+        var dvc = new DrdynvcChannel(async (packet, cancellationToken) =>
         {
             if ((packet[0] >> 4) != 3) { return; }
             _ = entered.TrySetResult();

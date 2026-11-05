@@ -109,7 +109,7 @@ public sealed class DynamicChannelTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = new Handler();
-        var dvc = new DrdynvcChannel(async (bytes, _) =>
+        var dvc = new DrdynvcChannel(async (bytes, cancellationToken) =>
         {
             sent.Add(bytes);
             if ((bytes[0] >> 4) == 2) { _ = entered.TrySetResult(); await release.Task; }

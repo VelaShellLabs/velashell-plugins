@@ -153,7 +153,7 @@ public sealed class WpdHotplugTests
             return [];
         }, (_, _) => handle, notifications, _ => { }))
         {
-            backend.Start(_ => { _ = removed.TrySetResult(); return Task.CompletedTask; }, _ => Task.CompletedTask);
+            backend.Start(deviceId => { _ = removed.TrySetResult(); return Task.CompletedTask; }, device => Task.CompletedTask);
             await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.IsEmpty(backend.Devices);
         }
@@ -189,7 +189,7 @@ public sealed class WpdHotplugTests
         await using (var backend = new WpdDeviceMonitor(["selected"], () => { WpdLocalDevice[] snapshot = Volatile.Read(ref devices); _ = enumerated.Release(); return snapshot; },
             (_, _) => new Handle(), notifications, _ => { }))
         {
-            backend.Start(_ => { _ = removed.TrySetResult(); return Task.CompletedTask; }, _ => { _ = Interlocked.Increment(ref additions); return Task.CompletedTask; });
+            backend.Start(deviceId => { _ = removed.TrySetResult(); return Task.CompletedTask; }, device => { _ = Interlocked.Increment(ref additions); return Task.CompletedTask; });
             await enumerated.WaitAsync();
             Volatile.Write(ref devices, []); notifications.Fire("selected", true);
             await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
