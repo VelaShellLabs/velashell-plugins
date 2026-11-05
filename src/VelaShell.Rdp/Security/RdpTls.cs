@@ -1,4 +1,5 @@
 using System.Net.Security;
+using System.Runtime.CompilerServices;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -13,7 +14,21 @@ namespace VelaShell.Rdp.Security;
 /// </summary>
 internal static class RdpTls
 {
+    private const string UseNetworkFrameworkSwitch = "System.Net.Security.UseNetworkFramework";
     private const string ServerAuthOid = "1.3.6.1.5.5.7.3.1";
+
+    // Secure Transport can fail while reading a valid TLS application record when a
+    // Windows RDP server sends its close alert immediately after the NLA response.
+    // Set this before any SslStream is created so macOS uses Network.framework's TLS
+    // implementation. Linux remains on its OpenSSL-backed implementation.
+#pragma warning disable CA2255 // This process-wide switch must be set before any host-created SslStream.
+    [ModuleInitializer]
+    internal static void ConfigurePlatformTls()
+    {
+        if (OperatingSystem.IsMacOS())
+            AppContext.SetSwitch(UseNetworkFrameworkSwitch, true);
+    }
+#pragma warning restore CA2255
 
     internal static async Task<SslStream> AuthenticateAsync(Stream inner, string targetHost, byte[]? pin, CancellationToken ct)
     {
