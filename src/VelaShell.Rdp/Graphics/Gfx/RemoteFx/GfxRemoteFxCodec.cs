@@ -40,7 +40,8 @@ internal sealed class GfxRemoteFxCodec
                     break;
                 case 0xCCC2:
                     RfxGuard.Require(!inFrame && block.Byte() == 1 && block.Byte() == 0, "Invalid RemoteFX channels block.");
-                    RfxGuard.Require(block.UInt16() is > 0 and > 0, "Invalid RemoteFX channel dimensions.");
+                    int channelWidth = block.UInt16(), channelHeight = block.UInt16();
+                    RfxGuard.Require(channelWidth > 0 && channelHeight > 0, "Invalid RemoteFX channel dimensions.");
                     break;
                 case 0xCCC3:
                     RfxGuard.Require(!inFrame && block.Byte() == 0 && block.UInt16() == 64, "Invalid RemoteFX context.");

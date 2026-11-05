@@ -15,6 +15,39 @@ internal static class RdpTls
 {
     private const string ServerAuthOid = "1.3.6.1.5.5.7.3.1";
 
+    // AppleCrypto has a known failure mode with the static RSA-GCM suites used by
+    // some RDP servers. Keep TLS 1.3 and ephemeral ECDHE suites, while retaining
+    // ECDHE-CBC for older servers; this avoids the affected RSA key-transport path
+    // without replacing macOS's stable Secure Transport backend process-wide.
+    private static readonly TlsCipherSuite[] MacOsCipherSuites =
+    [
+        TlsCipherSuite.TLS_AES_128_GCM_SHA256,
+        TlsCipherSuite.TLS_AES_256_GCM_SHA384,
+        TlsCipherSuite.TLS_CHACHA20_POLY1305_SHA256,
+        TlsCipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        TlsCipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        TlsCipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
+    ];
+
+    internal static SslClientAuthenticationOptions CreateClientAuthenticationOptions(string targetHost, bool pinned)
+    {
+        return new SslClientAuthenticationOptions
+        {
+            TargetHost = targetHost,
+            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            AllowRenegotiation = false,
+            CertificateRevocationCheckMode = pinned ? X509RevocationMode.NoCheck : X509RevocationMode.Online,
+            CipherSuitesPolicy = OperatingSystem.IsMacOS() ? new CipherSuitesPolicy(MacOsCipherSuites) : null
+        };
+    }
+
     internal static async Task<SslStream> AuthenticateAsync(Stream inner, string targetHost, byte[]? pin, CancellationToken ct)
     {
         byte[]? capturedPem = null;
@@ -61,13 +94,7 @@ internal static class RdpTls
         }
 
         var ssl = new SslStream(inner, leaveInnerStreamOpen: false, Validate);
-        var options = new SslClientAuthenticationOptions
-        {
-            TargetHost = targetHost,
-            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-            AllowRenegotiation = false,   // RDP never renegotiates; refusing it removes a class of TLS attacks
-            CertificateRevocationCheckMode = pin is null ? X509RevocationMode.Online : X509RevocationMode.NoCheck
-        };
+        SslClientAuthenticationOptions options = CreateClientAuthenticationOptions(targetHost, pin is not null);
         try
         {
             await ssl.AuthenticateAsClientAsync(options, ct).ConfigureAwait(false);

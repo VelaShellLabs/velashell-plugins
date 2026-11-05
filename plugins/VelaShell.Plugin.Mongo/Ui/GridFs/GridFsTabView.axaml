@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="using:VelaShell.Plugin.Mongo.Ui"
+             xmlns:gridfs="using:VelaShell.Plugin.Mongo.Ui.GridFs"
              x:Class="VelaShell.Plugin.Mongo.Ui.GridFsTabView"
              x:DataType="ui:GridFsTabViewModel">
 
@@ -266,7 +267,7 @@
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="ui:GridFsCrumb">
+              <DataTemplate x:DataType="gridfs:GridFsCrumb">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <ui:Glyph Key="Mongo.chevron-right" Size="11" Brush="{DynamicResource VelaTextMuted}" />
                   <Button Theme="{StaticResource MongoToolButton}" Height="22" Padding="6,0"
@@ -353,7 +354,7 @@
                   </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="ui:GridFsEntry">
+                  <DataTemplate x:DataType="gridfs:GridFsEntry">
                     <Border Height="28" Background="Transparent" BorderBrush="{DynamicResource VelaBorderPrimary}" BorderThickness="0,0,0,1">
                       <Grid ColumnDefinitions="32,*,86,130,140,96,60,62" ui:TableColumns.Row="files">
                         <CheckBox Grid.Column="0" Theme="{StaticResource FsCheck}" IsChecked="{Binding IsChecked}"
@@ -392,7 +393,7 @@
                   </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="ui:GridFsEntry">
+                  <DataTemplate x:DataType="gridfs:GridFsEntry">
                     <Border Classes="tile" Width="132" Height="132" Margin="4" CornerRadius="4" BorderThickness="1"
                             BorderBrush="Transparent" Background="Transparent">
                       <Grid RowDefinitions="*,Auto" Margin="6">
@@ -606,7 +607,7 @@
                     <TextBlock Classes="sectitle" Text="{Binding Loc[Fs_Versions]}" />
                     <ItemsControl ItemsSource="{Binding Details.Versions}">
                       <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="ui:GridFsVersionRow">
+                        <DataTemplate x:DataType="gridfs:GridFsVersionRow">
                           <DockPanel Height="22">
                             <TextBlock DockPanel.Dock="Right" Classes="ui small muted" Text="{Binding $parent[UserControl].((ui:GridFsTabViewModel)DataContext).Loc[Fs_Current]}"
                                        IsVisible="{Binding IsCurrent}" />
