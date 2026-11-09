@@ -242,6 +242,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private sealed class TransferSlot
     {
         private static readonly Geometry CancelIcon = Geometry.Parse("M18 6 6 18 M6 6l12 12"); // Lucide "x"
+        private const double TooltipMinWidth = 520;
+        private const double TooltipMaxWidth = 900;
         // The parent status panel provides the available width. Do not impose a second cap here:
         // on narrow views the transfer slot must be able to use every pixel not needed by the status text.
         internal readonly SlotPanel Root = new() { IsVisible = false, ClipToBounds = true, Margin = new Thickness(10, 0, 0, 0) };
@@ -368,7 +370,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             Cancel.IsVisible = progress.Active && connected;
         }
 
-        private static string BuildTooltip(RdpClipboardProgress progress, string direction, string state, Loc loc)
+        private static TextBlock BuildTooltip(RdpClipboardProgress progress, string direction, string state, Loc loc)
         {
             List<string> lines = [$"{direction}", $"{state}: {FormatExactBytes(progress.Bytes)}/{FormatExactBytes(progress.Total)}"];
             if (progress.Name.Length > 0) { lines.Add(loc["TransferFileName"] + ": " + progress.Name); }
@@ -376,7 +378,13 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             if (metrics.Length > 0) { lines.Add(metrics); }
             if (progress.Error is { } error) { lines.Add(error); }
             else if (progress.State is "Sent" or "Delivered") { lines.Add(loc["TransferDeliveryDetail"]); }
-            return string.Join("\n", lines);
+            return new TextBlock
+            {
+                Text = string.Join("\n", lines),
+                TextWrapping = TextWrapping.Wrap,
+                MinWidth = TooltipMinWidth,
+                MaxWidth = TooltipMaxWidth
+            };
         }
 
         private static string FormatMetrics(RdpClipboardProgress progress, Loc loc, bool compact = false)
