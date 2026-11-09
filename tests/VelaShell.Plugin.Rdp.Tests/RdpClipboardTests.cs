@@ -883,6 +883,41 @@ public sealed class RdpClipboardTests
         Assert.AreEqual("Sent", transfer.Snapshot.State);
     }
 
+    [TestMethod]
+    public void TransferProgressReportsAverageSpeedAndRemainingTimeAfterSampling()
+    {
+        var transfer = new RdpClipboardTransfer();
+        transfer.Start(1000);
+        Thread.Sleep(300);
+        transfer.Update(500, "data");
+        RdpClipboardProgress progress = transfer.Snapshot!;
+        Assert.IsNotNull(progress.SpeedBytesPerSecond);
+        Assert.IsGreaterThan(0, progress.SpeedBytesPerSecond!.Value);
+        Assert.IsNotNull(progress.Remaining);
+        Assert.IsGreaterThan(TimeSpan.Zero, progress.Remaining!.Value);
+
+        transfer.Update(1000, "data");
+        progress = transfer.Snapshot!;
+        Assert.IsNotNull(progress.SpeedBytesPerSecond);
+        Assert.IsNull(progress.Remaining);
+    }
+
+    [TestMethod]
+    public void TransferProgressHidesMetricsBeforeSamplingAndForUnknownTotals()
+    {
+        var transfer = new RdpClipboardTransfer();
+        transfer.Start(1000);
+        transfer.Update(100, "data");
+        Assert.IsNull(transfer.Snapshot!.SpeedBytesPerSecond);
+        Assert.IsNull(transfer.Snapshot.Remaining);
+
+        transfer.Start(0);
+        Thread.Sleep(300);
+        transfer.Update(100, "data");
+        Assert.IsNull(transfer.Snapshot!.SpeedBytesPerSecond);
+        Assert.IsNull(transfer.Snapshot.Remaining);
+    }
+
     private static async Task Until(Func<bool> predicate) => await UntilAsync(() => Task.FromResult(predicate()));
     private static async Task UntilAsync(Func<Task<bool>> predicate)
     {

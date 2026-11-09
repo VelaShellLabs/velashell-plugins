@@ -22,7 +22,7 @@ public sealed class RdpWorkspaceTests
         Assert.AreEqual("onWorkspace:" + descriptor.Id, manifest.RootElement.GetProperty("activationEvents")[0].GetString());
         Assert.IsTrue(descriptor.Features.HasFlag(WorkspaceFeatures.CertificateTrust | WorkspaceFeatures.SshTunnel));
         Assert.IsTrue(descriptor.Fields.Single(field => field.Key == descriptor.TrustedThumbprintSettingKey).IsHidden);
-        Assert.AreEqual("false", descriptor.Fields.Single(field => field.Key == "clipboard").DefaultValue);
+        Assert.AreEqual("true", descriptor.Fields.Single(field => field.Key == "clipboard").DefaultValue);
         IWorkspaceProvider? before = context.RecordingWorkspaces.GetProvider(descriptor.Id);
         context.HostEvents.RaiseLocaleChanged("zh-Hant");
         Assert.AreSame(before, context.RecordingWorkspaces.GetProvider(descriptor.Id));

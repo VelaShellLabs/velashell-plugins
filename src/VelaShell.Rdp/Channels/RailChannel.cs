@@ -45,7 +45,7 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 {
                     w.U32LE(0x43); // SPI_SET_HIGH_CONTRAST
                     w.U32LE(0x7e); // high-contrast flags used by the reference client
-                    w.U32LE(0);    // no colour-scheme string
+                    w.U32LE(2);    // empty UTF-16 colour scheme, including its terminator
                     w.U16LE(0);
                 }), ct).ConfigureAwait(false);
                 foreach (uint parameter in new uint[] { 0x21, 0x45, 0x25, 0x100b })
@@ -75,10 +75,30 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 uint raw = r.U32LE();
                 r.Skip(2);
                 int length = r.U16LE();
-                if (length is 0 or > 520 || (length & 1) != 0) { throw new RdpProtocolException("Invalid RAIL execute result name."); }
+                if (length > 520 || (length & 1) != 0) { throw new RdpProtocolException("Invalid RAIL execute result name."); }
                 string program = Encoding.Unicode.GetString(r.Take(length));
-                if (!string.Equals(program, options.Program, StringComparison.Ordinal)) { throw new RdpProtocolException("RAIL execute result does not match the requested program."); }
-                if (result != 0) { throw new RdpProtocolException($"RemoteApp launch was rejected (RAIL result 0x{result:X4}, OS result 0x{raw:X8})."); }
+                if (result != 0)
+                {
+                    string reason = result switch
+                    {
+                        0x0001 => "the server could not load the RemoteApp hook",
+                        0x0002 => "the server could not decode the RemoteApp request",
+                        0x0003 => "the published alias is not in the server's RemoteApp allowlist",
+                        0x0005 => "the published program was not found",
+                        0x0006 => "the server failed to start the published program",
+                        0x0007 => "the RemoteApp session is locked",
+                        _ => "the server rejected the RemoteApp request"
+                    };
+                    string osReason = raw switch
+                    {
+                        0x00000002 => "file not found",
+                        0x00000005 => "access denied",
+                        0x00000015 => "the device is not ready",
+                        _ => $"OS result 0x{raw:X8}"
+                    };
+                    throw new RdpProtocolException(
+                        $"RemoteApp '{program}' was rejected: {reason} ({osReason}; RAIL result 0x{result:X4}, OS result 0x{raw:X8}).");
+                }
                 _executed = true;
                 break;
             case 3:

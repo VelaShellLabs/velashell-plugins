@@ -1,6 +1,15 @@
+using System.Diagnostics;
+
 namespace VelaShell.Plugin.Rdp;
 
-internal sealed record RdpClipboardProgress(string State, long Bytes, long Total, string Name = "", string? Error = null)
+internal sealed record RdpClipboardProgress(
+    string State,
+    long Bytes,
+    long Total,
+    string Name = "",
+    string? Error = null,
+    double? SpeedBytesPerSecond = null,
+    TimeSpan? Remaining = null)
 {
     internal bool Active => State is "Preparing" or "Transferring" or "Publishing" or "Retrying";
 }
@@ -11,6 +20,7 @@ internal sealed class RdpClipboardTransfer
     private RdpClipboardProgress? _progress;
     private readonly Dictionary<uint, List<(long Start, long End)>> _ranges = [];
     private long _lastActivity;
+    private long _startedAt;
 
     internal RdpClipboardProgress? Snapshot { get { lock (_gate) { return _progress; } } }
     internal bool IsStalled(TimeSpan timeout)
@@ -35,6 +45,7 @@ internal sealed class RdpClipboardTransfer
         lock (_gate)
         {
             _ranges.Clear();
+            _startedAt = Stopwatch.GetTimestamp();
             _progress = new(state, 0, total);
             _lastActivity = Environment.TickCount64;
         }
@@ -44,7 +55,7 @@ internal sealed class RdpClipboardTransfer
         lock (_gate)
         {
             if (_progress?.Active != true) { return; }
-            _progress = _progress with { Bytes = bytes, Name = name, State = state };
+            _progress = WithMetrics(_progress with { Bytes = bytes, Name = name, State = state });
             _lastActivity = Environment.TickCount64;
         }
     }
@@ -70,7 +81,7 @@ internal sealed class RdpClipboardTransfer
             long bytes = _progress.Bytes + end - offset - removed;
             string state = _progress.State is "Sent" or "Delivered" or "Completed" ? _progress.State
                 : bytes == _progress.Total ? completedState : "Transferring";
-            _progress = _progress with { Bytes = bytes, Name = name, State = state };
+            _progress = WithMetrics(_progress with { Bytes = bytes, Name = name, State = state });
             _lastActivity = Environment.TickCount64;
         }
     }
@@ -80,7 +91,7 @@ internal sealed class RdpClipboardTransfer
         {
             if (_progress is { } progress && (progress.Active || progress.State is "Ready" or "Sent" or "Delivered"))
             {
-                _progress = progress with { State = "Completed" };
+                _progress = progress with { State = "Completed", Remaining = null };
             }
         }
     }
@@ -88,7 +99,22 @@ internal sealed class RdpClipboardTransfer
     {
         lock (_gate)
         {
-            if (force || _progress?.Active == true || _progress?.State == "Ready") { _progress = (_progress ?? new(state, 0, 0)) with { State = state, Error = error }; }
+            if (force || _progress?.Active == true || _progress?.State == "Ready")
+            {
+                _progress = (_progress ?? new(state, 0, 0)) with { State = state, Error = error, Remaining = null };
+            }
         }
+    }
+
+    private RdpClipboardProgress WithMetrics(RdpClipboardProgress progress)
+    {
+        if (progress.Total <= 0 || progress.Bytes <= 0 || _startedAt == 0) { return progress with { SpeedBytesPerSecond = null, Remaining = null }; }
+        double elapsed = (Stopwatch.GetTimestamp() - _startedAt) / (double)Stopwatch.Frequency;
+        if (elapsed < 0.25) { return progress with { SpeedBytesPerSecond = null, Remaining = null }; }
+        double speed = progress.Bytes / elapsed;
+        TimeSpan? remaining = progress.Active && progress.Bytes < progress.Total && speed > 0
+            ? TimeSpan.FromSeconds((progress.Total - progress.Bytes) / speed)
+            : null;
+        return progress with { SpeedBytesPerSecond = speed, Remaining = remaining };
     }
 }

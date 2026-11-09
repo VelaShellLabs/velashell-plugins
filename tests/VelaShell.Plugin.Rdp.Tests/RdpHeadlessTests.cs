@@ -119,6 +119,31 @@ public sealed class RdpHeadlessTests
     });
 
     [TestMethod]
+    public void TransferStatusPrioritizesMetricsOverTheFileName() => Run(async () =>
+    {
+        using var context = new TestPluginContext();
+        var settings = RdpSettings.From(RdpSettingsTests.Request(), new("en"));
+        await using var view = new RdpWorkspaceView(new FakeRdpSession(), context, settings, new("en"));
+        var window = new Window { Width = 400, Height = 300, Content = view };
+        window.Show();
+        view.UpdateTransfers(new("Transferring", 50, 100, "a-very-long-file-name-that-must-stay-in-the-tooltip", null, 1024 * 1024, TimeSpan.FromSeconds(8)), null);
+        window.UpdateLayout();
+
+        TextBlock text = Find<TextBlock>(view, "ClipboardDownloadProgress");
+        Panel slot = text.FindAncestorOfType<Panel>()!;
+        TextBlock state = slot.Children.OfType<TextBlock>().Single(control => control != text);
+        string tooltip = ToolTip.GetTip(slot)?.ToString() ?? "";
+        Assert.DoesNotContain("a-very-long-file-name", text.Text);
+        Assert.Contains("MB/s", state.Text);
+        Assert.Contains("8s", state.Text);
+        Assert.Contains("Remote → local", tooltip);
+        Assert.Contains("Transferring: 50B/100B", tooltip);
+        Assert.Contains("File name: a-very-long-file-name-that-must-stay-in-the-tooltip", tooltip);
+        Assert.Contains("Speed: 1.0MB/s · Remaining time: 8s", tooltip);
+        window.Close();
+    });
+
+    [TestMethod]
     public void FocusPublicationDoesNotHoldTheKeyboardQueue() => Run(async () =>
     {
         var session = new FakeRdpSession();

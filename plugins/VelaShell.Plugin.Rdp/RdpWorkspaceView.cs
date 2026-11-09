@@ -242,8 +242,9 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private sealed class TransferSlot
     {
         private static readonly Geometry CancelIcon = Geometry.Parse("M18 6 6 18 M6 6l12 12"); // Lucide "x"
-        // Capped so one long file name cannot take the whole bar; the name trims, never the bar or ×.
-        internal readonly SlotPanel Root = new() { IsVisible = false, ClipToBounds = true, MaxWidth = 480, Margin = new Thickness(10, 0, 0, 0) };
+        // The parent status panel provides the available width. Do not impose a second cap here:
+        // on narrow views the transfer slot must be able to use every pixel not needed by the status text.
+        internal readonly SlotPanel Root = new() { IsVisible = false, ClipToBounds = true, Margin = new Thickness(10, 0, 0, 0) };
         internal readonly TextBlock Text;
         internal readonly ProgressBar Bar;
         // Long state wording ("Copy completed (Shell confirmed)") trims here; the tooltip has it in full.
@@ -339,15 +340,17 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             string direction = loc[upload ? "TransferUpload" : "TransferDownload"], state = loc["Transfer" + progress.State];
             string size = progress.Total > 0 ? FormatSize(progress.Bytes) + " / " + FormatSize(progress.Total)
                 : progress.Bytes > 0 ? FormatSize(progress.Bytes) : "";
-            Text.Text = string.Join(" · ", new[] { direction, size, progress.Name }.Where(part => part.Length > 0));
-            // The tooltip keeps the exact byte counts and the full state wording the compact line drops.
-            string summary = $"{direction} · {state} · {progress.Bytes:N0} / {progress.Total:N0} B" + (progress.Name.Length > 0 ? " · " + progress.Name : "");
-            ToolTip.SetTip(Root, progress.Error is { } error ? summary + "\n" + error
-                : progress.State is "Sent" or "Delivered" ? summary + "\n" + loc["TransferDeliveryDetail"] : summary);
-            // Like the host's transfer rows: a percentage while bytes are moving, otherwise the state in words.
-            State.Text = progress.State == "Transferring" && progress.Total > 0
+            // Keep the status bar focused on measurable progress. The complete file name remains in the tooltip,
+            // where it is not truncated by a narrow workspace.
+            Text.Text = string.Join(" · ", new[] { direction, size }.Where(part => part.Length > 0));
+            string metrics = FormatMetrics(progress, loc);
+            ToolTip.SetTip(Root, BuildTooltip(progress, direction, state, loc));
+            // Show compact live metrics beside the percentage; the tooltip retains exact values.
+            string percentage = progress.State == "Transferring" && progress.Total > 0
                 ? Math.Clamp(100 * progress.Bytes / progress.Total, 0, 100).ToString(CultureInfo.InvariantCulture) + "%"
                 : state;
+            string compactMetrics = FormatMetrics(progress, loc, compact: true);
+            State.Text = compactMetrics.Length > 0 ? percentage + " · " + compactMetrics : percentage;
             Bar.IsIndeterminate = progress.State == "Preparing" && progress.Total == 0;
             Bar.Value = progress.Total == 0 ? progress.State is "Sent" or "Delivered" or "Completed" ? 100 : 0 : 100.0 * progress.Bytes / progress.Total;
             SetTone(progress.State switch
@@ -363,6 +366,42 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             Avalonia.Automation.AutomationProperties.SetName(Cancel, loc["TransferCancel"]);
             // Only a transfer that can still be stopped offers ×; a finished one has nothing to cancel.
             Cancel.IsVisible = progress.Active && connected;
+        }
+
+        private static string BuildTooltip(RdpClipboardProgress progress, string direction, string state, Loc loc)
+        {
+            List<string> lines = [$"{direction}", $"{state}: {FormatExactBytes(progress.Bytes)}/{FormatExactBytes(progress.Total)}"];
+            if (progress.Name.Length > 0) { lines.Add(loc["TransferFileName"] + ": " + progress.Name); }
+            string metrics = FormatMetrics(progress, loc);
+            if (metrics.Length > 0) { lines.Add(metrics); }
+            if (progress.Error is { } error) { lines.Add(error); }
+            else if (progress.State is "Sent" or "Delivered") { lines.Add(loc["TransferDeliveryDetail"]); }
+            return string.Join("\n", lines);
+        }
+
+        private static string FormatMetrics(RdpClipboardProgress progress, Loc loc, bool compact = false)
+        {
+            List<string> parts = [];
+            if (progress.SpeedBytesPerSecond is { } speed && speed > 0)
+            {
+                parts.Add(compact ? FormatRate(speed) : loc["TransferSpeed"] + ": " + FormatRate(speed));
+            }
+            if (progress.Remaining is { } remaining && remaining > TimeSpan.Zero)
+            {
+                parts.Add(compact ? FormatDuration(remaining) : loc["TransferRemainingTime"] + ": " + FormatDuration(remaining));
+            }
+            return string.Join(" · ", parts);
+        }
+
+        private static string FormatExactBytes(long bytes) => Math.Max(0, bytes).ToString("N0", CultureInfo.InvariantCulture) + "B";
+
+        private static string FormatRate(double bytesPerSecond) => FormatSize((long)Math.Min(bytesPerSecond, long.MaxValue)).Replace(" ", "", StringComparison.Ordinal) + "/s";
+
+        private static string FormatDuration(TimeSpan duration)
+        {
+            if (duration.TotalSeconds < 60) { return Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds)).ToString(CultureInfo.InvariantCulture) + "s"; }
+            if (duration.TotalMinutes < 60) { return $"{(int)duration.TotalMinutes}m {duration.Seconds}s"; }
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
         }
 
         private void SetTone(string token)
