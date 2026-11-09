@@ -138,7 +138,7 @@ public sealed class RdpHeadlessTests
         Assert.Contains("MB/s", state.Text);
         Assert.Contains("8s", state.Text);
         Assert.AreEqual(TextWrapping.Wrap, tooltip.TextWrapping);
-        Assert.IsLessThanOrEqualTo(tooltip.MinWidth, tooltip.MaxWidth);
+        Assert.AreEqual(0d, tooltip.MinWidth);
         Assert.IsTrue(tooltip.MaxWidth < 520d, "Narrow windows should reduce the tooltip width below the preferred minimum.");
         Assert.Contains("Remote → local", tooltip.Text);
         Assert.Contains("Transferring: 50B/100B", tooltip.Text);
