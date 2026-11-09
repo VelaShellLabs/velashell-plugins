@@ -18,7 +18,7 @@ internal sealed record RdpConnectOptions(
     bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default,
     RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false,
     bool GraphicsPipeline = false, RemoteAppOptions? RemoteApp = null,
-    RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0)
+    RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0, AutoReconnectCookie? ReconnectCookie = null)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -35,6 +35,7 @@ internal readonly record struct ChannelPayload(string ChannelName, byte[] Data, 
 internal sealed partial class RdpConnection : IAsyncDisposable
 {
     private readonly RdpConnectOptions _options;
+    private AutoReconnectCookie? _autoReconnectCookie;
     private TcpClient? _tcp;
     private RdpGatewayStream? _gateway;
     private RdpTransport _transport = null!;
@@ -77,6 +78,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             throw new ArgumentException("RemoteApp requires the classic RAIL graphics path.", nameof(options));
         }
         _options = options;
+        _autoReconnectCookie = options.ReconnectCookie;
         RemoteWindows = options.RemoteApp is null ? null : new RemoteAppWindowDecoder();
         Network = new(options.AdaptiveNetwork);
         _autoDetect = new(Network);
@@ -92,6 +94,8 @@ internal sealed partial class RdpConnection : IAsyncDisposable
 
     /// <summary>The security layer the server selected (<see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>).</summary>
     internal RdpSecurity Security { get; private set; }
+
+    internal AutoReconnectCookie? AutoReconnectCookie => _autoReconnectCookie;
 
     private TlsRecordTap? _tlsTap;
     private TlsCipherSuite? _tlsCipher;
@@ -170,7 +174,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         // Client Info on the I/O channel.
         Stage = RdpConnectStage.Login;
         byte[] clientInfo = ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
-            (uint)_options.Performance, _options.AudioPlayback, _options.RemoteApp is not null);
+            (uint)_options.Performance, _options.AudioPlayback, _options.RemoteApp is not null, _autoReconnectCookie);
         try { await SendOnIoAsync(clientInfo, ct).ConfigureAwait(false); }
         finally { CryptographicOperations.ZeroMemory(clientInfo); }   // carries the password in the clear
 
@@ -237,6 +241,12 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             byte[] payload = await ReadIoPayloadAsync(ct).ConfigureAwait(false);
             if (LooksLikeShareControl(payload))
             {
+                if (payload.Length >= 4 && (payload[2] | (payload[3] << 8)) is var controlType
+                    && (controlType & 0x0F) == (int)ShareControlType.ServerRedirect)
+                {
+                    ThrowServerRedirection(payload);
+                }
+
                 if (!licensing.CanActivate)
                 {
                     throw new RdpProtocolException("The server activated the session before completing RDP licensing.");
@@ -349,7 +359,22 @@ internal sealed partial class RdpConnection : IAsyncDisposable
                 break;
             case ShareControlType.Deactivate:
                 break; // await the following Demand Active
+            case ShareControlType.ServerRedirect:
+                ThrowServerRedirection(payload);
+                break;
         }
+    }
+
+    private static void ThrowServerRedirection(ReadOnlySpan<byte> payload)
+    {
+        var reader = new ByteReader(payload);
+        ShareControl.ControlHeader header = ShareControl.ReadControlHeader(ref reader);
+        if (header.Type != ShareControlType.ServerRedirect)
+        {
+            throw new RdpProtocolException("Expected a Server Redirection PDU.");
+        }
+
+        throw new RdpServerRedirectionException(ServerRedirectionParser.Parse(ref reader));
     }
 
     internal void ProcessDataPdu(ShareDataType type, ref ByteReader r)
@@ -394,9 +419,63 @@ internal sealed partial class RdpConnection : IAsyncDisposable
                 // The server announces the logon result (MS-RDPBCGR 2.2.10.1). A logon notification means the
                 // credentials were accepted and a session started — so a logoff right after it is the server
                 // terminating an established session (policy), not a credentials or protocol failure.
-                LogonInfoReceived?.Invoke(r.U32LE());
+                uint infoType = r.U32LE();
+                if (infoType == 3)
+                {
+                    ReadExtendedLogonInfo(ref r);
+                }
+
+                LogonInfoReceived?.Invoke(infoType);
                 break;
         }
+    }
+
+    private void ReadExtendedLogonInfo(ref ByteReader r)
+    {
+        ushort length = r.U16LE();
+        uint fieldsPresent = r.U32LE();
+        if (length < 6 || length - 6 > r.Remaining)
+        {
+            throw new RdpProtocolException("The extended Save Session Info PDU has an invalid length.");
+        }
+
+        var fields = new ByteReader(r.Take(length - 6));
+        if ((fieldsPresent & 0x00000001) != 0)
+        {
+            uint fieldLength = fields.U32LE();
+            if (fieldLength != AutoReconnectCookie.PacketLength || fieldLength > fields.Remaining)
+            {
+                throw new RdpProtocolException("The extended Save Session Info auto-reconnect field is invalid.");
+            }
+
+            var cookie = new ByteReader(fields.Take((int)fieldLength));
+            _autoReconnectCookie = AutoReconnectCookie.Parse(ref cookie);
+            if (cookie.Remaining != 0)
+            {
+                throw new RdpProtocolException("The extended Save Session Info auto-reconnect field has trailing data.");
+            }
+        }
+
+        if ((fieldsPresent & 0x00000002) != 0)
+        {
+            uint fieldLength = fields.U32LE();
+            if (fieldLength > fields.Remaining)
+            {
+                throw new RdpProtocolException("The extended Save Session Info error field is invalid.");
+            }
+            fields.Skip((int)fieldLength);
+        }
+
+        if (fields.Remaining != 0)
+        {
+            throw new RdpProtocolException("The extended Save Session Info contains unknown field data.");
+        }
+
+        if (r.Remaining < 570)
+        {
+            throw new RdpProtocolException("The extended Save Session Info PDU padding is truncated.");
+        }
+        r.Skip(570);
     }
 
     private void ProcessFastPathOutput(ReadOnlySpan<byte> data)

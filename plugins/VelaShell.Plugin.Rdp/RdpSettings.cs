@@ -3,6 +3,7 @@ using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
+using VelaShell.Rdp.Pdu;
 
 namespace VelaShell.Plugin.Rdp;
 
@@ -14,6 +15,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         | RdpPerformanceFlags.DisableMenuAnimations | RdpPerformanceFlags.DisableThemes,
     int ColorDepth = RdpSettings.DefaultColorDepth)
 {
+    internal AutoReconnectCookie? AutoReconnectCookie { get; set; }
     internal IReadOnlyList<PortMapping> Ports { get; init; } = [];
     internal IReadOnlyList<PrinterMapping> Printers { get; init; } = [];
     internal RdpCameraDevice? Camera { get; init; }
@@ -147,6 +149,16 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         string workingDirectory = request.GetString(RemoteAppWorkingDirectoryKey);
         if (program.Length != 0 || arguments.Length != 0 || workingDirectory.Length != 0)
         {
+            if (program.Length != 0 && !program.StartsWith("||", StringComparison.Ordinal))
+            {
+                if (program.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('_' or '-')))
+                {
+                    Invalid(RemoteAppProgramKey);
+                }
+
+                program = "||" + program;
+            }
+
             if (!program.StartsWith("||", StringComparison.Ordinal) || program.Length is <= 2 or > 260 || program.Any(char.IsControl))
             {
                 Invalid(RemoteAppProgramKey);

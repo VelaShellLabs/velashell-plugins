@@ -239,6 +239,20 @@ internal sealed unsafe class PcscSmartCardBackend : ISmartCardBackend
         return Result(output, length, false).Data;
     }
 
+    public void SetAttribute(nint card, uint attribute, byte[] value)
+    {
+        if (attribute != SmartCardAttributes.SuppressT1IfsRequest || value.Length > SmartCardNdr.MaxBuffer)
+        {
+            throw new SmartCardException(SmartCardException.Unsupported);
+        }
+        fixed (byte* data = value)
+        {
+            if (Win) { Check((nint)Windows.SetAttrib(card, attribute, data, (uint)value.Length)); }
+            else if (Lin) { Check(Linux.SetAttrib(card, attribute, data, (nuint)value.Length)); }
+            else { Check((nint)Mac.SetAttrib((int)card, attribute, data, (uint)value.Length)); }
+        }
+    }
+
     private static byte[] Pci(SmartCardPci pci)
     {
         if (pci.Extra.Length > 1024) { throw new SmartCardException(SmartCardException.InvalidParameter); }

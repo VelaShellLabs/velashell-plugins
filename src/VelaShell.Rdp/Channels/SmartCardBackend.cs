@@ -1,5 +1,10 @@
 namespace VelaShell.Rdp.Channels;
 
+internal static class SmartCardAttributes
+{
+    internal const uint SuppressT1IfsRequest = 0x7FFF0007;
+}
+
 internal interface ISmartCardBackend
 {
     nint EstablishContext(uint scope);
@@ -18,6 +23,7 @@ internal interface ISmartCardBackend
     SmartCardTransmitResult Transmit(nint card, SmartCardPci sendPci, byte[] send, SmartCardPci? receivePci, int capacity, bool lengthOnly);
     SmartCardBuffer Control(nint card, uint code, byte[] input, int capacity, bool lengthOnly);
     byte[] GetAttribute(nint card, uint attribute);
+    void SetAttribute(nint card, uint attribute, byte[] value);
 }
 
 internal sealed record SmartCardReaderState(string Reader, uint CurrentState, uint EventState, byte[] Atr);

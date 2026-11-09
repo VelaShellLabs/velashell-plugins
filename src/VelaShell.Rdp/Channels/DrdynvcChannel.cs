@@ -28,8 +28,8 @@ internal sealed partial class DrdynvcChannel
     private uint _displayChannelId;
     private bool _displayReady;     // its capabilities arrived; monitor layouts may now be sent
     private uint _maxMonitors = 1;
-    private (int Width, int Height, int Scale)? _pending;  // requested before the channel was ready
-    private (int Width, int Height, int Scale)? _lastSent; // suppress redundant layouts during a resize drag
+    private (RdpMonitorLayout Layout, int Scale)? _pending;  // requested before the channel was ready
+    private byte[]? _lastSent; // suppress redundant layouts during a resize drag
 
     private sealed record Listener(Func<DynamicChannel, IDynamicChannelHandler> Factory, int Limit);
     private sealed class Instance(DynamicChannel channel, IDynamicChannelHandler? handler, int limit)
@@ -157,6 +157,7 @@ internal sealed partial class DrdynvcChannel
                 _routes.Clear();
                 _reservedBytes = 0;
                 _displayReady = _displayOpen = false;
+                _lastSent = null;
             }
         }
         finally { _ = _sendGate.Release(); }
@@ -181,7 +182,8 @@ internal sealed partial class DrdynvcChannel
 
     internal DrdynvcChannel(Func<byte[], CancellationToken, Task> send, CancellationToken ct, bool displayControl = true,
         Action<string>? log = null, Func<int, Task>? waitForTunnel = null,
-        Action<int>? enableTunnel = null, Func<int, byte[], CancellationToken, Task>? sendTunnel = null)
+        Action<int>? enableTunnel = null, Func<int, byte[], CancellationToken, Task>? sendTunnel = null,
+        RdpMonitorLayout? initialLayout = null, int initialScale = 100)
     {
         _tcpSend = send;
         _send = SendRoutedAsync;
@@ -191,6 +193,10 @@ internal sealed partial class DrdynvcChannel
         _ct = ct;
         _displayEnabled = displayControl;
         _log = log;
+        if (initialLayout is not null)
+        {
+            _pending = (initialLayout, RdpScale.Clamp(initialScale));
+        }
     }
 
     // A device handler failing (a send racing its own close, a driver error during cleanup, …) costs that
@@ -273,30 +279,47 @@ internal sealed partial class DrdynvcChannel
     /// Buffered until the Display Control channel reports its capabilities; a no-op if the server
     /// never opens the channel (the desktop then stays at the negotiated size, scaled to fit).
     /// </summary>
-    internal async Task RequestResizeAsync(int width, int height, int scale = 100)
+    internal Task RequestResizeAsync(int width, int height, int scale = 100)
     {
+        width = Clamp(width) & ~1;   // MS-RDPEDISP: the width must be even; the height need not be
+        height = Clamp(height);
+        return RequestMonitorLayoutAsync(RdpMonitorLayout.Single(width, height), scale);
+    }
+
+    internal async Task RequestMonitorLayoutAsync(RdpMonitorLayout layout, int scale = 100)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
         if (!_displayEnabled)
         {
             return;
         }
 
-        width = Clamp(width) & ~1;   // MS-RDPEDISP: the width must be even; the height need not be
-        height = Clamp(height);
         scale = RdpScale.Clamp(scale);
         await _sendGate.WaitAsync(_ct).ConfigureAwait(false);
         try
         {
-            byte[] frame;
+            byte[]? frame = null;
             lock (_lock)
             {
-                if (!_displayReady) { _pending = (width, height, scale); return; }
-                if (_lastSent is { } last && last.Width == width && last.Height == height && last.Scale == scale)
+                if (!_displayReady)
+                {
+                    _pending = (layout, scale);
+                    return;
+                }
+
+                if (layout.Monitors.Count > _maxMonitors)
+                {
+                    Log($"display-control layout has {layout.Monitors.Count} monitors, server accepts {_maxMonitors}; keeping the current layout");
+                    return;
+                }
+
+                frame = BuildMonitorLayout(_displayChannelId, layout, scale);
+                if (_lastSent is not null && frame.AsSpan().SequenceEqual(_lastSent))
                 {
                     return;
                 }
 
-                _lastSent = (width, height, scale);
-                frame = BuildMonitorLayout(_displayChannelId, width, height, scale);
+                _lastSent = frame;
             }
             await _send(frame, _ct).ConfigureAwait(false);
         }
@@ -467,7 +490,7 @@ internal sealed partial class DrdynvcChannel
         uint maxMonitors = r.U32LE();
         lock (_lock)
         {
-            _maxMonitors = maxMonitors == 0 ? 1 : maxMonitors;
+            _maxMonitors = Math.Min(maxMonitors == 0 ? 1u : maxMonitors, (uint)RdpMonitorLayout.MaxMonitors);
             _displayReady = true;
             if (_pending is not { } p)
             {
@@ -475,29 +498,42 @@ internal sealed partial class DrdynvcChannel
             }
 
             _pending = null;
-            _lastSent = p;
-            return BuildMonitorLayout(_displayChannelId, p.Width, p.Height, p.Scale);
+            if (p.Layout.Monitors.Count > _maxMonitors)
+            {
+                Log($"display-control layout has {p.Layout.Monitors.Count} monitors, server accepts {_maxMonitors}; keeping the current layout");
+                return null;
+            }
+
+            byte[] frame = BuildMonitorLayout(_displayChannelId, p.Layout, p.Scale);
+            _lastSent = frame;
+            return frame;
         }
     }
 
-    private static byte[] BuildMonitorLayout(uint channelId, int width, int height, int scale = 100)
+    private static byte[] BuildMonitorLayout(uint channelId, RdpMonitorLayout layout, int scale = 100)
     {
-        // DISPLAYCONTROL_MONITOR_LAYOUT_PDU (MS-RDPEDISP 2.2.2.2) for a single primary monitor.
-        var disp = new ByteWriter(56);
-        disp.U32LE(DispMonitorLayout);          // Header.Type
-        disp.U32LE(56);                         // Header.Length = 8 + 8 + 40
-        disp.U32LE(40);                         // MonitorLayoutSize
-        disp.U32LE(1);                          // NumMonitors
-        disp.U32LE(MonitorPrimary);             // Flags
-        disp.U32LE(0);                          // Left
-        disp.U32LE(0);                          // Top
-        disp.U32LE((uint)width);                // Width
-        disp.U32LE((uint)height);               // Height
-        disp.U32LE(0);                          // PhysicalWidth
-        disp.U32LE(0);                          // PhysicalHeight
-        disp.U32LE(0);                          // Orientation = landscape
-        disp.U32LE((uint)RdpScale.Clamp(scale));  // DesktopScaleFactor (percent)
-        disp.U32LE((uint)RdpScale.Device(scale)); // DeviceScaleFactor (100 / 140 / 180)
+        // DISPLAYCONTROL_MONITOR_LAYOUT_PDU (MS-RDPEDISP 2.2.2.2). The managed framebuffer uses the
+        // layout's bounding desktop, so monitor origins are signed on the wire but validated non-negative.
+        int count = layout.Monitors.Count;
+        int length = checked(16 + count * 40);
+        var disp = new ByteWriter(length);
+        disp.U32LE(DispMonitorLayout);            // Header.Type
+        disp.U32LE((uint)length);                 // Header.Length = 8 + 8 + monitor definitions
+        disp.U32LE(40);                           // MonitorLayoutSize
+        disp.U32LE((uint)count);                  // NumMonitors
+        foreach (RdpMonitor monitor in layout.Monitors)
+        {
+            disp.U32LE(monitor.Primary ? MonitorPrimary : 0u);
+            disp.U32LE(unchecked((uint)monitor.X));
+            disp.U32LE(unchecked((uint)monitor.Y));
+            disp.U32LE(checked((uint)((long)monitor.X + monitor.Width)));
+            disp.U32LE(checked((uint)((long)monitor.Y + monitor.Height)));
+            disp.U32LE((uint)monitor.PhysicalWidth);
+            disp.U32LE((uint)monitor.PhysicalHeight);
+            disp.U32LE((uint)monitor.Orientation);
+            disp.U32LE((uint)RdpScale.Clamp(scale));
+            disp.U32LE((uint)RdpScale.Device(scale));
+        }
 
         int cbId = channelId <= 0xFF ? 0 : channelId <= 0xFFFF ? 1 : 2;
         var w = new ByteWriter(4 + CbIdBytes(cbId) + disp.Length);

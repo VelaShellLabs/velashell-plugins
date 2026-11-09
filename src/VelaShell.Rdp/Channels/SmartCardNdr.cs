@@ -67,6 +67,13 @@ internal sealed class SmartCardNdr
         return Bytes(header.Length).ToArray();
     }
 
+    internal byte[] SimpleBlob(int length, bool present)
+    {
+        if (!present) { return []; }
+        if (Count() != length) { throw new InvalidDataException("Inconsistent smart-card simple array."); }
+        return Bytes(length).ToArray();
+    }
+
     internal ulong Handle((int Length, bool Present) header)
     {
         byte[] value = Blob(header);

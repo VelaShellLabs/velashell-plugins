@@ -28,7 +28,7 @@ internal sealed partial class RdpDesktopControl
             if (_disposed != 0) { return; }
             _remoteWindows = RemoteApp?.RemoteWindows ?? [];
             if (RemoteApp?.ActiveRemoteWindow is > 0 and var active) { _activeRemoteWindow = active; }
-            if (!_remoteWindows.Any(w => w.Id == _activeRemoteWindow))
+            if (!_remoteWindows.Any(w => w.Id == _activeRemoteWindow && !w.IsCloaked))
             {
                 _activeRemoteWindow = _remoteWindows.FirstOrDefault(w => w.Visible)?.Id ?? 0;
             }
@@ -115,7 +115,7 @@ internal sealed partial class RdpDesktopControl
     }
     private static void DrawAppText(DrawingContext context, string value, Point position, IBrush brush) =>
         context.DrawText(new FormattedText(value, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Typeface.Default, 12, brush), position);
-    private IEnumerable<RemoteAppWindow> AppTabs() => _remoteWindows.Where(w => HasCaption(w) && w.ShowState != 0 && (w.ExtendedStyle & 0x80) == 0);
+    private IEnumerable<RemoteAppWindow> AppTabs() => _remoteWindows.Where(w => HasCaption(w) && !w.IsCloaked && w.ShowState != 0 && (w.ExtendedStyle & 0x80) == 0);
     private Rect AppTab(int index)
     {
         int count = Math.Max(1, AppTabs().Count());

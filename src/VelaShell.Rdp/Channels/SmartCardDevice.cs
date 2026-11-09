@@ -121,13 +121,14 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         if (!Supported(operation)) { return Error(operation, SmartCardException.Unsupported); }
 
         bool connect = operation is Base + 0xAC or Base + 0xB0;
-        bool cardOperation = operation >= Base + 0xB4 && operation <= Base + 0xD8;
+        bool cardOperation = operation >= Base + 0xB4 && operation <= Base + 0xDC;
         bool wide = operation is Base + 0x24 or Base + 0x2C or Base + 0xA4 or Base + 0xB0 or Base + 0xCC;
         if (connect && r.U32() == 0) { throw new InvalidDataException("Missing reader name."); }
         var contextHeader = r.BlobHeader(16);
         var cardHeader = cardOperation ? r.BlobHeader(16) : default;
         uint arg1 = 0, arg2 = 0, arg3 = 0;
-        bool lengthOnly = false, receivePciPresent = false, readersPresent = false;
+        bool lengthOnly = false, receivePciPresent = false, readersPresent = false, setAttributePresent = false;
+        int setAttributeLength = 0;
         (int Length, bool Present) bufferHeader = default, pciHeader = default;
         int count = 0;
         switch (operation - Base)
@@ -151,12 +152,17 @@ internal sealed class SmartCardDevice : IRdpdrDevice
             case 0xD4:
                 arg1 = r.U32(); bufferHeader = r.BlobHeader(); lengthOnly = r.Boolean(); arg2 = r.U32(); break;
             case 0xD8: arg1 = r.U32(); lengthOnly = r.Boolean(); arg2 = r.U32(); break;
+            case 0xDC:
+                arg1 = r.U32(); setAttributeLength = r.Count();
+                setAttributePresent = r.U32() != 0;
+                if (!setAttributePresent && setAttributeLength != 0) { throw new InvalidDataException(); }
+                break;
         }
         string? reader = connect ? r.String(wide) : null;
         ulong contextId = r.Handle(contextHeader);
         ulong cardId = cardOperation ? r.Handle(cardHeader) : 0;
         byte[] extra = operation == Base + 0xD0 ? r.Blob(pciHeader) : [];
-        byte[] data = r.Blob(bufferHeader);
+        byte[] data = operation == Base + 0xDC ? r.SimpleBlob(setAttributeLength, setAttributePresent) : r.Blob(bufferHeader);
         SmartCardPci? receivePci = null;
         if (receivePciPresent)
         {
@@ -273,6 +279,9 @@ internal sealed class SmartCardDevice : IRdpdrDevice
                         if (!lengthOnly) { SmartCardNdr.Blob(w, control.Data); }
                         break;
                     case 0xD8: WriteBuffer(w, _backend.GetAttribute(card, arg1), lengthOnly, arg2); break;
+                    case 0xDC:
+                        if (arg1 != SmartCardAttributes.SuppressT1IfsRequest) { throw new SmartCardException(SmartCardException.Unsupported); }
+                        _backend.SetAttribute(card, arg1, data); break;
                 }
             }
             finally { context.Operations.Release(); }
@@ -296,7 +305,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
     }
 
     private static bool Supported(uint op) => op - Base is 0x18 or 0x1C or 0x20 or 0x24 or 0x28 or 0x2C or 0xA0 or 0xA4 or 0xA8 or
-        0xAC or 0xB0 or 0xB4 or 0xB8 or 0xBC or 0xC0 or 0xC4 or 0xC8 or 0xCC or 0xD0 or 0xD4 or 0xD8;
+        0xAC or 0xB0 or 0xB4 or 0xB8 or 0xBC or 0xC0 or 0xC4 or 0xC8 or 0xCC or 0xD0 or 0xD4 or 0xD8 or 0xDC;
 
     private static byte[] MultiString(string[] names, bool wide)
     {

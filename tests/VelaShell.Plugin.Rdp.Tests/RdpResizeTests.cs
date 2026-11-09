@@ -1,4 +1,5 @@
 using System.Text;
+using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Pdu;
 using VelaShell.Rdp.Wire;
@@ -87,6 +88,89 @@ public sealed class RdpResizeTests
         layout.Skip(2 + 4 + 4 + 4 + 4 + 4 + 4 + 4); // to Width
         Assert.AreEqual(1920u, layout.U32LE());
         Assert.AreEqual(1080u, layout.U32LE());
+    }
+
+    [TestMethod]
+    public async Task MultiMonitorLayoutUsesOneDefinitionPerMonitor()
+    {
+        var sent = new List<byte[]>();
+        var layout = new RdpMonitorLayout(
+        [
+            new(0, 0, 1920, 1080, Primary: true, PhysicalWidth: 600, PhysicalHeight: 340),
+            new(1920, 0, 2560, 1440, PhysicalWidth: 700, PhysicalHeight: 390, Orientation: RdpMonitorOrientation.Portrait)
+        ]);
+        var dvc = new DrdynvcChannel((pdu, _) => { sent.Add(pdu); return Task.CompletedTask; }, CancellationToken.None);
+
+        await dvc.ProcessAsync(CreateRequest(3, DisplayControl));
+        await dvc.ProcessAsync(DisplayCapsData(3, maxMonitors: 2));
+        await dvc.RequestMonitorLayoutAsync(layout, 125);
+
+        Assert.HasCount(2, sent);
+        var reader = new ByteReader(sent[1]);
+        Assert.AreEqual(0x03, reader.U8() >> 4);
+        Assert.AreEqual(3u, reader.U8());
+        Assert.AreEqual(0x00000002u, reader.U32LE());
+        Assert.AreEqual(96u, reader.U32LE());
+        Assert.AreEqual(40u, reader.U32LE());
+        Assert.AreEqual(2u, reader.U32LE());
+
+        Assert.AreEqual(1u, reader.U32LE());
+        Assert.AreEqual(0u, reader.U32LE());
+        Assert.AreEqual(0u, reader.U32LE());
+        Assert.AreEqual(1920u, reader.U32LE());
+        Assert.AreEqual(1080u, reader.U32LE());
+        Assert.AreEqual(600u, reader.U32LE());
+        Assert.AreEqual(340u, reader.U32LE());
+        Assert.AreEqual(0u, reader.U32LE());
+        Assert.AreEqual(125u, reader.U32LE());
+        Assert.AreEqual(140u, reader.U32LE());
+
+        Assert.AreEqual(0u, reader.U32LE());
+        Assert.AreEqual(1920u, reader.U32LE());
+        Assert.AreEqual(0u, reader.U32LE());
+        Assert.AreEqual(4480u, reader.U32LE());
+        Assert.AreEqual(1440u, reader.U32LE());
+        Assert.AreEqual(700u, reader.U32LE());
+        Assert.AreEqual(390u, reader.U32LE());
+        Assert.AreEqual(90u, reader.U32LE());
+        Assert.AreEqual(125u, reader.U32LE());
+        Assert.AreEqual(140u, reader.U32LE());
+    }
+
+    [TestMethod]
+    public async Task ServerMonitorLimitRejectsUnsupportedLayout()
+    {
+        var sent = new List<byte[]>();
+        var dvc = new DrdynvcChannel((pdu, _) => { sent.Add(pdu); return Task.CompletedTask; }, CancellationToken.None);
+        var layout = new RdpMonitorLayout(
+        [new(0, 0, 100, 100, Primary: true), new(100, 0, 100, 100)]);
+
+        await dvc.ProcessAsync(CreateRequest(3, DisplayControl));
+        await dvc.ProcessAsync(DisplayCapsData(3, maxMonitors: 1));
+        await dvc.RequestMonitorLayoutAsync(layout);
+
+        Assert.HasCount(1, sent);
+    }
+
+    [TestMethod]
+    public async Task InitialMonitorLayoutWaitsForCapabilities()
+    {
+        var sent = new List<byte[]>();
+        var layout = RdpMonitorLayout.Single(1600, 900);
+        var dvc = new DrdynvcChannel((pdu, _) => { sent.Add(pdu); return Task.CompletedTask; }, CancellationToken.None,
+            initialLayout: layout, initialScale: 150);
+
+        await dvc.ProcessAsync(CreateRequest(3, DisplayControl));
+        Assert.HasCount(1, sent);
+        await dvc.ProcessAsync(DisplayCapsData(3, maxMonitors: 1));
+
+        Assert.HasCount(2, sent);
+        var reader = new ByteReader(sent[1]);
+        reader.Skip(2 + 4 + 4 + 4 + 4 + 4 + 4 + 4);
+        Assert.AreEqual(1600u, reader.U32LE());
+        Assert.AreEqual(900u, reader.U32LE());
+        reader.Skip(12);
+        Assert.AreEqual(150u, reader.U32LE());
     }
 
     [TestMethod]

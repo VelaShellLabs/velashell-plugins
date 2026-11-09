@@ -26,8 +26,10 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
             if (type is 5 or 0x13)
             {
                 if (_initialized) { throw new RdpProtocolException("Duplicate RAIL handshake."); }
+                // HandshakeEx bit 0 is TS_RAIL_ORDER_HANDSHAKEEX_FLAGS_HIDEF (high-DPI support),
+                // not an enhanced graphics request. Enhanced RAIL graphics are negotiated separately;
+                // classic RAIL remains valid for either handshake form.
                 RequireLength(body, type == 5 ? 4 : 8);
-                if (type == 0x13 && (body[4] & 1) != 0) { throw new RdpProtocolException("Server enabled unnegotiated enhanced RemoteApp graphics."); }
                 if (negotiatedSize?.Invoke() is { Width: >= 200, Height: >= 200 } size)
                 {
                     width = size.Width;
@@ -35,17 +37,22 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 }
                 _initialized = true;
                 await send(Packet(5, w => w.U32LE(7601)), ct).ConfigureAwait(false);
-                // No native shell integration, icon rendering, or client-side move loop is advertised.
-                await send(Packet(0x0b, w => w.U32LE(0x400)), ct).ConfigureAwait(false);
-                foreach (uint parameter in new uint[] { 0x25, 0x100b, 0x45, 0x21 })
+                // Advertise only features implemented by this client: server window cloaking and icon suppression.
+                // In particular, do not advertise local move/size or z-order synchronization.
+                await send(Packet(0x0b, w => w.U32LE(0x600)), ct).ConfigureAwait(false);
+                // Keep the startup sequence and wire sizes compatible with the reference RAIL client.
+                await send(Packet(3, w =>
+                {
+                    w.U32LE(0x43); // SPI_SET_HIGH_CONTRAST
+                    w.U32LE(0x7e); // high-contrast flags used by the reference client
+                    w.U32LE(0);    // no colour-scheme string
+                    w.U16LE(0);
+                }), ct).ConfigureAwait(false);
+                foreach (uint parameter in new uint[] { 0x21, 0x45, 0x25, 0x100b })
                 {
                     await send(Packet(3, w => { w.U32LE(parameter); w.U8(0); }), ct).ConfigureAwait(false);
                 }
-                await send(Packet(3, w => { w.U32LE(0x43); w.U32LE(0); w.U32LE(4); w.U16LE(2); w.U16LE(0); }), ct).ConfigureAwait(false);
-                await send(Packet(3, w => { w.U32LE(0x2f); Rectangle(w, 0, 0, width, Math.Max(1, height - RemoteAppOptions.WorkspaceStripHeight)); }), ct).ConfigureAwait(false);
-                await send(Packet(3, w => { w.U32LE(0xf001); Rectangle(w, 0, 0, width, height); }), ct).ConfigureAwait(false);
-                int stripHeight = Math.Min(height, RemoteAppOptions.WorkspaceStripHeight);
-                await send(Packet(3, w => { w.U32LE(0xf000); Rectangle(w, 0, height - stripHeight, width, stripHeight); }), ct).ConfigureAwait(false);
+                await send(Packet(3, w => { w.U32LE(0x2f); Rectangle(w, 0, 0, width, height); }), ct).ConfigureAwait(false);
                 await send(BuildExecute(options), ct).ConfigureAwait(false);
             }
             else
