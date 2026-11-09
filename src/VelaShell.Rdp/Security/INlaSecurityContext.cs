@@ -61,10 +61,15 @@ internal sealed class NegotiateSecurityContext : INlaSecurityContext
         {
             Package = package,
             Credential = new NetworkCredential(username, password, domain),
-            TargetName = $"TERMSRV/{targetHost}",
+            TargetName = ServiceTarget(targetHost),
             RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
         });
     }
+
+    internal static string ServiceTarget(string targetHost) =>
+        targetHost.Length > 0 && !IPAddress.TryParse(targetHost.Trim('[', ']'), out _)
+            ? $"TERMSRV/{targetHost}"
+            : string.Empty;
 
     public bool IsComplete { get; private set; }
 

@@ -11,6 +11,14 @@ namespace VelaShell.Plugin.Rdp.Tests;
 public sealed class ManagedNtlmTests
 {
     [TestMethod]
+    public void IpLiteralDoesNotCreateKerberosServiceTarget()
+    {
+        Assert.AreEqual(string.Empty, NegotiateSecurityContext.ServiceTarget("118.195.228.36"));
+        Assert.AreEqual(string.Empty, NegotiateSecurityContext.ServiceTarget("[2001:db8::1]"));
+        Assert.AreEqual("TERMSRV/rdp.example.com", NegotiateSecurityContext.ServiceTarget("rdp.example.com"));
+    }
+
+    [TestMethod]
     public void FirstTokenDoesNotRequireAnInstalledNtlmProvider()
     {
         using var auth = new NegotiateSecurityContext("Domain", "User", "password", "server", "NTLM");
