@@ -13,8 +13,8 @@ public sealed class ManagedNtlmTests
     [TestMethod]
     public void IpLiteralDoesNotCreateKerberosServiceTarget()
     {
-        Assert.IsNull(NegotiateSecurityContext.ServiceTarget("118.195.228.36"));
-        Assert.IsNull(NegotiateSecurityContext.ServiceTarget("[2001:db8::1]"));
+        Assert.AreEqual(string.Empty, NegotiateSecurityContext.ServiceTarget("118.195.228.36"));
+        Assert.AreEqual(string.Empty, NegotiateSecurityContext.ServiceTarget("[2001:db8::1]"));
         Assert.AreEqual("TERMSRV/rdp.example.com", NegotiateSecurityContext.ServiceTarget("rdp.example.com"));
     }
 

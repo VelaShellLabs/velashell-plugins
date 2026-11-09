@@ -66,10 +66,10 @@ internal sealed class NegotiateSecurityContext : INlaSecurityContext
         });
     }
 
-    internal static string? ServiceTarget(string targetHost) =>
+    internal static string ServiceTarget(string targetHost) =>
         targetHost.Length > 0 && !IPAddress.TryParse(targetHost.Trim('[', ']'), out _)
             ? $"TERMSRV/{targetHost}"
-            : null;
+            : string.Empty;
 
     public bool IsComplete { get; private set; }
 
