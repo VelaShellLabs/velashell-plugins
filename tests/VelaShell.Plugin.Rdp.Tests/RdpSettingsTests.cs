@@ -18,11 +18,13 @@ public sealed class RdpSettingsTests
         Settings = settings.ToDictionary(pair => pair.Key, pair => pair.Value)
     };
     [TestMethod]
-    public void RedirectionRequiresExplicitOptIn()
+    public void ClipboardIsEnabledByDefaultWhileSensitiveRedirectionStaysOptIn()
     {
         var settings = RdpSettings.From(Request(), new("en"));
-        Assert.IsFalse(settings.Clipboard);
+        Assert.IsTrue(settings.Clipboard);
+        Assert.IsFalse(RdpSettings.From(Request(("clipboard", "false")), new("en")).Clipboard);
         Assert.IsFalse(settings.SmartCardRedirection);
+        Assert.AreEqual("true", RdpSettings.Declare(new("en"), []).Single(field => field.Key == "clipboard").DefaultValue);
         Assert.IsNull(settings.Gateway);
         Assert.IsEmpty(settings.Drives);
         Assert.AreEqual(1920, settings.Width);

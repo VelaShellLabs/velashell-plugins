@@ -33,7 +33,7 @@ public sealed class RemoteAppTests
         byte[] highContrast = sent.Single(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) == 0x43);
         Assert.AreEqual((ushort)18, BitConverter.ToUInt16(highContrast, 2), "high-contrast parameter uses the standard empty colour scheme layout");
         Assert.AreEqual(0x7eu, BitConverter.ToUInt32(highContrast, 8));
-        Assert.AreEqual(0u, BitConverter.ToUInt32(highContrast, 12));
+        Assert.AreEqual(2u, BitConverter.ToUInt32(highContrast, 12));
         Assert.AreEqual((ushort)0, BitConverter.ToUInt16(highContrast, 16));
         byte[] workArea = sent.Single(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) == 0x2f);
         Assert.AreEqual((ushort)1280, BitConverter.ToUInt16(workArea, 12), "server-negotiated dimensions replace requested dimensions");
@@ -67,7 +67,10 @@ public sealed class RemoteAppTests
         var rail = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask);
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync(ExecuteResult(0), default));
         await rail.ProcessAsync(RailChannel.Packet(5, w => w.U32LE(7601)), default);
-        await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync(ExecuteResult(3), default));
+        RdpProtocolException rejection = await Assert.ThrowsAsync<RdpProtocolException>(() =>
+            rail.ProcessAsync(ExecuteResult(3, 0x15), default));
+        StringAssert.Contains(rejection.Message, "not in the server's RemoteApp allowlist");
+        StringAssert.Contains(rejection.Message, "device is not ready");
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync([1, 0, 3, 0], default));
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync([1, 0, 8, 0], default));
         var handshakeEx = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask);
@@ -87,6 +90,9 @@ public sealed class RemoteAppTests
         Assert.AreEqual(0x8000u, BitConverter.ToUInt32(rail, 8) & 0x8000);
         Assert.AreEqual(0u, BitConverter.ToUInt32(rail, 8) & 0x02000000);
         var options = new RdpClientOptions { Host = "h", Username = "u", Password = "", RemoteApp = App, DynamicResolution = true, Clipboard = false };
+        var railChannel = RdpManagedSession.BuildChannels(options).Single();
+        Assert.AreEqual("rail", railChannel.Name);
+        Assert.AreEqual(0xC0A00000u, railChannel.Options);
         Assert.AreSequenceEqual(new[] { "rail" }, RdpManagedSession.BuildChannels(options).Select(c => c.Name).ToArray());
         Assert.Throws<ArgumentException>(() => new RdpConnection(ConnectionOptions() with { GraphicsPipeline = true }));
         bool factoryCalled = false;
@@ -205,9 +211,9 @@ public sealed class RemoteAppTests
     });
 
     private static RdpConnectOptions ConnectionOptions() => new("h", 3389, "", "", "", 1024, 768, 32, null, "h", [], DrawingOrders: false, RemoteApp: App);
-    private static byte[] ExecuteResult(ushort result) => RailChannel.Packet(0x80, w =>
+    private static byte[] ExecuteResult(ushort result, uint rawResult = 0) => RailChannel.Packet(0x80, w =>
     {
-        w.U16LE(0); w.U16LE(result); w.U32LE(0); w.U16LE(0); String(w, App.Program);
+        w.U16LE(0); w.U16LE(result); w.U32LE(rawResult); w.U16LE(0); String(w, App.Program);
     });
     private static void String(ByteWriter w, string text) { byte[] bytes = Encoding.Unicode.GetBytes(text); w.U16LE((ushort)bytes.Length); w.Bytes(bytes); }
     private static void Rects(ByteWriter w, ushort x, ushort y, ushort right, ushort bottom) { w.U16LE(1); w.U16LE(x); w.U16LE(y); w.U16LE(right); w.U16LE(bottom); }

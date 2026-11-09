@@ -117,7 +117,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
             return value;
         }
-        bool clipboard = Flag("clipboard");
+        bool clipboard = Flag("clipboard", true);
         RdpGatewayOptions? gateway = null;
         string gatewayHost = request.GetString(GatewayHostKey).Trim();
         if (gatewayHost.Length != 0)
@@ -278,13 +278,16 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         };
     }
 
-    private static IReadOnlyList<PortMapping> ParsePorts(string text, Loc loc)
+    private static PortMapping[] ParsePorts(string text, Loc loc)
     {
         try
         {
             PortMapping[] ports = string.IsNullOrWhiteSpace(text) ? []
                 : [.. text.Split(';', StringSplitOptions.TrimEntries).Select(p => new PortMapping(p))];
-            if (ports.Length > 32 || ports.DistinctBy(p => p.Name).Count() != ports.Length) { throw new ArgumentException(); }
+            if (ports.Length > 32 || ports.DistinctBy(p => p.Name).Count() != ports.Length)
+            {
+                throw new ArgumentException("Port mappings must contain at most 32 unique entries.", nameof(text));
+            }
             return ports;
         }
         catch (ArgumentException) { throw new ProtocolConnectionException(loc.Format("Invalid", loc["Ports"])); }
@@ -333,7 +336,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
                     new("tls", loc["SecurityTls"])
                 ]
             },
-            new() { Key = "clipboard", Label = loc["Clipboard"], Hint = loc["ClipboardHint"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "false" }
+            new() { Key = "clipboard", Label = loc["Clipboard"], Hint = loc["ClipboardHint"], Kind = ProtocolSettingKind.Boolean, DefaultValue = "true" }
         ];
         foreach (LocalDisk disk in disks)
         {

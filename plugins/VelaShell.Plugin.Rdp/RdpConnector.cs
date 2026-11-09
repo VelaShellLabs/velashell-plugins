@@ -54,7 +54,10 @@ internal static class RdpConnector
             AudioPlayback = settings.Audio
             // DynamicResolution left at its default (true): the plugin always follows the window.
         };
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+        // RemoteApp includes the RAIL handshake and published-program launch after the base RDP connection.
+        // Keep the host timeout from cancelling that phase before the library's 30-second launch wait can finish.
+        int timeoutSeconds = settings.RemoteApp is null ? settings.TimeoutSeconds : Math.Max(settings.TimeoutSeconds, 45);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {

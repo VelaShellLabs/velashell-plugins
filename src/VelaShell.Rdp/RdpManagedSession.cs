@@ -219,7 +219,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         if (options.RemoteApp is not null)
         {
             options.RemoteApp.Validate();
-            channels.Add(new ChannelDef("rail", 0xC0800000));
+            channels.Add(new ChannelDef("rail", 0xC0A00000)); // INITIALIZED|ENCRYPT_RDP|COMPRESS_RDP|SHOW_PROTOCOL
         }
         if (options.Clipboard)
         {
