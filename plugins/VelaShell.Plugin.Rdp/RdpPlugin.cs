@@ -39,6 +39,12 @@ public sealed class RdpPlugin : IVelaPlugin
     /// <summary>Creates the plugin (host entry point).</summary>
     public RdpPlugin() : this(LocalDisks.Enumerate, DiskPollInterval, WindowsPrinterCatalog.GetPrinters, RdpCameraDevices.Enumerate, RdpWpdDevices.Enumerate)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // NegotiateAuthentication caches this process-wide switch on first use. Set it before
+            // the workspace can create the first Linux CredSSP context.
+            AppContext.SetSwitch("System.Net.Security.UseManagedNtlm", true);
+        }
     }
 
     /// <summary>Test seam: inject the disk source and poll interval.</summary>
