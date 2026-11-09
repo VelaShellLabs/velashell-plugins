@@ -242,8 +242,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private sealed class TransferSlot
     {
         private static readonly Geometry CancelIcon = Geometry.Parse("M18 6 6 18 M6 6l12 12"); // Lucide "x"
-        private const double TooltipPreferredMinWidth = 520;
-        private const double TooltipPreferredMaxWidth = 900;
+        private const double TooltipMaxWidth = 900;
         private const double TooltipScreenMargin = 64;
         // The parent status panel provides the available width. Do not impose a second cap here:
         // on narrow views the transfer slot must be able to use every pixel not needed by the status text.
@@ -385,13 +384,12 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
                 ? 0
                 : Math.Min(topLevel.ClientSize.Width, topLevel.Bounds.Width);
             double maxWidth = windowWidth > TooltipScreenMargin
-                ? Math.Max(240, Math.Min(TooltipPreferredMaxWidth, windowWidth - TooltipScreenMargin))
-                : TooltipPreferredMaxWidth;
+                ? Math.Max(240, Math.Min(TooltipMaxWidth, windowWidth - TooltipScreenMargin))
+                : TooltipMaxWidth;
             return new TextBlock
             {
                 Text = string.Join("\n", lines),
                 TextWrapping = TextWrapping.Wrap,
-                MinWidth = Math.Min(TooltipPreferredMinWidth, maxWidth),
                 MaxWidth = maxWidth
             };
         }
