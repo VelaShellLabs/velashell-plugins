@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Net.Security;
+using System.Security.Authentication;
 using VelaShell.Rdp.Security;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -7,6 +8,17 @@ namespace VelaShell.Plugin.Rdp.Tests;
 [TestClass]
 public sealed class RdpTlsPlatformTests
 {
+    [TestMethod]
+    public void LinuxUsesTls12ForRdpCompatibility()
+    {
+        SslClientAuthenticationOptions options = RdpTls.CreateClientAuthenticationOptions("rdp.example", pinned: false);
+        SslProtocols expected = OperatingSystem.IsLinux()
+            ? SslProtocols.Tls12
+            : SslProtocols.Tls12 | SslProtocols.Tls13;
+
+        Assert.AreEqual(expected, options.EnabledSslProtocols);
+    }
+
     [TestMethod]
     public void MacOsAvoidsStaticRsaGcmTlsSuites()
     {

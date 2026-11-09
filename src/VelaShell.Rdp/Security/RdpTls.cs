@@ -15,6 +15,13 @@ internal static class RdpTls
 {
     private const string ServerAuthOid = "1.3.6.1.5.5.7.3.1";
 
+    // Some RDP servers advertise TLS 1.3 but fail during the CredSSP application-data exchange
+    // when reached through Linux OpenSSL. TLS 1.2 is the interoperable RDP baseline already
+    // covered by the live-server matrix, so keep Linux on that version until those servers are fixed.
+    private static SslProtocols EnabledProtocols => OperatingSystem.IsLinux()
+        ? SslProtocols.Tls12
+        : SslProtocols.Tls12 | SslProtocols.Tls13;
+
     // AppleCrypto has a known failure mode with the static RSA-GCM suites used by
     // some RDP servers. Keep TLS 1.3 and ephemeral ECDHE suites, while retaining
     // ECDHE-CBC for older servers; this avoids the affected RSA key-transport path
@@ -41,7 +48,7 @@ internal static class RdpTls
         return new SslClientAuthenticationOptions
         {
             TargetHost = targetHost,
-            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            EnabledSslProtocols = EnabledProtocols,
             AllowRenegotiation = false,
             CertificateRevocationCheckMode = pinned ? X509RevocationMode.NoCheck : X509RevocationMode.Online,
             CipherSuitesPolicy = OperatingSystem.IsMacOS() ? new CipherSuitesPolicy(MacOsCipherSuites) : null
