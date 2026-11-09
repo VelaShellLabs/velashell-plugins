@@ -63,6 +63,13 @@ public interface IRdpSession : IRdpClipboardTransport, IAsyncDisposable
     Task RequestResizeAsync(int width, int height, int scalePercent, CancellationToken ct = default) => RequestResizeAsync(width, height, ct);
 
     /// <summary>
+    /// Requests a validated virtual monitor layout through MS-RDPEDISP. Sessions without display-control support
+    /// may ignore this request. The scale is applied to every monitor because the existing framebuffer and session
+    /// contract use one desktop scale for the virtual desktop.
+    /// </summary>
+    Task RequestMonitorLayoutAsync(RdpMonitorLayout layout, int scalePercent = 100, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
     /// Tells the server whether the desktop is being shown. A hidden or minimized view passes
     /// <see langword="false"/>: the server stops sending display updates (no bandwidth, no decoding) when it supports
     /// Suppress Output. <see langword="true"/> resumes them and asks for a full repaint. A no-op otherwise.

@@ -133,6 +133,11 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             return;
         }
 
+        if (session is RdpManagedSession managedSession && managedSession.AutoReconnectCookie is { } cookie)
+        {
+            _settings.AutoReconnectCookie = cookie;
+        }
+
         if (failure is RdpConnectionLostException lost && AutoReconnectDelays.Length > 0)
         {
             // The network dropped, not the server: the remote Windows session waits in the disconnected state, so
@@ -147,8 +152,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         {
             // Whether a Windows session actually started before the drop bisects the cause: logon reached =>
             // the server ended an established session (policy); not reached => it never got that far.
-            string logon = session is RdpManagedSession managed
-                ? managed.ReachedLogon ? $"; a Windows logon was reached (Save Session Info type {managed.LogonInfoType})" : "; no Windows logon was reached"
+            string logon = session is RdpManagedSession logonSession
+                ? logonSession.ReachedLogon ? $"; a Windows logon was reached (Save Session Info type {logonSession.LogonInfoType})" : "; no Windows logon was reached"
                 : "";
             _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure!.Message}{logon}");
         }

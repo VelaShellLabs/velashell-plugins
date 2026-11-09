@@ -33,7 +33,7 @@ Adapted codec algorithms and bundled managed dependencies retain the notices in
   (`libasound.so.2` plus a working ALSA/PipeWire/PulseAudio configuration). Audio failures are replayed
   through `IRdpAudioSource.AudioPlaybackFailed` and disable audio without disconnecting the desktop.
 
-It does **not** negotiate microphone capture, multiple monitors or RemoteApp window mappings.
+Microphone redirection has an explicit `RdpClientOptions.AudioInput` contract with bounded PCM format validation, but requesting it currently fails before network setup with `RdpAudioInputNotSupportedException`; no capture device or `AUDIO_INPUT` channel is opened. The full MS-RDPEAI negotiation/data path and platform capture backends remain unimplemented. RemoteApp window mappings are also not negotiated. Multiple monitors are negotiated as one bounded virtual desktop through MS-RDPEDISP; monitor rectangles must be non-overlapping, non-negative, and fit within 8192×8192, with one primary monitor at (0, 0).
 
 ## Managed graphics pipeline
 
@@ -69,6 +69,11 @@ await using var session = await RdpManagedSession.ConnectAsync(new RdpClientOpti
     Password = "…",
     Width = 1920,
     Height = 1080,
+    MonitorLayout = new RdpMonitorLayout(
+    [
+        new(0, 0, 1920, 1080, Primary: true),
+        new(1920, 0, 1920, 1080)
+    ]),
     ColorDepth = 32,            // 15, 16, 24 or 32
     DesktopScaleFactor = 150,   // the local display scale, so remote text is not tiny on a high-DPI screen
     Clipboard = true,

@@ -32,7 +32,7 @@ internal static class ClientInfo
     /// TS_EXTENDED_INFO_PACKET.performanceFlags (desktop features to suppress); when
     /// <paramref name="audioPlayback"/> is <see langword="false" />, INFO_NOAUDIOPLAYBACK is set so the server plays no audio.
     /// </summary>
-    internal static byte[] Build(string domain, string username, string password, bool autoLogon, uint performanceFlags, bool audioPlayback, bool remoteApp = false)
+    internal static byte[] Build(string domain, string username, string password, bool autoLogon, uint performanceFlags, bool audioPlayback, bool remoteApp = false, AutoReconnectCookie? autoReconnectCookie = null)
     {
         var w = new ByteWriter(2048);   // roomy enough that the password is never copied by a buffer resize
         // Basic Security Header: SEC_INFO_PKT.
@@ -88,7 +88,15 @@ internal static class ClientInfo
         w.Zeros(172);                     // clientTimeZone (TS_TIME_ZONE_INFORMATION), UTC/zeroed
         w.U32LE(0);                       // clientSessionId
         w.U32LE(performanceFlags);
-        w.U16LE(0);                       // cbAutoReconnectCookie
+        if (autoReconnectCookie is null)
+        {
+            w.U16LE(0);                   // cbAutoReconnectCookie
+        }
+        else
+        {
+            w.U16LE((ushort)AutoReconnectCookie.PacketLength);
+            w.Bytes(autoReconnectCookie.BuildClientPacket());
+        }
         return w.ToArray();
     }
 

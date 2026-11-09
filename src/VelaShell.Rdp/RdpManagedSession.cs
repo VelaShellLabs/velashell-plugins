@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Mcs;
+using VelaShell.Rdp.Pdu;
 
 namespace VelaShell.Rdp;
 
@@ -161,17 +162,28 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     /// that is refused too because the server requires NLA, or when <see cref="RdpSecurity.Nla"/> was requested.
     /// </para>
     /// </summary>
-    public static async Task<RdpManagedSession> ConnectAsync(RdpClientOptions options, CancellationToken ct = default)
+    public static Task<RdpManagedSession> ConnectAsync(RdpClientOptions options, CancellationToken ct = default) =>
+        ConnectCoreAsync(options, ct, null);
+
+    internal static Task<RdpManagedSession> ConnectAsyncWithCookie(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct = default) =>
+        ConnectCoreAsync(options, ct, cookie);
+
+    private static async Task<RdpManagedSession> ConnectCoreAsync(RdpClientOptions options, CancellationToken ct, AutoReconnectCookie? cookie)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (options.AudioInput is { } audioInput)
+        {
+            audioInput.Validate();
+            throw new RdpAudioInputNotSupportedException();
+        }
         if (options.Security != RdpSecurity.Auto)
         {
-            return await ConnectOnceAsync(options, options.Security, ct).ConfigureAwait(false);
+            return await ConnectOnceAsync(options, options.Security, cookie, ct).ConfigureAwait(false);
         }
 
         try
         {
-            return await ConnectOnceAsync(options, RdpSecurity.Auto, ct).ConfigureAwait(false);
+            return await ConnectOnceAsync(options, RdpSecurity.Auto, cookie, ct).ConfigureAwait(false);
         }
         catch (RdpNlaRefusedException refused)
         {
@@ -179,7 +191,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             // "require NLA" setting is off can still log the user on itself.
             try
             {
-                RdpManagedSession session = await ConnectOnceAsync(options, RdpSecurity.Tls, ct).ConfigureAwait(false);
+                RdpManagedSession session = await ConnectOnceAsync(options, RdpSecurity.Tls, cookie, ct).ConfigureAwait(false);
                 session.NlaRefusal = refused;
                 return session;
             }
@@ -192,6 +204,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
 
     /// <summary>The security layer in use: <see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>.</summary>
     public RdpSecurity Security => Connection.Security;
+
+    internal AutoReconnectCookie? AutoReconnectCookie => Connection.AutoReconnectCookie;
 
     /// <summary>
     /// Set when <see cref="RdpSecurity.Auto"/> fell back to TLS because the server refused NLA before any
@@ -224,7 +238,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             channels.Add(new ChannelDef("rdpsnd", 0xC0000000)); // INITIALIZED|ENCRYPT_RDP
         }
 
-        if (graphicsReady || (options.DynamicResolution && options.RemoteApp is null) || options.Camera is not null || options.WpdDevices.Count != 0)
+        if (graphicsReady || ((options.DynamicResolution || options.MonitorLayout is not null) && options.RemoteApp is null)
+            || options.Camera is not null || options.WpdDevices.Count != 0)
         {
             channels.Add(new ChannelDef("drdynvc", 0xC0800000)); // dynamic graphics, display control and device channels
         }
@@ -245,8 +260,15 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         return flags;
     }
 
-    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, CancellationToken ct)
+    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, AutoReconnectCookie? cookie, CancellationToken ct)
     {
+        if (options.RemoteApp is not null && options.MonitorLayout is not null)
+        {
+            throw new ArgumentException("Monitor layouts are unavailable for RemoteApp sessions.", nameof(options));
+        }
+
+        int width = options.MonitorLayout?.DesktopWidth ?? options.Width;
+        int height = options.MonitorLayout?.DesktopHeight ?? options.Height;
         IRdpGfxBackend? backend = PrepareGraphics(options);
         IReadOnlyList<ChannelDef> channels;
         RdpManagedSession session;
@@ -254,11 +276,11 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         {
             channels = BuildChannels(options, backend is not null);
             var connectOptions = new RdpConnectOptions(options.Host, options.Port, options.Username, options.Password,
-                options.Domain, options.Width, options.Height, backend is not null ? 32 : options.ColorDepth, options.CertificatePin,
+                options.Domain, width, height, backend is not null ? 32 : options.ColorDepth, options.CertificatePin,
                 string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
                 options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
                 options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null,
-                options.RemoteApp, options.Gateway, GatewayRedirections(options));
+                options.RemoteApp, options.Gateway, GatewayRedirections(options), cookie);
             session = new RdpManagedSession(new RdpConnection(connectOptions))
             {
                 _driveLog = options.DriveRedirectionLog,
@@ -342,7 +364,9 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         // the real bound; the count only caps per-entry overhead for tiny PDUs.
         _drdynvcQueue = Channel.CreateBounded<ChannelPayload>(new BoundedChannelOptions(16384) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         _drdynvc = new DrdynvcChannel((pdu, token) => Connection.SendVirtualChannelAsync("drdynvc", pdu, token), _stop.Token,
-            options.DynamicResolution && options.RemoteApp is null, LogDrive, Connection.WaitForTunnelAsync, Connection.EnableTunnelReading, Connection.SendTunnelAsync);
+            (options.DynamicResolution || options.MonitorLayout is not null) && options.RemoteApp is null,
+            LogDrive, Connection.WaitForTunnelAsync, Connection.EnableTunnelReading, Connection.SendTunnelAsync,
+            options.MonitorLayout, options.DesktopScaleFactor);
         if (options.Camera is { } camera)
         {
             _ = new CameraChannel(_drdynvc, camera, () => OperatingSystem.IsWindows()
@@ -507,6 +531,10 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     /// </summary>
     public Task RequestResizeAsync(int width, int height, int scalePercent, CancellationToken cancellationToken = default) =>
         _drdynvc?.RequestResizeAsync(width, height, scalePercent) ?? Task.CompletedTask;
+
+    /// <summary>Requests a multi-monitor virtual desktop layout through MS-RDPEDISP.</summary>
+    public Task RequestMonitorLayoutAsync(RdpMonitorLayout layout, int scalePercent = 100, CancellationToken cancellationToken = default) =>
+        _drdynvc?.RequestMonitorLayoutAsync(layout, scalePercent) ?? Task.CompletedTask;
 
     public Task SetDisplayUpdatesAsync(bool visible, CancellationToken cancellationToken = default) => Guard(async () =>
     {

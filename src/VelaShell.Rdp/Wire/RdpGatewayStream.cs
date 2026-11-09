@@ -11,8 +11,10 @@ namespace VelaShell.Rdp.Wire;
 internal sealed class RdpGatewayStream : Stream
 {
     private const int MaxPacketLength = 1024 * 1024;
+    private const uint ServiceMessageCapability = 0x00000008;
     private readonly WebSocket _socket;
     private readonly IDisposable? _http;
+    private readonly Action<string>? _serviceMessageReceived;
     private readonly SemaphoreSlim _writer = new(1);
     private readonly CancellationTokenSource _lifetime = new();
     private Task _keepAlive = Task.CompletedTask;
@@ -21,10 +23,11 @@ internal sealed class RdpGatewayStream : Stream
     private bool _closed;
     private int _disposed;
 
-    private RdpGatewayStream(WebSocket socket, IDisposable? http = null)
+    private RdpGatewayStream(WebSocket socket, IDisposable? http = null, Action<string>? serviceMessageReceived = null)
     {
         _socket = socket;
         _http = http;
+        _serviceMessageReceived = serviceMessageReceived;
     }
 
     internal static async Task<RdpGatewayStream> ConnectAsync(RdpGatewayOptions options, string targetHost, int targetPort,
@@ -64,7 +67,7 @@ internal sealed class RdpGatewayStream : Stream
         socket.Options.SetRequestHeader("RDG-Connection-Id", Guid.NewGuid().ToString("B"));
         socket.Options.SetRequestHeader("Cache-Control", "no-cache");
         socket.Options.SetRequestHeader("Pragma", "no-cache");
-        var stream = new RdpGatewayStream(socket, http);
+        var stream = new RdpGatewayStream(socket, http, options.ServiceMessageReceived);
         try
         {
             await socket.ConnectAsync(new UriBuilder(endpoint) { Scheme = "wss" }.Uri, http, ct).ConfigureAwait(false);
@@ -87,9 +90,9 @@ internal sealed class RdpGatewayStream : Stream
     }
 
     internal static async Task<RdpGatewayStream> CreateForTestAsync(WebSocket socket, string host, int port,
-        uint requestedRedirections, CancellationToken ct)
+        uint requestedRedirections, CancellationToken ct, Action<string>? serviceMessageReceived = null)
     {
-        var stream = new RdpGatewayStream(socket);
+        var stream = new RdpGatewayStream(socket, serviceMessageReceived: serviceMessageReceived);
         try
         {
             await stream.InitializeAsync(host, port, requestedRedirections, ct).ConfigureAwait(false);
@@ -111,8 +114,11 @@ internal sealed class RdpGatewayStream : Stream
         {
             throw new NotSupportedException("RD Gateway selected an unsupported RDGHTTP version.");
         }
-        // Advertise only capabilities actually implemented: no UDP, NAP, consent UI or reauthentication.
-        await SendPacketAsync(4, new byte[8], ct).ConfigureAwait(false);
+        // Advertise only the implemented advisory service-message capability. UDP, NAP, consent UI
+        // and reauthentication still require protocol behavior that this stream does not implement.
+        var tunnelRequest = new byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(tunnelRequest, ServiceMessageCapability);
+        await SendPacketAsync(4, tunnelRequest, ct).ConfigureAwait(false);
         byte[] tunnel = await ExpectAsync(5, 10, 2, ct).ConfigureAwait(false);
         ushort fields = BinaryPrimitives.ReadUInt16LittleEndian(tunnel.AsSpan(6));
         if ((fields & ~3) != 0) { throw new NotSupportedException("RD Gateway requires unsupported tunnel authorization or consent."); }
@@ -121,10 +127,7 @@ internal sealed class RdpGatewayStream : Stream
         if ((fields & 2) != 0)
         {
             Require(tunnel, position, 4);
-            if (BinaryPrimitives.ReadUInt32LittleEndian(tunnel.AsSpan(position)) != 0)
-            {
-                throw new NotSupportedException("RD Gateway requires capabilities not offered by this client.");
-            }
+            _ = BinaryPrimitives.ReadUInt32LittleEndian(tunnel.AsSpan(position));
             position += 4;
         }
         if (position != tunnel.Length) { throw new RdpProtocolException("Invalid RD Gateway tunnel response length."); }
@@ -188,6 +191,17 @@ internal sealed class RdpGatewayStream : Stream
         {
             throw new RdpProtocolException("Truncated RD Gateway packet.");
         }
+    }
+
+    private static string ReadServiceMessage(byte[] body)
+    {
+        Require(body, 0, 2);
+        ushort length = BinaryPrimitives.ReadUInt16LittleEndian(body);
+        if ((length & 1) != 0 || length != body.Length - 2)
+        {
+            throw new RdpProtocolException("Invalid RD Gateway service-message length.");
+        }
+        return Encoding.Unicode.GetString(body, 2, length).TrimEnd('\0');
     }
 
     private async Task<byte[]> ExpectAsync(ushort expected, int minimum, int errorOffset, CancellationToken ct)
@@ -266,7 +280,10 @@ internal sealed class RdpGatewayStream : Stream
                 case 12:
                     throw new NotSupportedException("RD Gateway requested reauthentication; reconnect the session.");
                 case 11:
-                    throw new NotSupportedException("RD Gateway requires service messaging, which was not negotiated.");
+                    string message = ReadServiceMessage(body);
+                    try { _serviceMessageReceived?.Invoke(message); }
+                    catch { /* An observer must not affect protocol ownership or transport progress. */ }
+                    break;
                 default:
                     throw new RdpProtocolException($"Unexpected RD Gateway data packet 0x{type:X4}.");
             }

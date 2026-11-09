@@ -46,10 +46,19 @@ public sealed record RdpClientOptions
     public int Height { get; init; } = 1080;
 
     /// <summary>
+    /// Optional multi-monitor layout sent over MS-RDPEDISP after the server advertises Display Control capabilities.
+    /// When null, the existing single-monitor width/height path is unchanged. The managed framebuffer uses the
+    /// layout's bounding virtual desktop and therefore accepts non-overlapping monitors with non-negative origins
+    /// within 8192×8192.
+    /// </summary>
+    public RdpMonitorLayout? MonitorLayout { get; init; }
+
+    /// <summary>
     /// When <see langword="true" /> (the default) the dynamic display-control channel is advertised, so a
     /// caller may follow the viewport with <see cref="RdpManagedSession.RequestResizeAsync(int, int, System.Threading.CancellationToken)"/>
     /// and the desktop resizes to match. Set to <see langword="false" /> for a fixed desktop locked to
-    /// <see cref="Width"/>×<see cref="Height"/> (the channel is then never opened and resize requests are ignored).
+    /// <see cref="Width"/>×<see cref="Height"/>. A configured <see cref="MonitorLayout"/> still enables the
+    /// display-control channel because it requires layout negotiation.
     /// </summary>
     public bool DynamicResolution { get; init; } = true;
 
@@ -65,6 +74,12 @@ public sealed record RdpClientOptions
     /// Disabled by default. Failures are reported by <see cref="IRdpAudioSource.AudioPlaybackFailed"/> without ending the desktop session.
     /// </summary>
     public bool AudioPlayback { get; init; }
+
+    /// <summary>
+    /// Requests local microphone redirection to the remote session. The option is disabled by default and
+    /// currently fails before network setup because MS-RDPEAI capture and platform backends are not implemented.
+    /// </summary>
+    public RdpAudioInputOptions? AudioInput { get; init; }
 
     /// <summary>
     /// Requested classic colour depth: 15, 16, 24 or 32 (32 decodes RDP 6.0 planar bitmaps).

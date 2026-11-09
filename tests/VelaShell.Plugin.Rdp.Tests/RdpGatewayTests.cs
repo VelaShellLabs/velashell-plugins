@@ -21,7 +21,7 @@ public sealed class RdpGatewayTests
         var socket = new ScriptedSocket([.. Responses(), Packet(13, []), Packet(10, [0, 0]), Packet(10, [3, 0, 8, 9, 10]), Packet(16, new byte[4])]);
         using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "desktop.example", 3390, 0, CancellationToken.None);
         Assert.AreSequenceEqual(new byte[] { 1, 0, 0, 0, 14, 0, 0, 0, 1, 0, 0, 0, 0, 0 }, socket.Sent[0]);
-        Assert.AreSequenceEqual(new byte[] { 4, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, socket.Sent[1]);
+        Assert.AreSequenceEqual(new byte[] { 4, 0, 0, 0, 16, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0 }, socket.Sent[1]);
         byte[] channel = socket.Sent[3];
         Assert.AreEqual((byte)1, channel[8]);
         Assert.AreEqual((ushort)3390, BinaryPrimitives.ReadUInt16LittleEndian(channel.AsSpan(10)));
@@ -41,6 +41,47 @@ public sealed class RdpGatewayTests
         int eof = await stream.ReadAsync(read);
         Assert.AreEqual(0, eof);
         Assert.AreEqual((ushort)17, BinaryPrimitives.ReadUInt16LittleEndian(socket.Sent[^1]));
+    }
+
+    [TestMethod]
+    public async Task ConsumesServiceMessageAndContinuesReadingData()
+    {
+        var messages = new List<string>();
+        byte[] serviceMessage = Encoding.Unicode.GetBytes("Gateway notice\0");
+        var serviceBody = new byte[2 + serviceMessage.Length];
+        BinaryPrimitives.WriteUInt16LittleEndian(serviceBody, (ushort)serviceMessage.Length);
+        serviceMessage.CopyTo(serviceBody, 2);
+        var socket = new ScriptedSocket([.. Responses(), Packet(11, serviceBody), Packet(10, [3, 0, 8, 9, 10]), Packet(16, new byte[4])]);
+        using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "server", 3389, 0,
+            CancellationToken.None, messages.Add);
+
+        var data = new byte[3];
+        await stream.ReadExactlyAsync(data);
+        Assert.AreEqual("Gateway notice", messages.Single());
+        Assert.AreSequenceEqual(new byte[] { 8, 9, 10 }, data);
+    }
+
+    [TestMethod]
+    public async Task RejectsMalformedServiceMessage()
+    {
+        foreach (byte[] body in new[]
+        {
+            new byte[] { 3, 0, (byte)'A', 0, 0 },
+            new byte[] { 4, 0, (byte)'A', 0 }
+        })
+        {
+            var socket = new ScriptedSocket([.. Responses(), Packet(11, body)]);
+            using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "server", 3389, 0, CancellationToken.None);
+            await Assert.ThrowsExactlyAsync<RdpProtocolException>(async () => { _ = await stream.ReadAsync(new byte[1]); });
+        }
+    }
+
+    [TestMethod]
+    public async Task ReauthenticationRemainsUnsupported()
+    {
+        var socket = new ScriptedSocket([.. Responses(), Packet(12, [])]);
+        using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "server", 3389, 0, CancellationToken.None);
+        await Assert.ThrowsExactlyAsync<NotSupportedException>(async () => { _ = await stream.ReadAsync(new byte[1]); });
     }
 
     [TestMethod]
@@ -231,7 +272,10 @@ public sealed class RdpGatewayTests
         handshake[4] = 1;
         // A server may advertise extended authentication without requiring it.
         handshake[8] = 3;
-        return [Packet(2, handshake), Packet(5, new byte[10]), Packet(7, new byte[8]), Packet(9, new byte[8])];
+        var tunnel = new byte[14];
+        BinaryPrimitives.WriteUInt16LittleEndian(tunnel.AsSpan(6), 2);
+        BinaryPrimitives.WriteUInt32LittleEndian(tunnel.AsSpan(10), 0x00000008);
+        return [Packet(2, handshake), Packet(5, tunnel), Packet(7, new byte[8]), Packet(9, new byte[8])];
     }
 
     private static byte[] Packet(ushort type, byte[] body)

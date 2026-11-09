@@ -97,7 +97,7 @@ internal sealed class RemoteAppWindowDecoder
         if (Has(0x200)) { window = window with { VisibilityRects = ReadRects(ref r) }; }
         if (Has(0x400000)) { _ = ReadString(ref r); }
         if (Has(0x800000)) { _ = r.U8(); }
-        if (Has(0x80000)) { _ = r.U8(); }
+        if (Has(0x80000)) { window = window with { IsCloaked = r.U8() != 0 }; }
         if (Has(0x40)) { _ = r.U8(); }
         if (Has(1)) { _ = r.U8(); }
         if ((long)Math.Max(1, window.WindowRects.Count) * window.VisibilityRects.Count > 4096 ||

@@ -39,6 +39,8 @@ internal static unsafe partial class SmartCardPcscNative
         internal static partial uint Control(nint card, uint code, byte* input, uint inputLength, byte* output, uint outputLength, uint* returned);
         [LibraryImport("winscard.dll", EntryPoint = "SCardGetAttrib")]
         internal static partial uint GetAttrib(nint card, uint attribute, byte* output, uint* length);
+        [LibraryImport("winscard.dll", EntryPoint = "SCardSetAttrib")]
+        internal static partial uint SetAttrib(nint card, uint attribute, byte* value, uint length);
     }
     internal static partial class Linux
     {
@@ -74,6 +76,8 @@ internal static unsafe partial class SmartCardPcscNative
         internal static partial nint Control(nint card, nuint code, byte* input, nuint inputLength, byte* output, nuint outputLength, nuint* returned);
         [LibraryImport("libpcsclite.so.1", EntryPoint = "SCardGetAttrib")]
         internal static partial nint GetAttrib(nint card, nuint attribute, byte* output, nuint* length);
+        [LibraryImport("libpcsclite.so.1", EntryPoint = "SCardSetAttrib")]
+        internal static partial nint SetAttrib(nint card, nuint attribute, byte* value, nuint length);
     }
     internal static partial class Mac
     {
@@ -109,5 +113,7 @@ internal static unsafe partial class SmartCardPcscNative
         internal static partial uint Control(int card, uint code, byte* input, uint inputLength, byte* output, uint outputLength, uint* returned);
         [LibraryImport("/System/Library/Frameworks/PCSC.framework/PCSC", EntryPoint = "SCardGetAttrib")]
         internal static partial uint GetAttrib(int card, uint attribute, byte* output, uint* length);
+        [LibraryImport("/System/Library/Frameworks/PCSC.framework/PCSC", EntryPoint = "SCardSetAttrib")]
+        internal static partial uint SetAttrib(int card, uint attribute, byte* value, uint length);
     }
 }
