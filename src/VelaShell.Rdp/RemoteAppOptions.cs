@@ -41,6 +41,8 @@ public sealed record RemoteAppWindow(uint Id)
     public uint Style { get; init; }
     public uint ExtendedStyle { get; init; }
     public byte ShowState { get; init; } = 5;
+    /// <summary>Whether the server has cloaked the window from the user.</summary>
+    public bool IsCloaked { get; init; }
     public int X { get; init; }
     public int Y { get; init; }
     public int Width { get; init; }
@@ -55,7 +57,7 @@ public sealed record RemoteAppWindow(uint Id)
     public int VisibleY { get; init; }
     public IReadOnlyList<RdpFrameRegion> WindowRects { get; init; } = Array.Empty<RdpFrameRegion>();
     public IReadOnlyList<RdpFrameRegion> VisibilityRects { get; init; } = Array.Empty<RdpFrameRegion>();
-    public bool Visible => ShowState is not (0 or 2) && Width > 0 && Height > 0;
+    public bool Visible => !IsCloaked && ShowState is not (0 or 2) && Width > 0 && Height > 0;
 }
 
 /// <summary>Optional RAIL contract; a desktop session reports IsRemoteApp=false. Events run on the receiver thread.</summary>

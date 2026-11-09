@@ -16,8 +16,10 @@ public sealed partial class RdpManagedSession
             GraphicsDiagnostic(options.GraphicsLog, "classic graphics selected; managed graphics pipeline disabled");
             return null;
         }
-        IRdpGfxBackend backend = (factory ?? ((width, height) => new ManagedRdpGfx(width, height,
-            message => GraphicsDiagnostic(options.GraphicsLog, message))))(options.Width, options.Height);
+        int width = options.MonitorLayout?.DesktopWidth ?? options.Width;
+        int height = options.MonitorLayout?.DesktopHeight ?? options.Height;
+        IRdpGfxBackend backend = (factory ?? ((w, h) => new ManagedRdpGfx(w, h,
+            message => GraphicsDiagnostic(options.GraphicsLog, message))))(width, height);
         GraphicsDiagnostic(options.GraphicsLog, "managed graphics pipeline ready; offering RDPGFX with AVC420/AVC444/AVC444v2");
         return backend;
     }

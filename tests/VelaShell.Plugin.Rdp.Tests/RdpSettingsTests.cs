@@ -73,6 +73,8 @@ public sealed class RdpSettingsTests
         Assert.AreEqual("||notepad", settings.RemoteApp.Program);
         Assert.AreEqual("\"C:\\shared files\\note.txt\"", settings.RemoteApp.Arguments);
         Assert.AreEqual("C:\\shared files", settings.RemoteApp.WorkingDirectory);
+        var shorthand = RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "notepad")), new("en"), []);
+        Assert.AreEqual("||notepad", shorthand.RemoteApp!.Program);
         Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "notepad.exe")), new("en"), []));
         Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppArgumentsKey, "orphan")), new("en"), []));
         Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "||app"),

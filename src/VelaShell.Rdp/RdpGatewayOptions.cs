@@ -13,6 +13,9 @@ public sealed record RdpGatewayOptions
     /// <summary>Optional SHA-256 leaf certificate pin for the gateway only. Otherwise OS trust and host validation apply.</summary>
     public byte[]? CertificatePin { get; init; }
 
+    /// <summary>Receives advisory RD Gateway service messages on the receive thread; exceptions are ignored.</summary>
+    public Action<string>? ServiceMessageReceived { get; init; }
+
     public override string ToString() => $"{nameof(RdpGatewayOptions)} {{ Host = {Host}, Port = {Port} }}";
 
     internal void Validate()

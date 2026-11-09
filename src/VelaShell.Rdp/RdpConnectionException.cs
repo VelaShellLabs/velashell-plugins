@@ -176,10 +176,73 @@ public sealed class RdpAuthenticationException : Exception
 }
 
 /// <summary>
+/// The server sent a redirection PDU. The metadata is parsed and surfaced, but the client does not follow it because
+/// doing so requires a new target connection with repeated certificate, gateway and session policy validation.
+/// </summary>
+public sealed class RdpServerRedirectionException : Exception
+{
+    internal RdpServerRedirectionException(Pdu.ServerRedirection redirection)
+        : base(BuildMessage(redirection))
+    {
+        SessionId = redirection.SessionId;
+        Flags = redirection.Flags;
+        TargetNetAddress = redirection.TargetNetAddress;
+        TargetFqdn = redirection.TargetFqdn;
+        TargetNetBiosName = redirection.TargetNetBiosName;
+        TargetNetAddresses = redirection.TargetNetAddresses;
+        LoadBalanceInfoLength = redirection.LoadBalanceInfoLength;
+        TsvUrlLength = redirection.TsvUrlLength;
+        RedirectionGuidLength = redirection.RedirectionGuidLength;
+        HasPasswordOrCookie = redirection.HasPasswordOrCookie;
+        HasTargetCertificate = redirection.HasTargetCertificate;
+    }
+
+    /// <summary>The redirected session identifier.</summary>
+    public uint SessionId { get; }
+
+    /// <summary>The raw redirection flags from the server.</summary>
+    public uint Flags { get; }
+
+    /// <summary>The server-provided target address, when present.</summary>
+    public string? TargetNetAddress { get; }
+
+    /// <summary>The server-provided target FQDN, when present.</summary>
+    public string? TargetFqdn { get; }
+
+    /// <summary>The server-provided target NetBIOS name, when present.</summary>
+    public string? TargetNetBiosName { get; }
+
+    /// <summary>The server-provided target addresses, when present.</summary>
+    public IReadOnlyList<string> TargetNetAddresses { get; }
+
+    /// <summary>The opaque load-balancing data length; its contents are intentionally not retained.</summary>
+    public int LoadBalanceInfoLength { get; }
+
+    /// <summary>The opaque TSV URL data length; its contents are intentionally not retained.</summary>
+    public int TsvUrlLength { get; }
+
+    /// <summary>The opaque redirection GUID length; its contents are intentionally not retained.</summary>
+    public int RedirectionGuidLength { get; }
+
+    /// <summary>Whether the packet carried a password or opaque redirection cookie.</summary>
+    public bool HasPasswordOrCookie { get; }
+
+    /// <summary>Whether the packet carried a target certificate.</summary>
+    public bool HasTargetCertificate { get; }
+
+    private static string BuildMessage(Pdu.ServerRedirection redirection)
+    {
+        string target = redirection.TargetFqdn ?? redirection.TargetNetAddress ?? redirection.TargetNetBiosName
+            ?? (redirection.TargetNetAddresses.Count == 0 ? "unspecified target" : "target address list");
+        return $"The RDP server requested redirection to {target} (session 0x{redirection.SessionId:X8}, flags 0x{redirection.Flags:X8}); automatic redirection is unavailable.";
+    }
+}
+
+/// <summary>
 /// An established session ended because the server sent a Set Error Info PDU (MS-RDPBCGR 2.2.5.1) carrying a
-/// non-zero <see cref="ErrorInfo" />. Many of these are server-side policy — the server signed the user out,
-/// another connection took over the session, or no Remote Desktop licence was available — rather than a
-/// client fault. Raised on <see cref="RdpManagedSession.Disconnected" />, never thrown from connect.
+/// non-zero <see cref="ErrorInfo" />. Many of these are server-side policy: the server signed the user out,
+/// another connection took over the session, or no Remote Desktop licence was available. Raised on
+/// <see cref="RdpManagedSession.Disconnected" />, never thrown from connect.
 /// </summary>
 public sealed class RdpDisconnectException(uint errorInfo)
     : Exception($"The RDP session was disconnected by the server: {RdpErrorInfo.Describe(errorInfo)} (0x{errorInfo:X8}).")

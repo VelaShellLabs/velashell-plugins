@@ -58,7 +58,7 @@ internal static class RdpConnector
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
-            return await RdpManagedSession.ConnectAsync(options, linked.Token).ConfigureAwait(false);
+            return await RdpManagedSession.ConnectAsyncWithCookie(options, settings.AutoReconnectCookie, linked.Token).ConfigureAwait(false);
         }
         catch (RdpCertificateRejectedException ex)
         {
@@ -87,6 +87,7 @@ internal static class RdpConnector
         RdpNlaRefusedException refused => new ProtocolConnectionException(
             loc.Format(refused.ServerRequiresNla ? "NlaRefusedRequired" : "NlaRefused", refused.Detail), refused),
         RdpNlaUnavailableException unavailable => new ProtocolConnectionException(loc["NlaUnavailable"], unavailable),
+        RdpServerRedirectionException redirection => new ProtocolConnectionException(redirection.Message, redirection),
         RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.HybridRequiredByServer } failed =>
             new ProtocolConnectionException(loc["NegotiationNlaRequired"], failed),
         RdpConnectionException { NegotiationFailure: RdpNegotiationFailure.SslNotAllowedByServer } failed =>
@@ -126,6 +127,11 @@ internal static class RdpConnector
     /// </summary>
     internal static string? DisconnectReason(Exception? failure, Loc loc)
     {
+        if (failure is RdpServerRedirectionException redirection)
+        {
+            return redirection.Message;
+        }
+
         if (failure is not RdpDisconnectException disconnect)
         {
             return null;

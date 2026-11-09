@@ -32,13 +32,15 @@ MS-TSGU RDGHTTP uses HTTPS/WebSocket, requiring a Windows Server 2016+ gateway w
 Authentication uses HTTP Negotiate/Kerberos or NTLM, with reused RDP credentials or separate secret gateway
 credentials. Gateway TLS uses OS trust or its own explicit SHA-256 leaf pin; target TLS/NLA remains independent.
 Connections are TCP-only, cannot combine with SSH jumps, and never fall back to direct access. Gateway policy
-that denies a requested redirection fails the connection. Legacy RPC/HTTP, paired HTTP IN/OUT, gateway UDP,
+that denies a requested redirection fails the connection. Advertised RDGHTTP service messages are validated,
+consumed, and optionally delivered through the programmatic `ServiceMessageReceived` callback; they do not
+trigger UI, MFA, consent, or authorization behavior. Legacy RPC/HTTP, paired HTTP IN/OUT, gateway UDP,
 MFA/extended authentication, consent, NAP and reauthentication are unsupported. Packet and real loopback
 TLS/WebSocket tests pass; production RD Gateway and AD HTTP authentication remain unverified.
 
 ## RemoteApp and smart cards
 
-On **RemoteApp**, set the published alias (`remoteAppProgram`, e.g. `||notepad`), optional arguments and working
+On **RemoteApp**, set the published alias (`remoteAppProgram`, e.g. `notepad` or `||notepad`; a simple bare alias is normalized), optional arguments and working
 directory. Empty means an ordinary desktop. MS-RAIL handshake/execution and window orders drive an application-only
 workspace with focus, input, move/resize and close. RemoteApp forces classic graphics and fixed session dimensions;
 enhanced GFX window mappings, native top-level windows and tray integration are unsupported. Live RDS application
@@ -48,8 +50,9 @@ On **Drive mapping**, `smartCard` explicitly enables all locally accessible PC/S
 MS-RDPESC uses `rdpdr` with pre-logon announcement and companion `rdpsnd`. Windows needs the Smart Card service,
 Linux needs `libpcsclite.so.1` and pcsc-lite, and macOS uses PCSC.framework; reader drivers are required.
 Missing backend/service fails the opted-in connection. Contexts, readers, status/waits, transactions, APDU transmit,
-control and attribute reads are supported; management/cache/SetAttrib operations are not. No PIN/APDU logging or
-native driver bundling. This grants card-operation access to the remote environment, not smart-card NLA login.
+control and attribute reads are supported; the standard `SCARD_ATTR_SUPRESS_T1_IFS_REQUEST` attribute write is
+also supported. Other management/cache attributes remain unsupported. No PIN/APDU logging or native driver bundling.
+This grants card-operation access to the remote environment, not smart-card NLA login.
 Protocol tests use fake cards; real cards and RDS interoperability still need validation.
 
 ## Remote audio playback
@@ -59,7 +62,7 @@ negotiates PCM 8/16-bit mono/stereo at 8–48 kHz, handles training and WaveInfo
 and confirms samples after playback completes. Output uses the system default device through
 WinMM (Windows), AudioToolbox AudioQueue (macOS), or ALSA `default` (Linux). Linux needs
 `libasound.so.2` and a configured default PCM; PipeWire/PulseAudio desktops need their ALSA plugin.
-No native binaries are bundled. Microphone capture, compressed codecs and UDP audio are not supported.
+No native binaries are bundled. Microphone capture is exposed only as a validated, opt-in library contract and currently fails before connection with an explicit unsupported error; the plugin does not request it. Compressed codecs and UDP audio are not supported.
 The audio worker has a 128-message / 1 MiB queue bound. Device/protocol failures disable audio and
 show a status-bar warning without ending the desktop; fix the default device and reconnect.
 Audio continues in background tabs. Check the remote Windows playback-redirection policy and
@@ -295,7 +298,7 @@ before the workspace attaches, and format names follow the server's negotiated c
 Remote text/images synchronize automatically; Windows remote file descriptors are published without
 content reads. A newer local copy supersedes pending publication. Unchanged content is not echoed back.
 
-Microphone capture and multiple monitors are not negotiated. When GFX is disabled or unopened, the server
+Microphone capture is not requested by the plugin. The library exposes a validated opt-in contract, but it currently fails before connection with an explicit unsupported error because the MS-RDPEAI wire path and capture backends are not implemented. Multiple monitors are negotiated as one bounded virtual desktop. When GFX is disabled or unopened, the server
 renders via classic bitmap updates (interleaved RLE, RDP 6.0 planar at 32 bpp) and GDI drawing orders
 (DstBlt, PatBlt, OpaqueRect, MultiOpaqueRect, ScrBlt, MemBlt from a 600/600/2048-entry revision 2 bitmap
 cache; `RdpClientOptions.DrawingOrders`, on by default) with MPPC bulk compression. Orders let a server

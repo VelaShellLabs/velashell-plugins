@@ -73,6 +73,21 @@ public sealed class SmartCardDeviceTests
     }
 
     [TestMethod]
+    public async Task SetAttributeForwardsOnlyAllowlistedReaderAttribute()
+    {
+        var backend = new Backend();
+        using var device = new SmartCardDevice(backend);
+        ulong context = await Establish(device), card = await Connect(device, context, false);
+        byte[] request = Card(context, card, w => { w.Write(0x7FFF0007u); w.Write(2u); w.Write(0x20000u); }, w => Blob(w, [1, 0]));
+        Assert.AreEqual(0u, Code(await Call(device, 0xDC, request)));
+        Assert.AreEqual(0x7FFF0007u, backend.Attribute);
+        Assert.AreSequenceEqual(new byte[] { 1, 0 }, backend.AttributeValue!);
+
+        byte[] denied = Card(context, card, w => { w.Write(0x7FFF0006u); w.Write(1u); w.Write(0x20000u); }, w => Blob(w, [1]));
+        Assert.AreEqual(SmartCardException.Unsupported, Code(await Call(device, 0xDC, denied)));
+    }
+
+    [TestMethod]
     public async Task TransmitAndControlRoundTripDeferredBuffersAndPci()
     {
         var backend = new Backend();
@@ -168,7 +183,7 @@ public sealed class SmartCardDeviceTests
         byte[] inconsistent = Ndr(w => { Header(w, 8); w.Write(7u); w.Write(123ul); });
         Assert.AreEqual(0xC000000Du, (await Call(device, 0x1C, inconsistent)).Status);
         Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0x1C, Context(123))));
-        Assert.AreEqual(SmartCardException.Unsupported, Code(await Call(device, 0xDC, Ndr(w => w.Write(0u)))));
+        Assert.AreEqual(0xC000000Du, (await Call(device, 0xDC, Ndr(w => w.Write(0u)))).Status);
         Assert.AreEqual(0xC0000023u, (await Call(device, 0x14, golden, outputLength: 24)).Status);
         Assert.AreEqual(1, backend.Establishes);
     }
@@ -253,6 +268,8 @@ public sealed class SmartCardDeviceTests
         internal uint ReleaseError;
         internal string? Reader;
         internal byte[]? Apdu;
+        internal uint Attribute;
+        internal byte[]? AttributeValue;
         internal readonly ManualResetEventSlim Entered = new(), Cancelled = new();
         public nint EstablishContext(uint scope) { Interlocked.Increment(ref Establishes); return Context; }
         public void ReleaseContext(nint context)
@@ -288,5 +305,6 @@ public sealed class SmartCardDeviceTests
         }
         public SmartCardBuffer Control(nint card, uint code, byte[] input, int capacity, bool lengthOnly) => new(input.Reverse().ToArray(), input.Length);
         public byte[] GetAttribute(nint card, uint attribute) => [1, 2, 3];
+        public void SetAttribute(nint card, uint attribute, byte[] value) { Attribute = attribute; AttributeValue = value; }
     }
 }
