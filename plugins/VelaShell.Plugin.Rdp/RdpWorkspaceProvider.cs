@@ -43,7 +43,17 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         bool pinned = settings.Security == RdpSecurity.Auto && await UsedNlaBeforeAsync(nlaKey, ct).ConfigureAwait(false);
         try
         {
-            IRdpSession session = await inner(request, pinned ? settings with { Security = RdpSecurity.Nla } : settings, loc, ct).ConfigureAwait(false);
+            IRdpSession session;
+            try
+            {
+                session = await inner(request, pinned ? settings with { Security = RdpSecurity.Nla } : settings, loc, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (pinned && ex.InnerException is RdpNlaRefusedException)
+            {
+                // NLA was selected, but CredSSP was refused before credentials were sent. Preserve Auto's
+                // existing TLS fallback for this case; only a TLS-only X.224 answer is a downgrade.
+                session = await inner(request, settings, loc, ct).ConfigureAwait(false);
+            }
             if (session is RdpManagedSession { NlaRefusal: { } refusal })
             {
                 _context.Log.Warn($"RDP {request.Host}:{request.Port}: the server refused NLA before any credentials were sent " +
@@ -56,7 +66,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             }
             return session;
         }
-        catch (Exception ex) when (pinned && ex.InnerException is RdpNlaUnavailableException or RdpNlaRefusedException)
+        catch (Exception ex) when (pinned && ex.InnerException is RdpNlaUnavailableException)
         {
             _context.Log.Warn($"RDP {request.Host}:{request.Port}: this host used NLA before but now offers no NLA — refused as a possible downgrade attack.", ex);
             throw new ProtocolConnectionException(loc.Format("NlaDowngrade", request.Host), ex);

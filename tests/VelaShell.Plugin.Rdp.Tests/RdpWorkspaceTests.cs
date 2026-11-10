@@ -84,6 +84,31 @@ public sealed class RdpWorkspaceTests
         Assert.AreEqual(1, sessions[1].DisposeCount);
         Assert.AreEqual(ProtocolSessionState.Closed, document.Status.State);
     }
+
+    [TestMethod]
+    public async Task PreviouslyNlaHostFallsBackToAutoWhenCredSspIsRefused()
+    {
+        using var context = new TestPluginContext { PluginId = "velashell.rdp" };
+        await context.Storage.SetAsync("nla-host:desktop.example:3389", true);
+        var security = new List<RdpSecurity>();
+        int attempts = 0;
+        await using var provider = new RdpWorkspaceProvider(context, new("en"), (_, settings, _, _) =>
+        {
+            security.Add(settings.Security);
+            if (Interlocked.Increment(ref attempts) == 1)
+            {
+                throw new ProtocolConnectionException("NLA refused", new RdpNlaRefusedException(null, new IOException("TLS alert")));
+            }
+
+            return Task.FromResult<IRdpSession>(new FakeRdpSession());
+        });
+
+        IWorkspaceDocument document = await provider.OpenAsync(RdpSettingsTests.Request());
+
+        Assert.AreSequenceEqual(new[] { RdpSecurity.Nla, RdpSecurity.Auto }, security);
+        await document.DisposeAsync();
+    }
+
     [TestMethod]
     public async Task AudioFailureKeepsDesktopConnectedAndReconnectClearsWarning()
     {
