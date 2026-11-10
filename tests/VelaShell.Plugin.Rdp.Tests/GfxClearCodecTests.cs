@@ -1,5 +1,6 @@
 using VelaShell.Rdp;
 using VelaShell.Rdp.Graphics;
+using VelaShell.Rdp.Graphics.Gfx;
 
 namespace VelaShell.Plugin.Rdp.Tests;
 

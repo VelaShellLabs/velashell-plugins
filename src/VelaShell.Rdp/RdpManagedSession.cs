@@ -163,12 +163,12 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     /// </para>
     /// </summary>
     public static Task<RdpManagedSession> ConnectAsync(RdpClientOptions options, CancellationToken ct = default) =>
-        ConnectCoreAsync(options, ct, null);
+        ConnectCoreAsync(options, null, ct);
 
     internal static Task<RdpManagedSession> ConnectAsyncWithCookie(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct = default) =>
-        ConnectCoreAsync(options, ct, cookie);
+        ConnectCoreAsync(options, cookie, ct);
 
-    private static async Task<RdpManagedSession> ConnectCoreAsync(RdpClientOptions options, CancellationToken ct, AutoReconnectCookie? cookie)
+    private static async Task<RdpManagedSession> ConnectCoreAsync(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (options.AudioInput is { } audioInput)

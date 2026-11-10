@@ -41,10 +41,10 @@ internal sealed class SmartCardDevice : IRdpdrDevice
     {
         int generation;
         lock (_gate) { generation = _generation; }
-        return Task.Run(() => Process(request, cancellationToken, generation), CancellationToken.None);
+        return Task.Run(() => Process(request, generation, cancellationToken), CancellationToken.None);
     }
 
-    private RdpdrIoResult Process(RdpdrIoRequest request, CancellationToken token, int generation)
+    private RdpdrIoResult Process(RdpdrIoRequest request, int generation, CancellationToken token)
     {
         if (request.MajorFunction != 0x0E) { return Failure(0xC00000BB); }
         uint operation = 0;
@@ -67,7 +67,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
             byte[] result;
             try
             {
-                result = Execute(operation, body[32..], token, generation);
+                result = Execute(operation, body[32..], generation, token);
             }
             catch (SmartCardException ex) { result = Error(operation, ex.Code); }
             catch (OperationCanceledException) { result = Error(operation, SmartCardException.Cancelled); }
@@ -87,7 +87,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         }
     }
 
-    private byte[] Execute(uint operation, byte[] input, CancellationToken token, int generation)
+    private byte[] Execute(uint operation, byte[] input, int generation, CancellationToken token)
     {
         lock (_gate)
         {
@@ -208,7 +208,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
             }
             if (operation is Base + 0xA0 or Base + 0xA4)
             {
-                SmartCardReaderState[] states = WaitForChange(context, arg1, readers, ct, cancelVersion);
+                SmartCardReaderState[] states = WaitForChange(context, arg1, readers, cancelVersion, ct);
                 if (states.Length != readers.Length) { throw new SmartCardException(SmartCardException.InvalidParameter); }
                 w.U32LE((uint)states.Length); w.U32LE(0x20000); w.U32LE((uint)states.Length);
                 foreach (SmartCardReaderState state in states)
@@ -290,7 +290,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         finally { if (leased) { Release(context); } }
     }
 
-    private SmartCardReaderState[] WaitForChange(Context context, uint timeout, SmartCardReaderState[] readers, CancellationToken token, int version)
+    private SmartCardReaderState[] WaitForChange(Context context, uint timeout, SmartCardReaderState[] readers, int version, CancellationToken token)
     {
         long start = Stopwatch.GetTimestamp();
         while (true)

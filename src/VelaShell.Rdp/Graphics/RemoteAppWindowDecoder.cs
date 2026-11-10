@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text;
 using VelaShell.Rdp.Wire;
 
@@ -136,7 +137,7 @@ internal sealed class RemoteAppWindowDecoder
         }
     }
 
-    private static IReadOnlyList<RdpFrameRegion> ReadRects(ref ByteReader r)
+    private static ReadOnlyCollection<RdpFrameRegion> ReadRects(ref ByteReader r)
     {
         int count = r.U16LE();
         if (count > 2048) { throw new RdpProtocolException("Too many RemoteApp region rectangles."); }

@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx.RemoteFx;
 
 internal ref struct RfxReader(ReadOnlySpan<byte> data)
 {

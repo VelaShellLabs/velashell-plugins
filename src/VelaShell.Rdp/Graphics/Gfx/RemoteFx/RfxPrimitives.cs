@@ -5,7 +5,7 @@
 // Copyright (c) Microsoft. All rights reserved. See THIRD-PARTY-NOTICES.txt.
 using System.Numerics;
 
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx.RemoteFx;
 
 internal static class RfxPrimitives
 {

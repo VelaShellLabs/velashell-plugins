@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Resources;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Graphics;
+using VelaShell.Rdp.Graphics.Gfx;
 using VelaShell.Rdp.Graphics.Gfx.RemoteFx;
 
 namespace VelaShell.Plugin.Rdp.Tests;

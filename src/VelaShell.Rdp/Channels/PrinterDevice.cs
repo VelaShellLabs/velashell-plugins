@@ -93,7 +93,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
                         try
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-                            return Execute(request, cancellationToken, epoch);
+                            return Execute(request, epoch, cancellationToken);
                         }
                         catch (Exception exception) when (exception is IOException or Win32Exception or OperationCanceledException or NotSupportedException or UnauthorizedAccessException)
                         {
@@ -117,7 +117,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
         }
     }
 
-    private RdpdrIoResult Execute(RdpdrIoRequest request, CancellationToken cancellationToken, int epoch)
+    private RdpdrIoResult Execute(RdpdrIoRequest request, int epoch, CancellationToken cancellationToken)
     {
         byte[] body = request.Body;
         if (request.MajorFunction == 0)
@@ -128,7 +128,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
             IPrinterJob native = _backend.Start(_mapping);
             try
             {
-                CheckCancellation(cancellationToken, epoch);
+                CheckCancellation(epoch, cancellationToken);
                 uint id = _closedIds.Count > 0 ? _closedIds.Dequeue() : _nextId++;
                 _jobs.Add(id, new Job(native));
                 return Result(request, 0, id);
@@ -144,7 +144,7 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
         if (request.MajorFunction == 2)
         {
             if (body.Length != 32) { Abort(request.FileId); return Result(request, InvalidParameter); }
-            CheckCancellation(cancellationToken, epoch);
+            CheckCancellation(epoch, cancellationToken);
             job.Native.Complete();
             _ = _jobs.Remove(request.FileId);
             job.Native.Dispose();
@@ -165,18 +165,18 @@ internal sealed class PrinterDevice : IRdpdrDevice, IAsyncDisposable
         int written = 0;
         while (written < length)
         {
-            CheckCancellation(cancellationToken, epoch);
+            CheckCancellation(epoch, cancellationToken);
             // Offset is reserved and ignored (MS-RDPEPC 2.2.2.9). Complete short native writes.
             int count = job.Native.Write(body.AsSpan(32 + written, length - written));
             if (count <= 0 || count > length - written) { throw new IOException("Invalid spooler write count."); }
             written += count;
         }
-        CheckCancellation(cancellationToken, epoch);
+        CheckCancellation(epoch, cancellationToken);
         job.Length += written;
         return Result(request, 0, (uint)written);
     }
 
-    private void CheckCancellation(CancellationToken token, int epoch)
+    private void CheckCancellation(int epoch, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (epoch != Volatile.Read(ref _epoch)) { throw new OperationCanceledException(); }
