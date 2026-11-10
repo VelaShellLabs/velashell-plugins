@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using VelaShell.Rdp.Graphics.Gfx;
 
 namespace VelaShell.Rdp.Graphics;
 

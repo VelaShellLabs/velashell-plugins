@@ -82,8 +82,8 @@ internal sealed class NativeAudioOutput : IAudioOutput
             return Task.FromCanceled(ct);
         }
 
-        var command = new Command(Volatile.Read(ref _generation), format, data, ct,
-            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), Stopwatch.GetTimestamp());
+        var command = new Command(Volatile.Read(ref _generation), format, data,
+            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), Stopwatch.GetTimestamp(), ct);
         lock (_budgetGate)
         {
             double duration = DurationMilliseconds(command);
@@ -132,7 +132,7 @@ internal sealed class NativeAudioOutput : IAudioOutput
 
         int generation = Interlocked.Increment(ref _generation);
         // A full queue already wakes the worker, which also observes the generation change.
-        _ = _commands.Writer.TryWrite(new Command(generation, default, null, default, null, 0));
+        _ = _commands.Writer.TryWrite(new Command(generation, default, null, null, 0, default));
     }
 
     public void Dispose()
@@ -362,7 +362,7 @@ internal sealed class NativeAudioOutput : IAudioOutput
     }
 
     private sealed record Command(int Generation, AudioFormat Format, byte[]? Data,
-        CancellationToken Cancellation, TaskCompletionSource? Result, long EnqueuedAt)
+        TaskCompletionSource? Result, long EnqueuedAt, CancellationToken Cancellation)
     {
         internal int TimedOut;
         internal TimeSpan QueueAllowance;

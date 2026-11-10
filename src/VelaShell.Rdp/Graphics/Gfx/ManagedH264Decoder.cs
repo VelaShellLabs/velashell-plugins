@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using ManagedCodecs;
 using ManagedCodecs.H264;
 
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx;
 
 internal sealed class ManagedH264Decoder(int width, int height, Action<long>? reserve = null)
 {

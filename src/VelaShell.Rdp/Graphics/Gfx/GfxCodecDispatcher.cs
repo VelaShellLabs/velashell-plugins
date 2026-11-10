@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using VelaShell.Rdp.Graphics.Gfx.RemoteFx;
 
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx;
 
 internal sealed record GfxDecodeRequest(
     ushort SurfaceId, uint ContextId, ushort CodecId, byte PixelFormat,

@@ -1,4 +1,4 @@
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx.RemoteFx;
 
 /// <summary>A connection-wide bound on retained progressive coefficient, sign, and pixel buffers.</summary>
 internal sealed class GfxProgressiveMemoryBudget(long maximumBytes = 256L * 1024 * 1024)

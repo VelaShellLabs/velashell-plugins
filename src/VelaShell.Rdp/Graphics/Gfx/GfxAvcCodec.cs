@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using ManagedCodecs;
 
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx;
 
 internal readonly record struct GfxAvcRectangle(int Left, int Top, int Right, int Bottom);
 

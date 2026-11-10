@@ -1,4 +1,4 @@
-namespace VelaShell.Rdp.Graphics;
+namespace VelaShell.Rdp.Graphics.Gfx;
 
 // MS-RDPNSC plane layout and RLE, following FreeRDP nsc.c (Apache-2.0).
 internal static class GfxNsCodec
