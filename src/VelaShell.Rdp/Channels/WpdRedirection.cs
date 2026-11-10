@@ -195,7 +195,8 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
             else
             {
                 await close().ConfigureAwait(false);
-            }        }
+            }
+        }
         public async Task OnCloseAsync()
         {
             WpdFileChannel[] files;

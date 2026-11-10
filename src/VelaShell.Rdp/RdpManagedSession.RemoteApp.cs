@@ -11,7 +11,7 @@ public sealed partial class RdpManagedSession
     private long _railQueuedBytes;
     public bool IsRemoteApp => Connection.RemoteWindows is not null;
     public uint ActiveRemoteWindow => Connection.RemoteWindows?.ActiveWindow ?? 0;
-    public IReadOnlyList<RemoteAppWindow> RemoteWindows => Connection.RemoteWindows?.Snapshot() ?? Array.Empty<RemoteAppWindow>();
+    public IReadOnlyList<RemoteAppWindow> RemoteWindows => Connection.RemoteWindows?.Snapshot() ?? [];
     public event Action? RemoteWindowsChanged;
 
     private void EnableRemoteApp(RemoteAppOptions options, int width, int height)
