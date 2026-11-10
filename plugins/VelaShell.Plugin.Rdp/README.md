@@ -269,8 +269,10 @@ or disconnection never permits this retry. Unknown or malformed tokens also fail
 password is never retried. **Downgrade protection:** the X.224 negotiation is unauthenticated, so in
 `auto` a host that once logged on with NLA is remembered (plugin storage key `nla-host:<host>:<port>`)
 and later connections to it require NLA; if it then offers TLS only (`RdpNlaUnavailableException`)
-or refuses NLA, the connection stops before any password is sent and explains that this can be a
-man-in-the-middle forcing a weaker logon (set `tls` explicitly if the server really changed).
+the connection stops before any password is sent and explains that this can be a man-in-the-middle
+forcing a weaker logon (set `tls` explicitly if the server really changed). If the server selects
+NLA but refuses the CredSSP exchange before credentials are sent, the connection re-enters Auto's
+existing TLS fallback; this is distinct from an unauthenticated TLS-only negotiation.
 Servers speaking CredSSP below v5 (before the CVE-2018-0886 fix) are refused and never retried as
 TLS. On Windows, NLA authenticates through the OS's native SSPI Negotiate package, like mstsc:
 a DNS host name is targeted as `TERMSRV/<host>` so Kerberos works for domain servers; an IP address
