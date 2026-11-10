@@ -286,7 +286,7 @@ internal sealed class GfxClearCodec
 internal ref struct GfxClearReader(ReadOnlySpan<byte> source)
 {
     private ReadOnlySpan<byte> _remaining = source;
-    internal bool Empty => _remaining.IsEmpty;
+    internal readonly bool Empty => _remaining.IsEmpty;
     internal ReadOnlySpan<byte> Take(int count)
     {
         if (count < 0 || count > _remaining.Length)

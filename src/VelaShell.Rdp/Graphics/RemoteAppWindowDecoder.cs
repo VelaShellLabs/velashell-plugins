@@ -17,8 +17,7 @@ internal sealed class RemoteAppWindowDecoder
     {
         lock (_gate)
         {
-            return _zOrder.Where(_windows.ContainsKey).Select(id => _windows[id])
-                .Concat(_windows.Values.Where(w => !_zOrder.Contains(w.Id))).ToArray();
+            return [.. _zOrder.Where(_windows.ContainsKey).Select(id => _windows[id]), .. _windows.Values.Where(w => !_zOrder.Contains(w.Id))];
         }
     }
     internal bool Contains(uint id) { lock (_gate) { return _windows.ContainsKey(id); } }
