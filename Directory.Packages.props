@@ -57,7 +57,7 @@
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
          测试工程也要引它(环回服务器要按收到的原始请求行重算 SigV4),
          集中管版本正是为了这两处永远一致。 -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.11" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.12" />
   </ItemGroup>
   <ItemGroup Label="串口插件">
     <!-- MIT,微软自家维护,Windows / Linux / macOS 的 RID 原生包齐全。
@@ -67,16 +67,16 @@
          注意:这个包带 runtimes/<rid>/native/,插件目录里必须**有那一层** ——
          没有的话 Linux/macOS 上是运行期 PlatformNotSupportedException,
          而在 Windows 开发机上永远测不出来(调研文档 §五.2 记的正是这条)。 -->
-    <PackageVersion Include="System.IO.Ports" Version="11.0.0-rc.3.26522.148" />
+    <PackageVersion Include="System.IO.Ports" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup Label="RDP 托管图形解码">
-    <PackageVersion Include="ManagedCodecs.H264" Version="0.11.0" />
+    <PackageVersion Include="ManagedCodecs.H264" Version="0.12.0" />
   </ItemGroup>
   <ItemGroup Label="RDP 托管 DTLS">
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.8.0-beta.349" />
   </ItemGroup>
   <ItemGroup Label="测试框架">
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.5.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.5.2" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
