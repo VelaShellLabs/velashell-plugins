@@ -108,15 +108,26 @@ public sealed class RdpPlugin : IVelaPlugin
 
     private void OnLocaleChanged(string locale)
     {
+        RdpWorkspaceProvider? provider;
         lock (_gate)
         {
-            if (_context is not { } context || _provider is not { } provider)
-            {
-                return;
-            }
+            provider = _context is null ? null : _provider;
+        }
 
-            provider.Loc = new(locale);
-            _registration = context.Workspaces.Register(Describe(provider.Loc, _disks, _printers, _cameras), provider);
+        if (provider is null)
+        {
+            return;
+        }
+
+        // The documents re-render their status (raising StatusChanged into host code) without this lock held.
+        var loc = new Loc(locale);
+        provider.Loc = loc;
+        lock (_gate)
+        {
+            if (_context is { } context && ReferenceEquals(_provider, provider))
+            {
+                _registration = context.Workspaces.Register(Describe(loc, _disks, _printers, _cameras), provider);
+            }
         }
     }
 
