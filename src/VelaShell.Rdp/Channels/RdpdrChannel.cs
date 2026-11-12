@@ -44,6 +44,12 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private bool _closed;
     private const int MaxOpenFiles = 4096;
     private readonly Dictionary<uint, DriveFile> _files = [];
+    // Serializes the drive requests (served on the channel worker) with CloseAll (called on session teardown), which
+    // used to enumerate and clear the same dictionary concurrently.
+    private readonly Lock _filesGate = new();
+
+    /// <summary>Open drive file handles (tests).</summary>
+    internal int OpenFileCount { get { lock (_filesGate) { return _files.Count; } } }
     private uint _clientId;
     private uint _fileSequence = 1;
     private ushort _serverMinor;
@@ -85,6 +91,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 _smartCardsAnnounced = false;
                 _devices.Clear();
                 _additionalById.Clear();
+                // A restarted handshake invalidates every file id the server held; close them instead of leaking handles.
+                CloseFiles();
                 _ = Interlocked.Increment(ref _generation);
                 foreach (IRdpdrDevice device in _additional) { device.Reset(); }
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
@@ -280,7 +288,10 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         }
         else
         {
-            try { status = Dispatch(major, minor, mapping, fileId, ref r, body); }
+            try
+            {
+                lock (_filesGate) { status = Dispatch(major, minor, mapping, fileId, ref r, body); }
+            }
             catch (DriveStatusException ex) { status = ex.Status; }
             catch (UnauthorizedAccessException) { status = NtStatus.AccessDenied; }
             catch (FileNotFoundException) { status = NtStatus.NoSuchFile; }
@@ -437,7 +448,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         switch (infoClass)
         {
             case DriveFile.FileDispositionInformation:
-                file.MarkForDeletion();
+                // FILE_DISPOSITION_INFORMATION is one DeletePending byte; servers may also send no buffer, meaning delete.
+                file.SetDeletePending(buffer.IsEmpty || buffer[0] != 0);
                 break;
             case DriveFile.FileRenameInformation:
                 {
@@ -465,11 +477,41 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         }
     }
 
+    /// <summary>
+    /// The volume that holds the mapped directory. Windows takes the drive root (DriveInfo accepts only roots there);
+    /// Unix passes the directory itself, which DriveInfo measures with statvfs — so /Volumes/USB, /media/… or a separate
+    /// /home report their own size instead of the root file system's.
+    /// </summary>
+    internal static (long Total, long Free) VolumeSpace(string localPath)
+    {
+        try
+        {
+            var drive = new DriveInfo(OperatingSystem.IsWindows() ? Path.GetPathRoot(localPath) ?? localPath : localPath);
+            return (drive.TotalSize, drive.AvailableFreeSpace);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return (0, 0);
+        }
+    }
+
+    /// <summary>
+    /// A volume serial number that stays the same for a mapping across queries and sessions (FNV-1a of its name and
+    /// path). It used to be derived from the free space, so it changed with every write and could look like new media.
+    /// </summary>
+    internal static uint VolumeSerial(DriveMapping mapping)
+    {
+        uint hash = 2166136261;
+        foreach (char c in mapping.Name + "\0" + mapping.LocalPath)
+        {
+            hash = (hash ^ c) * 16777619;
+        }
+        return hash;
+    }
+
     private static uint QueryVolume(DriveMapping mapping, uint infoClass, ByteWriter body)
     {
-        long total = 0, free = 0;
-        try { var di = new DriveInfo(Path.GetPathRoot(mapping.LocalPath) ?? mapping.LocalPath); total = di.TotalSize; free = di.AvailableFreeSpace; }
-        catch { /* report zero */ }
+        (long total, long free) = VolumeSpace(mapping.LocalPath);
         const uint bytesPerSector = 512, sectorsPerCluster = 8;
         ulong clusterBytes = bytesPerSector * sectorsPerCluster;
         ulong totalClusters = clusterBytes == 0 ? 0 : (ulong)total / clusterBytes;
@@ -482,7 +524,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                     byte[] label = Encoding.Unicode.GetBytes(mapping.Name + "\0");
                     body.U32LE((uint)(17 + label.Length));
                     body.U32LE(0); body.U32LE(0);           // VolumeCreationTime
-                    body.U32LE((uint)(freeClusters & 0xFFFF)); // VolumeSerialNumber
+                    body.U32LE(VolumeSerial(mapping));      // VolumeSerialNumber
                     body.U32LE((uint)label.Length);
                     body.U8(0);                             // SupportsObjects
                     body.Bytes(label);
@@ -500,7 +542,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                     byte[] fsName = Encoding.Unicode.GetBytes("NTFS\0");
                     body.U32LE((uint)(12 + fsName.Length));
                     body.U32LE(0x00000007);                 // CASE_SENSITIVE | CASE_PRESERVED | UNICODE_ON_DISK
-                    body.U32LE(260);                        // MaximumComponentNameLength
+                    body.U32LE(255);                        // MaximumComponentNameLength (NTFS, and Unix NAME_MAX)
                     body.U32LE((uint)fsName.Length);
                     body.Bytes(fsName);
                     return NtStatus.Success;
@@ -582,8 +624,20 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 foreach (IRdpdrDevice device in _additional) { device.Dispose(); }
             }
         }
-        foreach (DriveFile file in _files.Values) { try { file.Close(); } catch { /* ignore */ } }
-        _files.Clear();
+        CloseFiles();
+    }
+
+    private void CloseFiles()
+    {
+        lock (_filesGate)
+        {
+            foreach (DriveFile file in _files.Values)
+            {
+                try { file.Close(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
+            }
+            _files.Clear();
+        }
     }
 
     internal async Task DrainDevicesAsync()

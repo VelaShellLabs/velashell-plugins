@@ -463,6 +463,20 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         return new Border { IsVisible = false, Background = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)), Child = card };
     }
 
+    /// <summary>
+    /// What the overlay says after a failed reconnect. The connector already turned the failure into a localized
+    /// reason (wrong password, changed certificate, NLA refused, …); it used to be replaced by a generic "try again".
+    /// Credentials and certificate approval can only be renewed by reopening the session through the host, so those
+    /// reasons say so.
+    /// </summary>
+    internal static string ReconnectFailure(Exception ex, Loc loc) => ex switch
+    {
+        VelaShell.PluginSdk.Protocols.ProtocolAuthenticationException or VelaShell.PluginSdk.Protocols.ProtocolCertificateTrustException =>
+            $"{ex.Message} {loc["Reconnect"]}",
+        VelaShell.PluginSdk.Protocols.ProtocolConnectionException or VelaShell.PluginSdk.Protocols.ProtocolUnsupportedException => ex.Message,
+        _ => loc["ReconnectFailed"]
+    };
+
     private async void OnReconnectClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_reconnecting || Reconnect is not { } reconnect)
@@ -474,10 +488,10 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         _reconnect.IsEnabled = false;
         _overlayText.Text = _loc["Reconnecting"];
         try { await reconnect(default); }
-        catch
+        catch (Exception ex)
         {
             // The owning document keeps this (disconnected) view alive on failure, so re-arm the button.
-            _overlayText.Text = _loc["ReconnectFailed"];
+            _overlayText.Text = ReconnectFailure(ex, _loc);
             _reconnect.IsEnabled = true;
         }
         finally { _reconnecting = false; }

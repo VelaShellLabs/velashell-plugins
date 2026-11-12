@@ -1,4 +1,5 @@
 using System.Text;
+using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Wire;
 
@@ -12,7 +13,8 @@ namespace VelaShell.Plugin.Rdp.Tests;
 public sealed class DriveSemanticsTests
 {
     private const uint GenericRead = 0x80000000, GenericWrite = 0x40000000;
-    private const uint FileOpen = 1, FileCreate = 2, FileDirectoryFile = 1;
+    private const uint FileOpen = 1, FileCreate = 2, FileOpenIf = 3, FileDirectoryFile = 1;
+    private const uint FileWriteAttributes = 0x100, MaximumAllowed = 0x02000000, GenericAll = 0x10000000;
 
     private static string NewShare()
     {
@@ -204,6 +206,167 @@ public sealed class DriveSemanticsTests
             file.Close();
 
             CollectionAssert.AreEqual(new[] { "README.txt" }, Directory.GetFiles(share).Select(Path.GetFileName).ToArray());
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    private static void WithReadOnlyFile(Action<string, string> test)
+    {
+        string share = NewShare();
+        string path = Path.Combine(share, "ro.txt");
+        File.WriteAllText(path, "ro");
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try { test(share, path); }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+            Directory.Delete(share, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void AReadOnlyFileOpensForReadingWithoutDemandingWriteAccess() => WithReadOnlyFile((share, _) =>
+    {
+        // FILE_OPEN_IF and FILE_WRITE_ATTRIBUTES used to force a writable stream and so failed with access denied.
+        DriveFile openIf = DriveFile.Create(share, "\\ro.txt", GenericRead, FileOpenIf, 0, 0);
+        CollectionAssert.AreEqual("ro"u8.ToArray(), openIf.Read(0, 16));
+        openIf.Close();
+
+        DriveFile attributes = DriveFile.Create(share, "\\ro.txt", GenericRead | FileWriteAttributes, FileOpen, 0, 0);
+        attributes.Close();
+
+        DriveStatusException write = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\ro.txt", GenericWrite, FileOpen, 0, 0));
+        Assert.AreEqual(NtStatus.AccessDenied, write.Status);
+    });
+
+    [TestMethod]
+    public void MaximumAllowedFallsBackToReadAndGenericAllWrites()
+    {
+        WithReadOnlyFile((share, _) =>
+        {
+            DriveFile file = DriveFile.Create(share, "\\ro.txt", MaximumAllowed, FileOpen, 0, 0);
+            CollectionAssert.AreEqual("ro"u8.ToArray(), file.Read(0, 16));
+            Assert.AreEqual(NtStatus.AccessDenied, Assert.Throws<DriveStatusException>(() => file.Write(0, "x"u8)).Status);
+            file.Close();
+        });
+
+        string share = NewShare();
+        try
+        {
+            WriteFile(share, "rw.txt", "rw");
+            DriveFile all = DriveFile.Create(share, "\\rw.txt", GenericAll, FileOpen, 0, 0);
+            _ = all.Write(0, "RW"u8);
+            all.Close();
+            Assert.AreEqual("RW", File.ReadAllText(Path.Combine(share, "rw.txt")));
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    [TestMethod]
+    public void DeleteIsRefusedUpFrontWhenItCannotSucceedAndCanBeWithdrawn()
+    {
+        WithReadOnlyFile((share, path) =>
+        {
+            DriveFile file = DriveFile.Create(share, "\\ro.txt", GenericRead, FileOpen, 0, 0);
+            Assert.AreEqual(NtStatus.CannotDelete, Assert.Throws<DriveStatusException>(() => file.SetDeletePending(true)).Status);
+            file.Close();
+            Assert.IsTrue(File.Exists(path));
+        });
+
+        string share = NewShare();
+        try
+        {
+            _ = Directory.CreateDirectory(Path.Combine(share, "full"));
+            WriteFile(share, "full\\inner.txt", "x");
+            DriveFile directory = DriveFile.Create(share, "\\full", GenericRead, FileOpen, FileDirectoryFile, 0);
+            Assert.AreEqual(NtStatus.DirectoryNotEmpty, Assert.Throws<DriveStatusException>(() => directory.SetDeletePending(true)).Status);
+            directory.Close();
+
+            WriteFile(share, "keep.txt", "k");
+            DriveFile keep = DriveFile.Create(share, "\\keep.txt", GenericWrite, FileOpen, 0, 0);
+            keep.SetDeletePending(true);
+            keep.SetDeletePending(false);   // DeletePending = 0 withdraws the delete
+            keep.Close();
+            Assert.IsTrue(File.Exists(Path.Combine(share, "keep.txt")));
+
+            DriveFile gone = DriveFile.Create(share, "\\keep.txt", GenericWrite, FileOpen, 0, 0);
+            gone.SetDeletePending(true);
+            gone.Close();
+            Assert.IsFalse(File.Exists(Path.Combine(share, "keep.txt")));
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    [TestMethod]
+    public void AFifoInAMappingIsRefusedInsteadOfBlockingTheChannel()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows file systems have no FIFOs.");
+        }
+
+        string share = NewShare();
+        try
+        {
+            string fifo = Path.Combine(share, "pipe");
+            using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", fifo)!) { mkfifo.WaitForExit(); }
+
+            Task<DriveStatusException> open = Task.Run(() => Assert.Throws<DriveStatusException>(
+                () => DriveFile.Create(share, "\\pipe", GenericRead, FileOpen, 0, 0)));
+            Assert.IsTrue(open.Wait(TimeSpan.FromSeconds(10)), "Opening a FIFO must not block.");
+            Assert.AreEqual(NtStatus.AccessDenied, open.Result.Status);
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    [TestMethod]
+    public void VolumeInformationDescribesTheMappingsOwnVolumeAndAStableSerial()
+    {
+        string share = NewShare();
+        try
+        {
+            (long total, long free) = RdpdrChannel.VolumeSpace(share);
+            Assert.IsGreaterThan(0L, total);
+            Assert.IsGreaterThanOrEqualTo(0L, free);
+            Assert.IsLessThanOrEqualTo(total, free);
+
+            var mapping = new DriveMapping("work", share);
+            Assert.AreEqual(RdpdrChannel.VolumeSerial(mapping), RdpdrChannel.VolumeSerial(mapping));
+            Assert.AreNotEqual(RdpdrChannel.VolumeSerial(mapping), RdpdrChannel.VolumeSerial(new DriveMapping("docs", share)));
+            WriteFile(share, "grow.bin", new string('x', 1 << 16));
+            Assert.AreEqual(RdpdrChannel.VolumeSerial(mapping), RdpdrChannel.VolumeSerial(new DriveMapping("work", share)),
+                "The serial must not follow the free space.");
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    [TestMethod]
+    public void MacOsDecomposedNamesReachTheServerComposedAndStillOpen()
+    {
+        const string decomposed = "été.txt";   // "été.txt" as macOS commonly stores it (NFD)
+        const string composed = "été.txt";        // the same name as Windows expects it (NFC)
+        string share = NewShare();
+        try
+        {
+            File.WriteAllText(Path.Combine(share, decomposed), "x");
+            DriveFile root = DriveFile.Create(share, "\\", GenericRead, FileOpen, FileDirectoryFile, 0);
+            Assert.IsTrue(root.BeginEnumeration("\\*"));
+            string listed = Names(root).Single(name => name is not ("." or ".."));
+            root.Close();
+
+            if (OperatingSystem.IsMacOS())
+            {
+                Assert.AreEqual(composed, listed, "macOS sends the composed form.");
+                // The server opens what it was shown; APFS/HFS+ resolve the composed name to the stored file.
+                DriveFile opened = DriveFile.Create(share, "\\" + composed, GenericRead, FileOpen, 0, 0);
+                CollectionAssert.AreEqual("x"u8.ToArray(), opened.Read(0, 8));
+                opened.Close();
+            }
+            else
+            {
+                // Windows file names and Linux byte-string names are sent exactly as stored.
+                Assert.AreEqual(Path.GetFileName(Directory.GetFiles(share).Single()), listed);
+            }
         }
         finally { Directory.Delete(share, recursive: true); }
     }

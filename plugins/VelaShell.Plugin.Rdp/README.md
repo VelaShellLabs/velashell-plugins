@@ -174,7 +174,7 @@ arguments.
 - When automatic reconnect does not apply or gives up, a **Reconnect** button appears over the
   desktop (the host session tab reconnects too); reconnecting renews credentials and certificate
   approval. The button also works while automatic attempts are waiting.
-- **Bidirectional clipboard** is off by default. Text/images synchronize as before. On Windows,
+- **Bidirectional clipboard** is on by default (turn it off for a session that should not share clipboard data). Text/images synchronize as before. On Windows,
   remote Ctrl+C publishes virtual file/directory descriptors only. Paste in the chosen local
   Explorer directory requests IStream content; only then do RDP FILECONTENTS requests transfer
   bytes. Explorer owns the destination and writes files. No download cache, global key hooks,

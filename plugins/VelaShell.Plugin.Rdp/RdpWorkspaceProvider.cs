@@ -84,7 +84,14 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         }
     };
 
-    private static string NlaKey(WorkspaceConnectRequest request) => $"nla-host:{request.Host.ToLowerInvariant()}:{request.Port}";
+    /// <summary>
+    /// The server whose NLA use is remembered. Through an SSH tunnel <see cref="WorkspaceConnectRequest.Host" /> and
+    /// <see cref="WorkspaceConnectRequest.Port" /> are the host's local forwarding endpoint (often a fresh port each
+    /// time), so the record is keyed by the tunnel's real target, like the certificate host.
+    /// </summary>
+    internal static string NlaKey(WorkspaceConnectRequest request) => request.Tunnel is { } tunnel
+        ? $"nla-host:{tunnel.TargetHost.ToLowerInvariant()}:{tunnel.TargetPort}"
+        : $"nla-host:{request.Host.ToLowerInvariant()}:{request.Port}";
 
     private async Task<bool> UsedNlaBeforeAsync(string key, CancellationToken ct)
     {

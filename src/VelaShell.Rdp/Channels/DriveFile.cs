@@ -21,6 +21,9 @@ internal sealed class DriveFile
     internal const uint FileBasicInformation = 4, FileStandardInformation = 5, FileNamesInformation = 12;
     internal const uint FileRenameInformation = 10, FileDispositionInformation = 13;
     internal const uint FileAllocationInformation = 19, FileEndOfFileInformation = 20, FileAttributeTagInformation = 35;
+    // Access mask bits (MS-SMB2 2.2.13.1.1)
+    private const uint FileWriteData = 0x00000002, FileAppendData = 0x00000004;
+    private const uint MaximumAllowed = 0x02000000, GenericAll = 0x10000000, GenericWrite = 0x40000000;
     // Information (create result)
     internal const byte FileSuperseded = 0, FileOpened = 1, FileOverwritten = 3;
 
@@ -97,7 +100,13 @@ internal sealed class DriveFile
             return file;
         }
 
-        // Regular file.
+        // Regular file. On Unix an existing path must really be one: opening a FIFO would block the rdpdr worker, and
+        // device files must not be reachable (a mapped "/" contains /dev).
+        if (exists && !UnixFileType.IsRegularFile(full))
+        {
+            throw new DriveStatusException(NtStatus.AccessDenied);
+        }
+
         if (disposition == FileOpen && !exists)
         {
             throw new DriveStatusException(NtStatus.NoSuchFile);
@@ -118,13 +127,23 @@ internal sealed class DriveFile
             FileOverwriteIf => FileMode.Create,
             _ => FileMode.OpenOrCreate
         };
-        bool write = (desiredAccess & 0x40000000) != 0 ||                        // GENERIC_WRITE
-                     (desiredAccess & (0x0002 | 0x0004 | 0x0006 | 0x0100)) != 0 || // FILE_WRITE_DATA/APPEND/EA
-                     mode is FileMode.Create or FileMode.CreateNew or FileMode.Truncate or FileMode.OpenOrCreate;
+        // Only data access needs a writable stream (MS-SMB2 2.2.13.1.1 access mask): attribute and time changes are
+        // applied by path. A mode that creates or truncates needs write access too. MAXIMUM_ALLOWED takes write access
+        // when the file grants it and falls back to read, as Windows does.
+        bool maximum = (desiredAccess & MaximumAllowed) != 0;
+        bool write = (desiredAccess & (GenericWrite | GenericAll | FileWriteData | FileAppendData)) != 0
+            || mode is FileMode.Create or FileMode.CreateNew or FileMode.Truncate;
         try
         {
-            file._stream = new FileStream(full, mode, write ? FileAccess.ReadWrite : FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
+            try
+            {
+                file._stream = new FileStream(full, mode, write || maximum ? FileAccess.ReadWrite : FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+            }
+            catch (UnauthorizedAccessException) when (maximum && !write && mode is FileMode.Open or FileMode.OpenOrCreate)
+            {
+                file._stream = new FileStream(full, mode, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            }
         }
         catch (FileNotFoundException) { throw new DriveStatusException(NtStatus.NoSuchFile); }
         catch (DirectoryNotFoundException) { throw new DriveStatusException(NtStatus.ObjectPathNotFound); }
@@ -224,7 +243,30 @@ internal sealed class DriveFile
         catch { /* best-effort delete-on-close */ }
     }
 
-    internal void MarkForDeletion() => _deleteOnClose = true;
+    /// <summary>
+    /// FileDispositionInformation (MS-FSCC 2.4.11): sets or clears delete-pending. A delete that cannot succeed is
+    /// refused now, as Windows does, instead of failing silently when the handle closes: a non-empty directory
+    /// (STATUS_DIRECTORY_NOT_EMPTY) or a read-only file (STATUS_CANNOT_DELETE).
+    /// </summary>
+    internal void SetDeletePending(bool deletePending)
+    {
+        if (deletePending)
+        {
+            if (IsDirectory)
+            {
+                if (Directory.Exists(FullPath) && Directory.EnumerateFileSystemEntries(FullPath).Any())
+                {
+                    throw new DriveStatusException(NtStatus.DirectoryNotEmpty);
+                }
+            }
+            else if (File.Exists(FullPath) && File.GetAttributes(FullPath).HasFlag(FileAttributes.ReadOnly))
+            {
+                throw new DriveStatusException(NtStatus.CannotDelete);
+            }
+        }
+
+        _deleteOnClose = deletePending;
+    }
 
     /// <summary>
     /// FileRenameInformation (MS-FSCC 2.4.37). An existing target is replaced only when the server set
@@ -466,7 +508,7 @@ internal sealed class DriveFile
         FileSystemInfo info = name is "." or ".." || Directory.Exists(path) ? new DirectoryInfo(name is "." or ".." ? FullPath : path) : new FileInfo(path);
         long size = info is FileInfo f ? f.Length : 0;
         uint attributes = info.Exists ? (uint)info.Attributes : 0x10; // treat missing as dir-ish
-        byte[] nameBytes = Encoding.Unicode.GetBytes(name);
+        byte[] nameBytes = Encoding.Unicode.GetBytes(WireName(name));
 
         switch (infoClass)
         {
@@ -525,6 +567,16 @@ internal sealed class DriveFile
         }
         return true;
     }
+
+    /// <summary>
+    /// The name a directory entry carries to the server. macOS file systems commonly store names decomposed (NFD:
+    /// "e" + combining accent); Windows expects and shows composed names (NFC), so a decomposed name looked different
+    /// from, and did not match, the same name typed on the remote. APFS and HFS+ look names up regardless of
+    /// normalization, so the server's later open with the NFC form still finds the file. Linux file names are plain
+    /// byte strings — a renormalized name would not open — so they are sent as stored.
+    /// </summary>
+    internal static string WireName(string name) =>
+        OperatingSystem.IsMacOS() && !name.IsNormalized(NormalizationForm.FormC) ? name.Normalize(NormalizationForm.FormC) : name;
 
     private static void WriteTime(ByteWriter w, DateTime utc)
     {
@@ -638,6 +690,7 @@ internal static class NtStatus
     internal const uint FileIsADirectory = 0xC00000BA;
     internal const uint NotADirectory = 0xC0000103;
     internal const uint DirectoryNotEmpty = 0xC0000101;
+    internal const uint CannotDelete = 0xC0000121;
 }
 
 internal sealed class DriveStatusException(uint status) : Exception

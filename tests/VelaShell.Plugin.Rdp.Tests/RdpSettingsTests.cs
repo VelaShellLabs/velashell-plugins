@@ -18,6 +18,18 @@ public sealed class RdpSettingsTests
         Settings = settings.ToDictionary(pair => pair.Key, pair => pair.Value)
     };
     [TestMethod]
+    public void NlaDowngradeMemoryFollowsTheRealServerThroughATunnel()
+    {
+        WorkspaceConnectRequest direct = Request() with { Host = "Real.Example", Port = 3389 };
+        WorkspaceConnectRequest first = Request() with { Host = "127.0.0.1", Port = 50001, Tunnel = new("real.example", 3389, "Jump") };
+        WorkspaceConnectRequest second = first with { Port = 50002 };
+        WorkspaceConnectRequest other = first with { Tunnel = new("other.example", 3389, "Jump") };
+        Assert.AreEqual(RdpWorkspaceProvider.NlaKey(direct), RdpWorkspaceProvider.NlaKey(first));
+        Assert.AreEqual(RdpWorkspaceProvider.NlaKey(first), RdpWorkspaceProvider.NlaKey(second), "A new local port is the same server.");
+        Assert.AreNotEqual(RdpWorkspaceProvider.NlaKey(first), RdpWorkspaceProvider.NlaKey(other), "A reused local port is not.");
+    }
+
+    [TestMethod]
     public void ClipboardIsEnabledByDefaultWhileSensitiveRedirectionStaysOptIn()
     {
         var settings = RdpSettings.From(Request(), new("en"));

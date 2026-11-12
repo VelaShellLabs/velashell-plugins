@@ -399,7 +399,10 @@ internal sealed partial class DrdynvcChannel
                 _ = _instances.Remove(id);
                 if (_displayOpen && id == _displayChannelId)
                 { _displayOpen = _displayReady = false; _lastSent = null; }
-                return (null, instance.Handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
+                // MS-RDPEDYC 2.2.4: the client acknowledges a server Close Request with a Close Response for the same id.
+                var close = new ByteWriter(8);
+                close.U8((byte)((CmdClose << 4) | cb)); WriteVariable(close, id, cb);
+                return (close.ToArray(), instance.Handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
             }
             if (cmd is not (CmdData or CmdDataFirst or CmdDataCompressed or CmdDataFirstCompressed))
             {

@@ -173,4 +173,19 @@ public sealed class RdpSecurityTests
         Assert.IsTrue(field.IsAdvanced);
         Assert.AreSequenceEqual(new[] { "auto", "nla", "tls" }, [.. field.Choices!.Select(c => c.Value)]);
     }
+
+    [TestMethod]
+    public void AFailedReconnectFromTheViewShowsTheReasonNotOnlyTryAgain()
+    {
+        var loc = new Loc("en");
+        Exception wrongPassword = RdpConnector.Translate(new RdpAuthenticationException("rejected", 0xC000006D), loc);
+        string shown = RdpWorkspaceView.ReconnectFailure(wrongPassword, loc);
+        Assert.Contains(wrongPassword.Message, shown);
+        Assert.Contains(loc["Reconnect"], shown, "Credentials can only be renewed by reopening through the host.");
+
+        Exception refused = RdpConnector.Translate(new RdpNlaRefusedException(0x80090302, null), loc);
+        Assert.AreEqual(refused.Message, RdpWorkspaceView.ReconnectFailure(refused, loc));
+
+        Assert.AreEqual(loc["ReconnectFailed"], RdpWorkspaceView.ReconnectFailure(new InvalidOperationException("internal"), loc));
+    }
 }
