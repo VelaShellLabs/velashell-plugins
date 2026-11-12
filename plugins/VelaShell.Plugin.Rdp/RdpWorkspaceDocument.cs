@@ -23,6 +23,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     private Action<Exception?>? _disconnectedHandler;
     private Action<Exception>? _audioFailedHandler;
     private Exception? _audioError;
+    // How to word the current Faulted reason, so a language change re-renders it (guarded by _disposeGate).
+    private Func<Loc, string>? _faultMessage;
     private ContentControl? _root;
     private RdpWorkspaceView? _view;
     private Task? _disposeTask;
@@ -78,17 +80,26 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     }
     internal void SetLocale(Loc loc)
     {
+        WorkspaceStatus? relocalized = null;
         lock (_disposeGate)
         {
             _loc = loc;
             if (_status.State == ProtocolSessionState.Faulted)
             {
-                SetStatus(_status with { Message = loc["Disconnected"] });
+                // Re-render the reason in the new language instead of replacing it with a generic "disconnected".
+                relocalized = _status with { Message = _faultMessage?.Invoke(loc) ?? loc["Disconnected"] };
             }
             else if (_status.State == ProtocolSessionState.Connected && _audioError is { } error)
             {
-                SetStatus(_status with { Message = loc.Format("AudioFailed", error.Message) });
+                relocalized = _status with { Message = loc.Format("AudioFailed", error.Message) };
             }
+        }
+
+        // Raised outside the lock: StatusChanged runs host code, which may marshal to the UI thread while that thread
+        // waits for this lock (reading Status, binding a view).
+        if (relocalized is { } status)
+        {
+            SetStatus(status);
         }
         if (_root is not null)
         {
@@ -101,11 +112,13 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         {
             _session = session;
             _audioError = null;
+            _faultMessage = null;
             _attachedAt = Environment.TickCount64;
             _disconnectedHandler = failure => OnDisconnected(session, failure);
             session.Disconnected += _disconnectedHandler;
-            SetStatus(new(session.IsConnected ? ProtocolSessionState.Connected : ProtocolSessionState.Faulted), session);
         }
+
+        SetStatus(new(session.IsConnected ? ProtocolSessionState.Connected : ProtocolSessionState.Faulted), session);
         if (session is IRdpAudioSource audio)
         {
             _audioFailedHandler = failure => OnAudioFailed(session, failure);
@@ -114,12 +127,15 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
     }
     private void OnAudioFailed(IRdpSession session, Exception failure)
     {
+        WorkspaceStatus audioStatus;
         lock (_disposeGate)
         {
             if (_disposed != 0 || !ReferenceEquals(_session, session) || !session.IsConnected) { return; }
             _audioError = failure;
-            SetStatus(new(ProtocolSessionState.Connected, _loc.Format("AudioFailed", failure.Message)), session);
+            audioStatus = new(ProtocolSessionState.Connected, _loc.Format("AudioFailed", failure.Message));
         }
+
+        SetStatus(audioStatus, session);
         _context.Log.Warn($"RDP audio playback stopped: {failure.Message}");
         Dispatcher.UIThread.Post(() =>
         {
@@ -162,6 +178,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port} disconnected: {failure.GetType().Name}: {failure.Message}");
         }
 
+        lock (_disposeGate) { _faultMessage = loc => RdpConnector.DisconnectReason(failure, loc) ?? loc["Disconnected"]; }
         SetStatus(new(ProtocolSessionState.Faulted, reason ?? _loc["Disconnected"]), session);
         if (_root is not null)
         {
@@ -252,7 +269,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
                 break;
             }
 
-            ShowDisconnected(lost, _loc.Format("AutoReconnecting", attempt, AutoReconnectAttempts));
+            int shown = attempt;
+            ShowDisconnected(lost, loc => loc.Format("AutoReconnecting", shown, AutoReconnectAttempts));
             try
             {
                 await Task.Delay(AutoReconnectDelays[Math.Min(attempt, AutoReconnectDelays.Length) - 1], ct).ConfigureAwait(false);
@@ -279,12 +297,22 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         }
 
         _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port}: automatic reconnect gave up after {Math.Min(_autoAttempt, AutoReconnectAttempts)} attempt(s): {last?.Message}");
-        ShowDisconnected(lost, last is ProtocolAuthenticationException or ProtocolCertificateTrustException ? last.Message : _loc["AutoReconnectFailed"]);
+        // An authentication or certificate reason is already localized text from the connector; keep it as it is.
+        Exception? final = last;
+        ShowDisconnected(lost, loc => final is ProtocolAuthenticationException or ProtocolCertificateTrustException ? final.Message : loc["AutoReconnectFailed"]);
     }
 
     /// <summary>The disconnected card and status for <paramref name="session"/>, unless it has been replaced since.</summary>
-    private void ShowDisconnected(IRdpSession session, string message)
+    private void ShowDisconnected(IRdpSession session, Func<Loc, string> wording)
     {
+        string message;
+        lock (_disposeGate)
+        {
+            if (!ReferenceEquals(_session, session)) { return; }
+            _faultMessage = wording;
+            message = wording(_loc);
+        }
+
         SetStatus(new(ProtocolSessionState.Faulted, message), session);
         if (_root is not null)
         {
@@ -318,8 +346,21 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             // the current (disconnected) view in place — its in-view Reconnect button stays usable
             // instead of the workspace going blank.
             IRdpSession session = await _factory(_request!, _settings, _loc, linked.Token).ConfigureAwait(false);
-            await CloseConnectionAsync().ConfigureAwait(false);
+            try { await CloseConnectionAsync().ConfigureAwait(false); }
+            catch
+            {
+                // The new session would otherwise be neither attached nor disposed (and the old view already gone).
+                await session.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+
             AttachSession(session);
+            if (expected is null)
+            {
+                // A reconnect the user asked for starts a fresh automatic-reconnect series: a drop soon after it must
+                // not count the attempts of a series that had already given up.
+                _ = Interlocked.Exchange(ref _autoAttempt, 0);
+            }
             if (_root is not null)
             {
                 await Dispatcher.UIThread.InvokeAsync(BindView);

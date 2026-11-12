@@ -114,13 +114,18 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         }
         set
         {
+            RdpWorkspaceDocument[] documents;
             lock (_gate)
             {
                 _loc = value;
-                foreach (RdpWorkspaceDocument document in _documents)
-                {
-                    document.SetLocale(value);
-                }
+                documents = [.. _documents];
+            }
+
+            // Outside the lock: SetLocale raises StatusChanged into host code, and a document closing at the same time
+            // takes this lock from inside its own (lock order document → provider).
+            foreach (RdpWorkspaceDocument document in documents)
+            {
+                document.SetLocale(value);
             }
         }
     }

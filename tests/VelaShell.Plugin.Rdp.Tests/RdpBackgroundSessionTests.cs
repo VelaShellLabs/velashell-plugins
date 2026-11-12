@@ -137,6 +137,9 @@ public sealed class RdpBackgroundSessionTests
         Assert.AreEqual(4, calls, "the first connection and three automatic attempts");
         Assert.AreEqual(ProtocolSessionState.Faulted, document.Status.State);
         Assert.AreEqual(new Loc("en")["AutoReconnectFailed"], document.Status.Message);
+        // A language change re-words the specific reason instead of replacing it with a generic "disconnected".
+        document.SetLocale(new("zh-Hans"));
+        Assert.AreEqual(new Loc("zh-Hans")["AutoReconnectFailed"], document.Status.Message);
         Assert.AreEqual(0, first.DisposeCount, "the lost session stays until a reconnect succeeds or the tab closes");
         await document.ReconnectAsync().ContinueWith(_ => { });   // the manual button still works (and fails here)
         Assert.AreEqual(5, calls);

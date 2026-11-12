@@ -47,7 +47,10 @@ internal static class GccData
         if (messageChannel)
         {
             blocks.U16LE(0xC006); blocks.U16LE(8); blocks.U32LE(0);
-            if (multitransport) { blocks.U16LE(0xC00A); blocks.U16LE(8); blocks.U32LE(0x205); }
+            // TS_UD_CS_MULTITRANSPORT: TRANSPORTTYPE_UDPFECR (0x01) | SOFTSYNC_TCP_TO_UDP (0x200). Lossy UDP
+            // (TRANSPORTTYPE_UDPFECL, 0x04) is not offered: the dynamic channels require complete delivery, so a loss that
+            // FEC cannot repair would end the session — worse than staying on TCP.
+            if (multitransport) { blocks.U16LE(0xC00A); blocks.U16LE(8); blocks.U32LE(0x201); }
         }
         return WrapConferenceCreateRequest(blocks.Span);
     }

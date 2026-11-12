@@ -24,6 +24,20 @@ public sealed partial class RdpManagedSession
         return backend;
     }
 
+    /// <summary>
+    /// Ends the session as if the connection had been lost (for example local input could not be delivered because
+    /// the network stalled): the connection stops and <see cref="Disconnected" /> is raised with an
+    /// <see cref="RdpConnectionLostException" /> carrying <paramref name="reason" />, so the caller's normal handling —
+    /// status, overlay, automatic reconnect to the waiting Windows session — runs. Disposing instead ends a session
+    /// silently, because a disposed session raises no event. The caller still disposes the session afterwards.
+    /// </summary>
+    public void AbortConnection(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        _ = Interlocked.CompareExchange(ref _dynamicChannelFailure, new RdpConnectionLostException(reason), null);
+        _stop.Cancel();
+    }
+
     private void FailGraphics(Exception exception)
     {
         var failure = new IOException("RDP graphics pipeline failed; reconnect the session.", exception);

@@ -326,9 +326,9 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     internal static bool IsTls13FailureDuringNla(Exception failure) => failure switch
     {
         RdpConnectionException failed => failed.Stage == RdpConnectStage.Nla && failed.TlsProtocol == SslProtocols.Tls13
-            && CredSsp.IsTlsLayerFailure(failed.InnerException),
+            && CredSsp.IsConnectionLossDuringNla(failed.InnerException),
         RdpNlaRefusedException refused => refused.Status is null && refused.TlsProtocol == SslProtocols.Tls13
-            && CredSsp.IsTlsLayerFailure(refused.InnerException),
+            && CredSsp.IsConnectionLossDuringNla(refused.InnerException),
         _ => false
     };
 

@@ -541,7 +541,9 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 {
                     byte[] fsName = Encoding.Unicode.GetBytes("NTFS\0");
                     body.U32LE((uint)(12 + fsName.Length));
-                    body.U32LE(0x00000007);                 // CASE_SENSITIVE | CASE_PRESERVED | UNICODE_ON_DISK
+                    // FILE_CASE_PRESERVED_NAMES | FILE_UNICODE_ON_DISK (MS-FSCC 2.5.1). Not FILE_CASE_SENSITIVE_SEARCH:
+                    // names are matched without regard to case on every platform, as on NTFS by default.
+                    body.U32LE(0x00000006);
                     body.U32LE(255);                        // MaximumComponentNameLength (NTFS, and Unix NAME_MAX)
                     body.U32LE((uint)fsName.Length);
                     body.Bytes(fsName);

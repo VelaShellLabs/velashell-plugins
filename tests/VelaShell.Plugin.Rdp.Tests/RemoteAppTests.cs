@@ -37,7 +37,8 @@ public sealed class RemoteAppTests
         Assert.AreEqual((ushort)0, BitConverter.ToUInt16(highContrast, 16));
         byte[] workArea = sent.Single(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) == 0x2f);
         Assert.AreEqual((ushort)1280, BitConverter.ToUInt16(workArea, 12), "server-negotiated dimensions replace requested dimensions");
-        Assert.AreEqual((ushort)800, BitConverter.ToUInt16(workArea, 14), "work area uses the negotiated virtual desktop");
+        Assert.AreEqual((ushort)(800 - RemoteAppOptions.WorkspaceStripHeight), BitConverter.ToUInt16(workArea, 14),
+            "the work area uses the negotiated desktop and ends above the local application tabs");
         Assert.IsFalse(sent.Any(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) is 0xf000 or 0xf001), "startup does not send optional taskbar/display-change orders");
         byte[] execute = sent.Single(p => BitConverter.ToUInt16(p) == 1);
         var r = new ByteReader(execute);
@@ -67,6 +68,13 @@ public sealed class RemoteAppTests
         var rail = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask);
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync(ExecuteResult(0), default));
         await rail.ProcessAsync(RailChannel.Packet(5, w => w.U32LE(7601)), default);
+        // TS_RAIL_ORDER_CLOAK reaches the window decoder; a wrong length is malformed.
+        var cloaks = new List<(uint, bool)>();
+        var cloaking = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask, cloak: (id, cloaked) => cloaks.Add((id, cloaked)));
+        await cloaking.ProcessAsync(RailChannel.Packet(5, w => w.U32LE(7601)), default);
+        await cloaking.ProcessAsync(RailChannel.Packet(0x15, w => { w.U32LE(42); w.U8(1); }), default);
+        CollectionAssert.AreEqual(new[] { (42u, true) }, cloaks);
+        await Assert.ThrowsAsync<RdpProtocolException>(() => cloaking.ProcessAsync(RailChannel.Packet(0x15, w => w.U32LE(42)), default));
         // Orders and system parameters this client does not know are ignored, not fatal (a newer server may send them).
         await rail.ProcessAsync(RailChannel.Packet(0x16, w => w.U32LE(1)), default);
         await rail.ProcessAsync(RailChannel.Packet(3, w => { w.U32LE(0x1234); w.U8(1); }), default);
@@ -128,10 +136,16 @@ public sealed class RemoteAppTests
         SendOrder(connection, Window(42, 4 | 0x10, w => { w.U8(2); String(w, "Minimized"); }));
         Assert.IsFalse(connection.RemoteWindows.Snapshot().Single().Visible);
         Assert.IsEmpty(RdpDesktopControl.RemoteAppRegions(connection.RemoteWindows.Snapshot().Single(), 1024, 768).ToArray());
+        // 0x00080000 is EnforceServerZOrder (MS-RDPERP 2.2.1.3.1.2.1), not visibility.
         SendOrder(connection, Window(42, 0x80000, w => w.U8(1)));
+        Assert.IsTrue(connection.RemoteWindows.Snapshot().Single().EnforceServerZOrder);
+        Assert.IsFalse(connection.RemoteWindows.Snapshot().Single().IsCloaked);
+        // Cloaking comes from TS_RAIL_ORDER_CLOAK on the RAIL channel.
+        connection.RemoteWindows.SetCloaked(42, true);
         Assert.IsTrue(connection.RemoteWindows.Snapshot().Single().IsCloaked);
         Assert.IsFalse(connection.RemoteWindows.Snapshot().Single().Visible);
-        SendOrder(connection, Window(42, 0x80000, w => w.U8(0)));
+        connection.RemoteWindows.SetCloaked(42, false);
+        connection.RemoteWindows.SetCloaked(999, true);   // unknown window: ignored
         Assert.IsFalse(connection.RemoteWindows.Snapshot().Single().IsCloaked);
         SendOrder(connection, Desktop(0x20 | 0x10, w => { w.U32LE(42); w.U8(1); w.U32LE(42); }));
         Assert.AreEqual(42u, connection.RemoteWindows.ActiveWindow);

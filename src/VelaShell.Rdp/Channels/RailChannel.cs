@@ -5,7 +5,8 @@ namespace VelaShell.Rdp.Channels;
 
 /// <summary>MS-RDPERP 2.2.2: baseline Remote Programs (no local move/size or enhanced GFX).</summary>
 internal sealed class RailChannel(RemoteAppOptions options, int width, int height,
-    Func<byte[], CancellationToken, Task> send, Func<(int Width, int Height)>? negotiatedSize = null)
+    Func<byte[], CancellationToken, Task> send, Func<(int Width, int Height)>? negotiatedSize = null,
+    Action<uint, bool>? cloak = null)
 {
     private bool _initialized;
     private bool _executed;
@@ -52,7 +53,11 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 {
                     await send(Packet(3, w => { w.U32LE(parameter); w.U8(0); }), ct).ConfigureAwait(false);
                 }
-                await send(Packet(3, w => { w.U32LE(0x2f); Rectangle(w, 0, 0, width, height); }), ct).ConfigureAwait(false);
+                // SPI_SETWORKAREA: the client draws its application tabs over the bottom WorkspaceStripHeight pixels of
+                // the desktop, so the work area ends above them — a maximized remote window would otherwise have its
+                // status bar and scroll bar under the tabs, and clicks there would go to the tabs.
+                int workHeight = Math.Max(1, height - RemoteAppOptions.WorkspaceStripHeight);
+                await send(Packet(3, w => { w.U32LE(0x2f); Rectangle(w, 0, 0, width, workHeight); }), ct).ConfigureAwait(false);
                 await send(BuildExecute(options), ct).ConfigureAwait(false);
             }
             else
@@ -116,6 +121,13 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
             case 0x09:
                 RequireLength(body, 12);
                 r.Skip(12); // MS-RDPERP 3.2.5.2.8: ignore when local move/size is not advertised
+                break;
+            case 0x15:
+                // TS_RAIL_ORDER_CLOAK: sent by the server because the Client Information PDU advertises
+                // TS_RAIL_CLIENTSTATUS_BIDIRECTIONAL_CLOAK_SUPPORTED (MS-RDPERP 2.2.2.12.1): WindowId, Cloaked.
+                RequireLength(body, 5);
+                uint cloakedWindow = r.U32LE();
+                cloak?.Invoke(cloakedWindow, r.U8() != 0);
                 break;
             default:
                 // An order this client does not implement or did not negotiate (a newer server may send e.g. power or

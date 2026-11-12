@@ -263,6 +263,14 @@ internal sealed class DriveFile
             {
                 throw new DriveStatusException(NtStatus.CannotDelete);
             }
+
+            // On Unix removing an entry needs write and search permission on its directory, not on the entry itself;
+            // without it the delete would only fail, silently, when the handle closes.
+            if (Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(FullPath)) is { } parent
+                && !UnixFileType.CanModifyDirectory(parent))
+            {
+                throw new DriveStatusException(NtStatus.AccessDenied);
+            }
         }
 
         _deleteOnClose = deletePending;
@@ -286,6 +294,16 @@ internal sealed class DriveFile
         if (target.Equals(FullPath, StringComparison.Ordinal))
         {
             return;
+        }
+
+        // On a case-sensitive file system the target may exist under another case ("Readme.txt" for "README.txt"):
+        // that is the same name to the server, so it collides (or is replaced) instead of creating a second entry.
+        if (!File.Exists(target) && !Directory.Exists(target) && Path.GetDirectoryName(target) is { } targetParent
+            && Directory.Exists(targetParent) && Path.GetFileName(target).IndexOfAny(['*', '?']) < 0
+            && SingleCaseInsensitiveMatch(targetParent, Path.GetFileName(target)) is { } other
+            && !other.Equals(FullPath, StringComparison.Ordinal))
+        {
+            target = other;
         }
 
         bool targetIsDirectory = Directory.Exists(target);

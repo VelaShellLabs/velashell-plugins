@@ -41,8 +41,17 @@ public sealed record RemoteAppWindow(uint Id)
     public uint Style { get; init; }
     public uint ExtendedStyle { get; init; }
     public byte ShowState { get; init; } = 5;
-    /// <summary>Whether the server has cloaked the window from the user.</summary>
+    /// <summary>
+    /// Whether the server has cloaked the window from the user (TS_RAIL_ORDER_CLOAK, MS-RDPERP 2.2.2.12.1): it
+    /// exists but must not be shown — e.g. on another virtual desktop or still starting.
+    /// </summary>
     public bool IsCloaked { get; init; }
+
+    /// <summary>
+    /// EnforceServerZOrder (WINDOW_ORDER_FIELD_ENFORCE_SERVER_ZORDER, MS-RDPERP 2.2.1.3.1.2.1): the window keeps its
+    /// place in the server's Z-order relative to the other windows that set it. It does not affect visibility.
+    /// </summary>
+    public bool EnforceServerZOrder { get; init; }
     public int X { get; init; }
     public int Y { get; init; }
     public int Width { get; init; }

@@ -93,6 +93,18 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
         }
     }
 
+    /// <summary>Datagrams dropped as oversized, malformed or inconsistent with the connection state (diagnostics).</summary>
+    internal long DroppedDatagrams => Interlocked.Read(ref _droppedDatagrams);
+    private long _droppedDatagrams;
+
+    /// <summary>
+    /// A single datagram that is oversized, malformed or does not fit the connection state (a late duplicate SYN-ACK,
+    /// unknown flags, an acknowledgement of unsent data) is dropped, as datagram transports do: ending the tunnel —
+    /// and with it the session, once channels have moved onto it — for one stray packet made UDP less reliable than
+    /// TCP. The state machine validates before it changes anything, so a dropped datagram leaves it consistent. A
+    /// peer that is really gone is detected by the retransmission and keep-alive limits. Windows also reports an
+    /// ICMP port-unreachable for an earlier send as a reset on the next receive; that is ignored the same way.
+    /// </summary>
     private async Task ReceiveLoopAsync()
     {
         byte[] buffer = new byte[1233];
@@ -100,15 +112,37 @@ internal sealed class RdpUdpTransport : IAsyncDisposable
         {
             while (!_stop.IsCancellationRequested)
             {
-                int size = await _socket.ReceiveAsync(buffer, SocketFlags.None, _stop.Token).ConfigureAwait(false);
-                var packet = RdpUdpPacket.Decode(buffer.AsSpan(0, size));
-                List<byte[]> output;
-                lock (_gate)
+                int size;
+                try { size = await _socket.ReceiveAsync(buffer, SocketFlags.None, _stop.Token).ConfigureAwait(false); }
+                catch (SocketException ex) when (ex.SocketErrorCode is SocketError.MessageSize or SocketError.ConnectionReset)
                 {
-                    output = _state.Receive(packet, Environment.TickCount64);
-                    if (_state.Established) { _ = _connected.TrySetResult(); }
-                    Pulse();
+                    _ = Interlocked.Increment(ref _droppedDatagrams);
+                    continue;
                 }
+
+                if (size > 1232)
+                {
+                    _ = Interlocked.Increment(ref _droppedDatagrams);   // truncated: larger than the negotiated MTU
+                    continue;
+                }
+
+                List<byte[]> output;
+                try
+                {
+                    var packet = RdpUdpPacket.Decode(buffer.AsSpan(0, size));
+                    lock (_gate)
+                    {
+                        output = _state.Receive(packet, Environment.TickCount64);
+                        if (_state.Established) { _ = _connected.TrySetResult(); }
+                        Pulse();
+                    }
+                }
+                catch (RdpProtocolException)
+                {
+                    _ = Interlocked.Increment(ref _droppedDatagrams);
+                    continue;
+                }
+
                 await SendPacketsAsync(output, _stop.Token).ConfigureAwait(false);
             }
         }

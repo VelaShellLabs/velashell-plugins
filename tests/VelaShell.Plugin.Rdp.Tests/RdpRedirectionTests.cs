@@ -79,6 +79,20 @@ public sealed class RdpRedirectionTests
     }
 
     [TestMethod]
+    public void ARoutingTokenMustFitTheOneByteX224Length()
+    {
+        // 254 (LI) - 6 (TPDU header) - 8 (RDP_NEG_REQ) - 2 (CR LF) = 238 bytes of token.
+        byte[] longest = [.. Enumerable.Repeat((byte)'a', 238)];
+        byte[] request = RdpTransport.BuildConnectionRequest("alice", SecurityProtocol.Ssl, longest);
+        Assert.AreEqual(254, request[0], "LI (the TPDU starts with it; TPKT is added on send)");
+        Assert.HasCount(255, request);
+        _ = Assert.Throws<RdpProtocolException>(() => RdpTransport.BuildConnectionRequest("alice", SecurityProtocol.Ssl, [.. longest, (byte)'a']));
+
+        _ = Parse(RedirectionPacket(1, RedirectionFlags.LoadBalanceInfo, loadBalance: longest));
+        _ = Assert.Throws<RdpProtocolException>(() => Parse(RedirectionPacket(1, RedirectionFlags.LoadBalanceInfo, loadBalance: [.. longest, (byte)'a'])));
+    }
+
+    [TestMethod]
     public void TheClusterDataNamesTheRedirectedSession()
     {
         byte[] plain = GccData.BuildCluster(1);

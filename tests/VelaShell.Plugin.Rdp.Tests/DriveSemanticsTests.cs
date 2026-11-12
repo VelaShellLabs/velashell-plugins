@@ -298,6 +298,39 @@ public sealed class DriveSemanticsTests
     }
 
     [TestMethod]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void OnUnixADeleteInADirectoryThatCannotBeModifiedIsRefusedUpFront()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows governs deletion by the entry's attributes and ACL.");
+        }
+
+        string share = NewShare();
+        string locked = Path.Combine(share, "locked");
+        _ = Directory.CreateDirectory(locked);
+        File.WriteAllText(Path.Combine(locked, "a.txt"), "a");
+        try
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            if (UnixFileType.CanModifyDirectory(locked))
+            {
+                Assert.Inconclusive("Running with privileges that ignore directory permissions.");
+            }
+
+            DriveFile file = DriveFile.Create(share, "\\locked\\a.txt", GenericRead, FileOpen, 0, 0);
+            Assert.AreEqual(NtStatus.AccessDenied, Assert.Throws<DriveStatusException>(() => file.SetDeletePending(true)).Status);
+            file.Close();
+            Assert.IsTrue(File.Exists(Path.Combine(locked, "a.txt")));
+        }
+        finally
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(share, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void AFifoInAMappingIsRefusedInsteadOfBlockingTheChannel()
     {
         if (OperatingSystem.IsWindows())
@@ -392,6 +425,14 @@ public sealed class DriveSemanticsTests
             DriveFile upper = DriveFile.Create(share, "\\A.txt", GenericRead, FileOpen, 0, 0);
             CollectionAssert.AreEqual("upper"u8.ToArray(), upper.Read(0, 8));
             upper.Close();
+            // A rename onto a name that exists only in another case collides instead of creating a third spelling.
+            File.WriteAllText(Path.Combine(share, "other.txt"), "o");
+            DriveFile other = DriveFile.Create(share, "\\other.txt", GenericWrite, FileOpen, 0, 0);
+            File.Delete(Path.Combine(share, "a.txt"));
+            DriveStatusException renamed = Assert.Throws<DriveStatusException>(() => other.Rename("\\a.TXT", replaceIfExists: false));
+            Assert.AreEqual(NtStatus.ObjectNameCollision, renamed.Status);
+            other.Close();
+            File.WriteAllText(Path.Combine(share, "a.txt"), "lower");
             // ... but a third spelling matches both and is not resolved to either.
             DriveStatusException missing = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\a.TXT", GenericRead, FileOpen, 0, 0));
             Assert.AreEqual(NtStatus.NoSuchFile, missing.Status);

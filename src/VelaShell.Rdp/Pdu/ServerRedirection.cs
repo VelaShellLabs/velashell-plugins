@@ -119,11 +119,14 @@ internal static class ServerRedirectionParser
             hasPasswordOrCookie, hasTargetCertificate, loadBalanceInfo);
     }
 
-    /// <summary>The routing token the client sends back to the broker; bounded well below the opaque-field limit.</summary>
+    /// <summary>
+    /// The routing token the client sends back to the broker. It must fit in an X.224 Connection Request (one-byte
+    /// length indicator: 254 - 6 header bytes - 8 RDP_NEG_REQ bytes - CR LF = 238), so a longer one is refused here.
+    /// </summary>
     private static byte[] ReadOpaqueField(ref ByteReader r)
     {
         int length = checked((int)ReadUInt32(ref r));
-        if (length < 0 || length > 4096 || length > r.Remaining)
+        if (length < 0 || length > 238 || length > r.Remaining)
         {
             throw new RdpProtocolException("The server redirection load-balance field is invalid.");
         }

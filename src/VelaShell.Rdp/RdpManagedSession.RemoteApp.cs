@@ -17,7 +17,7 @@ public sealed partial class RdpManagedSession
     private void EnableRemoteApp(RemoteAppOptions options, int width, int height)
     {
         _rail = new RailChannel(options, width, height, (pdu, token) => Connection.SendVirtualChannelAsync("rail", pdu, token),
-            () => (Connection.Framebuffer.Width, Connection.Framebuffer.Height));
+            () => (Connection.Framebuffer.Width, Connection.Framebuffer.Height), Connection.RemoteWindows!.SetCloaked);
         _railQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         Connection.RemoteWindows!.Changed += OnRemoteWindowsChanged;
         _railWorker = DrainRailAsync();

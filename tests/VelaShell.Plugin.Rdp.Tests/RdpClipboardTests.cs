@@ -128,6 +128,25 @@ public sealed class RdpClipboardTests
     }
 
     [TestMethod]
+    public async Task AnActiveUploadStallsOnItsOwnTimeoutAndAReadySourceOnTheIdleRelease()
+    {
+        Assert.AreEqual(TimeSpan.FromSeconds(30), RdpClipboardBridge.LocalTransferStallTimeout);
+        Assert.AreEqual(TimeSpan.FromSeconds(60), RdpClipboardBridge.LocalSourceIdleRelease);
+
+        var ready = new RdpClipboardTransfer();
+        ready.Start(10, "Ready");
+        var active = new RdpClipboardTransfer();
+        active.Start(10, "Transferring");
+        await Task.Delay(20);
+        // A prepared source waits for the remote paste: only the idle release applies to it.
+        Assert.IsFalse(ready.IsStalled(TimeSpan.Zero, TimeSpan.FromHours(1)));
+        Assert.IsTrue(ready.IsStalled(TimeSpan.FromHours(1), TimeSpan.Zero));
+        // A transfer in progress stalls on the active timeout.
+        Assert.IsTrue(active.IsStalled(TimeSpan.Zero, TimeSpan.FromHours(1)));
+        Assert.IsFalse(active.IsStalled(TimeSpan.FromHours(1), TimeSpan.Zero));
+    }
+
+    [TestMethod]
     public async Task LocalSnapshotUsesChunksAndRejectsInvalidRanges()
     {
         string root = Path.Combine(Path.GetTempPath(), "vela-rdp-test-" + Guid.NewGuid().ToString("N"));
@@ -363,13 +382,17 @@ public sealed class RdpClipboardTests
         var window = new Window { Content = new Border() };
         window.Show();
         await window.Clipboard!.SetTextAsync("local");
-        var transport = new ClipboardTransport { RemoteFiles = [new("data", false, 10)], FileData = new byte[10] };
+        var transport = new ClipboardTransport { RemoteFiles = [new("data", false, 10)], FileData = new byte[10], SupportsClipboardLock = true };
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => null);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
         await Until(() => bridge.DownloadProgress?.State == "Unsupported");
         Assert.IsEmpty(transport.FileRequests);
+        // Nothing is locked or fetched only to be discarded, and the reason is left to the localized view text.
+        Assert.IsEmpty(transport.Locks);
+        Assert.AreEqual(0, transport.FormatRequests);
+        Assert.IsNull(bridge.DownloadProgress!.Error);
         Assert.AreEqual("local", await window.Clipboard.TryGetTextAsync());
         Assert.IsFalse(Directory.Exists(Path.Combine(context.DataDirectory, "rdp-clipboard")));
         window.Close();

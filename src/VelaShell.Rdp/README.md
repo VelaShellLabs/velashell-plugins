@@ -120,16 +120,13 @@ Without a `CertificatePin`, an untrusted server certificate raises
 `RdpClientOptions.Transport` defaults to `RdpTransportMode.Auto`; `Tcp` disables UDP negotiation.
 The main connection, classic bitmap/GDI output, input and static channels remain on TCP.
 When the server supports extended negotiation and Soft-Sync, dynamic channels can move to
-MS-RDPEUDP v1 reliable UDP (TLS) or lossy UDP (DTLS 1.2), using MS-RDPEMT.
-Both side tunnels must present the main connection's exact leaf certificate. Creation cookies
+MS-RDPEUDP v1 reliable UDP (TLS), using MS-RDPEMT. Lossy UDP is not offered and a server request
+for it is declined: dynamic channels require complete delivery. The tunnel must present the main connection's exact leaf certificate. Creation cookies
 are sent only inside encryption. UDP v2 and UDP Preferred are not advertised.
 
 Setup failures leave TCP running. After a tunnel is accepted, its failure ends the connection
 so callers can reconnect without replaying channel operations on another transport.
-UDP-L uses FEC but currently requires reconnection on an unrecovered application-data gap,
-preventing DVC fragments from different messages being spliced together. Outbound UDP-L DVC
-messages are limited to 600 bytes and are never fragmented. This is not continuous playback
-through arbitrary residual loss. `TcpTunnel = true` disables direct UDP for TCP-only proxies;
+The lossy-UDP (DTLS 1.2) implementation is retained but not negotiated. `TcpTunnel = true` disables direct UDP for TCP-only proxies;
 the plugin sets this automatically for SSH jump hosts.
 
 `AdaptiveNetwork` defaults to `true`. Server-provided RTT/bandwidth measurements are exposed

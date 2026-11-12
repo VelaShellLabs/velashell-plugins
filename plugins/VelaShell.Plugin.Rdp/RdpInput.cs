@@ -130,6 +130,9 @@ internal static class RdpInput
         return key == PhysicalKey.V && remote.HasFlag(KeyModifiers.Control) && (remote & (KeyModifiers.Alt | KeyModifiers.Meta)) == 0;
     }
 
+    /// <summary>Left/right Ctrl and Alt: the modifiers lifted around text typed with Option or AltGr.</summary>
+    internal static bool IsCharacterModifierScanCode(uint code) => code is 0x1d or 0x11d or 0x38 or 0x138;
+
     /// <summary>Scan codes of modifier and lock keys, which a release of Command on macOS must not let go of.</summary>
     internal static bool IsModifierScanCode(uint code) => code is 0x1d or 0x11d or 0x2a or 0x36 or 0x38 or 0x138 or 0x15b or 0x15c or 0x3a or 0x45 or 0x46;
     internal static uint Wheel(double delta, bool horizontal) =>

@@ -166,9 +166,17 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
 
         if (_cursors.Count >= 32)
         {
-            // Pointers are cached by the server too (21 slots): an evicted shape is rebuilt if it ever returns.
-            foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { if (!ReferenceEquals(cursor, Cursor)) { cursor.Dispose(); bitmap.Dispose(); } }
+            // Pointers are cached by the server too (21 slots): an evicted shape is rebuilt if it ever returns. The
+            // cursor on screen stays cached — dropping it without disposing leaked it and its bitmap for good.
+            var keep = new List<KeyValuePair<RdpPointer, (Cursor Cursor, Bitmap Bitmap)>>(1);
+            foreach (KeyValuePair<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> entry in _cursors)
+            {
+                if (ReferenceEquals(entry.Value.Cursor, Cursor)) { keep.Add(entry); }
+                else { entry.Value.Cursor.Dispose(); entry.Value.Bitmap.Dispose(); }
+            }
+
             _cursors.Clear();
+            foreach (KeyValuePair<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> entry in keep) { _cursors[entry.Key] = entry.Value; }
         }
 
         var image = new WriteableBitmap(new PixelSize(pointer.Width, pointer.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
@@ -353,8 +361,17 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (!_input.Writer.TryWrite(action))
         {
             OperationFailed?.Invoke();
-            // An overflowing input stream cannot safely drop a key-up. End the session instead.
-            _overflowShutdown ??= _session.DisposeAsync().AsTask();
+            // An overflowing input stream cannot safely drop a key-up, so the session ends — as a disconnect the
+            // document sees (status, overlay, automatic reconnect), not a silent dispose that left the view frozen
+            // under a "connected" status.
+            if (_session is RdpManagedSession managed)
+            {
+                managed.AbortConnection("Remote input could not keep up with local input (the network stalled).");
+            }
+            else
+            {
+                _overflowShutdown ??= _session.DisposeAsync().AsTask();
+            }
         }
     }
     internal void SendSecureAttention() => SendChord(0x1d, 0x38, 0x153);
@@ -534,7 +551,10 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         {
             if (paste && PublishClipboard is { } publish)
             {
-                await publish();
+                // A local clipboard that cannot be published (an unsupported file source, say) must not swallow the
+                // key: the paste still reaches the remote, which then pastes its own clipboard.
+                try { await publish(); }
+                catch (Exception) when (_disposed == 0) { OperationFailed?.Invoke(); }
             }
 
             await _session.KeyAsync(code, true);
@@ -567,7 +587,17 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (!string.IsNullOrEmpty(e.Text))
         {
             string text = e.Text;
-            Queue(() => _session.UnicodeAsync(text));
+            // A character typed with Option (macOS) or AltGr (Windows, reported as Ctrl+Alt) arrives while the remote
+            // still holds Alt/Ctrl from that modifier's own key-down; Windows would then take the Unicode key as an Alt
+            // mnemonic or Ctrl shortcut instead of inserting it. Lift those modifiers around the text and press them
+            // again, so a following shortcut still sees them held.
+            uint[] held = [.. _keys.Where(RdpInput.IsCharacterModifierScanCode)];
+            Queue(async () =>
+            {
+                foreach (uint code in held) { await _session.KeyAsync(code, false); }
+                await _session.UnicodeAsync(text);
+                foreach (uint code in held) { await _session.KeyAsync(code, true); }
+            });
             _preedit = null;
             InvalidateVisual();
             e.Handled = true;
@@ -614,7 +644,10 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (_buttons.Count == 0) { _pointer = null; e.Pointer.Capture(null); }
         e.Handled = true;
     }
-    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { ReleaseInput(); base.OnPointerCaptureLost(e); }
+    // Capture also ends on every ordinary button release, so only pointer state is let go here: releasing the keyboard
+    // too lifted a held Ctrl/Shift on the remote after the first click of a multi-select (macOS and Linux do not
+    // auto-repeat modifiers, so they never came back). Focus and activation loss release the keyboard.
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { ReleasePointer(); base.OnPointerCaptureLost(e); }
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         if (RemoteAppMoved(e)) { return; }
@@ -704,10 +737,17 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     }
     internal void ReleaseInput()
     {
-        _remoteDrag = null;
-        _remoteDragPreview = null;
         foreach (uint key in _keys) { uint captured = key; Queue(() => _session.KeyAsync(captured, false)); }
         _keys.Clear();
+        ReleasePointer();
+        _preedit = null;
+    }
+
+    /// <summary>Ends a remote drag and releases the mouse buttons still held on the remote; keys stay as they are.</summary>
+    private void ReleasePointer()
+    {
+        _remoteDrag = null;
+        _remoteDragPreview = null;
         foreach (uint button in _buttons)
         {
             SendMouse(button);
@@ -717,7 +757,6 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         IPointer? pointer = _pointer;
         _pointer = null;
         pointer?.Capture(null);
-        _preedit = null;
     }
     public async ValueTask DisposeAsync()
     {
@@ -740,6 +779,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
             pointers.PointerChanged -= OnPointer;
         }
 
+        Cursor = null;   // never leave a disposed cursor attached to the control
         foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { cursor.Dispose(); bitmap.Dispose(); }
         _cursors.Clear();
         _ = _input.Writer.TryComplete();

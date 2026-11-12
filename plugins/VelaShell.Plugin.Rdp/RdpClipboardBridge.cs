@@ -412,7 +412,14 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             }).ConfigureAwait(false);
             if (fileFormat != 0)
             {
-                if (includeFiles && generation != _receivedFileGeneration)
+                if (includeFiles && generation != _receivedFileGeneration && _virtualClipboard is null)
+                {
+                    // No delayed file provider on this platform: say so without first locking the remote clipboard
+                    // and fetching every descriptor only to discard them.
+                    _download.Finish("Unsupported", force: true);
+                    _receivedFileGeneration = generation;
+                }
+                else if (includeFiles && generation != _receivedFileGeneration)
                 {
                     await WaitForFormatDrainAsync(ct).ConfigureAwait(false);
                     uint? version = null;
@@ -598,7 +605,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         CheckReceive(generation, ct);
         if (_virtualClipboard is null)
         {
-            _download.Finish("Unsupported", "Remote virtual file paste requires Windows Explorer; this platform has no supported delayed file provider.", force: true);
+            _download.Finish("Unsupported", force: true);
             _receivedFileGeneration = generation;
             releaseVersion();
             return;
@@ -891,6 +898,15 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         _upload.Finish("Failed", error.Message, force: true);
     }
 
+    /// <summary>An upload that stops making progress for this long is ended as timed out.</summary>
+    internal static readonly TimeSpan LocalTransferStallTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// A local file source that is prepared or delivered but unlocked is released after this long without a request,
+    /// so its file handles do not keep the local files in use; the next paste through this window prepares it again.
+    /// </summary>
+    internal static readonly TimeSpan LocalSourceIdleRelease = TimeSpan.FromSeconds(60);
+
     private async Task MaintainAsync()
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -903,9 +919,9 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                     _remoteFiles?.Retire();
                 }
 
-                if (_localProgress.IsStalled(TimeSpan.FromSeconds(30)) && !IsLocalLocked(_localFiles))
+                if (_localProgress.IsStalled(LocalTransferStallTimeout, LocalSourceIdleRelease) && !IsLocalLocked(_localFiles))
                 {
-                    _localProgress.Finish("TimedOut", "The remote clipboard stopped requesting file data.");
+                    _localProgress.Finish("TimedOut");
                     lock (_requestGate) { _uploadCancellation?.Cancel(); }
                 }
                 await _localGate.WaitAsync(_stopToken).ConfigureAwait(false);

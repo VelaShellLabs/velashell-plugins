@@ -75,6 +75,12 @@ internal sealed class RdpGatewayStream : Stream
             stream._keepAlive = stream.KeepAliveAsync();
             return stream;
         }
+        catch (GatewayPolicyException)
+        {
+            // Already a specific, actionable reason; the generic "gateway must support …" hint would hide it.
+            stream.Dispose();
+            throw;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             stream.Dispose();
@@ -121,7 +127,12 @@ internal sealed class RdpGatewayStream : Stream
         await SendPacketAsync(4, tunnelRequest, ct).ConfigureAwait(false);
         byte[] tunnel = await ExpectAsync(5, 10, 2, ct).ConfigureAwait(false);
         ushort fields = BinaryPrimitives.ReadUInt16LittleEndian(tunnel.AsSpan(6));
-        if ((fields & ~3) != 0) { throw new NotSupportedException("RD Gateway requires unsupported tunnel authorization or consent."); }
+        // HTTP_TUNNEL_RESPONSE_OPTIONAL (MS-TSGU 2.2.10.21): tunnelId (0x1), capsFlags (0x2), SoH nonce + serverCert
+        // (SOH_REQ 0x4), consentMsg (CONSENT_MSG 0x10), in that order. The SoH request is only meaningful to a client
+        // that advertised NAP, which this one does not, so it is skipped; an administrator's consent message must be
+        // shown to and accepted by the user before connecting, which this client cannot do, so it is refused.
+        if ((fields & 0x10) != 0) { throw new NotSupportedException("RD Gateway requires the user to accept a consent message, which this client cannot display."); }
+        if ((fields & ~7) != 0) { throw new NotSupportedException("RD Gateway requires unsupported tunnel authorization."); }
         int position = 10;
         if ((fields & 1) != 0) { Require(tunnel, position, 4); position += 4; }
         if ((fields & 2) != 0)
@@ -129,6 +140,15 @@ internal sealed class RdpGatewayStream : Stream
             Require(tunnel, position, 4);
             _ = BinaryPrimitives.ReadUInt32LittleEndian(tunnel.AsSpan(position));
             position += 4;
+        }
+        if ((fields & 4) != 0)
+        {
+            Require(tunnel, position, 16 + 2);   // nonce (GUID), then serverCert's cbLen
+            position += 16;
+            int certLength = BinaryPrimitives.ReadUInt16LittleEndian(tunnel.AsSpan(position));
+            position += 2;
+            Require(tunnel, position, certLength);
+            position += certLength;
         }
         if (position != tunnel.Length) { throw new RdpProtocolException("Invalid RD Gateway tunnel response length."); }
         byte[] clientName = UnicodeString(Environment.MachineName);
@@ -143,10 +163,9 @@ internal sealed class RdpGatewayStream : Stream
         {
             Require(auth, position, 4);
             uint restrictions = BinaryPrimitives.ReadUInt32LittleEndian(auth.AsSpan(position));
-            if ((restrictions & requestedRedirections & 0x1F) != 0
-                || ((restrictions & 0x40000000) != 0 && requestedRedirections != 0))
+            if (IsRedirectionForbidden(restrictions, requestedRedirections))
             {
-                throw new IOException("RD Gateway policy forbids a requested redirection. Disable clipboard/device redirection in the connection settings.");
+                throw new GatewayPolicyException("RD Gateway policy forbids a requested redirection. Disable clipboard/device redirection in the connection settings.");
             }
             position += 4;
         }
@@ -162,9 +181,11 @@ internal sealed class RdpGatewayStream : Stream
         fields = BinaryPrimitives.ReadUInt16LittleEndian(response.AsSpan(4));
         position = 8;
         if ((fields & ~7) != 0) { throw new RdpProtocolException("Invalid RD Gateway channel response fields."); }
+        // HTTP_CHANNEL_RESPONSE_OPTIONAL (MS-TSGU 2.2.10.5): channelId (CHANNELID 0x1, 4 bytes), udpPort (UDPPORT 0x4,
+        // 2 bytes), authnCookie (AUTHNCOOKIE 0x2, HTTP_BYTE_BLOB), in that order.
         if ((fields & 1) != 0) { Require(response, position, 4); position += 4; }
-        if ((fields & 2) != 0) { Require(response, position, 2); position += 2; }
-        if ((fields & 4) != 0)
+        if ((fields & 4) != 0) { Require(response, position, 2); position += 2; }
+        if ((fields & 2) != 0)
         {
             Require(response, position, 2);
             int count = BinaryPrimitives.ReadUInt16LittleEndian(response.AsSpan(position));
@@ -361,4 +382,23 @@ internal sealed class RdpGatewayStream : Stream
     public override Task FlushAsync(CancellationToken ct) => Task.CompletedTask;
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
+
+    /// <summary>
+    /// The tunnel's redirFlags (MS-TSGU HTTP_TUNNEL_AUTH_RESPONSE): HTTP_TUNNEL_REDIR_ENABLE_ALL (0x80000000) allows
+    /// everything and the other bits are then ignored; DISABLE_ALL (0x40000000) forbids every redirection; otherwise
+    /// DISABLE_DRIVE/PRINTER/PORT/CLIPBOARD/PNP (0x01–0x10) forbid one kind each.
+    /// </summary>
+    internal static bool IsRedirectionForbidden(uint restrictions, uint requestedRedirections)
+    {
+        if ((restrictions & 0x80000000) != 0)
+        {
+            return false;
+        }
+
+        return (restrictions & requestedRedirections & 0x1F) != 0
+            || ((restrictions & 0x40000000) != 0 && requestedRedirections != 0);
+    }
+
+    /// <summary>The gateway's policy refuses a redirection this connection requested.</summary>
+    private sealed class GatewayPolicyException(string message) : IOException(message);
 }
