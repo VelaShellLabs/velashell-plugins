@@ -82,7 +82,7 @@ public sealed class RdpTunnelTests
         Exception rejected = await Assert.ThrowsAsync<Exception>(() => RdpMultitransport.ConnectAsync(server.Endpoint, "localhost",
             new byte[32], lossy, 42, new byte[16], new(true), server.Token));
         Assert.IsTrue(lossy ? rejected is TlsFatalAlert { AlertDescription: AlertDescription.bad_certificate }
-            : rejected is AuthenticationException, rejected.ToString());
+            : rejected is VelaShell.Rdp.RdpCertificateRejectedException { PinMismatch: true, InnerException: AuthenticationException }, rejected.ToString());
         await serving.WaitAsync(TimeSpan.FromSeconds(5));
     }
 

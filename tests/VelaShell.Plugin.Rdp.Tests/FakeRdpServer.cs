@@ -28,9 +28,20 @@ internal sealed class FakeRdpServer : IAsyncDisposable
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly List<uint> _requested = [];
     private readonly Task _serving;
+    private readonly X509Certificate2 _certificate;
 
-    internal FakeRdpServer(params Func<FakeRdpConnection, Task>[] scripts)
+    internal FakeRdpServer(params Func<FakeRdpConnection, Task>[] scripts) : this(null, scripts)
     {
+    }
+
+    /// <summary>
+    /// A server with its own certificate (pin it with <see cref="OwnPin" />), for tests that must not share TLS state
+    /// with the others. Note that clients also resume TLS sessions per target name; use a unique
+    /// <c>CertificateHost</c> as well when the negotiated protocol version matters.
+    /// </summary>
+    internal FakeRdpServer(X509Certificate2? certificate, params Func<FakeRdpConnection, Task>[] scripts)
+    {
+        _certificate = certificate ?? SharedCertificate.Value;
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _serving = ServeAsync(scripts);
@@ -38,8 +49,20 @@ internal sealed class FakeRdpServer : IAsyncDisposable
 
     internal int Port { get; }
 
-    /// <summary>SHA-256 of the server's leaf certificate, for <c>CertificatePin</c>.</summary>
+    /// <summary>SHA-256 of the shared leaf certificate, for <c>CertificatePin</c>.</summary>
     internal static byte[] Pin => SHA256.HashData(SharedCertificate.Value.RawData);
+
+    /// <summary>SHA-256 of this server's leaf certificate.</summary>
+    internal byte[] OwnPin => SHA256.HashData(_certificate.RawData);
+
+    /// <summary>A fresh self-signed RSA certificate with a key the platform TLS stack can serve.</summary>
+    internal static X509Certificate2 CreateCertificate(string name)
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest($"CN={name}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using X509Certificate2 ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        return X509CertificateLoader.LoadPkcs12(ephemeral.Export(X509ContentType.Pfx), null);
+    }
 
     /// <summary>The requestedProtocols of every connection, in order.</summary>
     internal IReadOnlyList<uint> RequestedProtocols
@@ -58,7 +81,7 @@ internal sealed class FakeRdpServer : IAsyncDisposable
         foreach (Func<FakeRdpConnection, Task> script in scripts)
         {
             using TcpClient client = await _listener.AcceptTcpClientAsync();
-            var connection = new FakeRdpConnection(client.GetStream(), SharedCertificate.Value);
+            var connection = new FakeRdpConnection(client.GetStream(), _certificate);
             uint requested = await connection.ReadConnectionRequestAsync();
             lock (_requested)
             {
@@ -116,13 +139,13 @@ internal sealed class FakeRdpConnection(NetworkStream net, X509Certificate2 cert
         await net.WriteAsync(pdu);
     }
 
-    internal async Task<SslStream> StartTlsAsync()
+    internal async Task<SslStream> StartTlsAsync(SslProtocols protocols = SslProtocols.Tls12)
     {
         var ssl = new SslStream(net, leaveInnerStreamOpen: true);
         await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
         {
             ServerCertificate = certificate,
-            EnabledSslProtocols = SslProtocols.Tls12
+            EnabledSslProtocols = protocols
         });
         return ssl;
     }

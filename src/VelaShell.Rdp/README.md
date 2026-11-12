@@ -16,7 +16,10 @@ Adapted codec algorithms and bundled managed dependencies retain the notices in
 - **Security** — TLS 1.2/1.3 via `SslStream` with OS trust-chain validation *or* an explicit SHA-256
   leaf-certificate pin; CredSSP/NLA (v5+ only) via the native SSPI Negotiate package on Windows and
   `NegotiateAuthentication` elsewhere. `RdpNlaUnavailableException` reports a server that stopped offering NLA, so a
-  caller can refuse that downgrade for hosts it knows use NLA.
+  caller can refuse that downgrade for hosts it knows use NLA. The TLS policy is the same on every OS; a TLS 1.3
+  failure during NLA is retried once with TLS 1.2 (`RdpManagedSession.TlsDowngraded` / `TlsFallbackCause`). A pinned
+  certificate that no longer matches raises `RdpCertificateRejectedException` with `PinMismatch`, so the caller can
+  ask for re-approval of a changed certificate. RSA and ECDSA server certificates are supported for NLA.
 - **Graphics** — interleaved RLE (8–24 bpp) and RDP 6.0 planar (32 bpp) bitmap decoding, MPPC bulk
   decompression, GDI drawing orders (DstBlt, PatBlt, ScrBlt, OpaqueRect, MultiOpaqueRect, MemBlt) with a revision 2
   bitmap cache, and pointer shapes (`IRdpPointerSource`), into a BGRA framebuffer that tracks its changed region;

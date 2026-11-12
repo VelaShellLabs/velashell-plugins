@@ -54,6 +54,12 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
                 // existing TLS fallback for this case; only a TLS-only X.224 answer is a downgrade.
                 session = await inner(request, settings, loc, ct).ConfigureAwait(false);
             }
+            if (session is RdpManagedSession { TlsFallbackCause: { } tlsCause })
+            {
+                _context.Log.Warn($"RDP {request.Host}:{request.Port}: TLS 1.3 failed during NLA ({RdpConnectionException.Describe(tlsCause)}); " +
+                    "connected with TLS 1.2 instead, and later connections to this server in this session start with TLS 1.2.");
+            }
+
             if (session is RdpManagedSession { NlaRefusal: { } refusal })
             {
                 _context.Log.Warn($"RDP {request.Host}:{request.Port}: the server refused NLA before any credentials were sent " +
