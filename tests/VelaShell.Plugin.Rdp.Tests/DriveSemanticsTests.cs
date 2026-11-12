@@ -298,6 +298,39 @@ public sealed class DriveSemanticsTests
     }
 
     [TestMethod]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void OnUnixADeleteInADirectoryThatCannotBeModifiedIsRefusedUpFront()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows governs deletion by the entry's attributes and ACL.");
+        }
+
+        string share = NewShare();
+        string locked = Path.Combine(share, "locked");
+        _ = Directory.CreateDirectory(locked);
+        File.WriteAllText(Path.Combine(locked, "a.txt"), "a");
+        try
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            if (UnixFileType.CanModifyDirectory(locked))
+            {
+                Assert.Inconclusive("Running with privileges that ignore directory permissions.");
+            }
+
+            DriveFile file = DriveFile.Create(share, "\\locked\\a.txt", GenericRead, FileOpen, 0, 0);
+            Assert.AreEqual(NtStatus.AccessDenied, Assert.Throws<DriveStatusException>(() => file.SetDeletePending(true)).Status);
+            file.Close();
+            Assert.IsTrue(File.Exists(Path.Combine(locked, "a.txt")));
+        }
+        finally
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(share, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void AFifoInAMappingIsRefusedInsteadOfBlockingTheChannel()
     {
         if (OperatingSystem.IsWindows())

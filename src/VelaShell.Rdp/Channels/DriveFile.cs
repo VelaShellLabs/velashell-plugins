@@ -263,6 +263,14 @@ internal sealed class DriveFile
             {
                 throw new DriveStatusException(NtStatus.CannotDelete);
             }
+
+            // On Unix removing an entry needs write and search permission on its directory, not on the entry itself;
+            // without it the delete would only fail, silently, when the handle closes.
+            if (Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(FullPath)) is { } parent
+                && !UnixFileType.CanModifyDirectory(parent))
+            {
+                throw new DriveStatusException(NtStatus.AccessDenied);
+            }
         }
 
         _deleteOnClose = deletePending;

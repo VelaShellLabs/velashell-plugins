@@ -49,6 +49,33 @@ internal static partial class UnixFileType
         }
     }
 
+    private const int WOk = 2, XOk = 1;
+
+    /// <summary>
+    /// Whether this process may add or remove entries in <paramref name="directory" /> (write and search permission,
+    /// checked by the kernel for the effective user with <c>access(2)</c>). Always <see langword="true" /> on Windows,
+    /// where deletion is governed by the entry's own attributes and ACL, checked when it happens.
+    /// </summary>
+    internal static bool CanModifyDirectory(string directory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
+        try
+        {
+            return Access(directory, WOk | XOk) == 0;
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException)
+        {
+            return true;   // cannot tell: let the delete itself decide, as before
+        }
+    }
+
+    [LibraryImport("libc", EntryPoint = "access", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    private static partial int Access(string path, int mode);
+
     [LibraryImport("libc", EntryPoint = "statx", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     private static partial int Statx(int dirfd, string path, int flags, uint mask, [Out] byte[] buffer);
 
