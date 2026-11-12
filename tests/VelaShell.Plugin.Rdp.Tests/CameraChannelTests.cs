@@ -136,11 +136,12 @@ public sealed class CameraChannelTests
         await h.Request(1, 17, 0);
         int before = h.Sent.Count;
         await h.Dvc.ProcessAsync([0x40, 2]);
-        Assert.AreEqual(before, h.Sent.Count);
+        // The only PDU after the server's Close Request is the Close Response (MS-RDPEDYC 2.2.4); no sample follows.
+        Assert.AreEqual(before + 1, h.Sent.Count);
         Assert.AreEqual(1, h.Backend.Disposals);
         h.Backend.Next.SetResult([1, 2, 3]);
         await h.Dvc.CloseAsync();
-        Assert.AreEqual(before, h.Sent.Count);
+        Assert.AreEqual(before + 1, h.Sent.Count);
     }
 
     [TestMethod]

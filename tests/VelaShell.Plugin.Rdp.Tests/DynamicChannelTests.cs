@@ -32,6 +32,7 @@ public sealed class DynamicChannelTests
         Assert.AreSequenceEqual(new byte[] { 7, 8, 9 }, handlers[1].Messages.Single());
         await dvc.ProcessAsync([0x20, 1, 8, 1]);
         await dvc.ProcessAsync([0x40, 1]);
+        Assert.AreSequenceEqual(new byte[] { 0x40, 1 }, sent.Last(), "A server Close Request is answered with a Close Response.");
         await dvc.ProcessAsync(Create(1)); await dvc.ProcessAsync([0x30, 1, 5]);
         Assert.AreSequenceEqual(new byte[] { 5 }, handlers[2].Messages.Single());
         Assert.AreEqual(1, handlers[0].Closes);

@@ -67,6 +67,9 @@ public sealed class RemoteAppTests
         var rail = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask);
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync(ExecuteResult(0), default));
         await rail.ProcessAsync(RailChannel.Packet(5, w => w.U32LE(7601)), default);
+        // Orders and system parameters this client does not know are ignored, not fatal (a newer server may send them).
+        await rail.ProcessAsync(RailChannel.Packet(0x16, w => w.U32LE(1)), default);
+        await rail.ProcessAsync(RailChannel.Packet(3, w => { w.U32LE(0x1234); w.U8(1); }), default);
         RdpProtocolException rejection = await Assert.ThrowsAsync<RdpProtocolException>(() =>
             rail.ProcessAsync(ExecuteResult(3, 0x15), default));
         StringAssert.Contains(rejection.Message, "not in the server's RemoteApp allowlist");

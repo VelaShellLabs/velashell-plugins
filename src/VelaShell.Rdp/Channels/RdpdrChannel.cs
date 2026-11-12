@@ -44,6 +44,12 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
     private bool _closed;
     private const int MaxOpenFiles = 4096;
     private readonly Dictionary<uint, DriveFile> _files = [];
+    // Serializes the drive requests (served on the channel worker) with CloseAll (called on session teardown), which
+    // used to enumerate and clear the same dictionary concurrently.
+    private readonly Lock _filesGate = new();
+
+    /// <summary>Open drive file handles (tests).</summary>
+    internal int OpenFileCount { get { lock (_filesGate) { return _files.Count; } } }
     private uint _clientId;
     private uint _fileSequence = 1;
     private ushort _serverMinor;
@@ -85,6 +91,8 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 _smartCardsAnnounced = false;
                 _devices.Clear();
                 _additionalById.Clear();
+                // A restarted handshake invalidates every file id the server held; close them instead of leaking handles.
+                CloseFiles();
                 _ = Interlocked.Increment(ref _generation);
                 foreach (IRdpdrDevice device in _additional) { device.Reset(); }
                 await _send(BuildClientAnnounceReply()).ConfigureAwait(false);
@@ -280,7 +288,10 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         }
         else
         {
-            try { status = Dispatch(major, minor, mapping, fileId, ref r, body); }
+            try
+            {
+                lock (_filesGate) { status = Dispatch(major, minor, mapping, fileId, ref r, body); }
+            }
             catch (DriveStatusException ex) { status = ex.Status; }
             catch (UnauthorizedAccessException) { status = NtStatus.AccessDenied; }
             catch (FileNotFoundException) { status = NtStatus.NoSuchFile; }
@@ -613,8 +624,20 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 foreach (IRdpdrDevice device in _additional) { device.Dispose(); }
             }
         }
-        foreach (DriveFile file in _files.Values) { try { file.Close(); } catch { /* ignore */ } }
-        _files.Clear();
+        CloseFiles();
+    }
+
+    private void CloseFiles()
+    {
+        lock (_filesGate)
+        {
+            foreach (DriveFile file in _files.Values)
+            {
+                try { file.Close(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
+            }
+            _files.Clear();
+        }
     }
 
     internal async Task DrainDevicesAsync()

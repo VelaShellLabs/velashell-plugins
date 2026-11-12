@@ -103,8 +103,10 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 break;
             case 3:
                 uint parameter = r.U32LE();
-                if (parameter is not (0x11 or 0x77)) { throw new RdpProtocolException("Unsupported server RAIL system parameter."); }
-                _ = r.U8(); // screen saver state is remote-only; never change the host's policy
+                // SPI_SETSCREENSAVEACTIVE / SPI_SETSCREENSAVESECURE: remote-only state, never applied to the host. Other
+                // parameters a newer server may send are ignored as well (MS-RDPERP 3.2.5.1.4).
+                _ = parameter;
+                r.Skip(r.Remaining);
                 break;
             case 0x0a:
                 // Constraints describe the server-managed resize loop; client does not advertise local move/size.
@@ -116,7 +118,10 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 r.Skip(12); // MS-RDPERP 3.2.5.2.8: ignore when local move/size is not advertised
                 break;
             default:
-                throw new RdpProtocolException($"Unsupported or unnegotiated server RAIL order 0x{type:X4}.");
+                // An order this client does not implement or did not negotiate (a newer server may send e.g. power or
+                // display requests): ignore it rather than end the RemoteApp session. Its length was already validated.
+                r.Skip(r.Remaining);
+                break;
         }
         if (r.Remaining != 0) { throw new RdpProtocolException("Trailing bytes in RAIL order."); }
         if (type == 0x80) { _launched.TrySetResult(); }

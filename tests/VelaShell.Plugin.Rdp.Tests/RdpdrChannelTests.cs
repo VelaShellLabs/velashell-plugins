@@ -218,4 +218,45 @@ public sealed class RdpdrChannelTests
         await channel.ProcessAsync(Pdu(UserLoggedOn));
         _ = Assert.ContainsSingle(IsDeviceListAnnounce, sent);
     }
+
+    private static byte[] CreateRequest(uint deviceId, string path)
+    {
+        byte[] name = System.Text.Encoding.Unicode.GetBytes(path + "\0");
+        byte[] p = new byte[24 + 32 + name.Length];
+        BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(0), CtypCore);
+        BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(2), 0x4952);        // PAKID_CORE_DEVICE_IOREQUEST
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(4), deviceId);
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(8), 0);              // FileId
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(12), 7);             // CompletionId
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(16), 0);             // IRP_MJ_CREATE
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(20), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(24), 0x80000000);    // GENERIC_READ
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(44), 3);             // FILE_OPEN_IF
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(52), (uint)name.Length);
+        name.CopyTo(p, 56);
+        return p;
+    }
+
+    [TestMethod]
+    public async Task ARestartedHandshakeClosesTheFilesOfThePreviousRound()
+    {
+        string share = Path.Combine(Path.GetTempPath(), "vela-rdpdr-" + Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(share);
+        try
+        {
+            var sent = new List<byte[]>();
+            var channel = new RdpdrChannel(pdu => { sent.Add(pdu); return Task.CompletedTask; }, [new DriveMapping("work", share)]);
+            await channel.ProcessAsync(ServerAnnouncePdu(0x000C));
+            await channel.ProcessAsync(Pdu(ClientIdConfirm));
+            await channel.ProcessAsync(Pdu(UserLoggedOn));
+            await channel.ProcessAsync(CreateRequest(1, "\\held.txt"));
+            Assert.AreEqual(1, channel.OpenFileCount, "The create request opened a file.");
+
+            // The server restarts the device handshake (Windows does after logon): its old file ids are gone.
+            await channel.ProcessAsync(ServerAnnouncePdu(0x000C));
+            Assert.AreEqual(0, channel.OpenFileCount, "Handles of the previous round must be closed, not leaked.");
+            channel.CloseAll();
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
 }
