@@ -397,7 +397,7 @@ public sealed class PairListField : FormField
 
     /// <summary>非空行(两格都填了才算)。</summary>
     public IEnumerable<PairRow> Filled =>
-        Rows.Where(r => r.Key.Trim().Length > 0 && r.Value.Trim().Length > 0);
+        Rows.Where(static r => r.Key.Trim().Length > 0 && r.Value.Trim().Length > 0);
 }
 
 /// <summary>可多选列表里的一项。</summary>
@@ -461,7 +461,7 @@ public sealed class SelectListField(string label) : FormField(label)
     public string Placeholder { get; init; } = "过滤…";
 
     /// <summary>已选的项。</summary>
-    public IEnumerable<SelectItem> SelectedItems => Items.Where(i => i.Selected);
+    public IEnumerable<SelectItem> SelectedItems => Items.Where(static i => i.Selected);
 
     /// <summary>重建过滤视图。</summary>
     public void ApplyFilter()

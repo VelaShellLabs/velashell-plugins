@@ -42,10 +42,7 @@ public sealed class MonitorBar : Control
     public static readonly StyledProperty<double> RadiusProperty =
         AvaloniaProperty.Register<MonitorBar, double>(nameof(Radius), 2);
 
-    static MonitorBar()
-    {
-        AffectsRender<MonitorBar>(RatioProperty, Ratio2Property, TokenProperty, Token2Property, TrackTokenProperty, GapProperty, RadiusProperty);
-    }
+    static MonitorBar() => AffectsRender<MonitorBar>(RatioProperty, Ratio2Property, TokenProperty, Token2Property, TrackTokenProperty, GapProperty, RadiusProperty);
 
     /// <summary>第一段比例。</summary>
     public double Ratio

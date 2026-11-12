@@ -27,10 +27,7 @@ public sealed partial class ConnectionDialogView : UserControl
     }
 
     /// <summary>设计器用的无参构造。</summary>
-    public ConnectionDialogView()
-    {
-        InitializeComponent();
-    }
+    public ConnectionDialogView() => InitializeComponent();
 
     private void OnPreviewChanged(object? sender, NotifyCollectionChangedEventArgs e) => RenderPreview();
 

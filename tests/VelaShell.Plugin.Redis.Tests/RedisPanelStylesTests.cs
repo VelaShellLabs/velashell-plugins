@@ -47,7 +47,7 @@ public sealed class RedisPanelStylesTests
     /// <summary>版式表能装载 —— 选择器语法、模板、Setter 目标属性全部就位。</summary>
     [TestMethod]
     public void Styles_Load_WithoutHostThemeTokens() =>
-        OnUi(() =>
+        OnUi(static () =>
         {
             Styles styles = LoadStyles();
 
@@ -66,7 +66,7 @@ public sealed class RedisPanelStylesTests
     /// </summary>
     [TestMethod]
     public void ChipButton_Template_RendersIconAndLabel() =>
-        OnUi(() =>
+        OnUi(static () =>
         {
             var geometry = StreamGeometry.Parse("M0,0 L10,10");
             var button = new Button { Classes = { "chip" }, Content = "导出", Tag = geometry };
@@ -92,7 +92,7 @@ public sealed class RedisPanelStylesTests
     /// </summary>
     [TestMethod]
     public void ChipButton_WithoutIcon_StillShowsLabel() =>
-        OnUi(() =>
+        OnUi(static () =>
         {
             var button = new Button { Classes = { "chip" }, Content = "取消" };
             var window = new Window { Width = 400, Height = 200, Content = button };
@@ -116,7 +116,7 @@ public sealed class RedisPanelStylesTests
     /// </summary>
     [TestMethod]
     public void SegButton_OnState_DiffersFromOff() =>
-        OnUi(() =>
+        OnUi(static () =>
         {
             var off = new Button { Classes = { "seg" }, Content = "前缀" };
             var on = new Button { Classes = { "seg", "on" }, Content = "通配" };

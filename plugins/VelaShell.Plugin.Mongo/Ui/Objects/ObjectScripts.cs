@@ -167,7 +167,7 @@ internal static class ObjectScripts
     public static BsonValue Simplify(BsonValue value) => value switch
     {
         BsonInt64 l when l.Value is >= int.MinValue and <= int.MaxValue => new BsonInt32((int)l.Value),
-        BsonDocument doc => new BsonDocument(doc.Select(e => new BsonElement(e.Name, Simplify(e.Value)))),
+        BsonDocument doc => new BsonDocument(doc.Select(static e => new BsonElement(e.Name, Simplify(e.Value)))),
         BsonArray array => new BsonArray(array.Select(Simplify)),
         _ => value
     };

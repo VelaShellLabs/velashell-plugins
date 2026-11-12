@@ -25,7 +25,7 @@ public sealed partial class UsersTabView : UserControl
             {
                 return;
             }
-            ICommand? save = viewModel.ShowRoles ? viewModel.RoleEditor?.SaveCommand : viewModel.UserEditor?.SaveCommand;
+            AsyncCommand? save = viewModel.ShowRoles ? viewModel.RoleEditor?.SaveCommand : viewModel.UserEditor?.SaveCommand;
             if (save?.CanExecute(null) == true)
             {
                 save.Execute(null);
@@ -35,10 +35,7 @@ public sealed partial class UsersTabView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public UsersTabView()
-    {
-        InitializeComponent();
-    }
+    public UsersTabView() => InitializeComponent();
 
     /// <summary>「+ 添加角色」:自定义角色在前(强调色盾牌),其余内置角色在后(灰盾牌),中间一条分隔线。</summary>
     private void OnAddRoleClick(object? sender, RoutedEventArgs e)

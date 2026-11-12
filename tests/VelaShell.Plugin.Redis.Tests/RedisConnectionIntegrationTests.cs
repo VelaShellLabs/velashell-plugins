@@ -151,7 +151,7 @@ public sealed class RedisConnectionIntegrationTests
         while (cursor is not "0");
 
         Assert.HasCount(7, found, "七个键都要被扫到,一个不多一个不少。");
-        Assert.Contains(k => k.Text == $"{_prefix}:user:1:profile", found);
+        Assert.Contains(static k => k.Text == $"{_prefix}:user:1:profile", found);
     }
 
     /// <summary>
@@ -280,8 +280,8 @@ public sealed class RedisConnectionIntegrationTests
 
         Assert.AreEqual(2, page.Total);
         Assert.IsTrue(page.IsComplete);
-        Assert.AreEqual("张三", page.Rows.Single(r => r.Label == "name").Value);
-        Assert.AreEqual("32", page.Rows.Single(r => r.Label == "age").Value);
+        Assert.AreEqual("张三", page.Rows.Single(static r => r.Label == "name").Value);
+        Assert.AreEqual("32", page.Rows.Single(static r => r.Label == "age").Value);
     }
 
     [TestMethod]
@@ -310,8 +310,8 @@ public sealed class RedisConnectionIntegrationTests
         RedisElementPage page = await Require().ReadElementsAsync(new($"{_prefix}:tags"), "set", "0", 100);
 
         Assert.AreEqual(2, page.Total);
-        Assert.AreSequenceEqual(["vip", "beta"], [.. page.Rows.Select(r => r.Label)], SequenceOrder.InAnyOrder);
-        Assert.IsTrue(page.Rows.All(r => r.Value.Length == 0), "集合只有成员,没有值 —— 值列该是空的。");
+        Assert.AreSequenceEqual(["vip", "beta"], [.. page.Rows.Select(static r => r.Label)], SequenceOrder.InAnyOrder);
+        Assert.IsTrue(page.Rows.All(static r => r.Value.Length == 0), "集合只有成员,没有值 —— 值列该是空的。");
     }
 
     [TestMethod]
@@ -320,8 +320,8 @@ public sealed class RedisConnectionIntegrationTests
         RedisElementPage page = await Require().ReadElementsAsync(new($"{_prefix}:board"), "zset", "0", 100);
 
         Assert.AreEqual(2, page.Total);
-        Assert.AreEqual(128d, page.Rows.Single(r => r.Label == "alice").Score);
-        Assert.AreEqual(64d, page.Rows.Single(r => r.Label == "bob").Score);
+        Assert.AreEqual(128d, page.Rows.Single(static r => r.Label == "alice").Score);
+        Assert.AreEqual(64d, page.Rows.Single(static r => r.Label == "bob").Score);
     }
 
     /// <summary>
@@ -338,7 +338,7 @@ public sealed class RedisConnectionIntegrationTests
 
         Assert.AreEqual(2, page.Total);
         Assert.AreSequenceEqual(
-            ["alice", "bob"], [.. page.Rows.Select(r => r.Label)], "倒序:分数高的在前。");
+            ["alice", "bob"], [.. page.Rows.Select(static r => r.Label)], "倒序:分数高的在前。");
         Assert.IsTrue(page.IsComplete);
     }
 
@@ -361,7 +361,7 @@ public sealed class RedisConnectionIntegrationTests
             new($"{_prefix}:board"), "200", "0", "0", 100, descending: false);
 
         Assert.AreEqual(2, page.Total);
-        Assert.AreSequenceEqual(["bob", "alice"], [.. page.Rows.Select(r => r.Label)]);
+        Assert.AreSequenceEqual(["bob", "alice"], [.. page.Rows.Select(static r => r.Label)]);
     }
 
     /// <summary>分页走的是 <c>LIMIT offset count</c>:游标字段里放的就是下一页的偏移量。</summary>

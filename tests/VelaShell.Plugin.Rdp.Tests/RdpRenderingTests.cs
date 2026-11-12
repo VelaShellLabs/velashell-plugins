@@ -77,11 +77,11 @@ public sealed class RdpRenderingTests
 
     [TestMethod]
     public void AnUnknownColourDepthIsRejected() =>
-        Assert.Throws<VelaShell.PluginSdk.Protocols.ProtocolConnectionException>(() =>
+        Assert.Throws<PluginSdk.Protocols.ProtocolConnectionException>(static () =>
             RdpSettings.From(RdpSettingsTests.Request((RdpSettings.ColorDepthKey, "8")), new("en")));
 
     [TestMethod]
-    public void AHiddenViewPausesServerUpdatesAndShowingItResumesThem() => Run(async () =>
+    public void AHiddenViewPausesServerUpdatesAndShowingItResumesThem() => Run(static async () =>
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
@@ -101,13 +101,13 @@ public sealed class RdpRenderingTests
         window.Content = view;          // back to this tab
         window.UpdateLayout();
         await Settle();
-        Assert.AreSequenceEqual(new[] { false, true }, [.. session.DisplayUpdates]);
+        Assert.AreSequenceEqual([false, true], [.. session.DisplayUpdates]);
         Assert.AreEqual(2, view.Desktop.DesktopWidth, "the change made while hidden is presented on return");
         window.Close();
     });
 
     [TestMethod]
-    public void ResizeRequestsCarryTheDisplayScaleAndAreRecordedForTheNextConnection() => Run(async () =>
+    public void ResizeRequestsCarryTheDisplayScaleAndAreRecordedForTheNextConnection() => Run(static async () =>
     {
         RdpViewMetrics.ResetForTest();
         using var context = new TestPluginContext();

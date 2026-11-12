@@ -11,7 +11,7 @@ internal sealed class WpdRedirection(IWpdDeviceBackend backend) : IAsyncDisposab
     private readonly HashSet<uint> _announced = [];
     private bool _disposed;
     private Task? _disposing;
-    private readonly HashSet<uint> _allowed = [.. backend.Devices.Select(d => d.DeviceId)];
+    private readonly HashSet<uint> _allowed = [.. backend.Devices.Select(static d => d.DeviceId)];
     private readonly List<WpdFileChannel> _files = [];
     private Control? _control;
     private bool _authenticated;

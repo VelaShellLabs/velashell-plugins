@@ -56,13 +56,9 @@ public sealed class CameraChannelTests
     private static byte[] Create(byte id, string name) => [0x10, id, .. Encoding.ASCII.GetBytes(name), 0];
 
     [TestMethod]
+    [OSCondition(OperatingSystems.Windows)]
     public void AsyncCallbackExposesNativeComInterfaceWithoutOpeningCamera()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         var callback = new WindowsCameraBackend.ReaderCallback();
         nint unknown = System.Runtime.InteropServices.Marshal.GetIUnknownForObject(callback);
         try
@@ -109,7 +105,7 @@ public sealed class CameraChannelTests
         Assert.AreSequenceEqual(new byte[] { 1, 19, 0, 4, 0, 0, 0 }, h.LastMessage);
         h.Backend.Next.SetResult([0xff, 0xd8, 0xff, 0xd9]);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!h.Sent.Any(x => x.Length > 3 && x[3] == 18))
+        while (!h.Sent.Any(static x => x.Length > 3 && x[3] == 18))
         {
             await Task.Delay(10, timeout.Token);
         }
@@ -118,12 +114,12 @@ public sealed class CameraChannelTests
         h.Backend.Next = new(TaskCreationOptions.RunContinuationsAsynchronously);
         await h.Request(1, 17, 0); await h.Request(1, 16);
         Assert.AreEqual(1, h.Backend.Stops);
-        Assert.AreEqual(2, h.Sent.Count(x => x.Length > 3 && x[3] == 19));
+        Assert.AreEqual(2, h.Sent.Count(static x => x.Length > 3 && x[3] == 19));
         Assert.AreSequenceEqual(new byte[] { 1, 1 }, h.LastMessage);
         int before = h.Sent.Count;
         h.Backend.Next.SetResult([8, 9]);
         await h.Request(1, 8);
-        Assert.AreEqual(before + 1, h.Sent.Count);
+        Assert.HasCount(before + 1, h.Sent);
         Assert.AreEqual(1, h.Backend.Disposals);
         await h.Dvc.CloseAsync();
     }
@@ -137,11 +133,11 @@ public sealed class CameraChannelTests
         int before = h.Sent.Count;
         await h.Dvc.ProcessAsync([0x40, 2]);
         // The only PDU after the server's Close Request is the Close Response (MS-RDPEDYC 2.2.4); no sample follows.
-        Assert.AreEqual(before + 1, h.Sent.Count);
+        Assert.HasCount(before + 1, h.Sent);
         Assert.AreEqual(1, h.Backend.Disposals);
         h.Backend.Next.SetResult([1, 2, 3]);
         await h.Dvc.CloseAsync();
-        Assert.AreEqual(before + 1, h.Sent.Count);
+        Assert.HasCount(before + 1, h.Sent);
     }
 
     [TestMethod]

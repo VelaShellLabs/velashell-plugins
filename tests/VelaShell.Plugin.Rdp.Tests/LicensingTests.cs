@@ -41,7 +41,7 @@ public sealed class LicensingTests
     {
         using var client = new Licensing("user", "machine");
         RdpProtocolException error = Assert.Throws<RdpProtocolException>(() => client.Process(Alert(code, transition)));
-        StringAssert.Contains(error.Message, $"0x{code:X8}");
+        Assert.Contains($"0x{code:X8}", error.Message);
     }
 
     [TestMethod]

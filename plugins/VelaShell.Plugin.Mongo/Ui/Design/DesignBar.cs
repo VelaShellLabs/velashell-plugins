@@ -31,10 +31,7 @@ public sealed class DesignBar : Control
     public static readonly StyledProperty<double> RadiusProperty =
         AvaloniaProperty.Register<DesignBar, double>(nameof(Radius), 2);
 
-    static DesignBar()
-    {
-        AffectsRender<DesignBar>(SegmentsProperty, TrackTokenProperty, GapProperty, RadiusProperty);
-    }
+    static DesignBar() => AffectsRender<DesignBar>(SegmentsProperty, TrackTokenProperty, GapProperty, RadiusProperty);
 
     /// <summary>各段。</summary>
     public IEnumerable<object>? Segments

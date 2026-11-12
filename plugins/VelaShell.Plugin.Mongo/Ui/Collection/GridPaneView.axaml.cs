@@ -60,7 +60,7 @@ public sealed partial class GridPaneView : UserControl
     private void OnHeaderClick(object? sender, RoutedEventArgs e)
     {
         // 钻入后列是嵌套字段,服务器端的排序管不到它们;子表就按数组原本的顺序看。
-        if (_viewModel is { IsDrilled: false } vm && (sender as Control)?.DataContext is CollectionColumn column)
+        if (_viewModel is { IsDrilled: false } vm && sender is Control { DataContext: CollectionColumn column })
         {
             vm.SortByColumnCommand.Execute(column);
         }
@@ -68,7 +68,7 @@ public sealed partial class GridPaneView : UserControl
 
     private void OnResizeDelta(object? sender, VectorEventArgs e)
     {
-        if ((sender as Control)?.DataContext is CollectionColumn column)
+        if (sender is Control { DataContext: CollectionColumn column })
         {
             column.Width += e.Vector.X;
         }

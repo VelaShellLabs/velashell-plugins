@@ -299,10 +299,10 @@ public sealed class ComposePageViewModel : PageViewModel
     /// <inheritdoc />
     public override IEnumerable<string> ColumnTexts(string key) => key switch
     {
-        "service" => Services.Select(s => s.Service),
-        "name" => Services.Select(s => s.Name),
-        "status" => Services.Select(s => s.Status ?? ""),
-        "ports" => Services.Select(s => s.PortsText),
+        "service" => Services.Select(static s => s.Service),
+        "name" => Services.Select(static s => s.Name),
+        "status" => Services.Select(static s => s.Status ?? ""),
+        "ports" => Services.Select(static s => s.PortsText),
         _ => []
     };
 

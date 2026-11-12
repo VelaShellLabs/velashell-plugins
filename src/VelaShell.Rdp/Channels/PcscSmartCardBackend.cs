@@ -228,7 +228,7 @@ internal sealed unsafe class PcscSmartCardBackend : ISmartCardBackend
                 if (response.Data[offset + 1] != 4) { break; }
                 Span<byte> value = response.Data.AsSpan(offset + 2, 4);
                 uint feature = BinaryPrimitives.ReadUInt32BigEndian(value);
-                if (feature >= 0x42000000 && feature <= 0x42000FFF)
+                if (feature is >= 0x42000000 and <= 0x42000FFF)
                 {
                     BinaryPrimitives.WriteUInt32BigEndian(value, 0x00310000 | ((feature - 0x42000000) << 2));
                 }
@@ -281,7 +281,7 @@ internal sealed unsafe class PcscSmartCardBackend : ISmartCardBackend
     private static uint Bounded(nuint value, uint max) => value <= max ? (uint)value : throw new SmartCardException(SmartCardException.InsufficientBuffer);
     private static void ValidateCapacity(int capacity)
     {
-        if (capacity < 0 || capacity > SmartCardNdr.MaxBuffer) { throw new SmartCardException(SmartCardException.InvalidParameter); }
+        if (capacity is < 0 or > SmartCardNdr.MaxBuffer) { throw new SmartCardException(SmartCardException.InvalidParameter); }
     }
 
     private static SmartCardBuffer Result(byte[] output, uint length, bool lengthOnly)

@@ -1,5 +1,4 @@
 using VelaShell.Rdp;
-using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Graphics.Gfx;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -14,8 +13,8 @@ public sealed class GfxClearCodecTests
         byte[] pixels = new byte[24];
         byte[] overlay = Subcodec(1, 1, 1, 1, 0, [9, 8, 7]);
         codec.Decode(Packet(1, 0, [1, 2, 3, 4], [], overlay, 12), 2, 2, pixels, 16);
-        AssertBytes(new byte[] { 1, 2, 3, 255 }, pixels.AsSpan(0, 4));
-        AssertBytes(new byte[] { 9, 8, 7, 255 }, pixels.AsSpan(20, 4));
+        AssertBytes([1, 2, 3, 255], pixels.AsSpan(0, 4));
+        AssertBytes([9, 8, 7, 255], pixels.AsSpan(20, 4));
         AssertBytes(new byte[8], pixels.AsSpan(8, 8));
         byte[] replay = new byte[16];
         codec.Decode([3, 1, 12, 0], 2, 2, replay, 8);
@@ -31,20 +30,20 @@ public sealed class GfxClearCodecTests
         var codec = new GfxClearCodec();
         byte[] pixels = new byte[3 * 3 * 4];
         // Three 3-pixel columns: short miss at y=1, short hit at y=0, full hit.
-        byte[] bands = Bytes(w =>
+        byte[] bands = Bytes(static w =>
         {
             w.Write((ushort)0); w.Write((ushort)2); w.Write((ushort)0); w.Write((ushort)2);
-            w.Write(new byte[] { 10, 20, 30 });
-            w.Write((ushort)0x0201); w.Write(new byte[] { 40, 50, 60 });
+            w.Write([10, 20, 30]);
+            w.Write((ushort)0x0201); w.Write([40, 50, 60]);
             w.Write((ushort)0x4000); w.Write((byte)0);
             w.Write((ushort)0x8000);
         });
         codec.Decode(Packet(0, 0, [], bands, []), 3, 3, pixels, 12);
-        AssertBytes(new byte[] { 40, 50, 60, 255 }, pixels.AsSpan(12, 4));
-        AssertBytes(new byte[] { 40, 50, 60, 255 }, pixels.AsSpan(4, 4));
-        AssertBytes(new byte[] { 40, 50, 60, 255 }, pixels.AsSpan(20, 4));
+        AssertBytes([40, 50, 60, 255], pixels.AsSpan(12, 4));
+        AssertBytes([40, 50, 60, 255], pixels.AsSpan(4, 4));
+        AssertBytes([40, 50, 60, 255], pixels.AsSpan(20, 4));
         codec.Decode(Packet(4, 1, [], bands, []), 3, 3, pixels, 12);
-        AssertBytes(new byte[] { 40, 50, 60, 255 }, pixels.AsSpan(20, 4));
+        AssertBytes([40, 50, 60, 255], pixels.AsSpan(20, 4));
     }
 
     [TestMethod]
@@ -55,7 +54,7 @@ public sealed class GfxClearCodecTests
         // palette count=2, stop=1, depth=1, three start pixels (run=2 plus suite start), then stop.
         byte[] rlex = [2, 1, 2, 3, 9, 8, 7, 3, 2];
         codec.Decode(Packet(0, 0, [], [], Subcodec(0, 0, 4, 1, 2, rlex)), 4, 1, pixels, 16);
-        AssertBytes(new byte[] { 1, 2, 3, 255, 1, 2, 3, 255, 1, 2, 3, 255, 9, 8, 7, 255 }, pixels);
+        AssertBytes([1, 2, 3, 255, 1, 2, 3, 255, 1, 2, 3, 255, 9, 8, 7, 255], pixels);
         rlex[^1] = 3;
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode(Packet(0, 1, [], [], Subcodec(0, 0, 4, 1, 2, rlex)), 4, 1, pixels, 16));
     }
@@ -63,34 +62,34 @@ public sealed class GfxClearCodecTests
     [TestMethod]
     public void NsCodecDecodesRleAndSubsampledTopDownColor()
     {
-        byte[] ns = Bytes(w =>
+        byte[] ns = Bytes(static w =>
         {
             w.Write(7u); w.Write(4u); w.Write(4u); w.Write(0u);
             w.Write((byte)1); w.Write((byte)1); w.Write((ushort)0);
-            w.Write(new byte[] { 100, 100, 10, 120, 120, 120, 120 });
-            w.Write(new byte[] { 10, 20, 30, 40 });
-            w.Write(new byte[] { 0, 0, 0, 0 });
+            w.Write([100, 100, 10, 120, 120, 120, 120]);
+            w.Write([10, 20, 30, 40]);
+            w.Write([0, 0, 0, 0]);
         });
         byte[] pixels = new byte[64];
         new GfxClearCodec().Decode(Packet(0, 0, [], [], Subcodec(0, 0, 8, 2, 1, ns)), 8, 2, pixels, 32);
-        AssertBytes(new byte[] { 90, 100, 110, 255 }, pixels.AsSpan(0, 4));
-        AssertBytes(new byte[] { 80, 120, 160, 255 }, pixels.AsSpan(60, 4));
+        AssertBytes([90, 100, 110, 255], pixels.AsSpan(0, 4));
+        AssertBytes([80, 120, 160, 255], pixels.AsSpan(60, 4));
     }
 
     [TestMethod]
     public void AnUnencodedNsCodecSubcodecLargerThanThreeBytesPerPixelIsAccepted()
     {
         // 1x1, no subsampling, all four planes unencoded: 20-byte header + 4 bytes, above the old w*h*3 bound.
-        byte[] ns = Bytes(w =>
+        byte[] ns = Bytes(static w =>
         {
             w.Write(1u); w.Write(1u); w.Write(1u); w.Write(1u);
             w.Write((byte)1); w.Write((byte)0); w.Write((ushort)0);
-            w.Write(new byte[] { 100, 0, 0, 200 });
+            w.Write([100, 0, 0, 200]);
         });
         Assert.HasCount(24, ns);
         byte[] pixels = new byte[4];
         new GfxClearCodec().Decode(Packet(0, 0, [], [], Subcodec(0, 0, 1, 1, 1, ns)), 1, 1, pixels, 4);
-        AssertBytes(new byte[] { 100, 100, 100 }, pixels.AsSpan(0, 3));
+        AssertBytes([100, 100, 100], pixels.AsSpan(0, 3));
     }
 
     [TestMethod]
@@ -111,15 +110,15 @@ public sealed class GfxClearCodecTests
     public void DispatcherKeepsAlphaSeparateAndUsesTopDownPlanarRows()
     {
         using var dispatcher = new GfxCodecDispatcher();
-        byte[] pixels = Enumerable.Repeat((byte)99, 16).ToArray();
+        byte[] pixels = [.. Enumerable.Repeat((byte)99, 16)];
         GfxDecodeRequest Request(ushort codec, byte[] data) => new(1, 0, codec, 0x21, 0, 0, 2, 2, data, pixels, 2, 2);
         dispatcher.Decode(Request(10, [0x20, 10, 20, 30, 40, 1, 2, 3, 4, 5, 6, 7, 8]));
-        AssertBytes(new byte[] { 5, 1, 10, 99 }, pixels.AsSpan(0, 4));
-        AssertBytes(new byte[] { 7, 3, 30, 99 }, pixels.AsSpan(8, 4));
+        AssertBytes([5, 1, 10, 99], pixels.AsSpan(0, 4));
+        AssertBytes([7, 3, 30, 99], pixels.AsSpan(8, 4));
         dispatcher.Decode(Request(12, [0x4C, 0x41, 1, 0, 77, 4]));
-        AssertBytes(new byte[] { 5, 1, 10, 77 }, pixels.AsSpan(0, 4));
-        dispatcher.Decode(Request(0, Enumerable.Repeat((byte)42, 16).ToArray()));
-        AssertBytes(new byte[] { 42, 42, 42, 77 }, pixels.AsSpan(0, 4));
+        AssertBytes([5, 1, 10, 77], pixels.AsSpan(0, 4));
+        dispatcher.Decode(Request(0, [.. Enumerable.Repeat((byte)42, 16)]));
+        AssertBytes([42, 42, 42, 77], pixels.AsSpan(0, 4));
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(12, [0x4C, 0x41, 1, 0, 0, 5])));
     }
 

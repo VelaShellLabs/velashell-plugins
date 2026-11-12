@@ -37,7 +37,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected(host: "prod-1");
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\",pid=1204,fd=6))\n",
             string.Empty,
             "Redis server v=7.2.4 sha=00000000:0 malloc=jemalloc bits=64\n",
@@ -57,7 +57,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "tcp 0 0 127.0.0.1:6379 0.0.0.0:* LISTEN 1204/redis-server\n",
             string.Empty,
             "redis-cli 5.0.7\n",
@@ -76,7 +76,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6380 0.0.0.0:* users:((\"redis-server\"))\n"
             + "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n",
             string.Empty,
@@ -85,7 +85,7 @@ public sealed class RedisDiscoveryTests
 
         IReadOnlyList<RedisDiscoveredInstance> found = await new RedisDiscovery(context).ProbeAsync(sessionId);
 
-        Assert.AreSequenceEqual([6379, 6380], [.. found.Select(item => item.Port)]);
+        Assert.AreSequenceEqual([6379, 6380], [.. found.Select(static item => item.Port)]);
     }
 
     [TestMethod]
@@ -95,7 +95,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             string.Empty,
             "/usr/bin/redis-server *:6381\n",
             string.Empty,
@@ -113,7 +113,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n"
             + "LISTEN 0 511 127.0.0.1:6390 0.0.0.0:* users:((\"redis-server\"))\n",
             string.Empty,
@@ -130,12 +130,12 @@ public sealed class RedisDiscoveryTests
 
         IReadOnlyList<RedisDiscoveredInstance> found = await new RedisDiscovery(context).ProbeAsync(sessionId);
 
-        RedisDiscoveredInstance plain = found.Single(item => item.Port == 6379);
+        RedisDiscoveredInstance plain = found.Single(static item => item.Port == 6379);
         Assert.IsTrue(plain.HasPassword);
         Assert.IsFalse(plain.UsesTls);
         Assert.AreEqual("/etc/redis/redis.conf", plain.ConfigPath);
 
-        RedisDiscoveredInstance tls = found.Single(item => item.Port == 6390);
+        RedisDiscoveredInstance tls = found.Single(static item => item.Port == 6390);
         Assert.IsTrue(tls.UsesTls, "tls-port 上的那个实例要标成 TLS。");
     }
 
@@ -147,7 +147,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n",
             string.Empty,
             "Redis server v=7.2.4\n",
@@ -167,7 +167,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(string.Empty, string.Empty, string.Empty, string.Empty);
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(string.Empty, string.Empty, string.Empty, string.Empty);
 
         Assert.IsEmpty(await new RedisDiscovery(context).ProbeAsync(sessionId));
     }
@@ -179,7 +179,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => throw new InvalidOperationException("no exec channel");
+        context.FakeRemoteExec.Handler = static (_, _) => throw new InvalidOperationException("no exec channel");
 
         Assert.IsEmpty(await new RedisDiscovery(context).ProbeAsync(sessionId));
     }
@@ -197,7 +197,7 @@ public sealed class RedisDiscoveryTests
         // 替身只造得出已连接的会话,所以这里守的是全部都被收进来;
         // "跳过未连接的" 那一半由 ConnectedSessionsAsync 里的 State 过滤本身承担。
         Assert.HasCount(2, sessions);
-        Assert.IsTrue(sessions.All(session => session.State == PluginSdk.Sessions.SessionState.Connected));
+        Assert.IsTrue(sessions.All(static session => session.State == PluginSdk.Sessions.SessionState.Connected));
     }
 
     // ── 提议连接 ──────────────────────────────────────────────────
@@ -207,7 +207,7 @@ public sealed class RedisDiscoveryTests
     {
         using TestPluginContext context = NewContext("zh-Hans");
         _ = context.FakeSessions.AddConnected(host: "prod-1");
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n"
             + "LISTEN 0 511 127.0.0.1:6380 0.0.0.0:* users:((\"redis-server\"))\n",
             string.Empty,
@@ -235,7 +235,7 @@ public sealed class RedisDiscoveryTests
         // 取消一条就是"够了"的信号,继续弹下一个只会烦人。
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n"
             + "LISTEN 0 511 127.0.0.1:6380 0.0.0.0:* users:((\"redis-server\"))\n",
             string.Empty, string.Empty, string.Empty);
@@ -253,7 +253,7 @@ public sealed class RedisDiscoveryTests
         using TestPluginContext context = NewContext();
         _ = context.FakeSessions.AddConnected();
         string sessionId = (await context.Sessions.ListAsync())[0].SessionId;
-        context.FakeRemoteExec.Handler = (_, _) => Sections(
+        context.FakeRemoteExec.Handler = static (_, _) => Sections(
             "LISTEN 0 511 127.0.0.1:6379 0.0.0.0:* users:((\"redis-server\"))\n",
             string.Empty, string.Empty, "/etc/redis/redis.conf\n");
         context.FakeRemoteFs.AddFile(sessionId, "/etc/redis/redis.conf",
@@ -267,7 +267,7 @@ public sealed class RedisDiscoveryTests
             "探到的口令要带上,否则用户还得自己去翻一遍配置。");
         // **口令绝不进日志。** 这一条比"能探到"更重要。
         Assert.DoesNotContain(
-            entry => entry.Message.Contains("hunter2", StringComparison.Ordinal), context.CollectingLog.Entries,
+            static entry => entry.Message.Contains("hunter2", StringComparison.Ordinal), context.CollectingLog.Entries,
             "日志里出现了口令。");
     }
 

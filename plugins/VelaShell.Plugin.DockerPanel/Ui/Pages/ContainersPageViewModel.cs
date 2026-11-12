@@ -81,7 +81,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     public override string Title => "容器";
 
     /// <summary>过滤后的行(界面绑这个)。</summary>
-    public KeyedCollection<ContainerRow> View { get; } = new(r => r.Id);
+    public KeyedCollection<ContainerRow> View { get; } = new(static r => r.Id);
 
     /// <summary>当前筛选档。</summary>
     public ContainerFilter Filter
@@ -126,13 +126,13 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     public int TotalCount => _all.Count;
 
     /// <summary>运行中数量。</summary>
-    public int RunningCount => _all.Count(r => r.IsRunning);
+    public int RunningCount => _all.Count(static r => r.IsRunning);
 
     /// <summary>已停止数量。</summary>
-    public int StoppedCount => _all.Count(r => !r.IsRunning && !r.IsPaused);
+    public int StoppedCount => _all.Count(static r => !r.IsRunning && !r.IsPaused);
 
     /// <summary>异常数量。</summary>
-    public int ProblemCount => _all.Count(r => r.IsUnhealthy || r.IsFailed);
+    public int ProblemCount => _all.Count(static r => r.IsUnhealthy || r.IsFailed);
 
     /// <summary>
     /// 筛选弹层里的 compose 项目清单(设计稿 19 号板)。
@@ -237,7 +237,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             {
                 return false;
             }
-            int picked = View.Count(r => r.Selected);
+            int picked = View.Count(static r => r.Selected);
             return picked == 0 ? false : picked == View.Count ? true : null;
         }
         set
@@ -288,12 +288,12 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     /// <inheritdoc />
     public override IEnumerable<string> ColumnTexts(string key) => key switch
     {
-        "name" => View.Select(r => r.Name),
-        "image" => View.Select(r => r.Image),
-        "ports" => View.Select(r => r.Ports),
-        "cpu" => View.Select(r => r.CpuText),
-        "mem" => View.Select(r => r.MemText),
-        "uptime" => View.Select(r => r.Uptime),
+        "name" => View.Select(static r => r.Name),
+        "image" => View.Select(static r => r.Image),
+        "ports" => View.Select(static r => r.Ports),
+        "cpu" => View.Select(static r => r.CpuText),
+        "mem" => View.Select(static r => r.MemText),
+        "uptime" => View.Select(static r => r.Uptime),
         _ => []
     };
 
@@ -498,13 +498,13 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
 
     private void RecountSelection()
     {
-        SelectedCount = _all.Count(r => r.Selected);
+        SelectedCount = _all.Count(static r => r.Selected);
         OnPropertyChanged(nameof(AllSelected));
     }
 
     private void ClearSelection()
     {
-        foreach (ContainerRow? row in _all.Where(r => r.Selected))
+        foreach (ContainerRow? row in _all.Where(static r => r.Selected))
         {
             row.Selected = false;
         }
@@ -520,7 +520,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     /// </para>
     /// </summary>
     private IReadOnlyList<ContainerRow> Targets(object? parameter) =>
-        parameter is ContainerRow row ? [row] : [.. _all.Where(r => r.Selected)];
+        parameter is ContainerRow row ? [row] : [.. _all.Where(static r => r.Selected)];
 
     private async Task BatchAsync(string verb, IReadOnlyList<ContainerRow> targets,
         Func<DockerClient, string, CancellationToken, Task> action)
@@ -648,8 +648,8 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             HostName = "",
             ConfirmLabel = "强制杀死",
             ConfirmIcon = "Icon.zap",
-            Commands = [.. targets.Select(t => $"POST /containers/{t.Name}/kill?signal=SIGKILL")],
-            CommandNote = $"等价于  docker kill {string.Join(' ', targets.Select(t => t.Name))}",
+            Commands = [.. targets.Select(static t => $"POST /containers/{t.Name}/kill?signal=SIGKILL")],
+            CommandNote = $"等价于  docker kill {string.Join(' ', targets.Select(static t => t.Name))}",
             Targets = [.. targets.Select(ToConfirmTarget)],
             Consequences =
             [
@@ -659,7 +659,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
         })).ConfigureAwait(true);
         if (confirmed)
         {
-            await BatchAsync("强杀", targets, (c, id, ct) => c.KillContainerAsync(id, "SIGKILL", ct)).ConfigureAwait(true);
+            await BatchAsync("强杀", targets, static (c, id, ct) => c.KillContainerAsync(id, "SIGKILL", ct)).ConfigureAwait(true);
         }
     }
 
@@ -758,7 +758,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     } = "";
 
     /// <summary>选中的来源数。</summary>
-    public int SelectedSourceCount => LogSources.Count(s => s.Selected);
+    public int SelectedSourceCount => LogSources.Count(static s => s.Selected);
 
     /// <summary>合并了几条流。</summary>
     public string MergedText => SelectedSourceCount switch
@@ -834,7 +834,7 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
             existing.SelectionChanged -= OnLogSourceToggled;
         }
         LogSources.Clear();
-        HashSet<string> seeded = [.. seed.Select(r => r.Id)];
+        HashSet<string> seeded = [.. seed.Select(static r => r.Id)];
         // 全部容器都列出来(含已停止的)—— 已停止容器的日志依然读得到,
         // 而"为什么它退出了"恰恰是最常要看的一份日志。
         int index = 0;
@@ -866,12 +866,12 @@ public sealed class ContainersPageViewModel : PageViewModel, IAsyncDisposable
     {
         // 颜色序号按**选中顺序里的位置**重新编号,而不是用列表里的下标:
         // 否则只选两个相邻容器时会拿到两个几乎一样的颜色。
-        List<LogSourceItem> selected = [.. LogSources.Where(s => s.Selected)];
+        List<LogSourceItem> selected = [.. LogSources.Where(static s => s.Selected)];
         for (int i = 0; i < selected.Count; i++)
         {
             selected[i].Index = i;
         }
-        return [.. selected.Select(s => s.Source)];
+        return [.. selected.Select(static s => s.Source)];
     }
 
     private void ApplyLogSourceView()

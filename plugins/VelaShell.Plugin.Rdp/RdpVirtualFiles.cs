@@ -25,7 +25,7 @@ internal sealed class RdpVirtualFiles : IDisposable
         Func<uint, ulong, uint, CancellationToken, Task<byte[]>> read, RdpClipboardTransfer progress, CancellationToken ct, Action? released = null)
     {
         Files = RdpClipboardCodec.DecodeFiles(RdpClipboardCodec.EncodeFiles(files));
-        if (Files.Sum(f => f.Length) > RdpClipboardFiles.MaxTransferBytes)
+        if (Files.Sum(static f => f.Length) > RdpClipboardFiles.MaxTransferBytes)
         {
             throw new InvalidDataException("Clipboard files exceed the 1 GiB transfer limit.");
         }
@@ -54,7 +54,7 @@ internal sealed class RdpVirtualFiles : IDisposable
                 _started = true;
                 if (_progress.Snapshot?.State != "Completed")
                 {
-                    _progress.Start(Files.Sum(f => f.Length));
+                    _progress.Start(Files.Sum(static f => f.Length));
                 }
             }
         }
@@ -83,13 +83,13 @@ internal sealed class RdpVirtualFiles : IDisposable
         {
             _token.ThrowIfCancellationRequested();
             _started = true;
-            long total = Files.Sum(f => f.Length);
+            long total = Files.Sum(static f => f.Length);
             _progress.Start(total, total == 0 ? "Delivered" : "Transferring");
         }
     }
     internal void DescriptorsDelivered()
     {
-        if (Files.All(f => f.Length == 0))
+        if (Files.All(static f => f.Length == 0))
         {
             lock (_gate)
             {

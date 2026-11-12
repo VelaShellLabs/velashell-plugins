@@ -52,17 +52,14 @@ public sealed class RdpInputTests
     [DataRow(PhysicalKey.NumPadDivide, 0x135u)]
     [DataRow(PhysicalKey.NumPadEnter, 0x11cu)]
     [DataRow(PhysicalKey.NumLock, 0x45u)]
-    public void KeypadKeysHaveScanCodes(PhysicalKey key, uint expected)
-    {
-        Assert.AreEqual(expected, RdpInput.ScanCode(key));
-    }
+    public void KeypadKeysHaveScanCodes(PhysicalKey key, uint expected) => Assert.AreEqual(expected, RdpInput.ScanCode(key));
 
     [TestMethod]
     public void EveryKeyOfAStandardKeyboardHasAScanCode()
     {
         // A key without a scan code is dropped unless it produces text, so the whole 104/105-key layout must map.
-        PhysicalKey[] unmapped = Enum.GetValues<PhysicalKey>()
-            .Where(k => k is >= PhysicalKey.A and <= PhysicalKey.Z
+        PhysicalKey[] unmapped = [.. Enum.GetValues<PhysicalKey>()
+            .Where(static k => k is >= PhysicalKey.A and <= PhysicalKey.Z
                 or >= PhysicalKey.Digit0 and <= PhysicalKey.Digit9
                 or >= PhysicalKey.NumPad0 and <= PhysicalKey.NumPad9
                 or >= PhysicalKey.F1 and <= PhysicalKey.F24
@@ -72,8 +69,7 @@ public sealed class RdpInputTests
                 or PhysicalKey.ArrowUp or PhysicalKey.ArrowDown or PhysicalKey.ArrowLeft or PhysicalKey.ArrowRight
                 or PhysicalKey.Home or PhysicalKey.End or PhysicalKey.PageUp or PhysicalKey.PageDown
                 or PhysicalKey.Insert or PhysicalKey.Delete or PhysicalKey.IntlBackslash)
-            .Where(k => RdpInput.ScanCode(k) == 0)
-            .ToArray();
+            .Where(static k => RdpInput.ScanCode(k) == 0)];
         Assert.IsEmpty(unmapped, "Unmapped: " + string.Join(", ", unmapped));
     }
 
@@ -108,10 +104,7 @@ public sealed class RdpInputTests
     [DataRow(nameof(RdpInput.KeyboardPlatform.Windows), KeyModifiers.Alt, "a", true, DisplayName = "Alt+A is a menu shortcut on Windows")]
     [DataRow(nameof(RdpInput.KeyboardPlatform.Other), KeyModifiers.Control | KeyModifiers.Alt, "t", true, DisplayName = "Ctrl+Alt+T stays a shortcut on Linux")]
     [DataRow(nameof(RdpInput.KeyboardPlatform.Other), KeyModifiers.Shift, "A", false, DisplayName = "Shift alone is typing")]
-    public void OnlyModifierChordsThatDoNotTypeAreShortcuts(string platform, KeyModifiers modifiers, string? symbol, bool shortcut)
-    {
-        Assert.AreEqual(shortcut, RdpInput.IsShortcut(modifiers, symbol, Enum.Parse<RdpInput.KeyboardPlatform>(platform)));
-    }
+    public void OnlyModifierChordsThatDoNotTypeAreShortcuts(string platform, KeyModifiers modifiers, string? symbol, bool shortcut) => Assert.AreEqual(shortcut, RdpInput.IsShortcut(modifiers, symbol, Enum.Parse<RdpInput.KeyboardPlatform>(platform)));
 
     [TestMethod]
     public void ReleasingCommandOnlyLetsGoOfOrdinaryKeys()
@@ -141,7 +134,7 @@ public sealed class RdpInputTests
     {
         var wheel = new RdpInput.WheelAccumulator();
         List<int> rotations = wheel.Add(-5);   // 600 steps
-        CollectionAssert.AreEqual(new[] { -255, -255, -90 }, rotations);
+        Assert.AreSequenceEqual([-255, -255, -90], rotations);
         Assert.AreEqual(0x0200u | 0x0100u | 0x01u, RdpInput.WheelFlags(-255, false));
         Assert.AreEqual(0x0400u | 0x78u, RdpInput.WheelFlags(120, true));
     }
@@ -151,7 +144,7 @@ public sealed class RdpInputTests
     {
         var wheel = new RdpInput.WheelAccumulator();
         Assert.IsEmpty(wheel.Add(0.004));                 // 0.48 of a step carried
-        CollectionAssert.AreEqual(new[] { -1 }, wheel.Add(-0.01));   // -1.2 steps, not -0.72
+        Assert.AreSequenceEqual([-1], wheel.Add(-0.01));   // -1.2 steps, not -0.72
         Assert.IsEmpty(wheel.Add(double.NaN));
     }
 }

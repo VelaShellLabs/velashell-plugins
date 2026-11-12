@@ -64,7 +64,7 @@ public sealed class RdpSecurityTests
     [TestMethod]
     public async Task AutoRetriesWithTlsOnlyWhenTheServerRefusesNlaUpFront()
     {
-        await using var server = new FakeRdpServer(RefuseNtlmWithErrorCode, async connection =>
+        await using var server = new FakeRdpServer(RefuseNtlmWithErrorCode, static async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Ssl);
             using SslStream ssl = await connection.StartTlsAsync();
@@ -82,7 +82,7 @@ public sealed class RdpSecurityTests
     [TestMethod]
     public async Task AutoExplainsAServerThatRequiresNlaButRefusesNtlm()
     {
-        await using var server = new FakeRdpServer(RefuseNtlmWithErrorCode, connection => connection.RefuseAsync(5));
+        await using var server = new FakeRdpServer(RefuseNtlmWithErrorCode, static connection => connection.RefuseAsync(5));
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Auto));
 
@@ -102,7 +102,7 @@ public sealed class RdpSecurityTests
     [TestMethod]
     public async Task NlaOnlyNeverFallsBackAndReportsAnAbortedFirstReply()
     {
-        await using var server = new FakeRdpServer(async connection =>
+        await using var server = new FakeRdpServer(static async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Hybrid);
             using SslStream ssl = await connection.StartTlsAsync();
@@ -127,7 +127,7 @@ public sealed class RdpSecurityTests
     [TestMethod]
     public async Task NlaOnlyRejectsAServerThatSelectsTls()
     {
-        await using var server = new FakeRdpServer(connection => connection.SelectAsync(FakeRdpConnection.Ssl));
+        await using var server = new FakeRdpServer(static connection => connection.SelectAsync(FakeRdpConnection.Ssl));
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Nla));
 
@@ -139,7 +139,7 @@ public sealed class RdpSecurityTests
     [TestMethod]
     public async Task TlsOnlyOffersOnlyTlsAndNamesAServerThatRequiresNla()
     {
-        await using var server = new FakeRdpServer(connection => connection.RefuseAsync(5));
+        await using var server = new FakeRdpServer(static connection => connection.RefuseAsync(5));
 
         Exception failure = await ConnectFailureAsync(Options(server, RdpSecurity.Tls));
 
@@ -162,16 +162,16 @@ public sealed class RdpSecurityTests
     }
 
     [TestMethod]
-    public void UnknownSecurityLayerIsRejected() => _ = Assert.Throws<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("security", "rdp")), new Loc("en"), []));
+    public void UnknownSecurityLayerIsRejected() => _ = Assert.Throws<ProtocolConnectionException>(static () => RdpSettings.From(RdpSettingsTests.Request(("security", "rdp")), new Loc("en"), []));
 
     [TestMethod]
     public void SecurityLayerIsAnAdvancedChoiceDefaultingToAuto()
     {
-        ProtocolSettingField field = RdpSettings.Declare(new Loc("en"), []).Single(f => f.Key == "security");
+        ProtocolSettingField field = RdpSettings.Declare(new Loc("en"), []).Single(static f => f.Key == "security");
         Assert.AreEqual(ProtocolSettingKind.Choice, field.Kind);
         Assert.AreEqual("auto", field.DefaultValue);
         Assert.IsTrue(field.IsAdvanced);
-        Assert.AreSequenceEqual(new[] { "auto", "nla", "tls" }, [.. field.Choices!.Select(c => c.Value)]);
+        Assert.AreSequenceEqual(["auto", "nla", "tls"], [.. field.Choices!.Select(static c => c.Value)]);
     }
 
     [TestMethod]

@@ -299,7 +299,7 @@ public sealed class OverviewPageViewModel : PageViewModel
     public RelayCommand ExportDiagnosticsCommand { get; }
 
     /// <summary>能不能弹本地文件对话框。</summary>
-    public bool CanPickFiles => FilePicker.IsAvailable;
+    public static bool CanPickFiles => FilePicker.IsAvailable;
 
     /// <summary>
     /// 打开终端。挑第一个在跑的容器 —— 没有在跑的就说清楚,而不是打开一个空终端。
@@ -307,7 +307,7 @@ public sealed class OverviewPageViewModel : PageViewModel
     private async Task OpenTerminalAsync()
     {
         await Shell.GoToAsync(PanelPage.Containers).ConfigureAwait(true);
-        if (Shell.Containers.View.FirstOrDefault(r => r.IsRunning) is not { } row)
+        if (Shell.Containers.View.FirstOrDefault(static r => r.IsRunning) is not { } row)
         {
             Shell.Feedback.Status(FeedbackKind.Warning, "没有正在运行的容器 —— 终端要有个容器才能进。");
             return;
@@ -380,9 +380,9 @@ public sealed class OverviewPageViewModel : PageViewModel
         {
             ContainerSummary[] containers = await client.ListContainersAsync(true, cancellationToken).ConfigureAwait(true);
             SystemInfo info = await client.InfoAsync(cancellationToken).ConfigureAwait(true);
-            int running = containers.Count(c => c.State == "running");
-            int unhealthy = containers.Count(c => (c.Status ?? "").Contains("(unhealthy)", StringComparison.OrdinalIgnoreCase));
-            int failed = containers.Count(c => c.State == "exited" && !(c.Status ?? "").Contains("(0)", StringComparison.Ordinal));
+            int running = containers.Count(static c => c.State == "running");
+            int unhealthy = containers.Count(static c => (c.Status ?? "").Contains("(unhealthy)", StringComparison.OrdinalIgnoreCase));
+            int failed = containers.Count(static c => c.State == "exited" && !(c.Status ?? "").Contains("(0)", StringComparison.Ordinal));
             RunningText = $"{running} / {containers.Length}";
             RunningDetail = $"{unhealthy} 个不健康 · {failed} 个异常退出";
             _hostMemory = info.MemTotal;
@@ -447,8 +447,8 @@ public sealed class OverviewPageViewModel : PageViewModel
     /// </summary>
     public void AcceptStatsSnapshot(IReadOnlyList<ContainerRow> rows)
     {
-        List<ContainerRow> running = [.. rows.Where(r => r.IsRunning && r.CpuPercent > 0)];
-        double total = running.Sum(r => r.CpuPercent);
+        List<ContainerRow> running = [.. rows.Where(static r => r.IsRunning && r.CpuPercent > 0)];
+        double total = running.Sum(static r => r.CpuPercent);
         CpuText = Humanize.Percent(total);
         _cpuPeak = Math.Max(_cpuPeak, total);
         CpuDetail = running.Count > 0
@@ -457,7 +457,7 @@ public sealed class OverviewPageViewModel : PageViewModel
         TrackHotContainers(running);
         // 内存卡走的是同一批采样:容器占用之和 / 宿主总量,
         // 单独再问一次 daemon 只会得到同样的数字。
-        long usedMemory = rows.Where(r => r.IsRunning).Sum(r => r.MemoryBytes);
+        long usedMemory = rows.Where(static r => r.IsRunning).Sum(static r => r.MemoryBytes);
         MemText = usedMemory > 0 ? Humanize.Bytes(usedMemory) : "0 B";
         MemDetail = _hostMemory > 0
             ? $"容器占用 · 宿主共 {Humanize.Bytes(_hostMemory)}{(_hostCpus > 0 ? $" · {_hostCpus} 核" : "")}"
@@ -468,9 +468,9 @@ public sealed class OverviewPageViewModel : PageViewModel
             _cpuTrend.RemoveAt(0);
         }
         RebuildTrend();
-        double max = running.Count > 0 ? running.Max(r => r.CpuPercent) : 0;
+        double max = running.Count > 0 ? running.Max(static r => r.CpuPercent) : 0;
         TopCpu.Clear();
-        foreach (ContainerRow? row in running.OrderByDescending(r => r.CpuPercent).Take(5))
+        foreach (ContainerRow? row in running.OrderByDescending(static r => r.CpuPercent).Take(5))
         {
             TopCpu.Add(new(row.Name, row.CpuPercent, max, Humanize.Percent(row.CpuPercent), row.CpuHot));
         }

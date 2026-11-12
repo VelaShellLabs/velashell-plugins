@@ -39,7 +39,7 @@ public sealed class ColumnResizer
         _header = host.GetControl<Grid>(headerName);
         _chrome = chrome;
         // 轨道在 XAML 里只写 Classes 与 Tag,事件在这里挂 —— 四个页面就不必各抄一遍转发方法。
-        foreach (Border? grip in _header.Children.OfType<Border>().Where(b => b.Tag is string))
+        foreach (Border? grip in _header.Children.OfType<Border>().Where(static b => b.Tag is string))
         {
             grip.PointerPressed += OnPressed;
             grip.PointerReleased += OnReleased;

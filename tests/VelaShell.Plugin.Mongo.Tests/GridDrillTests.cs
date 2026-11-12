@@ -47,7 +47,7 @@ public sealed class GridDrillTests
     };
 
     [TestMethod]
-    public void Menu_items_leave_the_foreground_to_the_host_theme() => Screens.OnUi(() =>
+    public void Menu_items_leave_the_foreground_to_the_host_theme() => Screens.OnUi(static () =>
     {
         MenuItem plain = MenuKit.Command("刷新", "Mongo.refresh-cw", new RelayCommand(static () => { }));
         Assert.IsFalse(plain.IsSet(TemplatedControl.ForegroundProperty),
@@ -65,7 +65,7 @@ public sealed class GridDrillTests
         bench.ViewModel.VisibleNodes.Any(n => n.Kind == NodeKind.Database && n.Name == database);
 
     [TestMethod]
-    public void System_databases_are_hidden_until_the_eye_is_toggled() => Screens.OnUi(async () =>
+    public void System_databases_are_hidden_until_the_eye_is_toggled() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -90,7 +90,7 @@ public sealed class GridDrillTests
     });
 
     [TestMethod]
-    public void A_system_database_named_in_the_connection_stays_listed() => Screens.OnUi(async () =>
+    public void A_system_database_named_in_the_connection_stays_listed() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync(database: "admin");
@@ -99,7 +99,7 @@ public sealed class GridDrillTests
     });
 
     [TestMethod]
-    public void The_setting_opens_the_tree_with_system_databases() => Screens.OnUi(async () =>
+    public void The_setting_opens_the_tree_with_system_databases() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync(settings: new Dictionary<string, string> { ["showSystemDatabases"] = "true" });
@@ -160,7 +160,7 @@ public sealed class GridDrillTests
         bench.Window.GetVisualDescendants().OfType<CollectionTabView>().First(static v => v.IsEffectivelyVisible).Grid;
 
     [TestMethod]
-    public void An_array_of_documents_opens_as_a_table_and_edits_stage_absolute_paths() => Screens.OnUi(async () =>
+    public void An_array_of_documents_opens_as_a_table_and_edits_stage_absolute_paths() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         (IMongoClient client, string database) = await SeedAsync();
@@ -175,10 +175,10 @@ public sealed class GridDrillTests
             Assert.IsTrue(tab.DrillInto(items));
             await Screens.PumpAsync(5);
             Assert.IsTrue(tab.IsDrilled);
-            Assert.AreSequenceEqual(new[] { "sku", "qty", "attrs", "note" }, [.. tab.GridColumns.Select(static c => c.Name)]);
+            Assert.AreSequenceEqual(["sku", "qty", "attrs", "note"], [.. tab.GridColumns.Select(static c => c.Name)]);
             Assert.HasCount(2, tab.GridRows);
-            Assert.AreSequenceEqual(new[] { "0", "1" }, [.. tab.GridRows.Select(static r => r.NumberText)], "rows are numbered by array index");
-            Assert.AreSequenceEqual(new[] { "文档 #1", "items" }, [.. tab.DrillCrumbs.Select(static c => c.Label)]);
+            Assert.AreSequenceEqual(["0", "1"], [.. tab.GridRows.Select(static r => r.NumberText)], "rows are numbered by array index");
+            Assert.AreSequenceEqual(["文档 #1", "items"], [.. tab.DrillCrumbs.Select(static c => c.Label)]);
             Assert.AreEqual("数组 · 2 项", tab.DrillSummary);
             Assert.AreSame(first, tab.SelectedRow, "the inspector keeps describing the document");
             Assert.AreEqual(2, GridOf(bench).List.ItemCount, "the grid shows the elements, not the documents");
@@ -219,7 +219,7 @@ public sealed class GridDrillTests
     });
 
     [TestMethod]
-    public void Scalars_objects_and_empty_arrays_drill_too() => Screens.OnUi(async () =>
+    public void Scalars_objects_and_empty_arrays_drill_too() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         (IMongoClient client, string database) = await SeedAsync();
@@ -240,7 +240,7 @@ public sealed class GridDrillTests
             Assert.IsTrue(tab.DrillInto(Cell(first, tab.Columns, "customer")));
             Assert.HasCount(1, tab.GridRows);
             Assert.AreEqual("", tab.GridRows[0].NumberText);
-            Assert.AreSequenceEqual(new[] { "name", "level" }, [.. tab.GridColumns.Select(static c => c.Name)]);
+            Assert.AreSequenceEqual(["name", "level"], [.. tab.GridColumns.Select(static c => c.Name)]);
             Assert.AreEqual("customer.level", Cell(tab.GridRows[0], tab.GridColumns, "level").Path);
             Assert.AreEqual("对象 · 2 个字段", tab.DrillSummary);
             tab.ExitDrill();
@@ -268,7 +268,7 @@ public sealed class GridDrillTests
     });
 
     [TestMethod]
-    public void Nested_drills_keep_a_history_and_crumbs_jump_back() => Screens.OnUi(async () =>
+    public void Nested_drills_keep_a_history_and_crumbs_jump_back() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         (IMongoClient client, string database) = await SeedAsync();
@@ -280,7 +280,7 @@ public sealed class GridDrillTests
             Assert.IsTrue(tab.DrillInto(Cell(first, tab.Columns, "items")));
             Assert.IsTrue(tab.DrillInto(Cell(tab.GridRows[0], tab.GridColumns, "attrs")));
             Assert.AreEqual("items.0.attrs", tab.Drill!.Path);
-            Assert.AreSequenceEqual(new[] { "文档 #1", "items", "[0]", "attrs" }, [.. tab.DrillCrumbs.Select(static c => c.Label)]);
+            Assert.AreSequenceEqual(["文档 #1", "items", "[0]", "attrs"], [.. tab.DrillCrumbs.Select(static c => c.Label)]);
             Assert.IsTrue(tab.DrillCrumbs[^1].IsLast);
 
             tab.DrillBack();
@@ -300,7 +300,7 @@ public sealed class GridDrillTests
     });
 
     [TestMethod]
-    public void Enter_drills_into_the_current_cell_and_backspace_returns() => Screens.OnUi(async () =>
+    public void Enter_drills_into_the_current_cell_and_backspace_returns() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         (IMongoClient client, string database) = await SeedAsync();
@@ -331,7 +331,7 @@ public sealed class GridDrillTests
     });
 
     [TestMethod]
-    public void Double_clicking_a_column_divider_fits_the_content() => Screens.OnUi(async () =>
+    public void Double_clicking_a_column_divider_fits_the_content() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         (IMongoClient client, string database) = await SeedAsync();
@@ -355,7 +355,7 @@ public sealed class GridDrillTests
 
     [TestMethod]
     [TestCategory("Screenshot")]
-    public void Screenshot_drilled_items() => Screens.OnUi(async () =>
+    public void Screenshot_drilled_items() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -390,12 +390,12 @@ public sealed class GridDrillTests
         window.Show();
         await Screens.PumpAsync(5);
 
-        Assert.AreSequenceEqual(new[] { "_id", "items" }, [.. grid.ColumnNames]);
+        Assert.AreSequenceEqual(["_id", "items"], [.. grid.ColumnNames]);
         Assert.IsFalse(grid.DrillInto(0, 0), "an Int32 is not a container");
         Assert.IsTrue(grid.DrillInto(0, 1));
         Assert.AreEqual(1, grid.Depth);
         Assert.AreEqual("items", grid.CurrentPath);
-        Assert.AreSequenceEqual(new[] { "值", "sku", "qty" }, [.. grid.ColumnNames], "a mixed array gets a value column for its scalars");
+        Assert.AreSequenceEqual(["值", "sku", "qty"], [.. grid.ColumnNames], "a mixed array gets a value column for its scalars");
 
         double before = grid.WidthOf(1);
         grid.AutoFit(1);
@@ -420,7 +420,7 @@ public sealed class GridDrillTests
     // ── 表格列宽:列头与各行共用一套 ──────────────────────────────────────────────
 
     [TestMethod]
-    public void Table_columns_share_widths_between_header_and_rows() => Screens.OnUi(async () =>
+    public void Table_columns_share_widths_between_header_and_rows() => Screens.OnUi(static async () =>
     {
         var header = new Grid { ColumnDefinitions = [with("120,80,*")] };
         TableColumns.SetHeader(header, "t");

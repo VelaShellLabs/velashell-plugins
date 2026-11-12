@@ -146,7 +146,7 @@ public sealed class LocalComposeHostSmokeTests
             Assert.Inconclusive($"这台机器上起不了 docker:{ex.Message}");
             return;
         }
-        string output = string.Join('\n', lines.Select(l => l.Line));
+        string output = string.Join('\n', lines.Select(static l => l.Line));
         if (exit != 0 && LooksLikeNoDaemon(output))
         {
             Assert.Inconclusive($"这台机器上 docker 守护进程没起:{output}");
@@ -154,7 +154,7 @@ public sealed class LocalComposeHostSmokeTests
         }
         Assert.AreEqual(0, exit, output);
         // --format json 至少给一个 JSON 数组,哪怕是空的。
-        string joined = string.Concat(lines.Where(l => l.Stream == ExecStream.StandardOutput).Select(l => l.Line));
+        string joined = string.Concat(lines.Where(static l => l.Stream == ExecStream.StandardOutput).Select(static l => l.Line));
         Assert.StartsWith("[", joined.TrimStart());
     }
 

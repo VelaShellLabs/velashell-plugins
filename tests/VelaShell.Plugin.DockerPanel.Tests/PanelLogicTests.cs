@@ -42,7 +42,7 @@ public class PanelLogicTests
     {
         BatchResult result = await BatchRunner.RunAsync(
             [("a", "worker-1"), ("b", "postgres-main"), ("c", "worker-2")],
-            (target, _) => target == "b"
+            static (target, _) => target == "b"
                 ? throw new DockerApiException(System.Net.HttpStatusCode.Conflict,
                     "conflict: container is being used by api-gateway")
                 : Task.CompletedTask, cancellationToken: TestContext.CancellationToken);
@@ -146,13 +146,13 @@ public class PanelLogicTests
     [TestMethod]
     public void Merge_KeepsExistingInstancesSoSelectionSurvivesARefresh()
     {
-        var collection = new KeyedCollection<Item>(i => i.Id);
+        var collection = new KeyedCollection<Item>(static i => i.Id);
         var a = new Item("a");
         var b = new Item("b");
-        collection.Merge([a, b], (_, _) => { });
+        collection.Merge([a, b], static (_, _) => { });
         Item keptA = collection[0];
 
-        collection.Merge([new Item("a"), new Item("b")], (current, incoming) => current.Version++);
+        collection.Merge([new Item("a"), new Item("b")], static (current, incoming) => current.Version++);
 
         // 简单地 Clear + AddRange 会把选中态、滚动位置与展开状态全部清掉,
         // 而这个面板每秒都可能因为一条事件而刷新。
@@ -163,12 +163,12 @@ public class PanelLogicTests
     [TestMethod]
     public void Merge_AddsRemovesAndReorders()
     {
-        var collection = new KeyedCollection<Item>(i => i.Id);
-        collection.Merge([new Item("a"), new Item("b"), new Item("c")], (_, _) => { });
+        var collection = new KeyedCollection<Item>(static i => i.Id);
+        collection.Merge([new Item("a"), new Item("b"), new Item("c")], static (_, _) => { });
 
-        collection.Merge([new Item("c"), new Item("a"), new Item("d")], (_, _) => { });
+        collection.Merge([new Item("c"), new Item("a"), new Item("d")], static (_, _) => { });
 
-        Assert.AreSequenceEqual(["c", "a", "d"], [.. collection.Select(i => i.Id)]);
+        Assert.AreSequenceEqual(["c", "a", "d"], [.. collection.Select(static i => i.Id)]);
     }
 
     // ── 确认闸门 ──────────────────────────────────────────────
@@ -183,7 +183,7 @@ public class PanelLogicTests
     };
 
     [TestMethod]
-    public void Gate_DataLossTierStaysLockedUntilTheWordIsTypedExactly() => OnUi(() =>
+    public void Gate_DataLossTierStaysLockedUntilTheWordIsTypedExactly() => OnUi(static () =>
     {
         var gate = new ConfirmGate();
         _ = gate.AskAsync(DataLossRequest());
@@ -202,7 +202,7 @@ public class PanelLogicTests
     });
 
     [TestMethod]
-    public void Gate_DestructiveTierNeedsNoTypedWord() => OnUi(() =>
+    public void Gate_DestructiveTierNeedsNoTypedWord() => OnUi(static () =>
     {
         var gate = new ConfirmGate();
         _ = gate.AskAsync(new()
@@ -218,7 +218,7 @@ public class PanelLogicTests
     });
 
     [TestMethod]
-    public void Gate_ConfirmAndCancelResolveTheWaiter() => OnUi(async () =>
+    public void Gate_ConfirmAndCancelResolveTheWaiter() => OnUi(static async () =>
     {
         var gate = new ConfirmGate();
         Task<bool> pending = gate.AskAsync(DataLossRequest());
@@ -232,7 +232,7 @@ public class PanelLogicTests
     });
 
     [TestMethod]
-    public void Gate_RefusesASecondRequestWhileOneIsOpen() => OnUi(async () =>
+    public void Gate_RefusesASecondRequestWhileOneIsOpen() => OnUi(static async () =>
     {
         var gate = new ConfirmGate();
         Task<bool> first = gate.AskAsync(DataLossRequest());
@@ -325,8 +325,8 @@ public class PanelLogicTests
     public void CreateNetworkForm_DisablesOverlayWhenSwarmIsInactive()
     {
         var form = new CreateNetworkForm(swarmActive: false);
-        ChoiceField driver = form.Fields.OfType<ChoiceField>().Single(f => f.Label == "驱动");
-        ChoiceOption overlay = driver.Options.Single(o => o.Value == "overlay");
+        ChoiceField driver = form.Fields.OfType<ChoiceField>().Single(static f => f.Label == "驱动");
+        ChoiceOption overlay = driver.Options.Single(static o => o.Value == "overlay");
 
         // 直接置灰而不是让用户去撞一条 daemon 的错误。
         Assert.IsFalse(overlay.Enabled);

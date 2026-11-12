@@ -73,7 +73,7 @@ internal sealed class TransferObjectRow : ObservableObject
         Actions = actions;
         _loc = loc;
         _changed = changed;
-        _action = actions.First(a => (XferAction)a.Value == XferAction.Create);
+        _action = actions.First(static a => (XferAction)a.Value == XferAction.Create);
     }
 
     /// <summary>名字(桶是桶名)。</summary>

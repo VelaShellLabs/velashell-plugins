@@ -96,7 +96,7 @@ public sealed class DynamicChannelTests
         int before = sent.Count;
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => channels[0].SendAsync([9]));
         await channels[0].CloseAsync();
-        Assert.AreEqual(before, sent.Count);
+        Assert.HasCount(before, sent);
         Assert.AreEqual(0, handlers[1].Closes);
         await channels[1].SendAsync([7]);
         Assert.AreSequenceEqual(new byte[] { 0x30, 1, 7 }, sent.Last());
@@ -122,7 +122,7 @@ public sealed class DynamicChannelTests
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Task closing = channels[0].CloseAsync();
         Assert.IsFalse(closing.IsCompleted);
-        Assert.IsFalse(sent.Any(bytes => (bytes[0] >> 4) == 4));
+        Assert.DoesNotContain(bytes => (bytes[0] >> 4) == 4, sent);
         release.SetResult();
         await Task.WhenAll(sending, closing).WaitAsync(TimeSpan.FromSeconds(3));
         int close = sent.FindIndex(bytes => (bytes[0] >> 4) == 4);

@@ -174,9 +174,9 @@ public sealed class QueryShapeTests
             BsonDocument.Parse("{ amount: -1 }"));
         Assert.IsNotNull(advice);
         Assert.AreEqual("{ status: 1, region: 1, amount: -1, createdAt: 1 }", advice.KeysText);
-        Assert.AreSequenceEqual(new[] { "status", "region" }, [.. advice.Equality]);
-        Assert.AreSequenceEqual(new[] { "amount" }, [.. advice.Sort]);
-        Assert.AreSequenceEqual(new[] { "createdAt" }, [.. advice.Range]);
+        Assert.AreSequenceEqual(["status", "region"], [.. advice.Equality]);
+        Assert.AreSequenceEqual(["amount"], [.. advice.Sort]);
+        Assert.AreSequenceEqual(["createdAt"], [.. advice.Range]);
     }
 
     [TestMethod]
@@ -187,7 +187,7 @@ public sealed class QueryShapeTests
             BsonDocument.Parse("{ total: -1 }"));
         Assert.IsNotNull(advice);
         Assert.AreEqual("{ \"customer.level\": 1, total: -1 }", advice.KeysText);
-        Assert.AreSequenceEqual(new[] { "total" }, [.. advice.SortAndRange]);
+        Assert.AreSequenceEqual(["total"], [.. advice.SortAndRange]);
         Assert.IsEmpty(advice.Range);
     }
 

@@ -53,7 +53,7 @@ internal static class S3ConfigJson
     /// <summary>把一个单值包装成 <c>{ "名字": 值 }</c>,让只有一个字段的配置也有稳定的文档形状。</summary>
     public static string Wrap(string propertyName, string? value)
     {
-        var buffer = new System.IO.MemoryStream();
+        var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
         {
             writer.WriteStartObject();

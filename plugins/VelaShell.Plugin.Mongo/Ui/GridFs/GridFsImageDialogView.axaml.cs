@@ -13,8 +13,5 @@ public sealed partial class GridFsImageDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public GridFsImageDialogView()
-    {
-        InitializeComponent();
-    }
+    public GridFsImageDialogView() => InitializeComponent();
 }

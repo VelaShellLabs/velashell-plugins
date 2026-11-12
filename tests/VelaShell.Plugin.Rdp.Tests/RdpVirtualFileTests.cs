@@ -7,9 +7,9 @@ namespace VelaShell.Plugin.Rdp.Tests;
 public sealed class RdpVirtualFileTests
 {
     [TestMethod]
+    [OSCondition(OperatingSystems.Windows)]
     public void OleDescriptorsAndStreamAcquisitionDoNotReadContent()
     {
-        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("Windows COM ABI test."); return; }
         int reads = 0;
         var progress = new RdpClipboardTransfer();
         using var files = new RdpVirtualFiles([new("folder", true, 0), new("folder\\data.bin", false, 4), new("other", false, 0)],
@@ -71,11 +71,11 @@ public sealed class RdpVirtualFileTests
     [DataRow("Logical Performed DropEffect", false)]
     [DataRow("Paste Succeeded", true)]
     [DataRow("TargetCLSID", true)]
+    [OSCondition(OperatingSystems.Windows)]
     public void NativeShellFeedbackDoesNotEndOperationOrCloseConsumerStreams(string name, bool release)
     {
-        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("Windows COM ABI test."); return; }
         var progress = new RdpClipboardTransfer();
-        using var files = new RdpVirtualFiles([new("data", false, 2)], (_, _, count, _) => Task.FromResult(Enumerable.Repeat((byte)3, (int)count).ToArray()), progress, default);
+        using var files = new RdpVirtualFiles([new("data", false, 2)], static (_, _, count, _) => Task.FromResult(Enumerable.Repeat((byte)3, (int)count).ToArray()), progress, default);
         using var data = new WindowsVirtualFileDataObject(files);
         nint unknown = Marshal.GetComInterfaceForObject(data, typeof(IVirtualFileDataObject));
         Guid iid = typeof(IDataObjectAsyncCapability).GUID;
@@ -154,7 +154,7 @@ public sealed class RdpVirtualFileTests
     {
         var progress = new RdpClipboardTransfer();
         using var files = new RdpVirtualFiles([new("directory", true, 0), new("empty", false, 0), new("a", false, 2), new("b", false, 3)],
-            (_, _, count, _) => Task.FromResult(new byte[count]), progress, default);
+            static (_, _, count, _) => Task.FromResult(new byte[count]), progress, default);
         _ = await files.ReadAsync(1, 0, 1);
         _ = await files.ReadAsync(3, 0, 3);
         Assert.AreEqual("Transferring", progress.Snapshot!.State);
@@ -173,7 +173,7 @@ public sealed class RdpVirtualFileTests
     {
         var progress = new RdpClipboardTransfer();
         using var files = new RdpVirtualFiles([new("directory", true, 0), new("empty", false, 0)],
-            (_, _, _, _) => throw new AssertFailedException("Zero-byte content must not request a block."), progress, default);
+            static (_, _, _, _) => throw new AssertFailedException("Zero-byte content must not request a block."), progress, default);
         files.DescriptorsDelivered();
         Assert.AreEqual("Delivered", progress.Snapshot!.State);
         files.BeginOperation();
@@ -196,7 +196,7 @@ public sealed class RdpVirtualFileTests
     public void ShellFailureKeepsItsTerminalStateAfterLateProgress(int result, string state)
     {
         var progress = new RdpClipboardTransfer();
-        using var files = new RdpVirtualFiles([new("data", false, 2)], (_, _, _, _) => Task.FromResult(new byte[2]), progress, default);
+        using var files = new RdpVirtualFiles([new("data", false, 2)], static (_, _, _, _) => Task.FromResult(new byte[2]), progress, default);
         files.BeginOperation();
         files.EndOperation(result, 0);
         progress.Sent(0, 0, 2, "data", "Delivered");
@@ -207,9 +207,9 @@ public sealed class RdpVirtualFileTests
     }
 
     [TestMethod]
+    [OSCondition(OperatingSystems.Windows)]
     public void NativeFormatProbesReturnHresultsWithoutManagedExceptionsOrTakingRejectedOwnership()
     {
-        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("Windows COM ABI test."); return; }
         using var files = new RdpVirtualFiles([new("data", false, 1)], (_, _, _, _) => Task.FromResult(new byte[] { 3 }), new(), default);
         using var data = new WindowsVirtualFileDataObject(files);
         nint unknown = Marshal.GetComInterfaceForObject(data, typeof(IVirtualFileDataObject));
@@ -268,9 +268,9 @@ public sealed class RdpVirtualFileTests
 
     [TestMethod]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [OSCondition(OperatingSystems.Windows)]
     public async Task ClipboardBusyRetriesAreBoundedAndCancellationStopsThem()
     {
-        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("Windows clipboard retry."); return; }
         int calls = 0;
         await WindowsVirtualFileClipboard.RetryClipboardAsync(() =>
         {
@@ -313,8 +313,8 @@ public sealed class RdpVirtualFileTests
     public void VirtualDescriptorsRejectUnsafePathsAndTransferLimitBeforeReading()
     {
         static Task<byte[]> NoRead(uint index, ulong offset, uint length, CancellationToken ct) => throw new AssertFailedException("Metadata must not read content.");
-        _ = Assert.Throws<InvalidDataException>(() => new RdpVirtualFiles([new("..\\escape", false, 1)], NoRead, new(), default));
-        _ = Assert.Throws<InvalidDataException>(() => new RdpVirtualFiles([new("large", false, RdpClipboardFiles.MaxTransferBytes + 1)], NoRead, new(), default));
+        _ = Assert.Throws<InvalidDataException>(static () => new RdpVirtualFiles([new("..\\escape", false, 1)], NoRead, new(), default));
+        _ = Assert.Throws<InvalidDataException>(static () => new RdpVirtualFiles([new("large", false, RdpClipboardFiles.MaxTransferBytes + 1)], NoRead, new(), default));
     }
 
     private static T Method<T>(nint instance, int slot) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(instance), slot * IntPtr.Size));

@@ -105,7 +105,7 @@ public sealed class RdpWorkspaceTests
 
         IWorkspaceDocument document = await provider.OpenAsync(RdpSettingsTests.Request());
 
-        Assert.AreSequenceEqual(new[] { RdpSecurity.Nla, RdpSecurity.Auto }, security);
+        Assert.AreSequenceEqual([RdpSecurity.Nla, RdpSecurity.Auto], security);
         await document.DisposeAsync();
     }
 

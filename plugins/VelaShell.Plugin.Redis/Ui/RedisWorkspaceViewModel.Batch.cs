@@ -48,16 +48,16 @@ public sealed partial class RedisWorkspaceViewModel
         Loc.Format("Redis_BatchSelected", _checkedKeys.Count.ToString("N0", CultureInfo.CurrentCulture));
 
     /// <summary>进入/退出多选模式。</summary>
-    public AsyncCommand ToggleMultiSelectCommand { get; private set; } = null!;
+    public AsyncCommand ToggleMultiSelectCommand { get; private set; }
 
     /// <summary>勾选 / 取消勾选一行(列表模板里的复选框绑它)。</summary>
-    public AsyncCommand<RedisKeyRow?> ToggleCheckedCommand { get; private set; } = null!;
+    public AsyncCommand<RedisKeyRow?> ToggleCheckedCommand { get; private set; }
 
     /// <summary>复制勾选的键名到剪贴板(一行一个)。</summary>
-    public AsyncCommand CopyKeyNamesCommand { get; private set; } = null!;
+    public AsyncCommand CopyKeyNamesCommand { get; private set; }
 
     /// <summary>批量删除勾选的键。</summary>
-    public AsyncCommand BatchDeleteCommand { get; private set; } = null!;
+    public AsyncCommand BatchDeleteCommand { get; private set; }
 
     /// <summary>
     /// 请视图把一段文本放进剪贴板。
@@ -150,7 +150,7 @@ public sealed partial class RedisWorkspaceViewModel
             return Task.CompletedTask;
         }
         // 键名用**显示形式**(转义后):它能直接粘进控制台,也能粘进代码里当字面量。
-        CopyRequested?.Invoke(this, string.Join('\n', _checkedKeys.Select(key => key.Display).Order(StringComparer.Ordinal)));
+        CopyRequested?.Invoke(this, string.Join('\n', _checkedKeys.Select(static key => key.Display).Order(StringComparer.Ordinal)));
         StatusMessage = Loc.Format("Redis_BatchCopied", _checkedKeys.Count.ToString("N0", CultureInfo.CurrentCulture));
         return Task.CompletedTask;
     }

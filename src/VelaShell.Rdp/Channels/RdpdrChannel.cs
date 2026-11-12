@@ -173,7 +173,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
     private byte[] BuildCapabilityResponse()
     {
-        IRdpdrDevice[] capabilities = [.. _additional.DistinctBy(d => d.CapabilityType)];
+        IRdpdrDevice[] capabilities = [.. _additional.DistinctBy(static d => d.CapabilityType)];
         ByteWriter w = Header(PakidClientCapability);
         w.U16LE((ushort)(2 + capabilities.Length)); // general + drive + selected non-drive capabilities
         w.U16LE(0);                 // pad
@@ -191,7 +191,7 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         w.U32LE(0x00000007);        // extendedPDU: REMOVE | DISPLAY_NAME | USER_LOGGEDON
         w.U32LE(0x00000001);        // extraFlags1: ENABLE_ASYNCIO
         w.U32LE(0);                 // extraFlags2
-        w.U32LE((uint)_additional.Count(device => device.DeviceType == 0x20)); // pre-logon smart-card devices
+        w.U32LE((uint)_additional.Count(static device => device.DeviceType == 0x20)); // pre-logon smart-card devices
 
         // Drive capability set (version 2, header only).
         w.U16LE(CapDriveType);

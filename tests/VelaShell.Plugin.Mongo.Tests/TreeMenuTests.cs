@@ -37,16 +37,16 @@ public sealed class TreeMenuTests
     private static TreeNode Folder(TreeNode db, FolderKind kind) => db.Children.Single(n => n.Kind == NodeKind.Folder && n.Folder == kind);
 
     [TestMethod]
-    public void Every_group_offers_creating_its_own_kind_of_object() => Screens.OnUi(async () =>
+    public void Every_group_offers_creating_its_own_kind_of_object() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
         Loc loc = bench.ViewModel.Loc;
         TreeNode db = await DatabaseNodeAsync(bench, Screens.Database);
 
-        CollectionAssert.Contains(Labels(bench, Folder(db, FolderKind.Collections)), loc["Tree_NewCollection"]);
-        CollectionAssert.Contains(Labels(bench, Folder(db, FolderKind.Views)), loc["Tree_NewView"]);
-        CollectionAssert.Contains(Labels(bench, Folder(db, FolderKind.Buckets)), loc["Tree_NewBucket"]);
+        Assert.Contains(loc["Tree_NewCollection"], Labels(bench, Folder(db, FolderKind.Collections)));
+        Assert.Contains(loc["Tree_NewView"], Labels(bench, Folder(db, FolderKind.Views)));
+        Assert.Contains(loc["Tree_NewBucket"], Labels(bench, Folder(db, FolderKind.Buckets)));
         string[] database = Labels(bench, db);
         CollectionAssert.IsSubsetOf(new[] { loc["Tree_NewCollection"], loc["Tree_NewView"], loc["Tree_NewBucket"] }, database);
 
@@ -54,8 +54,8 @@ public sealed class TreeMenuTests
         CollectionAssert.IsSubsetOf(new[] { loc["Tree_NewCollection"], loc["Tree_NewView"] }, Labels(bench, orders));
         TreeNode view = Folder(db, FolderKind.Views).Children.First();
         string[] viewMenu = Labels(bench, view);
-        CollectionAssert.Contains(viewMenu, loc["Tree_NewView"]);
-        CollectionAssert.DoesNotContain(viewMenu, loc["Tree_NewCollection"]);
+        Assert.Contains(loc["Tree_NewView"], viewMenu);
+        Assert.DoesNotContain(loc["Tree_NewCollection"], viewMenu);
 
         TreeNode bucket = Folder(db, FolderKind.Buckets).Children.First();
         CollectionAssert.IsSubsetOf(new[] { loc["Tree_UploadFiles"], loc["Tree_UploadFolder"], loc["Tree_NewBucket"], loc["Tree_DropBucket"] },
@@ -64,7 +64,7 @@ public sealed class TreeMenuTests
     });
 
     [TestMethod]
-    public void New_view_from_a_collection_lands_on_the_view_card_with_that_source() => Screens.OnUi(async () =>
+    public void New_view_from_a_collection_lands_on_the_view_card_with_that_source() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -136,8 +136,8 @@ public sealed class TreeMenuTests
             await Screens.PumpAsync(10);
 
             List<string> left = await (await client.GetDatabase(db).ListCollectionNamesAsync()).ToListAsync();
-            CollectionAssert.DoesNotContain(left, "images.files");
-            CollectionAssert.DoesNotContain(left, "images.chunks");
+            Assert.DoesNotContain("images.files", left);
+            Assert.DoesNotContain("images.chunks", left);
             Assert.IsEmpty(bench.ViewModel.Tabs.OfType<GridFsTabViewModel>(), "the bucket's tab is closed");
             dbNode = await DatabaseNodeAsync(bench, db);
             Assert.IsEmpty(Folder(dbNode, FolderKind.Buckets).Children);

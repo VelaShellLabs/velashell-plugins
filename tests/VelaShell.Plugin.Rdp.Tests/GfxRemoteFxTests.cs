@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Resources;
 using VelaShell.Rdp;
-using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Graphics.Gfx;
 using VelaShell.Rdp.Graphics.Gfx.RemoteFx;
 
@@ -14,16 +13,16 @@ public sealed class GfxRemoteFxTests
     public void ClassicProtocolExampleMatchesIndependentReferenceImage()
     {
         Assembly assembly = typeof(GfxRemoteFxTests).Assembly;
-        string resource = assembly.GetManifestResourceNames().Single(n => n.EndsWith("GfxRemoteFx.fixture.resources", StringComparison.Ordinal));
+        string resource = assembly.GetManifestResourceNames().Single(static n => n.EndsWith("GfxRemoteFx.fixture.resources", StringComparison.Ordinal));
         using var reader = new ResourceReader(assembly.GetManifestResourceStream(resource)!);
-        var values = reader.Cast<System.Collections.DictionaryEntry>().ToDictionary(e => (string)e.Key, e => (string)e.Value!);
+        var values = reader.Cast<System.Collections.DictionaryEntry>().ToDictionary(static e => (string)e.Key, static e => (string)e.Value!);
         byte[] encoded = Convert.FromBase64String(values["Encoded"]);
         byte[] expected = Convert.FromBase64String(values["Expected"]);
         byte[] actual = new byte[64 * 64 * 4];
         new GfxRemoteFxCodec().Decode(encoded, 64, 64, actual, 256);
         for (int i = 0; i < actual.Length; i++)
         {
-            Assert.IsTrue(Math.Abs(actual[i] - expected[i]) <= (i % 4 == 3 ? 0 : 1), $"Reference pixel channel {i}: {expected[i]} != {actual[i]}");
+            Assert.IsLessThanOrEqualTo(i % 4 == 3 ? 0 : 1, Math.Abs(actual[i] - expected[i]), $"Reference pixel channel {i}: {expected[i]} != {actual[i]}");
         }
     }
 
@@ -32,7 +31,7 @@ public sealed class GfxRemoteFxTests
     [DataRow(true)]
     public void ClassicSolidColorClipsPartialEdgeTilesAndPreservesStride(bool rlgr3)
     {
-        byte[] pixels = Enumerable.Repeat((byte)0xCD, 32 * 3).ToArray();
+        byte[] pixels = [.. Enumerable.Repeat((byte)0xCD, 32 * 3)];
         var codec = new GfxRemoteFxCodec();
         codec.Decode(Classic(rlgr3, new RfxRect(2, 1, 3, 2)), 7, 3, pixels, 32);
         for (int y = 0; y < 3; y++)
@@ -92,10 +91,10 @@ public sealed class GfxRemoteFxTests
         codec.Decode(Progressive(First(reduced), reduced, extraQuant: 2), 64, 64, pixels, 256);
         codec.Decode(Progressive(Upgrade(reduced, second: false), reduced, extraQuant: 1), 64, 64, pixels, 256);
         new GfxProgressiveCodec().Decode(Progressive(Simple(reduced, after: 1), reduced), 64, 64, expected, 256);
-        CollectionAssert.AreEqual(expected, pixels);
+        Assert.AreSequenceEqual(expected, pixels);
         codec.Decode(Progressive(Upgrade(reduced, second: true), reduced), 64, 64, pixels, 256);
         new GfxProgressiveCodec().Decode(Progressive(Simple(reduced, after: 2), reduced), 64, 64, expected, 256);
-        CollectionAssert.AreEqual(expected, pixels);
+        Assert.AreSequenceEqual(expected, pixels);
     }
 
     [TestMethod]
@@ -110,7 +109,7 @@ public sealed class GfxRemoteFxTests
         codec.ResetEncodingContext();
         var replacement = new GfxProgressiveCodec(surface);
         replacement.Decode(Progressive(Simple(false, difference: true, zero: true), false), 64, 64, pixels, 256);
-        CollectionAssert.AreEqual(reference, pixels);
+        Assert.AreSequenceEqual(reference, pixels);
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => replacement.Decode(Progressive(Upgrade(false, false), false, extraQuant: 1), 64, 64, pixels, 256));
         var otherSurface = new GfxProgressiveSurfaceState(budget);
         var other = new GfxProgressiveCodec(otherSurface);
@@ -124,7 +123,7 @@ public sealed class GfxRemoteFxTests
     public void DispatcherRetainsProgressiveSurfaceDifferenceAfterDeletingEncodingContext()
     {
         using var dispatcher = new GfxCodecDispatcher();
-        byte[] pixels = Enumerable.Repeat((byte)73, 16384).ToArray();
+        byte[] pixels = [.. Enumerable.Repeat((byte)73, 16384)];
         GfxDecodeRequest Request(uint context, byte[] data) =>
             new(5, context, 9, 0x20, 0, 0, 64, 64, data, pixels, 64, 64);
         dispatcher.Decode(Request(7, Progressive(First(false), false, extraQuant: 2)));
@@ -135,7 +134,7 @@ public sealed class GfxRemoteFxTests
         Array.Fill(pixels, (byte)73);
         byte[] difference = Progressive(Simple(false, difference: true, zero: true), false);
         dispatcher.Decode(Request(8, difference));
-        CollectionAssert.AreEqual(reference, pixels);
+        Assert.AreSequenceEqual(reference, pixels);
 
         dispatcher.Reset();
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => dispatcher.Decode(Request(9, difference)));
@@ -157,7 +156,7 @@ public sealed class GfxRemoteFxTests
     [TestMethod]
     public void ProgressiveMultipleTilesClipTheRightSurfaceEdge()
     {
-        byte[] pixels = Enumerable.Repeat((byte)23, 276 * 2).ToArray();
+        byte[] pixels = [.. Enumerable.Repeat((byte)23, 276 * 2)];
         byte[] tiles = Join(Simple(true), Simple(true, x: 1));
         new GfxProgressiveCodec().Decode(Progressive(tiles, true, rectangle: new RfxRect(0, 0, 67, 2), tileCount: 2), 67, 2, pixels, 276);
         for (int y = 0; y < 2; y++)
@@ -178,10 +177,10 @@ public sealed class GfxRemoteFxTests
         byte[] before = (byte[])pixels.Clone();
         byte[] truncated = Progressive(Upgrade(false, false), false, extraQuant: 1)[..^1];
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode(truncated, 64, 64, pixels, 256));
-        CollectionAssert.AreEqual(before, pixels);
+        Assert.AreSequenceEqual(before, pixels);
         codec.Decode(Progressive(Upgrade(false, false), false, extraQuant: 1), 64, 64, pixels, 256);
         new GfxProgressiveCodec().Decode(Progressive(Simple(false, after: 1), false), 64, 64, expected, 256);
-        CollectionAssert.AreEqual(expected, pixels);
+        Assert.AreSequenceEqual(expected, pixels);
         codec.Reset();
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => codec.Decode(Progressive(Upgrade(false, true), false), 64, 64, pixels, 256));
     }
@@ -216,7 +215,7 @@ public sealed class GfxRemoteFxTests
             ? reduced ? ["hAAAB659KAA=", "AAAez2UA", "AAAezdlA"] : ["hAAAB799H4A=", "AAAfE2Pw", "AAAfEdj8"]
             : reduced ? [after == 1 ? "m/cAAAAPWv/2UA==" : after == 2 ? "nP2gAAAD1r/+SgA=" : "AAAezf/ZQA==", "AAAez/2UAA==", "AAAezf/9lAA="]
             : [after == 1 ? "m/cAAAAPfP/2Pw==" : after == 2 ? "nP2gAAAD3z/+R+A=" : "AAAfEf/Y/A==", "AAAfE/2PwA==", "AAAfEf/9j8A="];
-        return values.Select(Convert.FromBase64String).ToArray();
+        return [.. values.Select(Convert.FromBase64String)];
     }
 
     private static byte[] Simple(bool reduced, int after = 0, bool difference = false, bool zero = false, int x = 0) =>
@@ -291,7 +290,7 @@ public sealed class GfxRemoteFxTests
         {
             w.Write((byte)64); U16(w, 1); w.Write((byte)1); w.Write((byte)(extraQuant > 0 ? 1 : 0));
             w.Write((byte)(reduced ? 1 : 0)); U16(w, tile.Length == 0 ? 0 : tileCount); w.Write((uint)tile.Length);
-            U16(w, rect.X, rect.Y, rect.Width, rect.Height); w.Write(new byte[] { (byte)(0x60 | llQuant), 0x66, 0x66, 0x66, 0x66 });
+            U16(w, rect.X, rect.Y, rect.Width, rect.Height); w.Write([(byte)(0x60 | llQuant), 0x66, 0x66, 0x66, 0x66]);
             if (extraQuant > 0) { w.Write((byte)100); w.Write(Enumerable.Repeat((byte)(extraQuant * 17), 15).ToArray()); }
             w.Write(tile);
         }), Block(0xCCC2, _ => { }));
@@ -336,7 +335,7 @@ public sealed class GfxRemoteFxTests
             writer.Write((ushort)value);
         }
     }
-    private static byte[] Join(params byte[][] values) => values.SelectMany(v => v).ToArray();
+    private static byte[] Join(params byte[][] values) => [.. values.SelectMany(static v => v)];
     private sealed class BitWriter
     {
         private readonly List<int> _bits = [];

@@ -20,16 +20,16 @@ public sealed class RdpMonitorLayoutTests
         Assert.AreEqual(4480, layout.DesktopWidth);
         Assert.AreEqual(1440, layout.DesktopHeight);
         Assert.AreEqual(1920, layout.Monitors[0].Width);
-        Assert.AreEqual(2, layout.Monitors.Count);
+        Assert.HasCount(2, layout.Monitors);
     }
 
     [TestMethod]
     public void LayoutRequiresExactlyOnePrimary()
     {
-        Assert.Throws<ArgumentException>(() => new RdpMonitorLayout(
+        Assert.Throws<ArgumentException>(static () => new RdpMonitorLayout(
         [new(0, 0, 100, 100), new(100, 0, 100, 100)]));
 
-        Assert.Throws<ArgumentException>(() => new RdpMonitorLayout(
+        Assert.Throws<ArgumentException>(static () => new RdpMonitorLayout(
         [new(0, 0, 100, 100, Primary: true), new(100, 0, 100, 100, Primary: true)]));
 
         _ = new RdpMonitorLayout(
@@ -39,13 +39,13 @@ public sealed class RdpMonitorLayoutTests
     [TestMethod]
     public void LayoutRejectsOverlapAndNegativeOrigin()
     {
-        Assert.Throws<ArgumentException>(() => new RdpMonitorLayout(
+        Assert.Throws<ArgumentException>(static () => new RdpMonitorLayout(
         [
             new(0, 0, 100, 100, Primary: true),
             new(50, 50, 100, 100)
         ]));
 
-        Assert.Throws<ArgumentException>(() => new RdpMonitorLayout(
+        Assert.Throws<ArgumentException>(static () => new RdpMonitorLayout(
         [new(-1, 0, 100, 100, Primary: true)]));
     }
 }

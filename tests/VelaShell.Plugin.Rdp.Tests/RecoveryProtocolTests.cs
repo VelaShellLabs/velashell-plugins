@@ -20,15 +20,15 @@ public sealed class RecoveryProtocolTests
         for (int i = 0; i < 16; i++) { server[12 + i] = (byte)(i + 1); }
 
         var reader = new ByteReader(server);
-        AutoReconnectCookie cookie = AutoReconnectCookie.Parse(ref reader);
+        var cookie = AutoReconnectCookie.Parse(ref reader);
         byte[] packet = cookie.BuildClientPacket();
 
-        Assert.AreEqual(28, packet.Length);
+        Assert.HasCount(28, packet);
         Assert.AreEqual(28u, BinaryPrimitives.ReadUInt32LittleEndian(packet.AsSpan(0, 4)));
         Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32LittleEndian(packet.AsSpan(4, 4)));
         Assert.AreEqual(0x12345678u, BinaryPrimitives.ReadUInt32LittleEndian(packet.AsSpan(8, 4)));
         byte[] expected = HMACMD5.HashData(server.AsSpan(12, 16), new byte[32]);
-        CollectionAssert.AreEqual(expected, packet[12..]);
+        Assert.AreSequenceEqual(expected, packet[12..]);
     }
 
     [TestMethod]

@@ -65,7 +65,7 @@ internal sealed class CollectionSample
     /// <summary>抽一批。视图与时序集合同样支持 <c>$sample</c>。</summary>
     public static async Task<CollectionSample> LoadAsync(MongoConnection connection, string database, string collection, int size, CancellationToken cancellationToken)
     {
-        BsonDocument[] pipeline = new[] { new BsonDocument("$sample", new BsonDocument("size", Math.Clamp(size, 50, 5000))) };
+        BsonDocument[] pipeline = [new BsonDocument("$sample", new BsonDocument("size", Math.Clamp(size, 50, 5000)))];
         using IAsyncCursor<BsonDocument> cursor = await connection.Collection(database, collection)
             .AggregateAsync<BsonDocument>(pipeline, new AggregateOptions { MaxTime = TimeSpan.FromSeconds(10) }, cancellationToken)
             .ConfigureAwait(false);
@@ -225,11 +225,11 @@ internal sealed class CollectionSample
             foreach (CollectionSampleField field in fields.Take(80))
             {
                 string name = filterMode ? field.Path : field.Path[(field.Path.LastIndexOf('.') + 1)..];
-                bool needsQuotes = !System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_$][A-Za-z0-9_$]*$");
+                string fieldName = BsonText.FieldName(name);
                 items.Add(new CompletionItem
                 {
                     Label = name,
-                    InsertText = (needsQuotes ? BsonText.Quote(name) : name) + ": |",
+                    InsertText = fieldName + ": |",
                     IconKey = "Mongo.variable",
                     IconToken = "VelaWarning",
                     Category = loc.Format("Cw_SuggestField", BsonKinds.Name(field.Kind)),

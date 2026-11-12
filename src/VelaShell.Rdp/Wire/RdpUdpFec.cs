@@ -48,7 +48,7 @@ internal sealed class RdpUdpFec
 
     internal static byte[] Encode(uint start, IReadOnlyList<byte[]> sources, byte index)
     {
-        byte[] result = new byte[sources.Max(s => s.Length) + 2];
+        byte[] result = new byte[sources.Max(static s => s.Length) + 2];
         for (int s = 0; s < sources.Count; s++)
         {
             byte coefficient = Coefficient(index, unchecked(start + (uint)s));
@@ -77,8 +77,8 @@ internal sealed class RdpUdpFec
     {
         _ = _equations.RemoveAll(p => RdpUdpPacket.Distance(unchecked(p.SourceSequence + p.FecRange), next) < 0);
         if (_equations.Count == 0) { yield break; }
-        uint[] missing = _equations.SelectMany(p => Enumerable.Range(0, p.FecRange + 1)
-            .Select(i => unchecked(p.SourceSequence + (uint)i))).Where(s => !_sources.ContainsKey(s)).Distinct().ToArray();
+        uint[] missing = [.. _equations.SelectMany(p => Enumerable.Range(0, p.FecRange + 1)
+            .Select(i => unchecked(p.SourceSequence + (uint)i))).Where(s => !_sources.ContainsKey(s)).Distinct()];
         // An oversized/incomplete system is left for retransmission (R) or the reorder timer (L).
         if (missing.Length == 0 || missing.Length > 32 || missing.Any(s => RdpUdpPacket.Distance(s, next) < 0 || RdpUdpPacket.Distance(s, next) >= window)) { yield break; }
         int length = _equations.Max(p => p.Payload.Length);

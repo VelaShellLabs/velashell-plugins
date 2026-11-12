@@ -14,8 +14,5 @@ public sealed partial class ConnectionStateTabView : UserControl
     }
 
     /// <summary>设计器用的无参构造。</summary>
-    public ConnectionStateTabView()
-    {
-        InitializeComponent();
-    }
+    public ConnectionStateTabView() => InitializeComponent();
 }

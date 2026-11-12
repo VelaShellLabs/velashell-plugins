@@ -111,7 +111,7 @@ public sealed class GridFsTests
         try
         {
             IReadOnlyList<GridFsUploadItem> items = GridFsTabViewModel.ExpandPaths([folder, loose]);
-            Assert.AreSequenceEqual(new[] { "SKU-1/main.jpg", "SKU-1/detail/d1.jpg", "loose.txt" }, [.. items.Select(static i => i.Relative)], SequenceOrder.InAnyOrder);
+            Assert.AreSequenceEqual(["SKU-1/main.jpg", "SKU-1/detail/d1.jpg", "loose.txt"], [.. items.Select(static i => i.Relative)], SequenceOrder.InAnyOrder);
             Assert.AreEqual(3L, items.Single(static i => i.Relative == "SKU-1/main.jpg").Size);
         }
         finally
@@ -123,7 +123,7 @@ public sealed class GridFsTests
     // ── 服务层(真实服务器) ───────────────────────────────────────────────
 
     [TestMethod]
-    public void Service_lists_virtual_directories_versions_and_filters() => Screens.OnUi(async () =>
+    public void Service_lists_virtual_directories_versions_and_filters() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using TempBucket temp = await TempBucket.CreateAsync();
@@ -240,7 +240,7 @@ public sealed class GridFsTests
     });
 
     [TestMethod]
-    public void Service_finds_and_cleans_orphan_chunks_and_creates_buckets() => Screens.OnUi(async () =>
+    public void Service_finds_and_cleans_orphan_chunks_and_creates_buckets() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using TempBucket temp = await TempBucket.CreateAsync();
@@ -271,7 +271,7 @@ public sealed class GridFsTests
 
         await GridFsService.CreateBucketAsync(temp.Connection, temp.Database, "images");
         IReadOnlyList<GridFsBucketInfo> buckets = await GridFsService.ListBucketsAsync(temp.Connection, temp.Database);
-        CollectionAssert.Contains(buckets.Select(static b => b.Name).ToList(), "images");
+        Assert.Contains("images", buckets.Select(static b => b.Name).ToList());
         IReadOnlyList<BsonDocument> chunkIndexes = await temp.Connection.ListIndexesAsync(temp.Database, "images.chunks");
         BsonDocument unique = chunkIndexes.Single(static i => i["name"].AsString == "files_id_1_n_1");
         Assert.IsTrue(unique.GetValue("unique", false).ToBoolean());
@@ -331,7 +331,7 @@ public sealed class GridFsTests
         IMongoCollection<BsonDocument> files = temp.Connection.Collection(temp.Database, "fs.files");
         IMongoCollection<BsonDocument> chunks = temp.Connection.Collection(temp.Database, "fs.chunks");
         List<BsonValue> left = [.. (await files.Find(FilterDefinition<BsonDocument>.Empty).ToListAsync()).Select(static d => d["_id"])];
-        Assert.AreSequenceEqual(new BsonValue[] { ids[2], ids[3], ids[4] }, left, SequenceOrder.InAnyOrder, "only v1 and v2 are gone");
+        Assert.AreSequenceEqual([ids[2], ids[3], ids[4]], left, SequenceOrder.InAnyOrder, "only v1 and v2 are gone");
         Assert.AreEqual(0L, await chunks.CountDocumentsAsync(new BsonDocument("files_id", new BsonDocument("$in", new BsonArray { ids[0], ids[1] }))),
             "their chunks went with them");
         Assert.AreEqual(ids[4], details.Versions[0].File.Id, "the latest stays the latest");

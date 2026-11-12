@@ -47,10 +47,7 @@ public sealed partial class PipelineTabView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public PipelineTabView()
-    {
-        InitializeComponent();
-    }
+    public PipelineTabView() => InitializeComponent();
 
     // ── 阶段搜索弹层 ───────────────────────────────────────────────────────
 
@@ -270,9 +267,9 @@ public sealed partial class PipelineTabView : UserControl
     private void FitResultTable() => ResultTable.MinWidth = Math.Max(0, ResultScroller.Bounds.Width);
 
     /// <summary>拖列头分隔线改列宽。</summary>
-    private void OnResultResizeDelta(object? sender, Avalonia.Input.VectorEventArgs e)
+    private void OnResultResizeDelta(object? sender, VectorEventArgs e)
     {
-        if ((sender as Control)?.DataContext is PipelineColumn column)
+        if (sender is Control { DataContext: PipelineColumn column })
         {
             column.Width += e.Vector.X;
         }

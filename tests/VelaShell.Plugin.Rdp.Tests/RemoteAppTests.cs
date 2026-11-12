@@ -1,15 +1,16 @@
-using System.Text;
 using System.Runtime.InteropServices;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Graphics;
+using VelaShell.Rdp.Mcs;
 using VelaShell.Rdp.Pdu;
 using VelaShell.Rdp.Wire;
 using static VelaShell.Plugin.Rdp.Tests.RdpHeadlessTests;
@@ -39,7 +40,7 @@ public sealed class RemoteAppTests
         Assert.AreEqual((ushort)1280, BitConverter.ToUInt16(workArea, 12), "server-negotiated dimensions replace requested dimensions");
         Assert.AreEqual((ushort)(800 - RemoteAppOptions.WorkspaceStripHeight), BitConverter.ToUInt16(workArea, 14),
             "the work area uses the negotiated desktop and ends above the local application tabs");
-        Assert.IsFalse(sent.Any(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) is 0xf000 or 0xf001), "startup does not send optional taskbar/display-change orders");
+        Assert.DoesNotContain(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) is 0xf000 or 0xf001, sent, "startup does not send optional taskbar/display-change orders");
         byte[] execute = sent.Single(p => BitConverter.ToUInt16(p) == 1);
         var r = new ByteReader(execute);
         Assert.AreEqual((ushort)1, r.U16LE());
@@ -57,9 +58,9 @@ public sealed class RemoteAppTests
         await rail.ActivateAsync(42, true, default);
         await rail.SystemCommandAsync(42, 0xf060, default);
         await rail.MoveAsync(42, 10, 20, 400, 300, default);
-        CollectionAssert.AreEqual(new byte[] { 2, 0, 9, 0, 42, 0, 0, 0, 1 }, sent[0]);
-        CollectionAssert.AreEqual(new byte[] { 4, 0, 10, 0, 42, 0, 0, 0, 0x60, 0xf0 }, sent[1]);
-        CollectionAssert.AreEqual(new byte[] { 8, 0, 16, 0, 42, 0, 0, 0, 10, 0, 20, 0, 154, 1, 64, 1 }, sent[2]);
+        Assert.AreSequenceEqual(new byte[] { 2, 0, 9, 0, 42, 0, 0, 0, 1 }, sent[0]);
+        Assert.AreSequenceEqual(new byte[] { 4, 0, 10, 0, 42, 0, 0, 0, 0x60, 0xf0 }, sent[1]);
+        Assert.AreSequenceEqual(new byte[] { 8, 0, 16, 0, 42, 0, 0, 0, 10, 0, 20, 0, 154, 1, 64, 1 }, sent[2]);
     }
 
     [TestMethod]
@@ -73,15 +74,15 @@ public sealed class RemoteAppTests
         var cloaking = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask, cloak: (id, cloaked) => cloaks.Add((id, cloaked)));
         await cloaking.ProcessAsync(RailChannel.Packet(5, w => w.U32LE(7601)), default);
         await cloaking.ProcessAsync(RailChannel.Packet(0x15, w => { w.U32LE(42); w.U8(1); }), default);
-        CollectionAssert.AreEqual(new[] { (42u, true) }, cloaks);
+        Assert.AreSequenceEqual([(42u, true)], cloaks);
         await Assert.ThrowsAsync<RdpProtocolException>(() => cloaking.ProcessAsync(RailChannel.Packet(0x15, w => w.U32LE(42)), default));
         // Orders and system parameters this client does not know are ignored, not fatal (a newer server may send them).
         await rail.ProcessAsync(RailChannel.Packet(0x16, w => w.U32LE(1)), default);
         await rail.ProcessAsync(RailChannel.Packet(3, w => { w.U32LE(0x1234); w.U8(1); }), default);
         RdpProtocolException rejection = await Assert.ThrowsAsync<RdpProtocolException>(() =>
             rail.ProcessAsync(ExecuteResult(3, 0x15), default));
-        StringAssert.Contains(rejection.Message, "not in the server's RemoteApp allowlist");
-        StringAssert.Contains(rejection.Message, "device is not ready");
+        Assert.Contains("not in the server's RemoteApp allowlist", rejection.Message);
+        Assert.Contains("device is not ready", rejection.Message);
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync([1, 0, 3, 0], default));
         await Assert.ThrowsAsync<RdpProtocolException>(() => rail.ProcessAsync([1, 0, 8, 0], default));
         var handshakeEx = new RailChannel(App, 1024, 768, (_, _) => Task.CompletedTask);
@@ -101,10 +102,10 @@ public sealed class RemoteAppTests
         Assert.AreEqual(0x8000u, BitConverter.ToUInt32(rail, 8) & 0x8000);
         Assert.AreEqual(0u, BitConverter.ToUInt32(rail, 8) & 0x02000000);
         var options = new RdpClientOptions { Host = "h", Username = "u", Password = "", RemoteApp = App, DynamicResolution = true, Clipboard = false };
-        var railChannel = RdpManagedSession.BuildChannels(options).Single();
+        ChannelDef railChannel = RdpManagedSession.BuildChannels(options).Single();
         Assert.AreEqual("rail", railChannel.Name);
         Assert.AreEqual(0xC0A00000u, railChannel.Options);
-        Assert.AreSequenceEqual(new[] { "rail" }, RdpManagedSession.BuildChannels(options).Select(c => c.Name).ToArray());
+        Assert.AreSequenceEqual(["rail"], [.. RdpManagedSession.BuildChannels(options).Select(c => c.Name)]);
         Assert.Throws<ArgumentException>(() => new RdpConnection(ConnectionOptions() with { GraphicsPipeline = true }));
         bool factoryCalled = false;
         Assert.IsNull(RdpManagedSession.PrepareGraphics(options with { EnableGraphicsPipeline = true }, (_, _) => { factoryCalled = true; throw new InvalidOperationException(); }));
@@ -183,7 +184,7 @@ public sealed class RemoteAppTests
     }
 
     [TestMethod]
-    public void WorkspaceRoutesOnlyApplicationPixelsAndLocalChromeToTheRemoteApp() => Run(async () =>
+    public void WorkspaceRoutesOnlyApplicationPixelsAndLocalChromeToTheRemoteApp() => Run(static async () =>
     {
         var session = new FakeRdpSession { IsRemoteApp = true };
         await using var desktop = new RdpDesktopControl(session, 800, 600);
@@ -191,8 +192,15 @@ public sealed class RemoteAppTests
         window.Show(); window.UpdateLayout();
         session.EmitWindows(new RemoteAppWindow(42)
         {
-            Title = "Editor", X = 100, Y = 100, VisibleX = 100, VisibleY = 100, Width = 400, Height = 300,
-            Style = 0x00c40000, VisibilityRects = [new(0, 0, 400, 300)]
+            Title = "Editor",
+            X = 100,
+            Y = 100,
+            VisibleX = 100,
+            VisibleY = 100,
+            Width = 400,
+            Height = 300,
+            Style = 0x00c40000,
+            VisibilityRects = [new(0, 0, 400, 300)]
         });
         byte[] pixels = new byte[800 * 600 * 4];
         for (int i = 0; i < pixels.Length; i += 4) { pixels[i + 2] = 255; pixels[i + 3] = 255; }
@@ -202,7 +210,7 @@ public sealed class RemoteAppTests
         using (var copy = new WriteableBitmap(new PixelSize(800, 600), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul))
         {
             rendered.Render(desktop);
-            using var buffer = copy.Lock();
+            using ILockedFramebuffer buffer = copy.Lock();
             rendered.CopyPixels(buffer);
             byte[] actual = new byte[buffer.RowBytes * 600];
             Marshal.Copy(buffer.Address, actual, 0, actual.Length);
@@ -217,10 +225,10 @@ public sealed class RemoteAppTests
         window.MouseDown(new Point(150, 110), MouseButton.Left); window.MouseMove(new Point(175, 135)); window.MouseUp(new Point(175, 135), MouseButton.Left);
         await Task.Delay(50);
         Dispatcher.UIThread.RunJobs();
-        Assert.HasCount(2, session.Mouse.Where(m => (m.Flags & 0x1000) != 0).ToArray(), "only the application client click reaches RDP input");
-        CollectionAssert.Contains(session.RemoteCommands, "activate:42:True");
-        CollectionAssert.Contains(session.RemoteCommands, "close:42");
-        CollectionAssert.Contains(session.RemoteCommands, "move:42:125:125:400:300");
+        Assert.HasCount(2, session.Mouse.Where(static m => (m.Flags & 0x1000) != 0).ToArray(), "only the application client click reaches RDP input");
+        Assert.Contains("activate:42:True", session.RemoteCommands);
+        Assert.Contains("close:42", session.RemoteCommands);
+        Assert.Contains("move:42:125:125:400:300", session.RemoteCommands);
         Assert.IsEmpty(session.Resizes, "RemoteApp keeps its negotiated virtual work area");
         session.EmitWindows(); Dispatcher.UIThread.RunJobs();
         Assert.IsNull(desktop.HitRemoteWindow(200, 200));

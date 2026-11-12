@@ -481,7 +481,7 @@ public sealed class S3ProtocolFileSystem(IProtocolsApi? protocols = null, IS3Act
                     .ConfigureAwait(false);
                 return
                 [
-                    .. (buckets.Buckets ?? []).Select(b => new S3FileEntry
+                    .. (buckets.Buckets ?? []).Select(static b => new S3FileEntry
                     {
                         Name = b.BucketName ?? string.Empty,
                         FullPath = "/" + b.BucketName,

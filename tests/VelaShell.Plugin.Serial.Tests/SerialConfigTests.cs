@@ -15,7 +15,7 @@ public sealed class SerialConfigTests
         {
             Host = host,
             Port = 22,
-            Settings = settings.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
+            Settings = settings.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal)
         };
 
     [TestMethod]

@@ -89,10 +89,7 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public QueryTabView()
-    {
-        InitializeComponent();
-    }
+    public QueryTabView() => InitializeComponent();
 
     /// <summary>里面那块代码编辑器(测试与截图要直接摆弄光标、弹补全)。</summary>
     internal CodeEditor CodeEditor => Editor;

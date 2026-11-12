@@ -186,7 +186,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Run_DesignScriptProducesTwoResultsAndHistory() => Screens.OnUi(async () =>
+    public void Run_DesignScriptProducesTwoResultsAndHistory() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -218,7 +218,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Run_CurrentStatementOnlyAndParseErrorsStop() => Screens.OnUi(async () =>
+    public void Run_CurrentStatementOnlyAndParseErrorsStop() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -238,7 +238,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Diagnostics_DottedKeyWithQuickFix() => Screens.OnUi(async () =>
+    public void Diagnostics_DottedKeyWithQuickFix() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -260,7 +260,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Completion_UsesSampledFieldsAndUpstreamGroup() => Screens.OnUi(async () =>
+    public void Completion_UsesSampledFieldsAndUpstreamGroup() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -306,7 +306,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Explain_FromEditorShowsPlanAndAdvice() => Screens.OnUi(async () =>
+    public void Explain_FromEditorShowsPlanAndAdvice() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -330,7 +330,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Explain_keeps_the_split_height_the_user_dragged() => Screens.OnUi(async () =>
+    public void Explain_keeps_the_split_height_the_user_dragged() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -357,7 +357,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Writes_RespectReadOnlyAndRefreshCatalog() => Screens.OnUi(async () =>
+    public void Writes_RespectReadOnlyAndRefreshCatalog() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -384,7 +384,7 @@ public sealed class QueryTests
     });
 
     [TestMethod]
-    public void Format_SaveAndSnippets() => Screens.OnUi(async () =>
+    public void Format_SaveAndSnippets() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -405,7 +405,7 @@ public sealed class QueryTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board03_QueryEditorWithCompletion() => Screens.OnUi(async () =>
+    public void Board03_QueryEditorWithCompletion() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -438,7 +438,7 @@ public sealed class QueryTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board03_AlternateViewsAndDialogs() => Screens.OnUi(async () =>
+    public void Board03_AlternateViewsAndDialogs() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -486,7 +486,7 @@ public sealed class QueryTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board14_ExplainPlan() => Screens.OnUi(async () =>
+    public void Board14_ExplainPlan() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

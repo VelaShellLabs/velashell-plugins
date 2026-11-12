@@ -76,9 +76,9 @@ public sealed class S3FileServiceIntegrationTests
         List<S3FileEntry> entries = await _service.ListDirectoryAsync(_session, "/");
 
         Assert.HasCount(2, entries);
-        Assert.IsTrue(entries.All(e => e.IsDirectory));
-        Assert.AreSequenceEqual(["another-bucket", "test-bucket"], [.. entries.Select(e => e.Name)], SequenceOrder.InAnyOrder);
-        Assert.AreEqual("/test-bucket", entries.Single(e => e.Name == Bucket).FullPath);
+        Assert.IsTrue(entries.All(static e => e.IsDirectory));
+        Assert.AreSequenceEqual(["another-bucket", "test-bucket"], [.. entries.Select(static e => e.Name)], SequenceOrder.InAnyOrder);
+        Assert.AreEqual("/test-bucket", entries.Single(static e => e.Name == Bucket).FullPath);
         AssertAllRequestsSigned();
     }
 
@@ -97,18 +97,18 @@ public sealed class S3FileServiceIntegrationTests
         List<S3FileEntry> root = await _service.ListDirectoryAsync(_session, "/test-bucket");
 
         Assert.HasCount(2, root);
-        S3FileEntry file = root.Single(e => !e.IsDirectory);
+        S3FileEntry file = root.Single(static e => !e.IsDirectory);
         Assert.AreEqual("readme.txt", file.Name);
         Assert.AreEqual("/test-bucket/readme.txt", file.FullPath);
         Assert.AreEqual(5, file.Size);
-        S3FileEntry directory = root.Single(e => e.IsDirectory);
+        S3FileEntry directory = root.Single(static e => e.IsDirectory);
         Assert.AreEqual("logs", directory.Name);
         Assert.AreEqual("/test-bucket/logs", directory.FullPath);
 
         // 进到子目录:两个文件 + 一个更深的目录。
         List<S3FileEntry> logs = await _service.ListDirectoryAsync(_session, "/test-bucket/logs");
-        Assert.AreSequenceEqual(["a.log", "b.log", "2026"], [.. logs.Select(e => e.Name)], SequenceOrder.InAnyOrder);
-        Assert.AreEqual("/test-bucket/logs/2026", logs.Single(e => e.IsDirectory).FullPath);
+        Assert.AreSequenceEqual(["a.log", "b.log", "2026"], [.. logs.Select(static e => e.Name)], SequenceOrder.InAnyOrder);
+        Assert.AreEqual("/test-bucket/logs/2026", logs.Single(static e => e.IsDirectory).FullPath);
         AssertAllRequestsSigned();
     }
 
@@ -143,7 +143,7 @@ public sealed class S3FileServiceIntegrationTests
 
         Assert.HasCount(7, entries);
         Assert.AreSequenceEqual(
-            [.. Enumerable.Range(0, 7).Select(i => $"file-{i}.txt")], [.. entries.Select(e => e.Name)], SequenceOrder.InAnyOrder);
+            [.. Enumerable.Range(0, 7).Select(static i => $"file-{i}.txt")], [.. entries.Select(static e => e.Name)], SequenceOrder.InAnyOrder);
         AssertAllRequestsSigned();
     }
 
@@ -223,7 +223,7 @@ public sealed class S3FileServiceIntegrationTests
             Assert.IsGreaterThanOrEqualTo(1, progress.Count);
             Assert.AreEqual(progress[^1].TotalBytes, progress[^1].TransferredBytes, "最后一次上报必须是满进度。");
             // 单次 PUT 不会发起分片上传。
-            Assert.DoesNotContain(r => r.Contains("uploads", StringComparison.Ordinal), _server.Requests);
+            Assert.DoesNotContain(static r => r.Contains("uploads", StringComparison.Ordinal), _server.Requests);
             AssertAllRequestsSigned();
         }
         finally
@@ -250,9 +250,9 @@ public sealed class S3FileServiceIntegrationTests
             byte[]? stored = _server.GetObject(Bucket, "big.bin");
             Assert.IsNotNull(stored);
             Assert.AreSequenceEqual(content, stored);
-            Assert.Contains(r => r.Contains("uploads", StringComparison.Ordinal), _server.Requests,
+            Assert.Contains(static r => r.Contains("uploads", StringComparison.Ordinal), _server.Requests,
                 "大文件必须走分片上传。");
-            Assert.Contains(r => r.Contains("partNumber=", StringComparison.Ordinal), _server.Requests);
+            Assert.Contains(static r => r.Contains("partNumber=", StringComparison.Ordinal), _server.Requests);
             AssertAllRequestsSigned();
         }
         finally

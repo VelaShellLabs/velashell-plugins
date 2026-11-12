@@ -263,7 +263,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         CancellationTokenSource? preparing = null;
         try
         {
-            (Dictionary<uint, byte[]> Data, string[] Paths) = await OnUiAsync(async () =>
+            (Dictionary<uint, byte[]> clipboardData, string[] clipboardPaths) = await OnUiAsync(async () =>
             {
                 IClipboard? clipboard = TopLevel.GetTopLevel(_owner)?.Clipboard;
                 Dictionary<uint, byte[]> data = [];
@@ -309,7 +309,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 return (Data: data, Paths: paths);
             }).ConfigureAwait(false);
             uint? localSequence = OperatingSystem.IsWindows() ? WindowsVirtualFileClipboard.Native.GetClipboardSequenceNumber() : null;
-            string fingerprint = Fingerprint(Data, Paths);
+            string fingerprint = Fingerprint(clipboardData, clipboardPaths);
             if (fingerprint == _lastRemoteFingerprint || fingerprint == _lastPublishedFingerprint)
             {
                 return;
@@ -327,14 +327,14 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                     preparing = CancellationTokenSource.CreateLinkedTokenSource(ct, _uploadCancellation.Token);
                 }
                 _upload = _localProgress = new();
-                if (Paths.Length > 0) { _upload.Start(0, "Preparing"); }
+                if (clipboardPaths.Length > 0) { _upload.Start(0, "Preparing"); }
             }
             finally { _ = _localGate.Release(); }
             ct = preparing.Token;
-            if (Paths.Length > 0)
+            if (clipboardPaths.Length > 0)
             {
-                files = await Task.Run(() => RdpClipboardFiles.Open(Paths, ct), ct).ConfigureAwait(false);
-                Data[RdpClipboardCodec.FileGroup] = RdpClipboardCodec.EncodeFiles(files.Entries);
+                files = await Task.Run(() => RdpClipboardFiles.Open(clipboardPaths, ct), ct).ConfigureAwait(false);
+                clipboardData[RdpClipboardCodec.FileGroup] = RdpClipboardCodec.EncodeFiles(files.Entries);
             }
             string formats;
             await _localGate.WaitAsync(ct).ConfigureAwait(false);
@@ -350,7 +350,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
                 _localFiles = files;
                 _localFilesSequence = files is null ? null : localSequence;
                 files = null;
-                _localData = Data;
+                _localData = clipboardData;
                 formats = string.Concat(_localData.Keys.Select(id => $"{id}\t{FormatName(id)}\n"));
                 if (_localFiles is not null)
                 {
@@ -716,7 +716,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         catch
         {
             // Finish the caller, but only the actual response may free the protocol slot.
-            _ = response.TrySetCanceled();
+            _ = response.TrySetCanceled(CancellationToken.None);
             _ = response.Task.Exception;
             throw;
         }
@@ -1071,7 +1071,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
     private static string Fingerprint(Dictionary<uint, byte[]> data, string[] paths)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (KeyValuePair<uint, byte[]> pair in data.OrderBy(p => p.Key))
+        foreach (KeyValuePair<uint, byte[]> pair in data.OrderBy(static p => p.Key))
         {
             hash.AppendData(BitConverter.GetBytes(pair.Key));
             hash.AppendData(pair.Value);
@@ -1089,7 +1089,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         IStorageItem[]? files = await clipboard.TryGetFilesAsync();
         if (files is { Length: > 0 })
         {
-            return Fingerprint([], [.. files.Select(f => f.TryGetLocalPath() ?? "")]);
+            return Fingerprint([], [.. files.Select(static f => f.TryGetLocalPath() ?? "")]);
         }
 
         Dictionary<uint, byte[]> data = [];

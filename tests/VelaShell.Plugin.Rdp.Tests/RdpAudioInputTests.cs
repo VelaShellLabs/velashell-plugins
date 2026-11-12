@@ -26,7 +26,7 @@ public sealed class RdpAudioInputTests
 
         RdpAudioInputNotSupportedException error = await Assert.ThrowsAsync<RdpAudioInputNotSupportedException>(
             () => RdpManagedSession.ConnectAsync(options));
-        StringAssert.Contains(error.Message, "no audio-input channel or capture device was opened");
+        Assert.Contains("no audio-input channel or capture device was opened", error.Message);
     }
 
     [TestMethod]

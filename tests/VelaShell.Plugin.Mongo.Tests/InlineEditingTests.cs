@@ -41,7 +41,7 @@ public sealed class InlineEditingTests
     private static DateTime LocalOf(BsonValue value) => value.AsBsonDateTime.ToUniversalTime().ToLocalTime();
 
     [TestMethod]
-    public void A_date_cell_opens_a_calendar_and_the_picked_day_is_staged() => Screens.OnUi(async () =>
+    public void A_date_cell_opens_a_calendar_and_the_picked_day_is_staged() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -104,7 +104,7 @@ public sealed class InlineEditingTests
     });
 
     [TestMethod]
-    public void Leaving_an_inspector_edit_writes_it_and_drops_the_editing_look() => Screens.OnUi(async () =>
+    public void Leaving_an_inspector_edit_writes_it_and_drops_the_editing_look() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

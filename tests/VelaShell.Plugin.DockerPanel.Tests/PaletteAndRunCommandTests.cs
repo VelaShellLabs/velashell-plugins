@@ -18,7 +18,7 @@ public class PaletteAndRunCommandTests
     private static CommandPalette Palette(params PaletteEntry[] entries) => new(() => entries);
 
     private static PaletteEntry Entry(string group, string title, string detail = "") =>
-        new(group, title, detail, "Icon.info", RowTone.Idle, false, () => Task.CompletedTask);
+        new(group, title, detail, "Icon.info", RowTone.Idle, false, static () => Task.CompletedTask);
 
     [TestMethod]
     public void OpenCollectsFreshEntriesEveryTime()

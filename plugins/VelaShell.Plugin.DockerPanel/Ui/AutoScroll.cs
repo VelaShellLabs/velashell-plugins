@@ -31,10 +31,7 @@ public static class AutoScroll
     public static readonly AttachedProperty<INotifyCollectionChanged?> SourceProperty =
         AvaloniaProperty.RegisterAttached<Control, INotifyCollectionChanged?>("Source", typeof(AutoScroll));
 
-    static AutoScroll()
-    {
-        _ = SourceProperty.Changed.AddClassHandler<Control>(OnSourceChanged);
-    }
+    static AutoScroll() => SourceProperty.Changed.AddClassHandler<Control>(OnSourceChanged);
 
     /// <summary>读 <see cref="SourceProperty" />。</summary>
     public static INotifyCollectionChanged? GetSource(Control control) => control.GetValue(SourceProperty);

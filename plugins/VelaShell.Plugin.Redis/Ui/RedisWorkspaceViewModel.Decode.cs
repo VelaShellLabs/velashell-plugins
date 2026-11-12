@@ -88,13 +88,13 @@ public sealed partial class RedisWorkspaceViewModel
     } = RedisSerialization.None;
 
     /// <summary>切换解压环节。</summary>
-    public AsyncCommand<RedisCodecOption?> UseCompressionCommand { get; private set; } = null!;
+    public AsyncCommand<RedisCodecOption?> UseCompressionCommand { get; private set; }
 
     /// <summary>切换反序列化环节。</summary>
-    public AsyncCommand<RedisCodecOption?> UseSerializationCommand { get; private set; } = null!;
+    public AsyncCommand<RedisCodecOption?> UseSerializationCommand { get; private set; }
 
     /// <summary>切到 JSON 视图(缩进排版;保存时把编辑框里的文本原样写回)。</summary>
-    public AsyncCommand UseJsonFormatCommand { get; private set; } = null!;
+    public AsyncCommand UseJsonFormatCommand { get; private set; }
 
     /// <summary>
     /// 把编辑框里这段文本重新缩进排版。
@@ -104,7 +104,7 @@ public sealed partial class RedisWorkspaceViewModel
     /// 不猜、也不"尽力格式化"出一段谁也认不出的东西。
     /// </para>
     /// </summary>
-    public AsyncCommand FormatValueCommand { get; private set; } = null!;
+    public AsyncCommand FormatValueCommand { get; private set; }
 
     /// <summary>
     /// 把当前这段值写到文件。
@@ -114,7 +114,7 @@ public sealed partial class RedisWorkspaceViewModel
     /// 路径直接报到状态条上,不静默写到某个猜出来的地方。
     /// </para>
     /// </summary>
-    public AsyncCommand DownloadValueCommand { get; private set; } = null!;
+    public AsyncCommand DownloadValueCommand { get; private set; }
 
     private Task FormatValueAsync()
     {
@@ -134,7 +134,7 @@ public sealed partial class RedisWorkspaceViewModel
             return;
         }
         // 文件名从键名来,非法字符换成下划线:键名里的冒号在 Windows 上是不能进路径的。
-        string safe = new([.. key.Display.Select(ch =>
+        string safe = new([.. key.Display.Select(static ch =>
             char.IsLetterOrDigit(ch) || ch is '-' or '_' or '.' ? ch : '_')]);
         string path = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

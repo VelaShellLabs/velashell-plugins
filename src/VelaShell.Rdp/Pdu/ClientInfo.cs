@@ -94,7 +94,7 @@ internal static class ClientInfo
         }
         else
         {
-            w.U16LE((ushort)AutoReconnectCookie.PacketLength);
+            w.U16LE(AutoReconnectCookie.PacketLength);
             w.Bytes(autoReconnectCookie.BuildClientPacket());
         }
         return w.ToArray();

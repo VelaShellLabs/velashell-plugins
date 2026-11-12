@@ -20,10 +20,7 @@ internal sealed class EffectivePreview : ObservableObject, IDisposable
     private CancellationTokenSource? _pending;
 
     /// <summary>构造。</summary>
-    public EffectivePreview(UsersTabViewModel owner)
-    {
-        _owner = owner;
-    }
+    public EffectivePreview(UsersTabViewModel owner) => _owner = owner;
 
     /// <summary>预览行。</summary>
     public ObservableCollection<EffectiveLine> Lines { get; } = [];

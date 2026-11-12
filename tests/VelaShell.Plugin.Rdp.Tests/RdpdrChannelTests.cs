@@ -25,7 +25,7 @@ public sealed class RdpdrChannelTests
             Drives = shareDrive ? [new DriveMapping("work", Path.GetTempPath())] : []
         };
 
-        string[] names = [.. RdpManagedSession.BuildChannels(options).Select(channel => channel.Name)];
+        string[] names = [.. RdpManagedSession.BuildChannels(options).Select(static channel => channel.Name)];
         string[] expected = shareDrive
             ? ["cliprdr", "rdpdr", "rdpsnd", "drdynvc"]
             : ["cliprdr", "drdynvc"];
@@ -37,8 +37,8 @@ public sealed class RdpdrChannelTests
     {
         var options = new RdpClientOptions { Host = "localhost", Clipboard = false, DynamicResolution = false };
         Assert.IsEmpty(RdpManagedSession.BuildChannels(options));
-        string[] names = [.. RdpManagedSession.BuildChannels(options with { SmartCardRedirection = true }).Select(c => c.Name)];
-        Assert.AreSequenceEqual(new[] { "rdpdr", "rdpsnd" }, names);
+        string[] names = [.. RdpManagedSession.BuildChannels(options with { SmartCardRedirection = true }).Select(static c => c.Name)];
+        Assert.AreSequenceEqual(["rdpdr", "rdpsnd"], names);
     }
 
     private static byte[] ServerAnnouncePdu(ushort minor)
@@ -143,9 +143,9 @@ public sealed class RdpdrChannelTests
                 await channel.ProcessAsync(Pdu(ClientIdConfirm));
             }
 
-            Assert.Contains(frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == ClientIdConfirm, sent);
-            Assert.Contains(frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == 0x434E, sent);
-            Assert.Contains(frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == 0x4350, sent);
+            Assert.Contains(static frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == ClientIdConfirm, sent);
+            Assert.Contains(static frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == 0x434E, sent);
+            Assert.Contains(static frame => BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(2)) == 0x4350, sent);
             byte[] announcement = sent.Single(IsDeviceListAnnounce);
             Assert.AreEqual(shareDrive ? 1u : 0u, BinaryPrimitives.ReadUInt32LittleEndian(announcement.AsSpan(4)));
             if (!shareDrive)

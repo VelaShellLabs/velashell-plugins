@@ -41,7 +41,7 @@ public sealed class Glyph : Control
     {
         AffectsRender<Glyph>(DataProperty, BrushProperty, SizeProperty);
         AffectsMeasure<Glyph>(SizeProperty);
-        _ = KeyProperty.Changed.AddClassHandler<Glyph>((glyph, _) => glyph.ResolveKey());
+        _ = KeyProperty.Changed.AddClassHandler<Glyph>(static (glyph, _) => glyph.ResolveKey());
         // 图标是定尺寸的,默认的 Stretch 对它没有意义:排版会把它拉成整行高,
         // 而 Render 从原点开画 —— 于是图标贴在行顶,旁边居中的文字与它错开一截。
         // 这是"图标和文字不在一个水平中轴上"的根因,逐处补 VerticalAlignment 补不干净。

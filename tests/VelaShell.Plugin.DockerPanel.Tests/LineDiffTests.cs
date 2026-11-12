@@ -13,7 +13,7 @@ namespace VelaShell.Plugin.DockerPanel.Tests;
 public class LineDiffTests
 {
     private static string Render(IReadOnlyList<DiffLine> lines) =>
-        string.Join("\n", lines.Select(l => l.Marker switch
+        string.Join("\n", lines.Select(static l => l.Marker switch
         {
             DiffMarker.Added => "+" + l.Text,
             DiffMarker.Removed => "-" + l.Text,
@@ -46,7 +46,7 @@ public class LineDiffTests
     {
         IReadOnlyList<DiffLine> diff = LineDiff.Compute("a\nb", "a\nx\nb");
 
-        DiffLine added = diff.Single(l => l.Marker == DiffMarker.Added);
+        DiffLine added = diff.Single(static l => l.Marker == DiffMarker.Added);
         Assert.AreEqual(0, added.OldNumber);
         Assert.AreEqual(2, added.NewNumber);
         DiffLine last = diff[^1];
@@ -86,8 +86,8 @@ public class LineDiffTests
     public void HandlesEmptySides()
     {
         Assert.IsEmpty(LineDiff.Compute("", ""));
-        Assert.AreEqual(2, LineDiff.Compute("", "a\nb").Count(l => l.Marker == DiffMarker.Added));
-        Assert.AreEqual(2, LineDiff.Compute("a\nb", "").Count(l => l.Marker == DiffMarker.Removed));
+        Assert.AreEqual(2, LineDiff.Compute("", "a\nb").Count(static l => l.Marker == DiffMarker.Added));
+        Assert.AreEqual(2, LineDiff.Compute("a\nb", "").Count(static l => l.Marker == DiffMarker.Removed));
     }
 
     [TestMethod]
@@ -116,6 +116,6 @@ public class LineDiffTests
         IReadOnlyList<DiffLine> diff = LineDiff.Compute(before, after);
 
         Assert.AreEqual(1, LineDiff.CountChanged(diff));
-        Assert.AreEqual(DiffMarker.Added, diff.Single(l => l.Marker != DiffMarker.None).Marker);
+        Assert.AreEqual(DiffMarker.Added, diff.Single(static l => l.Marker != DiffMarker.None).Marker);
     }
 }

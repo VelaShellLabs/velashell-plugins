@@ -158,9 +158,9 @@ public sealed class RedisPanelEditingUiTests
     public void StringValue_CanBeEditedAndSaved()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("edit:text", (db, key) => db.StringSet(key, "before"));
+            await SeedAsync("edit:text", static (db, key) => db.StringSet(key, "before"));
             await using Harness harness = await ShowAsync($"{_prefix}:edit");
             RedisWorkspaceViewModel vm = harness.ViewModel;
 
@@ -186,9 +186,9 @@ public sealed class RedisPanelEditingUiTests
     {
         // 拦住时给"为什么 + 怎么解除",而不是灰一个按钮让用户猜。
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("ro:text", (db, key) => db.StringSet(key, "keep"));
+            await SeedAsync("ro:text", static (db, key) => db.StringSet(key, "keep"));
             await using Harness harness = await ShowAsync($"{_prefix}:ro", environment: "production");
             RedisWorkspaceViewModel vm = harness.ViewModel;
 
@@ -211,7 +211,7 @@ public sealed class RedisPanelEditingUiTests
     public void TurningOffReadOnlyInProduction_RequiresTypedConfirmation()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none", environment: "production");
             RedisWorkspaceViewModel vm = harness.ViewModel;
@@ -242,9 +242,9 @@ public sealed class RedisPanelEditingUiTests
     public void DeletingAKey_GoesThroughTypedConfirmationAndCanBeCancelled()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("del:text", (db, key) => db.StringSet(key, "v"));
+            await SeedAsync("del:text", static (db, key) => db.StringSet(key, "v"));
             await using Harness harness = await ShowAsync($"{_prefix}:del");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "del", "text");
@@ -269,9 +269,9 @@ public sealed class RedisPanelEditingUiTests
     public void HashFields_CanBeAddedAndRemovedThroughTheEditStrip()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("h:profile", (db, key) => db.HashSet(key, [new HashEntry("name", "张三")]));
+            await SeedAsync("h:profile", static (db, key) => db.HashSet(key, [new HashEntry("name", "张三")]));
             await using Harness harness = await ShowAsync($"{_prefix}:h");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "h", "profile");
@@ -286,13 +286,13 @@ public sealed class RedisPanelEditingUiTests
             vm.AddElementCommand.Execute(null);
             await PumpAsync();
 
-            Assert.AreEqual("32", vm.Elements.Single(row => row.Label == "age").Value);
+            Assert.AreEqual("32", vm.Elements.Single(static row => row.Label == "age").Value);
 
-            vm.SelectedElement = vm.Elements.Single(row => row.Label == "age");
+            vm.SelectedElement = vm.Elements.Single(static row => row.Label == "age");
             vm.RemoveElementCommand.Execute(null);
             await PumpAsync();
 
-            Assert.DoesNotContain(row => row.Label == "age", vm.Elements);
+            Assert.DoesNotContain(static row => row.Label == "age", vm.Elements);
         });
     }
 
@@ -301,9 +301,9 @@ public sealed class RedisPanelEditingUiTests
     {
         // 列表没有按索引删除的原语 —— 这句话必须出现在界面上,不能只在代码注释里。
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("l:queue", (db, key) => db.ListRightPush(key, ["a", "b"]));
+            await SeedAsync("l:queue", static (db, key) => db.ListRightPush(key, ["a", "b"]));
             await using Harness harness = await ShowAsync($"{_prefix}:l");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "l", "queue");
@@ -319,9 +319,9 @@ public sealed class RedisPanelEditingUiTests
     public void SortedSetSelection_ExposesTheScoreColumn()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("z:board", (db, key) => db.SortedSetAdd(key, "alice", 10));
+            await SeedAsync("z:board", static (db, key) => db.SortedSetAdd(key, "alice", 10));
             await using Harness harness = await ShowAsync($"{_prefix}:z");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "z", "board");
@@ -343,9 +343,9 @@ public sealed class RedisPanelEditingUiTests
     public void BadScore_IsReportedInsteadOfWritingGarbage()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("zbad:board", (db, key) => db.SortedSetAdd(key, "alice", 10));
+            await SeedAsync("zbad:board", static (db, key) => db.SortedSetAdd(key, "alice", 10));
             await using Harness harness = await ShowAsync($"{_prefix}:zbad");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "zbad", "board");
@@ -366,9 +366,9 @@ public sealed class RedisPanelEditingUiTests
     {
         // 换算给用户看,而不是等他按下去才发现填的是分钟还是秒。
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("ttl:text", (db, key) => db.StringSet(key, "v"));
+            await SeedAsync("ttl:text", static (db, key) => db.StringSet(key, "v"));
             await using Harness harness = await ShowAsync($"{_prefix}:ttl");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "ttl", "text");
@@ -397,10 +397,10 @@ public sealed class RedisPanelEditingUiTests
     public void Rename_ToAnExistingKey_AsksBeforeOverwriting()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("rn:a", (db, key) => db.StringSet(key, "from"));
-            await SeedAsync("rn:b", (db, key) => db.StringSet(key, "to"));
+            await SeedAsync("rn:a", static (db, key) => db.StringSet(key, "from"));
+            await SeedAsync("rn:b", static (db, key) => db.StringSet(key, "to"));
             await using Harness harness = await ShowAsync($"{_prefix}:rn");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "rn", "a");
@@ -426,7 +426,7 @@ public sealed class RedisPanelEditingUiTests
     public void Console_RunsACommandAndRendersTheReply()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none");
             RedisWorkspaceViewModel vm = harness.ViewModel;
@@ -437,9 +437,9 @@ public sealed class RedisPanelEditingUiTests
             vm.Console.RunCommand.Execute(null);
             await PumpAsync();
 
-            Assert.Contains(line => line.Text == "PONG", vm.Console.Lines);
+            Assert.Contains(static line => line.Text == "PONG", vm.Console.Lines);
             Assert.AreEqual(string.Empty, vm.Console.Input, "跑完就清空输入。");
-            Assert.Contains(line => line.IsCommand, vm.Console.Lines, "敲过的那一行要留在输出里。");
+            Assert.Contains(static line => line.IsCommand, vm.Console.Lines, "敲过的那一行要留在输出里。");
         });
     }
 
@@ -447,7 +447,7 @@ public sealed class RedisPanelEditingUiTests
     public void Console_History_IsWalkableWithArrows()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none");
             RedisConsoleViewModel console = harness.ViewModel.Console;
@@ -474,7 +474,7 @@ public sealed class RedisPanelEditingUiTests
     public void Console_Prompt_ShowsTheDatabaseAndReadOnlyState()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none", environment: "production");
             RedisWorkspaceViewModel vm = harness.ViewModel;
@@ -488,7 +488,7 @@ public sealed class RedisPanelEditingUiTests
     public void Console_BlockedCommand_ExplainsWhyInsteadOfRunning()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none", environment: "production");
             RedisConsoleViewModel console = harness.ViewModel.Console;
@@ -500,7 +500,7 @@ public sealed class RedisPanelEditingUiTests
             console.RunCommand.Execute(null);
             await PumpAsync();
 
-            Assert.Contains(line => line.IsNote && line.Text.Contains("只读", StringComparison.Ordinal), console.Lines);
+            Assert.Contains(static line => line.IsNote && line.Text.Contains("只读", StringComparison.Ordinal), console.Lines);
         });
     }
 
@@ -508,7 +508,7 @@ public sealed class RedisPanelEditingUiTests
     public void Console_UnsupportedCommand_IsFlaggedBeforeItIsTyped()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none");
             RedisConsoleViewModel console = harness.ViewModel.Console;
@@ -524,9 +524,9 @@ public sealed class RedisPanelEditingUiTests
     {
         // 把"点点点"与"敲命令"缝在一起:省掉最烦的那一步 —— 手抄键名。
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("send:profile", (db, key) => db.HashSet(key, [new HashEntry("f", "v")]));
+            await SeedAsync("send:profile", static (db, key) => db.HashSet(key, [new HashEntry("f", "v")]));
             await using Harness harness = await ShowAsync($"{_prefix}:send");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             vm.SelectedRow = Leaf(vm, _prefix, "send", "profile");
@@ -546,7 +546,7 @@ public sealed class RedisPanelEditingUiTests
     public void Drawer_OverviewTab_LoadsServerMetrics()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none");
             RedisWorkspaceViewModel vm = harness.ViewModel;
@@ -557,7 +557,7 @@ public sealed class RedisPanelEditingUiTests
             Assert.IsTrue(vm.IsOverviewTab);
             Assert.IsTrue(vm.IsDrawerOpen);
             Assert.IsFalse(vm.HasOverviewNotice, $"概览应能读到:{vm.OverviewNotice}");
-            Assert.Contains(group => group.Title == "server", vm.Overview);
+            Assert.Contains(static group => group.Title == "server", vm.Overview);
         });
     }
 
@@ -565,7 +565,7 @@ public sealed class RedisPanelEditingUiTests
     public void Drawer_ClientsTab_MarksOurOwnConnection()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none");
             RedisWorkspaceViewModel vm = harness.ViewModel;
@@ -574,9 +574,9 @@ public sealed class RedisPanelEditingUiTests
             await PumpAsync();
 
             Assert.IsFalse(vm.HasClientsNotice, $"客户端列表应能读到:{vm.ClientsNotice}");
-            Assert.Contains(client => client.IsSelf, vm.Clients);
+            Assert.Contains(static client => client.IsSelf, vm.Clients);
             // 自己的连接禁止断开。
-            vm.SelectedClient = vm.Clients.First(client => client.IsSelf);
+            vm.SelectedClient = vm.Clients.First(static client => client.IsSelf);
             Assert.IsFalse(vm.KillClientCommand.CanExecute(null));
         });
     }
@@ -585,7 +585,7 @@ public sealed class RedisPanelEditingUiTests
     public void Drawer_ToggleLabel_FollowsItsState()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             await using Harness harness = await ShowAsync($"{_prefix}:none");
             RedisWorkspaceViewModel vm = harness.ViewModel;
@@ -601,9 +601,9 @@ public sealed class RedisPanelEditingUiTests
     public void ConfirmOverlay_IsInTheVisualTreeAndFollowsState()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("ov:text", (db, key) => db.StringSet(key, "v"));
+            await SeedAsync("ov:text", static (db, key) => db.StringSet(key, "v"));
             await using Harness harness = await ShowAsync($"{_prefix}:ov");
             RedisWorkspaceViewModel vm = harness.ViewModel;
             Border overlay = harness.View.GetControl<Border>("ConfirmOverlay");
@@ -706,9 +706,9 @@ public sealed class RedisPanelEditingUiTests
     public void MultilineTextValue_StaysPlainText()
     {
         Require();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
-            await SeedAsync("multi:json", (db, key) => db.StringSet(key, "{\n  \"a\": 1\n}"));
+            await SeedAsync("multi:json", static (db, key) => db.StringSet(key, "{\n  \"a\": 1\n}"));
             await using Harness harness = await ShowAsync($"{_prefix}:multi");
             RedisWorkspaceViewModel vm = harness.ViewModel;
 

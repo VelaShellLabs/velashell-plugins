@@ -7,8 +7,5 @@ namespace VelaShell.Plugin.DockerPanel.Ui;
 public sealed partial class PanelFormView : UserControl
 {
     /// <summary>建视图。</summary>
-    public PanelFormView()
-    {
-        AvaloniaXamlLoader.Load(this);
-    }
+    public PanelFormView() => AvaloniaXamlLoader.Load(this);
 }

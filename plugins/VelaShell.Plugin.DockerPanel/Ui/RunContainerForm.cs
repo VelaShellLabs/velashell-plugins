@@ -160,8 +160,8 @@ public sealed partial class RunContainerForm : PanelForm
             bindings[key] = [new() { HostPort = row.Key.Trim() }];
             exposed[key] = new object();
         }
-        string[] binds = [.. Volumes.Filled.Select(r => $"{r.Key.Trim()}:{r.Value.Trim()}")];
-        string[] env = [.. Env.Filled.Select(r => $"{r.Key.Trim()}={r.Value.Trim()}")];
+        string[] binds = [.. Volumes.Filled.Select(static r => $"{r.Key.Trim()}:{r.Value.Trim()}")];
+        string[] env = [.. Env.Filled.Select(static r => $"{r.Key.Trim()}={r.Value.Trim()}")];
         string command = _command.Value.Trim();
         return new()
         {

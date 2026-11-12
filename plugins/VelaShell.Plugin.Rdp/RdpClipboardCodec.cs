@@ -124,7 +124,7 @@ internal static class RdpClipboardCodec
         }
         // A file may not also be used as a directory by another entry. One set lookup per parent prefix:
         // the former scan of every file for every prefix was O(n² × depth) — billions of steps for a hostile list.
-        HashSet<string> fileNames = [with(StringComparer.OrdinalIgnoreCase), .. files.Where(f => !f.IsDirectory).Select(f => f.Name)];
+        HashSet<string> fileNames = [with(StringComparer.OrdinalIgnoreCase), .. files.Where(static f => !f.IsDirectory).Select(static f => f.Name)];
         foreach (RdpClipboardFile file in files)
         {
             for (int slash = file.Name.IndexOf('\\'); slash > 0; slash = file.Name.IndexOf('\\', slash + 1))
@@ -150,7 +150,7 @@ internal static class RdpClipboardCodec
             // Format characters (Unicode Cf) are invisible: U+202E RIGHT-TO-LEFT OVERRIDE makes "gpj.exe" display
             // as "exe.jpg"-style names in Explorer, so a remote file could pose as a harmless type.
             if (part.Length == 0 || part is "." or ".." || part.EndsWith(' ') || part.EndsWith('.')
-                || part.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format
+                || part.Any(static c => char.IsControl(c) || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format
                     || "<>:\"/|?*".Contains(c))
                 || stem.Equals("CON", StringComparison.OrdinalIgnoreCase)
                 || stem.Equals("PRN", StringComparison.OrdinalIgnoreCase)

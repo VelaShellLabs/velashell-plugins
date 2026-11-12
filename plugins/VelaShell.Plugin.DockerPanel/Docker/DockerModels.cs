@@ -502,7 +502,7 @@ public sealed record ImageSummary
 
     /// <summary>没有任何标签 —— 即悬空镜像。</summary>
     public bool IsDangling =>
-        RepoTags is null or { Length: 0 } || RepoTags.All(t => t == "<none>:<none>");
+        RepoTags is null or { Length: 0 } || RepoTags.All(static t => t == "<none>:<none>");
 }
 
 /// <summary>镜像构建历史的一层。</summary>

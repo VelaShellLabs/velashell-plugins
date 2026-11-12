@@ -21,12 +21,12 @@ public sealed class SmartCardDeviceTests
         Assert.AreNotEqual((ulong)backend.Card, card);
         Assert.AreEqual("Reader Ω", backend.Reader);
         ulong other = await Establish(device);
-        Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0xBC, Card(other, card, w => w.Write(0u)))));
-        Assert.AreEqual(0u, Code(await Call(device, 0xB4, Card(context, card, w => { w.Write(2u); w.Write(2u); w.Write(1u); }))));
-        Assert.AreEqual(0u, Code(await Call(device, 0xBC, Card(context, card, w => w.Write(0u)))));
-        Assert.AreEqual(0u, Code(await Call(device, 0xC0, Card(context, card, w => w.Write(0u)))));
-        Assert.AreEqual(0u, Code(await Call(device, 0xB8, Card(context, card, w => w.Write(0u)))));
-        Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0xC8, Card(context, card, w => { w.Write(0u); w.Write(100u); w.Write(32u); }))));
+        Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0xBC, Card(other, card, static w => w.Write(0u)))));
+        Assert.AreEqual(0u, Code(await Call(device, 0xB4, Card(context, card, static w => { w.Write(2u); w.Write(2u); w.Write(1u); }))));
+        Assert.AreEqual(0u, Code(await Call(device, 0xBC, Card(context, card, static w => w.Write(0u)))));
+        Assert.AreEqual(0u, Code(await Call(device, 0xC0, Card(context, card, static w => w.Write(0u)))));
+        Assert.AreEqual(0u, Code(await Call(device, 0xB8, Card(context, card, static w => w.Write(0u)))));
+        Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0xC8, Card(context, card, static w => { w.Write(0u); w.Write(100u); w.Write(32u); }))));
         Assert.AreEqual(0u, Code(await Call(device, 0x18, Context(context))));
         Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0x1C, Context(context))));
         device.Reset();
@@ -42,12 +42,12 @@ public sealed class SmartCardDeviceTests
     {
         using var device = new SmartCardDevice(new Backend());
         ulong context = await Establish(device);
-        byte[] query = Context(context, w => { w.Write(0u); w.Write(0u); w.Write(1u); w.Write(0u); });
+        byte[] query = Context(context, static w => { w.Write(0u); w.Write(0u); w.Write(1u); w.Write(0u); });
         RdpdrIoResult length = await Call(device, wide ? 0x2Cu : 0x28u, query);
         Assert.AreEqual(0u, Code(length));
         Assert.AreEqual((uint)(wide ? 20 : 10), U32(length.Body, 24));
         Assert.AreEqual(0u, U32(length.Body, 28));
-        byte[] request = Context(context, w => { w.Write(0u); w.Write(0u); w.Write(0u); w.Write(11u); });
+        byte[] request = Context(context, static w => { w.Write(0u); w.Write(0u); w.Write(0u); w.Write(11u); });
         RdpdrIoResult readers = await Call(device, wide ? 0x2Cu : 0x28u, request);
         Assert.AreEqual(0u, Code(readers));
         byte[] expected = (wide ? Encoding.Unicode : Encoding.ASCII).GetBytes("Reader Ω\0\0");
@@ -55,18 +55,18 @@ public sealed class SmartCardDeviceTests
         Assert.AreEqual((uint)expected.Length, U32(readers.Body, 24));
         Assert.AreSequenceEqual(expected, readers.Body.AsSpan(36, expected.Length).ToArray());
         RdpdrIoResult tooSmall = await Call(device, wide ? 0x2Cu : 0x28u,
-            Context(context, w => { w.Write(0u); w.Write(0u); w.Write(0u); w.Write(1u); }));
+            Context(context, static w => { w.Write(0u); w.Write(0u); w.Write(0u); w.Write(1u); }));
         Assert.AreEqual(SmartCardException.InsufficientBuffer, Code(tooSmall));
-        RdpdrIoResult groups = await Call(device, wide ? 0x24u : 0x20u, Context(context, w => { w.Write(0u); w.Write(uint.MaxValue); }));
+        RdpdrIoResult groups = await Call(device, wide ? 0x24u : 0x20u, Context(context, static w => { w.Write(0u); w.Write(uint.MaxValue); }));
         Assert.AreEqual(0u, Code(groups));
         ulong card = await Connect(device, context, wide);
         RdpdrIoResult status = await Call(device, wide ? 0xCCu : 0xC8u,
-            Card(context, card, w => { w.Write(0u); w.Write(100u); w.Write(0u); }));
+            Card(context, card, static w => { w.Write(0u); w.Write(100u); w.Write(0u); }));
         Assert.AreEqual(0u, Code(status));
         Assert.AreEqual(6u, U32(status.Body, 32));
         Assert.AreEqual(2u, U32(status.Body, 36));
         Assert.AreEqual(2u, U32(status.Body, 72));
-        RdpdrIoResult attr = await Call(device, 0xD8, Card(context, card, w => { w.Write(0x90303u); w.Write(0u); w.Write(0u); }));
+        RdpdrIoResult attr = await Call(device, 0xD8, Card(context, card, static w => { w.Write(0x90303u); w.Write(0u); w.Write(0u); }));
         Assert.AreEqual(0u, Code(attr));
         Assert.AreEqual(3u, U32(attr.Body, 24));
         Assert.AreEqual(0u, U32(attr.Body, 28));
@@ -78,12 +78,12 @@ public sealed class SmartCardDeviceTests
         var backend = new Backend();
         using var device = new SmartCardDevice(backend);
         ulong context = await Establish(device), card = await Connect(device, context, false);
-        byte[] request = Card(context, card, w => { w.Write(0x7FFF0007u); w.Write(2u); w.Write(0x20000u); }, w => Blob(w, [1, 0]));
+        byte[] request = Card(context, card, static w => { w.Write(0x7FFF0007u); w.Write(2u); w.Write(0x20000u); }, static w => Blob(w, [1, 0]));
         Assert.AreEqual(0u, Code(await Call(device, 0xDC, request)));
         Assert.AreEqual(0x7FFF0007u, backend.Attribute);
         Assert.AreSequenceEqual(new byte[] { 1, 0 }, backend.AttributeValue!);
 
-        byte[] denied = Card(context, card, w => { w.Write(0x7FFF0006u); w.Write(1u); w.Write(0x20000u); }, w => Blob(w, [1]));
+        byte[] denied = Card(context, card, static w => { w.Write(0x7FFF0006u); w.Write(1u); w.Write(0x20000u); }, static w => Blob(w, [1]));
         Assert.AreEqual(SmartCardException.Unsupported, Code(await Call(device, 0xDC, denied)));
     }
 
@@ -159,7 +159,7 @@ public sealed class SmartCardDeviceTests
         var backend = new Backend { ReleaseError = SmartCardException.NoService };
         using var device = new SmartCardDevice(backend);
         ulong context = await Establish(device);
-        RdpdrIoResult result = await Call(device, 0xA0, Context(context, w => { w.Write(0u); w.Write(0u); w.Write(0u); }));
+        RdpdrIoResult result = await Call(device, 0xA0, Context(context, static w => { w.Write(0u); w.Write(0u); w.Write(0u); }));
         Assert.AreEqual(0u, Code(result));
         Assert.AreEqual(SmartCardException.NoService, Code(await Call(device, 0x18, Context(context))));
     }
@@ -178,12 +178,12 @@ public sealed class SmartCardDeviceTests
         byte[] invalid = (byte[])golden.Clone(); invalid[8] = 16;
         Assert.AreEqual(0xC000000Du, (await Call(device, 0x14, invalid)).Status);
         Assert.AreEqual(0xC000000Du, (await Call(device, 0x14, golden[..^1])).Status);
-        byte[] oversized = Ndr(w => { Header(w, 17); w.Write(17u); w.Write(new byte[17]); });
+        byte[] oversized = Ndr(static w => { Header(w, 17); w.Write(17u); w.Write(new byte[17]); });
         Assert.AreEqual(0xC000000Du, (await Call(device, 0x1C, oversized)).Status);
-        byte[] inconsistent = Ndr(w => { Header(w, 8); w.Write(7u); w.Write(123ul); });
+        byte[] inconsistent = Ndr(static w => { Header(w, 8); w.Write(7u); w.Write(123ul); });
         Assert.AreEqual(0xC000000Du, (await Call(device, 0x1C, inconsistent)).Status);
         Assert.AreEqual(SmartCardException.InvalidHandle, Code(await Call(device, 0x1C, Context(123))));
-        Assert.AreEqual(0xC000000Du, (await Call(device, 0xDC, Ndr(w => w.Write(0u)))).Status);
+        Assert.AreEqual(0xC000000Du, (await Call(device, 0xDC, Ndr(static w => w.Write(0u)))).Status);
         Assert.AreEqual(0xC0000023u, (await Call(device, 0x14, golden, outputLength: 24)).Status);
         Assert.AreEqual(1, backend.Establishes);
     }
@@ -216,7 +216,7 @@ public sealed class SmartCardDeviceTests
     private static uint Code(RdpdrIoResult result) { Assert.AreEqual(0u, result.Status); return U32(result.Body, 20); }
     private static async Task<ulong> Establish(SmartCardDevice device)
     {
-        RdpdrIoResult result = await Call(device, 0x14, Ndr(w => w.Write(2u)));
+        RdpdrIoResult result = await Call(device, 0x14, Ndr(static w => w.Write(2u)));
         Assert.AreEqual(0u, Code(result));
         return BinaryPrimitives.ReadUInt64LittleEndian(result.Body.AsSpan(36));
     }
@@ -294,7 +294,7 @@ public sealed class SmartCardDeviceTests
         public void Cancel(nint context) => Cancelled.Set();
         public (nint Card, uint Protocol) Connect(nint context, string reader, uint shareMode, uint protocols) { Reader = reader; return (Card, 2); }
         public uint Reconnect(nint card, uint shareMode, uint protocols, uint initialization) => 2;
-        public void Disconnect(nint card, uint disposition) { Interlocked.Increment(ref Disconnects); }
+        public void Disconnect(nint card, uint disposition) => Interlocked.Increment(ref Disconnects);
         public void BeginTransaction(nint card) { }
         public void EndTransaction(nint card, uint disposition) { }
         public SmartCardStatus Status(nint card) => new(["Reader Ω"], 6, 2, [0x3B, 0]);
@@ -303,7 +303,7 @@ public sealed class SmartCardDeviceTests
             Apdu = send;
             return new(receivePci, new([0x90, 0], OversizedResponse ? capacity + 1 : 2));
         }
-        public SmartCardBuffer Control(nint card, uint code, byte[] input, int capacity, bool lengthOnly) => new(input.Reverse().ToArray(), input.Length);
+        public SmartCardBuffer Control(nint card, uint code, byte[] input, int capacity, bool lengthOnly) => new([.. input.Reverse()], input.Length);
         public byte[] GetAttribute(nint card, uint attribute) => [1, 2, 3];
         public void SetAttribute(nint card, uint attribute, byte[] value) { Attribute = attribute; AttributeValue = value; }
     }

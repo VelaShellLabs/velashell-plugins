@@ -95,14 +95,14 @@ public sealed class CredSspNegotiationTests
     [TestMethod]
     public void PublicKeyBindingUsesTheCertificatesSubjectPublicKeyForRsaAndEc()
     {
-        using RSA rsa = RSA.Create(2048);
+        using var rsa = RSA.Create(2048);
         using X509Certificate2 rsaCert = new CertificateRequest("CN=rsa", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
             .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         byte[] rsaKey = CredSsp.ServerPublicKey(rsaCert);
         byte[] pkcs1 = rsa.ExportRSAPublicKey();
         Assert.IsTrue(rsaKey.AsSpan().SequenceEqual(pkcs1), "RSA binds the PKCS#1 RSAPublicKey, as before.");
 
-        using ECDsa ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 ecCert = new CertificateRequest("CN=ec", ec, HashAlgorithmName.SHA256)
             .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         byte[] ecKey = CredSsp.ServerPublicKey(ecCert);
@@ -125,10 +125,7 @@ public sealed class CredSspNegotiationTests
     [DataRow(NegotiateAuthenticationStatusCode.TargetUnknown)]
     [DataRow(NegotiateAuthenticationStatusCode.GenericFailure)]
     [DataRow(NegotiateAuthenticationStatusCode.Unsupported)]
-    public void UnixConfigurationFailuresAreNotCredentialFailures(NegotiateAuthenticationStatusCode status)
-    {
-        Assert.IsInstanceOfType<RdpProtocolException>(NlaFailure.FromNegotiate(status));
-    }
+    public void UnixConfigurationFailuresAreNotCredentialFailures(NegotiateAuthenticationStatusCode status) => Assert.IsInstanceOfType<RdpProtocolException>(NlaFailure.FromNegotiate(status));
 
     [TestMethod]
     [DataRow(0x8009030Cu, true, DisplayName = "SEC_E_LOGON_DENIED")]

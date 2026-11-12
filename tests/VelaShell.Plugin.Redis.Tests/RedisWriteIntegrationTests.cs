@@ -138,7 +138,7 @@ public sealed class RedisWriteIntegrationTests
 
         RedisElementPage page = await connection.ReadElementsAsync(key, "hash", "0", 100);
         Assert.AreEqual(2, page.Total);
-        Assert.AreEqual("张三", page.Rows.Single(r => r.Label == "name").Value);
+        Assert.AreEqual("张三", page.Rows.Single(static r => r.Label == "name").Value);
 
         Assert.IsTrue(await connection.DeleteHashFieldAsync(key, "age"));
         Assert.IsFalse(await connection.DeleteHashFieldAsync(key, "age"), "第二次删同一个字段应报没删到。");
@@ -157,12 +157,12 @@ public sealed class RedisWriteIntegrationTests
         await connection.SetListItemAsync(key, 1, "A");
 
         RedisElementPage page = await connection.ReadElementsAsync(key, "list", "0", 100);
-        Assert.AreSequenceEqual(["z", "A", "b"], [.. page.Rows.Select(r => r.Value)]);
+        Assert.AreSequenceEqual(["z", "A", "b"], [.. page.Rows.Select(static r => r.Value)]);
 
         // 列表没有按索引删除的原语:删的是第一个等于该值的元素。
         Assert.AreEqual(1, await connection.RemoveListValueAsync(key, "A"));
         Assert.AreSequenceEqual(
-            ["z", "b"], [.. (await connection.ReadElementsAsync(key, "list", "0", 100)).Rows.Select(r => r.Value)]);
+            ["z", "b"], [.. (await connection.ReadElementsAsync(key, "list", "0", 100)).Rows.Select(static r => r.Value)]);
     }
 
     [TestMethod]
@@ -187,7 +187,7 @@ public sealed class RedisWriteIntegrationTests
         Assert.IsFalse(await connection.SetSortedMemberAsync(key, "alice", 20), "改分不算新增成员。");
 
         RedisElementPage page = await connection.ReadElementsAsync(key, "zset", "0", 100);
-        Assert.AreEqual(20d, page.Rows.Single(r => r.Label == "alice").Score);
+        Assert.AreEqual(20d, page.Rows.Single(static r => r.Label == "alice").Score);
         Assert.IsTrue(await connection.RemoveSortedMemberAsync(key, "alice"));
     }
 
@@ -305,8 +305,8 @@ public sealed class RedisWriteIntegrationTests
     {
         IReadOnlyList<RedisCommandHint> hints = Require().Complete("hget");
 
-        Assert.Contains(hint => hint.Name == "HGETALL", hints);
-        Assert.IsTrue(hints.All(hint => hint.Name.StartsWith("HGET", StringComparison.Ordinal)));
+        Assert.Contains(static hint => hint.Name == "HGETALL", hints);
+        Assert.IsTrue(hints.All(static hint => hint.Name.StartsWith("HGET", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -405,11 +405,11 @@ public sealed class RedisWriteIntegrationTests
     {
         IReadOnlyList<RedisMetricGroup> groups = await Require().ReadOverviewAsync();
 
-        Assert.DoesNotContain(group => group.Unavailable, groups, "INFO 应能读到。");
-        RedisMetricGroup server = groups.Single(group => group.Title == "server");
-        Assert.IsFalse(string.IsNullOrEmpty(server.Items.Single(item => item.Label == "version").Value));
-        Assert.Contains(group => group.Title == "memory", groups);
-        Assert.Contains(group => group.Title == "persistence", groups);
+        Assert.DoesNotContain(static group => group.Unavailable, groups, "INFO 应能读到。");
+        RedisMetricGroup server = groups.Single(static group => group.Title == "server");
+        Assert.IsFalse(string.IsNullOrEmpty(server.Items.Single(static item => item.Label == "version").Value));
+        Assert.Contains(static group => group.Title == "memory", groups);
+        Assert.Contains(static group => group.Title == "persistence", groups);
     }
 
     [TestMethod]
@@ -418,7 +418,7 @@ public sealed class RedisWriteIntegrationTests
         // 拿不到就留空 —— 0 会被读成一个真实的测量值。
         IReadOnlyList<RedisMetricGroup> groups = await Require().ReadOverviewAsync();
 
-        foreach (RedisMetric metric in groups.SelectMany(group => group.Items))
+        foreach (RedisMetric metric in groups.SelectMany(static group => group.Items))
         {
             Assert.IsNotNull(metric.Value);
         }
@@ -445,8 +445,8 @@ public sealed class RedisWriteIntegrationTests
         IReadOnlyList<RedisClientEntry>? clients = await Require().ReadClientsAsync();
 
         Assert.IsNotNull(clients);
-        Assert.Contains(client => client.IsSelf, clients, "至少本连接自己应被认出来。");
-        Assert.IsTrue(clients.All(client => client.Address.Length > 0));
+        Assert.Contains(static client => client.IsSelf, clients, "至少本连接自己应被认出来。");
+        Assert.IsTrue(clients.All(static client => client.Address.Length > 0));
     }
 
     [TestMethod]

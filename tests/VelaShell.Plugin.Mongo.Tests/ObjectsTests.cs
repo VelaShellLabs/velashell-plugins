@@ -31,7 +31,7 @@ public sealed class ObjectsTests
 
         string ddl = ObjectScripts.Ddl(info, [new BsonDocument { { "v", 2 }, { "key", new BsonDocument { { "device", 1 }, { "ts", 1 } } }, { "name", "device_1_ts_1" } }]);
 
-        StringAssert.StartsWith(ddl, "db.createCollection(\n  \"events\",");
+        Assert.StartsWith("db.createCollection(\n  \"events\",", ddl);
         Assert.Contains("granularity: \"minutes\"", ddl);
         Assert.Contains("expireAfterSeconds: 7776000", ddl);
         Assert.IsFalse(ddl.Contains("bucketMaxSpanSeconds", StringComparison.Ordinal), ddl);
@@ -58,7 +58,7 @@ public sealed class ObjectsTests
 
         string ddl = ObjectScripts.Ddl(info, indexes);
 
-        StringAssert.StartsWith(ddl, "db.createCollection(\"carts\")");
+        Assert.StartsWith("db.createCollection(\"carts\")", ddl);
         Assert.IsFalse(ddl.Contains("_id_", StringComparison.Ordinal), ddl);
         Assert.Contains("db.carts.createIndex({ updatedAt: 1 }, { name: \"updatedAt_1\", expireAfterSeconds: 86400 })", ddl);
         Assert.Contains("collMod: \"carts\"", ddl);
@@ -77,7 +77,7 @@ public sealed class ObjectsTests
         };
         string ddl = ObjectScripts.Ddl(new CollectionInfo("shop", "v_paid", CollectionKind.View, options), []);
 
-        StringAssert.StartsWith(ddl, "db.createView(\n  \"v_paid\",\n  \"orders\",");
+        Assert.StartsWith("db.createView(\n  \"v_paid\",\n  \"orders\",", ddl);
         Assert.Contains("$match", ddl);
     }
 
@@ -86,7 +86,7 @@ public sealed class ObjectsTests
     public void Odd_collection_names_go_through_getCollection()
     {
         string line = ObjectScripts.CreateIndex("weird-name", new BsonDocument { { "key", new BsonDocument("a", 1) }, { "name", "a_1" } });
-        StringAssert.StartsWith(line, "db.getCollection(\"weird-name\").createIndex(");
+        Assert.StartsWith("db.getCollection(\"weird-name\").createIndex(", line);
     }
 
     // ── 对象行 ───────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ public sealed class ObjectsTests
         IReadOnlyCollection<string> orders = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "orders");
         IReadOnlyCollection<string> system = ObjectsTabViewModel.EffectiveActions(privileges, "shop", "system.profile");
 
-        Assert.AreSequenceEqual(new[] { "find", "insert", "listIndexes" }, [.. orders], SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["find", "insert", "listIndexes"], [.. orders], SequenceOrder.InAnyOrder);
         Assert.IsEmpty(system);
     }
 
@@ -215,8 +215,8 @@ public sealed class ObjectsTests
             drop.ConfirmCommand.Execute(null);
             await WaitUntilAsync(() => tab.Items.All(static i => i.Name != "doomed"));
             List<string> names = await (await database.ListCollectionNamesAsync()).ToListAsync();
-            CollectionAssert.DoesNotContain(names, "doomed");
-            CollectionAssert.Contains(names, "keep");
+            Assert.DoesNotContain("doomed", names);
+            Assert.Contains("keep", names);
         }
         finally
         {
@@ -226,7 +226,7 @@ public sealed class ObjectsTests
 
     /// <summary>只读模式下删除在确认框之前就被拦下,并提示原因。</summary>
     [TestMethod]
-    public void Read_only_mode_blocks_drop_before_any_confirmation() => Screens.OnUi(async () =>
+    public void Read_only_mode_blocks_drop_before_any_confirmation() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

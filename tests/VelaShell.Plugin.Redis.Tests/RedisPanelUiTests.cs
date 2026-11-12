@@ -144,7 +144,7 @@ public sealed class RedisPanelUiTests
     public void KeyList_FoldsTheNoisyPrefix_ShowsMetadata_AndExpandsInPlace()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync(_prefix);
@@ -155,9 +155,9 @@ public sealed class RedisPanelUiTests
 
                 // 10 个订单折成一行;2 个 user 键低于阈值,照旧平铺。
                 Assert.AreSequenceEqual(
-                    [$"{_prefix}:order:2026:*", $"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(row => row.Display)]);
+                    [$"{_prefix}:order:2026:*", $"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(static row => row.Display)]);
 
-                RedisKeyRow group = viewModel.Rows.Single(row => row.IsGroup);
+                RedisKeyRow group = viewModel.Rows.Single(static row => row.IsGroup);
                 Assert.AreEqual(10, group.Count);
                 Assert.IsTrue(group.IsCollapsed, "折叠态应显示向右的箭头。");
                 Assert.IsFalse(group.IsExpandedGroup);
@@ -231,7 +231,7 @@ public sealed class RedisPanelUiTests
         Logger.Sink = sink;
         try
         {
-            OnUi(async () =>
+            OnUi(static async () =>
             {
                 // 装载时就没有选中:详情头此刻整块不可见,绑定却照样在求值。
                 (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
@@ -283,7 +283,7 @@ public sealed class RedisPanelUiTests
     public void AutoRefreshTick_KeepsTheUnsavedStringDraft()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync(_prefix);
@@ -322,7 +322,7 @@ public sealed class RedisPanelUiTests
     public void AutoRefreshTick_KeepsTheOtherDrafts_AndSaysWhyItIsHolding()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync(_prefix);
@@ -386,7 +386,7 @@ public sealed class RedisPanelUiTests
     public void Panel_Geometry_MatchesTheDesign()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync(_prefix);
@@ -493,7 +493,7 @@ public sealed class RedisPanelUiTests
     public void Panel_Loads_WithoutHostThemeTokens()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, _, RedisConnection connection) = await ShowAsync();
             try
@@ -517,7 +517,7 @@ public sealed class RedisPanelUiTests
     {
         // 这一行小字是"过滤条语义看得见"那条设计决定的落地处,值得钉住。
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, _, RedisConnection connection) = await ShowAsync($"{_prefix}:user");
             try
@@ -539,7 +539,7 @@ public sealed class RedisPanelUiTests
     public void Scan_BuildsTheKeyTreeAndReportsAnHonestStatus()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync($"{_prefix}:user");
@@ -549,14 +549,14 @@ public sealed class RedisPanelUiTests
                 Assert.AreEqual(2, viewModel.MatchedCount);
                 // 扁平列表:一行一个**完整键名**,两个键都在眼前,不必逐层点开。
                 Assert.AreSequenceEqual(
-                    [$"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(row => row.Display)], SequenceOrder.InAnyOrder);
-                Assert.DoesNotContain(row => row.IsGroup, viewModel.Rows, "两个键远低于折叠阈值。");
-                Assert.AreEqual("string", viewModel.Rows.Single(row => row.Display.EndsWith(":name", StringComparison.Ordinal)).TypeName);
-                Assert.AreEqual("hash", viewModel.Rows.Single(row => row.Display.EndsWith(":profile", StringComparison.Ordinal)).TypeName);
+                    [$"{_prefix}:user:1:name", $"{_prefix}:user:1:profile"], [.. viewModel.Rows.Select(static row => row.Display)], SequenceOrder.InAnyOrder);
+                Assert.DoesNotContain(static row => row.IsGroup, viewModel.Rows, "两个键远低于折叠阈值。");
+                Assert.AreEqual("string", viewModel.Rows.Single(static row => row.Display.EndsWith(":name", StringComparison.Ordinal)).TypeName);
+                Assert.AreEqual("hash", viewModel.Rows.Single(static row => row.Display.EndsWith(":profile", StringComparison.Ordinal)).TypeName);
 
                 // 面包屑 = 这批键的公共前缀,用户据此知道自己在哪一层。
                 Assert.AreSequenceEqual(
-                    [_prefix, "user", "1"], [.. viewModel.Breadcrumb.Select(segment => segment.Label)]);
+                    [_prefix, "user", "1"], [.. viewModel.Breadcrumb.Select(static segment => segment.Label)]);
 
                 // **只有游标归零才敢说"全部"** —— 状态条的措辞是这条纪律的出口。
                 string status = view.GetControl<TextBlock>("ScanStatus").Text ?? "";
@@ -586,7 +586,7 @@ public sealed class RedisPanelUiTests
     public void ClusterDeploymentAgainstStandalone_StillScans_AndSaysTheModeDoesNotMatch()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync($"{_prefix}:user", deployment: "cluster");
@@ -621,7 +621,7 @@ public sealed class RedisPanelUiTests
     public void SelectingAHashKey_LoadsItsFieldsIntoTheDetailPane()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync($"{_prefix}:user");
@@ -635,7 +635,7 @@ public sealed class RedisPanelUiTests
                 Assert.IsTrue(viewModel.IsCollectionSelected);
                 Assert.IsFalse(viewModel.IsStringSelected);
                 Assert.AreEqual("字段", viewModel.LabelColumnHeader);
-                Assert.AreEqual("张三", viewModel.Elements.Single(e => e.Label == "name").Value);
+                Assert.AreEqual("张三", viewModel.Elements.Single(static e => e.Label == "name").Value);
                 Assert.AreEqual("永不过期", viewModel.SelectedTtlText);
                 Assert.IsTrue(view.GetControl<ListBox>("ElementList").IsVisible);
             }
@@ -651,7 +651,7 @@ public sealed class RedisPanelUiTests
     public void SelectingAStringKey_ShowsTheValueEditor()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, RedisWorkspaceView view, RedisWorkspaceViewModel viewModel, RedisConnection connection) =
                 await ShowAsync($"{_prefix}:user");
@@ -680,7 +680,7 @@ public sealed class RedisPanelUiTests
     {
         // 护栏的第一档在界面上必须看得见:生产标记 + 只读徽章。
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) = await ShowAsync();
             try
@@ -702,7 +702,7 @@ public sealed class RedisPanelUiTests
     public void DatabaseDropdown_ListsEveryDatabaseWithItsKeyCount()
     {
         RequireServer();
-        OnUi(async () =>
+        OnUi(static async () =>
         {
             (Window window, _, RedisWorkspaceViewModel viewModel, RedisConnection connection) = await ShowAsync();
             try

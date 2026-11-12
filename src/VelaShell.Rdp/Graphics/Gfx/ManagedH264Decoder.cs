@@ -310,10 +310,7 @@ internal sealed class ManagedH264Decoder(int width, int height, Action<long>? re
     {
         private readonly ReadOnlySpan<byte> _source;
         private int _position, _current, _remaining, _zeros;
-        internal RbspReader(ReadOnlySpan<byte> source)
-        {
-            _source = source;
-        }
+        internal RbspReader(ReadOnlySpan<byte> source) => _source = source;
 
         internal int Read(int count)
         {

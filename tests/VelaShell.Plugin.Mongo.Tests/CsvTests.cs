@@ -65,7 +65,7 @@ public sealed class CsvTests
         {
             Assert.AreSequenceEqual(rows[i], read[i], $"row {i}");
         }
-        Assert.AreSequenceEqual(new long[] { 1, 2, 4, 5 }, lines, "the quoted newline makes record 2 span two physical lines");
+        Assert.AreSequenceEqual([1, 2, 4, 5], lines, "the quoted newline makes record 2 span two physical lines");
     }
 
     [TestMethod]
@@ -77,7 +77,7 @@ public sealed class CsvTests
         {
             read.Add(string.Join("|", record));
         }
-        Assert.AreSequenceEqual(new[] { "a|b", "c|d", "e|f" }, read);
+        Assert.AreSequenceEqual(["a|b", "c|d", "e|f"], read);
     }
 
     [TestMethod]
@@ -85,7 +85,7 @@ public sealed class CsvTests
     {
         var reader = new CsvReader(new StringReader("5\" disk,ok\r\n"), ',');
         Assert.IsTrue(reader.TryRead(out string[] record));
-        Assert.AreSequenceEqual(new[] { "5\" disk", "ok" }, record);
+        Assert.AreSequenceEqual(["5\" disk", "ok"], record);
     }
 
     [TestMethod]
@@ -121,7 +121,7 @@ public sealed class CsvTests
         };
         IReadOnlyList<XferField> fields = SchemaSampler.Analyze([doc], flatten: true);
         Assert.AreSequenceEqual(
-            new[] { "_id", "orderNo", "customer.name", "customer.level", "total", "createdAt", "items", "note" }, [.. fields.Select(static f => f.Path)]);
+            ["_id", "orderNo", "customer.name", "customer.level", "total", "createdAt", "items", "note"], [.. fields.Select(static f => f.Path)]);
 
         ExportColumn[] columns =
         [
@@ -139,7 +139,7 @@ public sealed class CsvTests
         Assert.AreEqual("id,orderNo,customer.name,customer.level,total,createdAt,items,note", string.Join(",", header));
         Assert.IsTrue(reader.TryRead(out string[] cells));
         string local = created.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-        Assert.AreSequenceEqual(new[] { "66f5c2a1b04e1c3a5d7e9f01", "SO2609-10400", "陈立", "VIP", "1299.50", local }, cells[..6]);
+        Assert.AreSequenceEqual(["66f5c2a1b04e1c3a5d7e9f01", "SO2609-10400", "陈立", "VIP", "1299.50", local], cells[..6]);
         BsonArray items = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(cells[6]);
         Assert.AreEqual(doc["items"], items, "arrays are written as JSON strings that parse back to the same value");
         Assert.AreEqual("", cells[7], "null is left empty by default");
@@ -150,7 +150,7 @@ public sealed class CsvTests
     {
         var doc = new BsonDocument { { "a", 1 }, { "b", new BsonDocument("c", "x") } };
         IReadOnlyList<XferField> fields = SchemaSampler.Analyze([doc], flatten: false);
-        Assert.AreSequenceEqual(new[] { "a", "b" }, [.. fields.Select(static f => f.Path)]);
+        Assert.AreSequenceEqual(["a", "b"], [.. fields.Select(static f => f.Path)]);
         Assert.AreEqual(CellConversion.Json, fields[1].DefaultConversion);
         Assert.AreEqual(doc["b"], BsonDocument.Parse(CellFormatter.Format(doc["b"], CellConversion.Json, nullAsEmpty: true)));
     }

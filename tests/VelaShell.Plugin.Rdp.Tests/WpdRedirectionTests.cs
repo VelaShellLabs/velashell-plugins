@@ -85,14 +85,14 @@ public sealed class WpdRedirectionTests
         var backend = new FakeBackend();
         var owner = new WpdRedirection(backend);
         var first = new Output();
-        WpdFileChannel file = owner.CreateFile(first.Send, () => Task.CompletedTask);
+        WpdFileChannel file = owner.CreateFile(first.Send, static () => Task.CompletedTask);
         await file.OnMessageAsync(Create(1, 7));
         byte[] denied = await first.Next();
         Assert.AreEqual(unchecked((uint)WpdPolicy.HResult(5)), Get(denied, 4));
         Assert.IsEmpty(backend.Handles);
         await Authenticate(owner);
         var second = new Output();
-        WpdFileChannel unknown = owner.CreateFile(second.Send, () => Task.CompletedTask);
+        WpdFileChannel unknown = owner.CreateFile(second.Send, static () => Task.CompletedTask);
         await unknown.OnMessageAsync(Create(2, 999));
         denied = await second.Next();
         Assert.AreEqual(unchecked((uint)WpdPolicy.HResult(5)), Get(denied, 4));
@@ -108,8 +108,8 @@ public sealed class WpdRedirectionTests
         var owner = new WpdRedirection(backend);
         await Authenticate(owner);
         var a = new Output(); var b = new Output();
-        WpdFileChannel one = owner.CreateFile(a.Send, () => Task.CompletedTask);
-        WpdFileChannel two = owner.CreateFile(b.Send, () => Task.CompletedTask);
+        WpdFileChannel one = owner.CreateFile(a.Send, static () => Task.CompletedTask);
+        WpdFileChannel two = owner.CreateFile(b.Send, static () => Task.CompletedTask);
         await one.OnMessageAsync(Create(1, 7)); await two.OnMessageAsync(Create(2, 7));
         _ = await a.Next(); _ = await b.Next();
         byte[] write = Request(0x123456, 1, 3, 0x12345678, 0x9abcdef0);
@@ -135,7 +135,7 @@ public sealed class WpdRedirectionTests
     {
         var backend = new FakeBackend();
         var output = new Output();
-        var file = new WpdFileChannel(backend, () => true, id => id == 7, output.Send, () => Task.CompletedTask);
+        var file = new WpdFileChannel(backend, static () => true, static id => id == 7, output.Send, static () => Task.CompletedTask);
         await file.OnMessageAsync(Create(1, 7)); _ = await output.Next();
         byte[] ioctl = [.. Request(2, 2, WpdPolicy.ReadIoctl, 2, 3), 7, 8, 1, 2, 3, 99];
         await file.OnMessageAsync(ioctl);
@@ -162,7 +162,7 @@ public sealed class WpdRedirectionTests
     {
         var backend = new FakeBackend();
         var output = new Output();
-        var file = new WpdFileChannel(backend, () => true, _ => true, output.Send, () => Task.CompletedTask);
+        var file = new WpdFileChannel(backend, static () => true, static _ => true, output.Send, static () => Task.CompletedTask);
         await file.OnMessageAsync(Create(1, 7)); _ = await output.Next();
         FakeHandle handle = backend.Handles.Single();
         handle.Wait = true;
@@ -230,10 +230,10 @@ public sealed class WpdRedirectionTests
     {
         var backend = new FakeBackend(); var output = new Output(); var controlOutput = new Output();
         var owner = new WpdRedirection(backend);
-        IDynamicChannelHandler control = owner.CreateControl(controlOutput.Send, () => Task.CompletedTask);
+        IDynamicChannelHandler control = owner.CreateControl(controlOutput.Send, static () => Task.CompletedTask);
         await control.OnMessageAsync(Control(0x65, 1, 5, 1)); _ = await controlOutput.Next();
         await control.OnMessageAsync(Control(0x67)); _ = await controlOutput.Next();
-        WpdFileChannel file = owner.CreateFile(output.Send, () => Task.CompletedTask);
+        WpdFileChannel file = owner.CreateFile(output.Send, static () => Task.CompletedTask);
         await file.OnMessageAsync(Create(1, 7)); _ = await output.Next();
         backend.Handles[0].Failure = new Win32Exception(1167);
         await file.OnMessageAsync(Request(2, 0, 1, 0, 0));
@@ -242,7 +242,7 @@ public sealed class WpdRedirectionTests
         Assert.AreEqual(unchecked((uint)WpdPolicy.HResult(1167)), Get(failure, 4));
         Assert.AreSequenceEqual(Control(0x68, 7), removal);
         Assert.IsTrue(backend.Handles[0].Disposed);
-        WpdFileChannel reopened = owner.CreateFile(output.Send, () => Task.CompletedTask);
+        WpdFileChannel reopened = owner.CreateFile(output.Send, static () => Task.CompletedTask);
         await reopened.OnMessageAsync(Create(3, 7));
         byte[] denied = await output.Next();
         Assert.AreEqual(0x80070005u, Get(denied, 4));
@@ -254,14 +254,14 @@ public sealed class WpdRedirectionTests
     public async Task PendingRequestsAreBoundedAndDangerousOpenFlagsNeverReachBackend()
     {
         var backend = new FakeBackend(); var output = new Output();
-        var denied = new WpdFileChannel(backend, () => true, _ => true, output.Send, () => Task.CompletedTask);
+        var denied = new WpdFileChannel(backend, static () => true, static _ => true, output.Send, static () => Task.CompletedTask);
         byte[] badOpen = Create(1, 7);
         Put(badOpen, 24, 0x04000000); // DELETE_ON_CLOSE is never allowed for a selected WPD interface.
         await denied.OnMessageAsync(badOpen);
         byte[] response = await output.Next();
         Assert.AreEqual(0x80070005u, Get(response, 4));
         Assert.IsEmpty(backend.Handles);
-        var file = new WpdFileChannel(backend, () => true, _ => true, output.Send, () => Task.CompletedTask);
+        var file = new WpdFileChannel(backend, static () => true, static _ => true, output.Send, static () => Task.CompletedTask);
         await file.OnMessageAsync(Create(2, 7)); _ = await output.Next();
         backend.Handles[0].Wait = true;
         for (uint i = 0; i <= WpdPolicy.MaxPending; i++)
@@ -279,7 +279,7 @@ public sealed class WpdRedirectionTests
 
     private static async Task Authenticate(WpdRedirection owner)
     {
-        IDynamicChannelHandler control = owner.CreateControl(_ => Task.CompletedTask, () => Task.CompletedTask);
+        IDynamicChannelHandler control = owner.CreateControl(static _ => Task.CompletedTask, static () => Task.CompletedTask);
         await control.OnMessageAsync(Control(0x65, 1, 5, 1));
         await control.OnMessageAsync(Control(0x67));
     }
@@ -341,7 +341,7 @@ public sealed class WpdRedirectionTests
                 try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
                 catch (OperationCanceledException) { _ = Interlocked.Increment(ref Cancellations); throw; }
             }
-            return new(0, request.Count, request.Function == 1 ? [] : [.. Enumerable.Range(40, request.Count).Select(i => (byte)i)]);
+            return new(0, request.Count, request.Function == 1 ? [] : [.. Enumerable.Range(40, request.Count).Select(static i => (byte)i)]);
         }
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
     }

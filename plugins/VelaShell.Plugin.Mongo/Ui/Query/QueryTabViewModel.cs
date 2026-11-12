@@ -411,8 +411,8 @@ internal sealed partial class QueryTabViewModel : WorkspaceTab
     {
         try
         {
-            IReadOnlyList<Core.DatabaseInfo> databases = await Workspace.Connection.ListDatabasesAsync().ConfigureAwait(true);
-            foreach (Core.DatabaseInfo info in databases)
+            IReadOnlyList<DatabaseInfo> databases = await Workspace.Connection.ListDatabasesAsync().ConfigureAwait(true);
+            foreach (DatabaseInfo info in databases)
             {
                 if (!Databases.Contains(info.Name))
                 {

@@ -38,7 +38,7 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
 
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if ((e.Source as Control)?.DataContext is TreeNode node)
+        if (e.Source is Control { DataContext: TreeNode node })
         {
             _viewModel.OpenNodeCommand.Execute(node);
         }

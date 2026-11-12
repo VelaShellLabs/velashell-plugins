@@ -40,12 +40,12 @@ public static class DiskMath
         }
         // "未使用"跟着 Containers == 0 走,与 daemon 自己 prune 时的判断一致;
         // 悬空镜像只是其中一个子集,拿它当分母会把可回收量算少。
-        ImageSummary[] unusedImages = [.. (usage.Images ?? []).Where(i => i.Containers <= 0)];
-        VolumeSummary[] unusedVolumes = [.. (usage.Volumes ?? []).Where(v => v.UsageData is { RefCount: <= 0 })];
+        ImageSummary[] unusedImages = [.. (usage.Images ?? []).Where(static i => i.Containers <= 0)];
+        VolumeSummary[] unusedVolumes = [.. (usage.Volumes ?? []).Where(static v => v.UsageData is { RefCount: <= 0 })];
         return new(
-            unusedImages.Sum(i => i.Size),
-            unusedVolumes.Sum(v => v.UsageData is { Size: > 0 } u ? u.Size : 0),
-            (usage.BuildCache ?? []).Where(c => !c.InUse).Sum(c => c.Size),
+            unusedImages.Sum(static i => i.Size),
+            unusedVolumes.Sum(static v => v.UsageData is { Size: > 0 } u ? u.Size : 0),
+            (usage.BuildCache ?? []).Where(static c => !c.InUse).Sum(static c => c.Size),
             unusedImages.Length,
             unusedVolumes.Length);
     }

@@ -70,7 +70,7 @@ public sealed class DesignTests
             await bench.Session.RefreshTreeAsync(db);
             DesignTabViewModel tab = await OpenDesignAsync(bench, db, "items");
             Assert.AreEqual(1, tab.ReadyIndexCount, "only _id_ to begin with");
-            StringAssert.StartsWith(tab.StatusText, $"设计 · {db}.items · 1 个索引");
+            Assert.StartsWith($"设计 · {db}.items · 1 个索引", tab.StatusText);
 
             // ── 新建索引:{ kind: 1, price: -1 },唯一不勾,带部分条件 ──
             tab.OpenCreateCommand.Execute(null);
@@ -100,10 +100,10 @@ public sealed class DesignTests
             Assert.AreEqual("kind", tab.NewKeys[0].Field);
             Assert.IsTrue(tab.HasDraft);
             Assert.AreEqual("kind_1_price_-1", tab.DraftIndex!.Name);
-            Assert.AreSequenceEqual(new[] { "kind", "price" }, [.. tab.DraftIndex.Keys.Select(static k => k.Field)]);
+            Assert.AreSequenceEqual(["kind", "price"], [.. tab.DraftIndex.Keys.Select(static k => k.Field)]);
             Assert.AreEqual("复合", tab.DraftIndex.TypeText);
             Assert.Contains(static a => a.Text == "部分", tab.DraftIndex.Attributes);
-            StringAssert.StartsWith(tab.DraftIndex.SizeText, "≈ ");
+            Assert.StartsWith("≈ ", tab.DraftIndex.SizeText);
             Assert.DoesNotContain(static r => r.Name == "kind_1_price_-1", tab.Indexes, "the draft row is not an index yet");
             Assert.AreEqual($"将在 {db}.items 上执行 createIndexes", tab.NewTarget);
             tab.CreateIndexCommand.Execute(null);
@@ -143,7 +143,7 @@ public sealed class DesignTests
             Assert.IsNotNull(tab.Generated);
             Assert.AreEqual(0, tab.GenFailCount, "a rule generated from the whole collection fits it");
             Assert.Contains("kind: { enum: [ \"toy\", \"book\" ] }", tab.GeneratedText);
-            StringAssert.StartsWith(tab.StatusText, $"设计 · {db}.items · Schema · ");
+            Assert.StartsWith($"设计 · {db}.items · Schema · ", tab.StatusText);
 
             tab.GenLevel = "moderate";
             tab.GenAction = "warn";
@@ -176,7 +176,7 @@ public sealed class DesignTests
             await tab.EvaluateTryDocAsync();
             Assert.IsTrue(tab.TryFailed);
             Assert.Contains("仍会写入并记录警告", tab.TryTitle);
-            StringAssert.StartsWith(tab.TryDetail, "properties.price.minimum:");
+            Assert.StartsWith("properties.price.minimum:", tab.TryDetail);
             Assert.HasCount(1, tab.TryMarks);
 
             tab.TryDocText = "{ sku: \"X\", price: 31 }";

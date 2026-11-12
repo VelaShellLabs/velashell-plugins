@@ -47,7 +47,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
     private RdpdrIoResult Process(RdpdrIoRequest request, int generation, CancellationToken token)
     {
         if (request.MajorFunction != 0x0E) { return Failure(0xC00000BB); }
-        uint operation = 0;
+
         try
         {
             token.ThrowIfCancellationRequested();
@@ -55,7 +55,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
             if (body.Length < 32) { return Failure(0xC000000D); }
             uint outputLength = BinaryPrimitives.ReadUInt32LittleEndian(body);
             uint inputLength = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(4));
-            operation = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(8));
+            uint operation = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(8));
             if (inputLength != body.Length - 32 || inputLength > 1024 * 1024 || outputLength > 1024 * 1024)
             {
                 return Failure(0xC000000D);
@@ -121,11 +121,11 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         if (!Supported(operation)) { return Error(operation, SmartCardException.Unsupported); }
 
         bool connect = operation is Base + 0xAC or Base + 0xB0;
-        bool cardOperation = operation >= Base + 0xB4 && operation <= Base + 0xDC;
+        bool cardOperation = operation is >= (Base + 0xB4) and <= (Base + 0xDC);
         bool wide = operation is Base + 0x24 or Base + 0x2C or Base + 0xA4 or Base + 0xB0 or Base + 0xCC;
         if (connect && r.U32() == 0) { throw new InvalidDataException("Missing reader name."); }
-        var contextHeader = r.BlobHeader(16);
-        var cardHeader = cardOperation ? r.BlobHeader(16) : default;
+        (int Length, bool Present) contextHeader = r.BlobHeader(16);
+        (int Length, bool Present) cardHeader = cardOperation ? r.BlobHeader(16) : default;
         uint arg1 = 0, arg2 = 0, arg3 = 0;
         bool lengthOnly = false, receivePciPresent = false, readersPresent = false, setAttributePresent = false;
         int setAttributeLength = 0;
@@ -134,9 +134,11 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         switch (operation - Base)
         {
             case 0x20: case 0x24: lengthOnly = r.Boolean(); arg1 = r.U32(); break;
-            case 0x28: case 0x2C:
+            case 0x28:
+            case 0x2C:
                 bufferHeader = r.BlobHeader(65536); lengthOnly = r.Boolean(); arg1 = r.U32(); break;
-            case 0xA0: case 0xA4:
+            case 0xA0:
+            case 0xA4:
                 arg1 = r.U32(); count = r.Count(11);
                 readersPresent = r.U32() != 0;
                 if (!readersPresent && count != 0) { throw new InvalidDataException(); }
@@ -166,7 +168,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         SmartCardPci? receivePci = null;
         if (receivePciPresent)
         {
-            uint protocol = r.U32(); var header = r.BlobHeader(1024);
+            uint protocol = r.U32(); (int Length, bool Present) header = r.BlobHeader(1024);
             receivePci = new SmartCardPci(protocol, r.Blob(header));
         }
         SmartCardReaderState[] readers = [];
@@ -186,10 +188,10 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         r.Complete();
         Context context = Acquire(contextId);
         bool leased = true;
-        int cancelVersion = Volatile.Read(ref context.CancelVersion);
+        int cancelVersion = Volatile.Read(ref context._cancelVersion);
         try
         {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, context.Stop.Token);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, context._stop.Token);
             CancellationToken ct = linked.Token;
             ct.ThrowIfCancellationRequested();
             using CancellationTokenRegistration registration = ct.Register(() => CancelNative(context));
@@ -198,12 +200,12 @@ internal sealed class SmartCardDevice : IRdpdrDevice
                 Close(contextId, context);
                 leased = false;
                 Release(context);
-                return Error(operation, context.Released.Task.GetAwaiter().GetResult());
+                return Error(operation, context._released.Task.GetAwaiter().GetResult());
             }
             if (operation == Base + 0xA8)
             {
-                Interlocked.Increment(ref context.CancelVersion);
-                _backend.Cancel(context.Native);
+                Interlocked.Increment(ref context._cancelVersion);
+                _backend.Cancel(context._native);
                 return SmartCardNdr.Encode(w);
             }
             if (operation is Base + 0xA0 or Base + 0xA4)
@@ -219,36 +221,40 @@ internal sealed class SmartCardDevice : IRdpdrDevice
                 }
                 return SmartCardNdr.Encode(w);
             }
-            context.Operations.Wait(ct);
+            context._operations.Wait(ct);
             try
             {
                 ct.ThrowIfCancellationRequested();
                 nint card = 0;
-                if (cardOperation && !context.Cards.TryGetValue(cardId, out card)) { throw new SmartCardException(SmartCardException.InvalidHandle); }
+                if (cardOperation && !context._cards.TryGetValue(cardId, out card)) { throw new SmartCardException(SmartCardException.InvalidHandle); }
                 switch (operation - Base)
                 {
-                    case 0x1C: _backend.IsValidContext(context.Native); break;
-                    case 0x20: case 0x24:
-                        WriteBuffer(w, MultiString(_backend.ListReaderGroups(context.Native), wide), lengthOnly, arg1, wide ? 2 : 1); break;
-                    case 0x28: case 0x2C:
+                    case 0x1C: _backend.IsValidContext(context._native); break;
+                    case 0x20:
+                    case 0x24:
+                        WriteBuffer(w, MultiString(_backend.ListReaderGroups(context._native), wide), lengthOnly, arg1, wide ? 2 : 1); break;
+                    case 0x28:
+                    case 0x2C:
                         string[]? groups = data.Length == 0 ? null : ParseMultiString(data, wide);
-                        WriteBuffer(w, MultiString(_backend.ListReaders(context.Native, groups), wide), lengthOnly, arg1, wide ? 2 : 1); break;
-                    case 0xAC: case 0xB0:
-                        if (context.Cards.Count >= 128) { throw new SmartCardException(SmartCardException.NoMemory); }
-                        (nint connected, uint protocol) = _backend.Connect(context.Native, reader!, arg1, arg2);
+                        WriteBuffer(w, MultiString(_backend.ListReaders(context._native, groups), wide), lengthOnly, arg1, wide ? 2 : 1); break;
+                    case 0xAC:
+                    case 0xB0:
+                        if (context._cards.Count >= 128) { throw new SmartCardException(SmartCardException.NoMemory); }
+                        (nint connected, uint protocol) = _backend.Connect(context._native, reader!, arg1, arg2);
                         ulong newId;
                         lock (_gate) { newId = ++_sequence; }
-                        context.Cards.Add(newId, connected);
+                        context._cards.Add(newId, connected);
                         SmartCardNdr.BlobHeader(w, 8, true); SmartCardNdr.BlobHeader(w, 8, true); w.U32LE(protocol);
                         SmartCardNdr.Handle(w, contextId); SmartCardNdr.Handle(w, newId); break;
                     case 0xB4: w.U32LE(_backend.Reconnect(card, arg1, arg2, arg3)); break;
-                    case 0xB8: _backend.Disconnect(card, arg1); _ = context.Cards.Remove(cardId); break;
+                    case 0xB8: _backend.Disconnect(card, arg1); _ = context._cards.Remove(cardId); break;
                     case 0xBC: _backend.BeginTransaction(card); break;
                     case 0xC0: _backend.EndTransaction(card, arg1); break;
                     case 0xC4:
                         SmartCardStatus state = _backend.Status(card);
                         w.U32LE(state.State); w.U32LE(state.Protocol); WriteBuffer(w, state.Atr, lengthOnly, arg1); break;
-                    case 0xC8: case 0xCC:
+                    case 0xC8:
+                    case 0xCC:
                         SmartCardStatus status = _backend.Status(card);
                         byte[] names = MultiString(status.Readers, wide);
                         CheckCapacity(names.Length / (wide ? 2 : 1), lengthOnly, arg1);
@@ -284,7 +290,7 @@ internal sealed class SmartCardDevice : IRdpdrDevice
                         _backend.SetAttribute(card, arg1, data); break;
                 }
             }
-            finally { context.Operations.Release(); }
+            finally { context._operations.Release(); }
             return SmartCardNdr.Encode(w);
         }
         finally { if (leased) { Release(context); } }
@@ -296,10 +302,10 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         while (true)
         {
             token.ThrowIfCancellationRequested();
-            if (version != Volatile.Read(ref context.CancelVersion)) { throw new SmartCardException(SmartCardException.Cancelled); }
+            if (version != Volatile.Read(ref context._cancelVersion)) { throw new SmartCardException(SmartCardException.Cancelled); }
             uint elapsed = (uint)Math.Min(uint.MaxValue, Stopwatch.GetElapsedTime(start).TotalMilliseconds);
             uint slice = timeout == uint.MaxValue ? 250 : Math.Min(250, timeout > elapsed ? timeout - elapsed : 0);
-            try { return _backend.GetStatusChange(context.Native, slice, readers); }
+            try { return _backend.GetStatusChange(context._native, slice, readers); }
             catch (SmartCardException ex) when (ex.Code == SmartCardException.Timeout && (timeout == uint.MaxValue || elapsed + slice < timeout)) { }
         }
     }
@@ -377,8 +383,8 @@ internal sealed class SmartCardDevice : IRdpdrDevice
     {
         lock (_gate)
         {
-            if (!_contexts.TryGetValue(id, out Context? context) || context.Closing) { throw new SmartCardException(SmartCardException.InvalidHandle); }
-            context.Users++;
+            if (!_contexts.TryGetValue(id, out Context? context) || context._closing) { throw new SmartCardException(SmartCardException.InvalidHandle); }
+            context._users++;
             return context;
         }
     }
@@ -388,32 +394,32 @@ internal sealed class SmartCardDevice : IRdpdrDevice
         lock (_gate)
         {
             if (!_contexts.Remove(id)) { throw new SmartCardException(SmartCardException.InvalidHandle); }
-            context.Closing = true;
+            context._closing = true;
         }
-        context.Stop.Cancel();
+        context._stop.Cancel();
         CancelNative(context);
     }
 
     private void Release(Context context)
     {
         bool clean;
-        lock (_gate) { clean = --context.Users == 0 && context.Closing; }
+        lock (_gate) { clean = --context._users == 0 && context._closing; }
         if (clean)
         {
             uint status = 0;
-            try { _backend.ReleaseContext(context.Native); }
+            try { _backend.ReleaseContext(context._native); }
             catch (SmartCardException ex) { status = ex.Code; }
             finally
             {
-                context.Stop.Dispose(); context.Operations.Dispose();
-                context.Released.TrySetResult(status);
+                context._stop.Dispose(); context._operations.Dispose();
+                context._released.TrySetResult(status);
             }
         }
     }
 
     private void CancelNative(Context context)
     {
-        try { _backend.Cancel(context.Native); }
+        try { _backend.Cancel(context._native); }
         catch (SmartCardException) { }
     }
 
@@ -425,11 +431,11 @@ internal sealed class SmartCardDevice : IRdpdrDevice
             _generation++;
             contexts = [.. _contexts];
             _contexts.Clear();
-            foreach (var pair in contexts) { pair.Value.Closing = true; pair.Value.Users++; }
+            foreach (KeyValuePair<ulong, Context> pair in contexts) { pair.Value._closing = true; pair.Value._users++; }
         }
-        foreach (var pair in contexts)
+        foreach (KeyValuePair<ulong, Context> pair in contexts)
         {
-            pair.Value.Stop.Cancel(); CancelNative(pair.Value); Release(pair.Value);
+            pair.Value._stop.Cancel(); CancelNative(pair.Value); Release(pair.Value);
         }
     }
 
@@ -441,12 +447,12 @@ internal sealed class SmartCardDevice : IRdpdrDevice
 
     private sealed class Context(nint native)
     {
-        internal readonly nint Native = native;
-        internal readonly Dictionary<ulong, nint> Cards = [];
-        internal readonly SemaphoreSlim Operations = new(1, 1);
-        internal readonly CancellationTokenSource Stop = new();
-        internal readonly TaskCompletionSource<uint> Released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal int Users, CancelVersion;
-        internal bool Closing;
+        internal readonly nint _native = native;
+        internal readonly Dictionary<ulong, nint> _cards = [];
+        internal readonly SemaphoreSlim _operations = new(1, 1);
+        internal readonly CancellationTokenSource _stop = new();
+        internal readonly TaskCompletionSource<uint> _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int _users, _cancelVersion;
+        internal bool _closing;
     }
 }

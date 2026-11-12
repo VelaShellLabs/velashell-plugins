@@ -89,10 +89,10 @@ internal sealed partial class MongoConnection
         BsonDocument storage;
         try
         {
-            BsonDocument[] pipeline = new[]
-            {
+            BsonDocument[] pipeline =
+            [
                 new BsonDocument("$collStats", new BsonDocument("storageStats", new BsonDocument()))
-            };
+            ];
             using IAsyncCursor<BsonDocument> cursor = await Collection(database, collection)
                 .AggregateAsync<BsonDocument>(pipeline, cancellationToken: cancellationToken).ConfigureAwait(false);
             BsonDocument? first = await cursor.FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);

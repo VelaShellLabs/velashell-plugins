@@ -39,7 +39,7 @@ public sealed class WeightedStackPanel : Panel
     static WeightedStackPanel()
     {
         // 权重变了要重排的是**父面板**(每一段的宽度都跟着变),不是那一段自己。
-        _ = WeightProperty.Changed.AddClassHandler<Control>((child, _) =>
+        _ = WeightProperty.Changed.AddClassHandler<Control>(static (child, _) =>
             (child.GetVisualParent() as WeightedStackPanel)?.InvalidateArrange());
     }
 

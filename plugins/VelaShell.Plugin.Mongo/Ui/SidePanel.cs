@@ -16,10 +16,7 @@ public static class SidePanel
 
     private static readonly ConditionalWeakTable<Grid, Saved> SavedWidths = [];
 
-    static SidePanel()
-    {
-        _ = CollapsedProperty.Changed.AddClassHandler<Grid>(static (grid, _) => Apply(grid));
-    }
+    static SidePanel() => CollapsedProperty.Changed.AddClassHandler<Grid>(static (grid, _) => Apply(grid));
 
     /// <summary>读。</summary>
     public static bool GetCollapsed(Grid grid) => grid.GetValue(CollapsedProperty);

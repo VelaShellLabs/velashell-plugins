@@ -247,6 +247,6 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
         _lastSend = now;
         return new(_highest, (ushort)(Capacity - _pending.Count - _delivered.Count),
             RdpUdpFlags.Ack | RdpUdpFlags.AckOfAcks | (_congestion ? RdpUdpFlags.Congestion : 0))
-        { AckVector = vector.ToArray(), AckOfAcks = _acked };
+        { AckVector = [.. vector], AckOfAcks = _acked };
     }
 }

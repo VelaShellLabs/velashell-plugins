@@ -238,7 +238,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         cancellationToken.ThrowIfCancellationRequested();
         if (Settings.Deployment == RedisDeployment.Cluster)
         {
-            RedisScanPage clustered = await ScanClusterAsync(cursor, match, type, cancellationToken).ConfigureAwait(false);
+            RedisScanPage clustered = await ScanClusterAsync(cursor, match, cancellationToken).ConfigureAwait(false);
             return await NarrowByTypeAsync(clustered, type, cancellationToken).ConfigureAwait(false);
         }
         (string next, List<RedisKeyName> keys) = await ScanOnceAsync(
@@ -311,8 +311,10 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         for (int i = 0; i < keys.Count; i++)
         {
             var redisKey = keys[i].ToRedisKey();
-            ttls[i] = db.KeyTimeToLiveAsync(redisKey);
-            lengths[i] = LengthAsync(db, redisKey, ParseType(i < types.Count ? types[i] : string.Empty));
+            cancellationToken.ThrowIfCancellationRequested();
+            ttls[i] = db.KeyTimeToLiveAsync(redisKey).WaitAsync(cancellationToken);
+            lengths[i] = LengthAsync(db, redisKey, ParseType(i < types.Count ? types[i] : string.Empty))
+                .WaitAsync(cancellationToken);
         }
         try
         {
@@ -370,7 +372,8 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         var pending = new Task<RedisType>[keys.Count];
         for (int i = 0; i < keys.Count; i++)
         {
-            pending[i] = db.KeyTypeAsync(keys[i].ToRedisKey());
+            cancellationToken.ThrowIfCancellationRequested();
+            pending[i] = db.KeyTypeAsync(keys[i].ToRedisKey()).WaitAsync(cancellationToken);
         }
         try
         {
@@ -404,9 +407,11 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         IDatabase db = Db();
         var redisKey = key.ToRedisKey();
         // 一次流水线打包:类型、TTL、编码三条命令一个往返。
-        Task<RedisType> typeTask = db.KeyTypeAsync(redisKey);
-        Task<TimeSpan?> ttlTask = db.KeyTimeToLiveAsync(redisKey);
-        Task<RedisResult> encodingTask = TryExecuteAsync(db, "OBJECT", "ENCODING", redisKey);
+        cancellationToken.ThrowIfCancellationRequested();
+        Task<RedisType> typeTask = db.KeyTypeAsync(redisKey).WaitAsync(cancellationToken);
+        Task<TimeSpan?> ttlTask = db.KeyTimeToLiveAsync(redisKey).WaitAsync(cancellationToken);
+        Task<RedisResult> encodingTask = TryExecuteAsync(db, "OBJECT", "ENCODING", redisKey)
+            .WaitAsync(cancellationToken);
         await Task.WhenAll(typeTask, ttlTask, encodingTask).ConfigureAwait(false);
 
         RedisType type = typeTask.Result;
@@ -421,8 +426,11 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         if (includeMemory)
         {
             // 两条一起打包:一个往返。MEMORY USAGE 对大键并不便宜,所以只有详情页才问它。
-            Task<RedisResult> usageTask = TryExecuteAsync(db, "MEMORY", "USAGE", redisKey);
-            Task<RedisResult> idleTask = TryExecuteAsync(db, "OBJECT", "IDLETIME", redisKey);
+            cancellationToken.ThrowIfCancellationRequested();
+            Task<RedisResult> usageTask = TryExecuteAsync(db, "MEMORY", "USAGE", redisKey)
+                .WaitAsync(cancellationToken);
+            Task<RedisResult> idleTask = TryExecuteAsync(db, "OBJECT", "IDLETIME", redisKey)
+                .WaitAsync(cancellationToken);
             _ = await Task.WhenAll(usageTask, idleTask).ConfigureAwait(false);
             memory = usageTask.Result.IsNull ? -1 : (long?)usageTask.Result ?? -1;
             // LFU 策略下服务器只给 FREQ,IDLETIME 会报错 —— TryExecuteAsync 已经把它变成 nil,
@@ -442,16 +450,20 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         cancellationToken.ThrowIfCancellationRequested();
         IDatabase db = Db();
         var redisKey = key.ToRedisKey();
-        long total = await db.StringLengthAsync(redisKey).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        long total = await db.StringLengthAsync(redisKey).WaitAsync(cancellationToken).ConfigureAwait(false);
         int limit = Settings.ValuePreviewBytes;
         if (total <= limit)
         {
-            RedisValue whole = await db.StringGetAsync(redisKey).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            RedisValue whole = await db.StringGetAsync(redisKey).WaitAsync(cancellationToken).ConfigureAwait(false);
             return new((byte[]?)whole ?? [], total);
         }
         // GETRANGE 的区间是闭的,所以上界是 limit-1。整取一个 4MB 的值只为显示前 256KB
         // 是纯粹的浪费 —— 而且那份内存还要在界面里再留一遍。
-        RedisValue slice = await db.StringGetRangeAsync(redisKey, 0, limit - 1).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        RedisValue slice = await db.StringGetRangeAsync(redisKey, 0, limit - 1)
+            .WaitAsync(cancellationToken).ConfigureAwait(false);
         return new((byte[]?)slice ?? [], total);
     }
 
@@ -542,11 +554,14 @@ internal sealed partial class RedisConnection : IAsyncDisposable
                       && parsed > 0
             ? parsed
             : 0;
-        long total = await db.SortedSetLengthAsync(redisKey, start, stop).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        long total = await db.SortedSetLengthAsync(redisKey, start, stop)
+            .WaitAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         SortedSetEntry[] entries = await db.SortedSetRangeByScoreWithScoresAsync(
             redisKey, start, stop, Exclude.None,
             descending ? Order.Descending : Order.Ascending,
-            offset, pageSize).ConfigureAwait(false);
+            offset, pageSize).WaitAsync(cancellationToken).ConfigureAwait(false);
         var rows = new List<RedisElement>(entries.Length);
         foreach (SortedSetEntry entry in entries)
         {
@@ -636,7 +651,6 @@ internal sealed partial class RedisConnection : IAsyncDisposable
     private async Task<RedisScanPage> ScanClusterAsync(
         string cursor,
         string match,
-        string? type,
         CancellationToken cancellationToken)
     {
         List<IServer> servers = [.. PrimaryServers()];
@@ -699,12 +713,12 @@ internal sealed partial class RedisConnection : IAsyncDisposable
 
         var keys = new List<RedisKeyName>();
         long next = 0;
-        IAsyncEnumerable<RedisKey> source = server.KeysAsync(
+        cancellationToken.ThrowIfCancellationRequested();
+        await using IAsyncEnumerator<RedisKey> enumerator = server.KeysAsync(
             database,
             string.IsNullOrEmpty(match) ? "*" : match,
             pageSize: Settings.ScanCount,
-            cursor: start);
-        await using IAsyncEnumerator<RedisKey> enumerator = source.GetAsyncEnumerator(cancellationToken);
+            cursor: start).GetAsyncEnumerator(cancellationToken);
         while (keys.Count < Settings.ScanCount && await enumerator.MoveNextAsync().ConfigureAwait(false))
         {
             if ((byte[]?)enumerator.Current is { } raw)
@@ -785,7 +799,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         return (next, keys);
     }
 
-    private async Task<RedisElementPage> ScanPairsAsync(
+    private static async Task<RedisElementPage> ScanPairsAsync(
         IDatabase db,
         string command,
         RedisKey key,
@@ -864,7 +878,7 @@ internal sealed partial class RedisConnection : IAsyncDisposable
         {
             // 条目的字段对摊平成一行 name=value 展示:流的详情页(消费组、pending)是后续里程碑,
             // 这里先让用户看得见内容而不是一片空白。
-            string payload = string.Join("  ", entry.Values.Select(pair => $"{Display(pair.Name)}={Display(pair.Value)}"));
+            string payload = string.Join("  ", entry.Values.Select(static pair => $"{Display(pair.Name)}={Display(pair.Value)}"));
             rows.Add(new(entry.Id.ToString() ?? string.Empty, payload));
         }
         // 下一页从最后一条的 id 之后开始:XRANGE 的区间是闭的,用 ( 前缀取开区间。

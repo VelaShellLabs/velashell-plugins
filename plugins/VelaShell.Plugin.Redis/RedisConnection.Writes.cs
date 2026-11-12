@@ -245,7 +245,7 @@ internal sealed partial class RedisConnection
             return 0;
         }
         IDatabase db = Db();
-        RedisKey[] redisKeys = [.. keys.Select(key => key.ToRedisKey())];
+        RedisKey[] redisKeys = [.. keys.Select(static key => key.ToRedisKey())];
         // 库的 KeyDelete 发的是 DEL,拿不到 UNLINK —— 所以这里显式走 Execute。
         if (_unlinkSupported != false)
         {

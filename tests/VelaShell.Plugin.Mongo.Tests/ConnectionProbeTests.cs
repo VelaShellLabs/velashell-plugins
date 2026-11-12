@@ -79,7 +79,7 @@ public sealed class ConnectionProbeTests
 
         ConnectionPreview? full = ConnectionProbe.Preview(
             Draft("mongodb://10.0.0.1:27017,10.0.0.2:27017/shop?replicaSet=rs0", 0, "", new() { ["topology"] = "uri" }), Zh);
-        StringAssert.StartsWith(Text(full), "mongodb://10.0.0.1:27017,10.0.0.2:27017/shop");
+        Assert.StartsWith("mongodb://10.0.0.1:27017,10.0.0.2:27017/shop", Text(full));
     }
 
     /// <summary>对本机 mongod 跑一遍:TCP / 认证 / hello / 权限都过,成员表里有一台主节点,结论是「连接成功 · N ms」。</summary>
@@ -88,15 +88,15 @@ public sealed class ConnectionProbeTests
     {
         await TestServer.RequireAsync();
         var url = new MongoUrl(TestServer.Uri);
-        var provider = new MongoConnector(new VelaShell.PluginSdk.Testing.TestPluginContext(), Zh);
+        var provider = new MongoConnector(new PluginSdk.Testing.TestPluginContext(), Zh);
         var seen = new List<ProbeStep>();
         ProbeReport report = await provider.ProbeAsync(Profile(url.Server.Host, url.Server.Port, "",
             new() { ["directConnection"] = "true" }), "", new SyncProgress(seen.Add), CancellationToken.None);
 
         Assert.IsTrue(report.Succeeded, string.Join("; ", report.Steps.Select(static s => $"{s.Key}={s.State}:{s.Detail}")));
-        Assert.AreSequenceEqual(new[] { "tcp", "auth", "hello", "privileges" }, [.. report.Steps.Select(static s => s.Key)]);
+        Assert.AreSequenceEqual(["tcp", "auth", "hello", "privileges"], [.. report.Steps.Select(static s => s.Key)]);
         Assert.IsTrue(report.Steps.Take(3).All(static s => s.State == ProbeState.Passed));
-        StringAssert.StartsWith(report.Summary, "连接成功 · ");
+        Assert.StartsWith("连接成功 · ", report.Summary);
         Assert.AreEqual("发现的成员", report.EndpointsTitle);
         Assert.Contains(static e => e.Role is "PRIMARY" or "STANDALONE" && e.Tone == Tone.Success, report.Endpoints);
         Assert.Contains(static s => s is { Key: "tcp", State: ProbeState.Running }, seen, "each step reports when it starts");
@@ -107,7 +107,7 @@ public sealed class ConnectionProbeTests
     [TestMethod]
     public async Task Probe_reports_a_closed_port_without_throwing()
     {
-        var provider = new MongoConnector(new VelaShell.PluginSdk.Testing.TestPluginContext(), Zh);
+        var provider = new MongoConnector(new PluginSdk.Testing.TestPluginContext(), Zh);
         ProbeReport report = await provider.ProbeAsync(Profile("127.0.0.1", 1, "",
             new() { ["directConnection"] = "true", ["connectTimeout"] = "1000" }), "", null, CancellationToken.None);
 
@@ -126,7 +126,7 @@ public sealed class ConnectionProbeTests
     {
         await TestServer.RequireAsync();
         var url = new MongoUrl(TestServer.Uri);
-        var provider = new MongoConnector(new VelaShell.PluginSdk.Testing.TestPluginContext(), Zh);
+        var provider = new MongoConnector(new PluginSdk.Testing.TestPluginContext(), Zh);
         ProbeReport report = await provider.ProbeAsync(Profile(url.Server.Host, url.Server.Port, "ops_reader",
             new() { ["directConnection"] = "true", ["database"] = "shop", ["authSource"] = "admin" }), "reader-pass", null, CancellationToken.None);
         if (!report.Succeeded)

@@ -407,7 +407,7 @@ internal sealed class JsonCardViewModel : ObservableObject
         BsonDocument? baseline = Row.Original;
         IReadOnlyDictionary<string, int> lines = IsEditing
             ? CaretPathScanner.Scan(_editText, -1).KeyLines
-            : Printed.LinePaths.Select((p, i) => (p, i)).Where(static t => t.p is not null)
+            : Printed.LinePaths.Select(static (p, i) => (p, i)).Where(static t => t.p is not null)
                 .GroupBy(static t => t.p!).ToDictionary(static g => g.Key, static g => g.First().i + 1);
         string top = currentPath?.Split('.')[0] ?? "";
         var items = new List<JsonOutlineItem>();

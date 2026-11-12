@@ -50,13 +50,13 @@ public sealed class RedisKeyLayoutTests
                 "demo:user:10086:lock",
                 "demo:user:10086:profile",
                 "demo:user:10086:sessions"
-            ], [.. rows.Select(row => row.Display)]);
+            ], [.. rows.Select(static row => row.Display)]);
 
-        RedisKeyRow group = rows.Single(row => row.IsGroup);
+        RedisKeyRow group = rows.Single(static row => row.IsGroup);
         Assert.AreEqual(40, group.Count);
         Assert.IsFalse(group.IsExpanded);
         // 一行 = 一个完整键名。树上只有片段,这正是要改掉的东西。
-        Assert.IsTrue(rows.Where(row => row.IsKey).All(row => row.Display.StartsWith("demo:", StringComparison.Ordinal)));
+        Assert.IsTrue(rows.Where(static row => row.IsKey).All(static row => row.Display.StartsWith("demo:", StringComparison.Ordinal)));
     }
 
     /// <summary>折出来的前缀要走到最深的公共段,而不是笼统的上一层。</summary>
@@ -64,7 +64,7 @@ public sealed class RedisKeyLayoutTests
     public void Build_GroupPrefixReachesTheDeepestCommonSegment()
     {
         List<RedisKeyRow> rows = RedisKeyLayout.Build(Demo(), Delimiter, threshold: 8);
-        RedisKeyRow group = rows.Single(row => row.IsGroup);
+        RedisKeyRow group = rows.Single(static row => row.IsGroup);
 
         // `demo:order:*` 是对的但没说到位;40 个键共享到 2026 这一段。
         Assert.AreEqual("demo:order:2026:*", group.Display);
@@ -97,8 +97,8 @@ public sealed class RedisKeyLayoutTests
 
         List<RedisKeyRow> collapsed = RedisKeyLayout.Build(keys, Delimiter, threshold: 8);
         Assert.AreSequenceEqual(
-            ["app:cache:x", "app:session:*"], [.. collapsed.Select(row => row.Display)]);
-        RedisKeyRow group = collapsed.Single(row => row.IsGroup);
+            ["app:cache:x", "app:session:*"], [.. collapsed.Select(static row => row.Display)]);
+        RedisKeyRow group = collapsed.Single(static row => row.IsGroup);
         Assert.AreEqual(20, group.Count);
 
         List<RedisKeyRow> expanded = RedisKeyLayout.Build(
@@ -106,7 +106,7 @@ public sealed class RedisKeyLayoutTests
 
         // 展开后不是甩出 20 行,而是继续收敛成两条子分组 —— 这正是递归套用规则的意义。
         Assert.AreSequenceEqual(
-            ["app:cache:x", "app:session:*", "app:session:abc:*", "app:session:def:*"], [.. expanded.Select(row => row.Display)]);
+            ["app:cache:x", "app:session:*", "app:session:abc:*", "app:session:def:*"], [.. expanded.Select(static row => row.Display)]);
         Assert.IsTrue(expanded[1].IsExpanded);
         Assert.IsTrue(expanded[2].Depth == 1 && expanded[3].Depth == 1, "展开出来的成员要缩进一级。");
     }
@@ -124,7 +124,7 @@ public sealed class RedisKeyLayoutTests
 
         List<RedisKeyRow> rows = RedisKeyLayout.Build(keys, Delimiter, threshold: 8);
 
-        Assert.DoesNotContain(row => row.IsGroup, rows);
+        Assert.DoesNotContain(static row => row.IsGroup, rows);
         Assert.HasCount(3, rows);
     }
 
@@ -139,10 +139,10 @@ public sealed class RedisKeyLayoutTests
 
         List<RedisKeyRow> rows = RedisKeyLayout.Build(keys, Delimiter, threshold: 2);
 
-        Assert.DoesNotContain(row => row.Display == "a:b:*", rows,
+        Assert.DoesNotContain(static row => row.Display == "a:b:*", rows,
             "a:b 会被这条分组行错误地算进去。");
         Assert.AreSequenceEqual(
-            ["a:b", "a:b:c", "a:b:d"], [.. rows.Select(row => row.Display)]);
+            ["a:b", "a:b:c", "a:b:d"], [.. rows.Select(static row => row.Display)]);
     }
 
     [TestMethod]
@@ -152,7 +152,7 @@ public sealed class RedisKeyLayoutTests
 
         List<RedisKeyRow> rows = RedisKeyLayout.Build(keys, delimiter: "", threshold: 2);
 
-        Assert.AreSequenceEqual(["a", "b", "c"], [.. rows.Select(row => row.Display)]);
+        Assert.AreSequenceEqual(["a", "b", "c"], [.. rows.Select(static row => row.Display)]);
     }
 
     /// <summary>阈值低于下限即"不折" —— 阈值 1 会让每个键都自成一组,那是纯粹的噪音。</summary>
@@ -161,7 +161,7 @@ public sealed class RedisKeyLayoutTests
     {
         List<RedisKeyRow> rows = RedisKeyLayout.Build(Demo(), Delimiter, threshold: 1);
 
-        Assert.DoesNotContain(row => row.IsGroup, rows);
+        Assert.DoesNotContain(static row => row.IsGroup, rows);
         Assert.HasCount(46, rows);
     }
 
@@ -194,8 +194,8 @@ public sealed class RedisKeyLayoutTests
         var firstPage = new List<RedisKeyName> { K("demo:a:1"), K("demo:a:2"), K("demo:b:1") };
         RedisKeyLayout.Sync(target, RedisKeyLayout.Build(firstPage, Delimiter, threshold: 2));
 
-        RedisKeyRow groupBefore = target.Single(row => row.IsGroup);
-        RedisKeyRow keyBefore = target.Single(row => row.IsKey);
+        RedisKeyRow groupBefore = target.Single(static row => row.IsGroup);
+        RedisKeyRow keyBefore = target.Single(static row => row.IsKey);
         Assert.AreEqual("demo:a:*", groupBefore.Display);
         Assert.AreEqual(2, groupBefore.Count);
         Assert.AreEqual("demo:b:1", keyBefore.Display);
@@ -206,11 +206,11 @@ public sealed class RedisKeyLayoutTests
         var secondPage = new List<RedisKeyName>(firstPage) { K("demo:a:3"), K("demo:a:4") };
         RedisKeyLayout.Sync(target, RedisKeyLayout.Build(secondPage, Delimiter, threshold: 2));
 
-        RedisKeyRow groupAfter = target.Single(row => row.IsGroup);
+        RedisKeyRow groupAfter = target.Single(static row => row.IsGroup);
         Assert.AreSame(groupBefore, groupAfter, "分组行被换成了新对象,选中状态会丢。");
         Assert.AreEqual(4, groupAfter.Count, "计数停在了第一页的数字上。");
         Assert.AreEqual(string.Empty, groupAfter.GroupTip, "旧文案要被新算的那一份整份顶掉。");
-        Assert.AreSame(keyBefore, target.Single(row => row.IsKey), "键行也要复用,否则选中项会被顶掉。");
+        Assert.AreSame(keyBefore, target.Single(static row => row.IsKey), "键行也要复用,否则选中项会被顶掉。");
     }
 
     [TestMethod]

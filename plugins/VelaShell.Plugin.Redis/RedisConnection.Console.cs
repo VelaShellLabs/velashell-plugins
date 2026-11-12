@@ -60,7 +60,7 @@ internal sealed partial class RedisConnection
     public RedisCommandGuard Guard { get; } = new();
 
     /// <summary>已知命令的补全条目,按名字排序。</summary>
-    public IReadOnlyList<RedisCommandHint> CommandHints => [.. _hints.Values.OrderBy(h => h.Name, StringComparer.Ordinal)];
+    public IReadOnlyList<RedisCommandHint> CommandHints => [.. _hints.Values.OrderBy(static h => h.Name, StringComparer.Ordinal)];
 
     /// <summary>某条命令在这条通道上是否跑不了(界面据此在敲之前就说清楚)。</summary>
     /// <param name="command">命令名或整行。</param>

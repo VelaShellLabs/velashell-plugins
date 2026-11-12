@@ -49,8 +49,8 @@ public sealed class IndexAdvisorTests
         EsrShape shape = EsrShape.From(
             BsonDocument.Parse("{ total: { $gte: 100 }, status: 'paid', 'customer.level': { $in: ['VIP', 'SVIP'] } }"),
             BsonDocument.Parse("{ createdAt: -1 }"))!;
-        Assert.AreSequenceEqual(new[] { "status", "customer.level" }, [.. shape.Equality]);
-        Assert.AreSequenceEqual(new[] { "total" }, [.. shape.Range]);
+        Assert.AreSequenceEqual(["status", "customer.level"], [.. shape.Equality]);
+        Assert.AreSequenceEqual(["total"], [.. shape.Range]);
         Assert.AreEqual(BsonDocument.Parse("{ status: 1, 'customer.level': 1, createdAt: -1, total: 1 }"), shape.EsrKey());
         Assert.AreEqual("E", shape.RoleOf("status"));
         Assert.AreEqual("S", shape.RoleOf("createdAt"));
@@ -77,13 +77,13 @@ public sealed class IndexAdvisorTests
     [TestMethod]
     public void Slow_queries_group_by_shape_and_ignore_cheap_index_scans()
     {
-        BsonDocument[] profile = new[]
-        {
+        BsonDocument[] profile =
+        [
             Find(BsonDocument.Parse("{ status: 'paid', total: { $gte: 1 } }"), BsonDocument.Parse("{ total: -1 }")),
             Find(BsonDocument.Parse("{ status: 'shipped', total: { $gte: 9 } }"), BsonDocument.Parse("{ total: -1 }"), millis: 600),
             Find(BsonDocument.Parse("{ orderNo: 'SO-1' }"), plan: "IXSCAN { orderNo: 1 }", examined: 1, returned: 1),
             new BsonDocument { { "op", "getmore" }, { "command", new BsonDocument("getMore", 1L) } }
-        };
+        ];
         IReadOnlyList<AdvisorQueryGroup> groups = IndexAdvisor.GroupSlowQueries(profile);
         Assert.HasCount(1, groups);
         AdvisorQueryGroup group = groups[0];
@@ -134,7 +134,7 @@ public sealed class IndexAdvisorTests
         Assert.IsEmpty(IndexAdvisor.Advise(groups, indexes, Now));
 
         AdvisorIndex[] hidden = [Index("status_1_total_-1", BsonDocument.Parse("{ status: 1, total: -1 }"), extra: new BsonDocument("hidden", true))];
-        Assert.AreEqual(AdvisorKind.CreateIndex, IndexAdvisor.Advise(groups, hidden, Now).First().Kind,
+        Assert.AreEqual(AdvisorKind.CreateIndex, IndexAdvisor.Advise(groups, hidden, Now)[0].Kind,
             "a hidden index is not used by the optimizer, so it does not count");
     }
 
@@ -167,7 +167,7 @@ public sealed class IndexAdvisorTests
             Index("status_-1", BsonDocument.Parse("{ status: -1 }"))
         ];
         IReadOnlyList<AdvisorSuggestion> advice = IndexAdvisor.Advise([], indexes, Now);
-        AdvisorSuggestion redundant = advice.Single(a => a.Kind == AdvisorKind.RedundantIndex);
+        AdvisorSuggestion redundant = advice.Single(static a => a.Kind == AdvisorKind.RedundantIndex);
         Assert.AreEqual("status_1", redundant.Index!.Name);
         Assert.AreEqual("status_1_createdAt_-1", redundant.Other!.Name);
     }

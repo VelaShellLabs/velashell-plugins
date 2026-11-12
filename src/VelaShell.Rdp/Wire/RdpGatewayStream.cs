@@ -35,8 +35,8 @@ internal sealed class RdpGatewayStream : Stream
     {
         options.Validate();
         if (!OperatingSystem.IsWindows()) { AppContext.SetSwitch("System.Net.Security.UseManagedNtlm", true); }
-        var endpoint = new UriBuilder("https", options.Host, options.Port, "/remoteDesktopGateway/").Uri;
-        var credential = options.UseRdpCredentials
+        Uri endpoint = new UriBuilder("https", options.Host, options.Port, "/remoteDesktopGateway/").Uri;
+        NetworkCredential credential = options.UseRdpCredentials
             ? new NetworkCredential(username, password, domain)
             : new NetworkCredential(options.Username, options.Password, options.Domain);
         var credentials = new CredentialCache { { endpoint, "Negotiate", credential }, { endpoint, "NTLM", credential } };
@@ -122,7 +122,7 @@ internal sealed class RdpGatewayStream : Stream
         }
         // Advertise only the implemented advisory service-message capability. UDP, NAP, consent UI
         // and reauthentication still require protocol behavior that this stream does not implement.
-        var tunnelRequest = new byte[8];
+        byte[] tunnelRequest = new byte[8];
         BinaryPrimitives.WriteUInt32LittleEndian(tunnelRequest, ServiceMessageCapability);
         await SendPacketAsync(4, tunnelRequest, ct).ConfigureAwait(false);
         byte[] tunnel = await ExpectAsync(5, 10, 2, ct).ConfigureAwait(false);
@@ -152,7 +152,7 @@ internal sealed class RdpGatewayStream : Stream
         }
         if (position != tunnel.Length) { throw new RdpProtocolException("Invalid RD Gateway tunnel response length."); }
         byte[] clientName = UnicodeString(Environment.MachineName);
-        var authorization = new byte[2 + clientName.Length];
+        byte[] authorization = new byte[2 + clientName.Length];
         clientName.CopyTo(authorization, 2);
         await SendPacketAsync(6, authorization, ct).ConfigureAwait(false);
         byte[] auth = await ExpectAsync(7, 8, 0, ct).ConfigureAwait(false);
@@ -171,7 +171,7 @@ internal sealed class RdpGatewayStream : Stream
         }
         if ((fields & 2) != 0) { Require(auth, position, 4); position += 4; }
         if (position != auth.Length) { throw new RdpProtocolException("Invalid RD Gateway authorization length."); }
-        var channel = new byte[6 + target.Length];
+        byte[] channel = new byte[6 + target.Length];
         channel[0] = 1;
         BinaryPrimitives.WriteUInt16LittleEndian(channel.AsSpan(2), (ushort)targetPort);
         BinaryPrimitives.WriteUInt16LittleEndian(channel.AsSpan(4), 3);
@@ -200,7 +200,7 @@ internal sealed class RdpGatewayStream : Stream
     {
         int bytes = Encoding.Unicode.GetByteCount(value) + 2;
         if (bytes > ushort.MaxValue) { throw new ArgumentException("RD Gateway string is too long."); }
-        var result = new byte[bytes + 2];
+        byte[] result = new byte[bytes + 2];
         BinaryPrimitives.WriteUInt16LittleEndian(result, (ushort)bytes);
         Encoding.Unicode.GetBytes(value, result.AsSpan(2));
         return result;
@@ -237,11 +237,11 @@ internal sealed class RdpGatewayStream : Stream
 
     private async Task<(ushort Type, byte[] Body)> ReceivePacketAsync(CancellationToken ct)
     {
-        var header = new byte[8];
+        byte[] header = new byte[8];
         await ReceiveExactlyAsync(header, ct).ConfigureAwait(false);
         uint size = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(4));
         if (size is < 8 or > MaxPacketLength) { throw new RdpProtocolException("Invalid RD Gateway packet length."); }
-        var body = new byte[size - 8];
+        byte[] body = new byte[size - 8];
         await ReceiveExactlyAsync(body, ct).ConfigureAwait(false);
         return (BinaryPrimitives.ReadUInt16LittleEndian(header), body);
     }
@@ -263,7 +263,7 @@ internal sealed class RdpGatewayStream : Stream
         try
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
-            var packet = new byte[8 + body.Length];
+            byte[] packet = new byte[8 + body.Length];
             BinaryPrimitives.WriteUInt16LittleEndian(packet, type);
             BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(4), (uint)packet.Length);
             body.CopyTo(packet.AsMemory(8));
@@ -322,7 +322,7 @@ internal sealed class RdpGatewayStream : Stream
         while (!buffer.IsEmpty)
         {
             int count = Math.Min(buffer.Length, ushort.MaxValue);
-            var body = new byte[count + 2];
+            byte[] body = new byte[count + 2];
             BinaryPrimitives.WriteUInt16LittleEndian(body, (ushort)count);
             buffer[..count].CopyTo(body.AsMemory(2));
             await SendPacketAsync(10, body, cancellationToken).ConfigureAwait(false);

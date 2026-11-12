@@ -16,7 +16,7 @@ public sealed partial class MongoStylesTests
     private static string ThemeFile => Path.Combine(RepoRoot(), "plugins", "VelaShell.Plugin.Mongo", "Ui", "MongoTheme.axaml");
 
     [TestMethod]
-    public void Every_icon_geometry_parses() => Screens.OnUi(() =>
+    public void Every_icon_geometry_parses() => Screens.OnUi(static () =>
     {
         string xaml = File.ReadAllText(ThemeFile);
         MatchCollection icons = IconPattern().Matches(xaml);
@@ -38,7 +38,7 @@ public sealed partial class MongoStylesTests
     });
 
     [TestMethod]
-    public void Styles_load_without_host_tokens() => Screens.OnUi(() =>
+    public void Styles_load_without_host_tokens() => Screens.OnUi(static () =>
     {
         // 令牌缺席(未命中的 DynamicResource 保持默认值)时样式表照样能装载。
         var styles = (Styles)AvaloniaXamlLoader.Load(new Uri("avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml"));

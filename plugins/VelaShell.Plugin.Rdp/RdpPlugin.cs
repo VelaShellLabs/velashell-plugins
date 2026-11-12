@@ -54,9 +54,9 @@ public sealed class RdpPlugin : IVelaPlugin
         Func<IReadOnlyList<RdpWpdDevice>>? enumerateWpdDevices = null)
     {
         _enumerateDisks = enumerateDisks;
-        _enumeratePrinters = enumeratePrinters ?? (() => []);
-        _enumerateCameras = enumerateCameras ?? (() => []);
-        _enumerateWpdDevices = enumerateWpdDevices ?? (() => []);
+        _enumeratePrinters = enumeratePrinters ?? (static () => []);
+        _enumerateCameras = enumerateCameras ?? (static () => []);
+        _enumerateWpdDevices = enumerateWpdDevices ?? (static () => []);
         _pollInterval = pollInterval;
     }
 

@@ -59,7 +59,7 @@ public sealed class ImagesPageViewModel : PageViewModel
     public override string Title => "镜像";
 
     /// <summary>过滤后的行。</summary>
-    public KeyedCollection<ImageRow> View { get; } = new(r => r.Id);
+    public KeyedCollection<ImageRow> View { get; } = new(static r => r.Id);
 
     /// <summary>当前筛选。</summary>
     public ImageFilter Filter
@@ -104,13 +104,13 @@ public sealed class ImagesPageViewModel : PageViewModel
     public int TotalCount => _all.Count;
 
     /// <summary>使用中的数量。</summary>
-    public int UsedCount => _all.Count(r => r.Summary.Containers > 0);
+    public int UsedCount => _all.Count(static r => r.Summary.Containers > 0);
 
     /// <summary>未使用的数量。</summary>
-    public int UnusedCount => _all.Count(r => r.Summary.Containers <= 0 && !r.IsDangling);
+    public int UnusedCount => _all.Count(static r => r.Summary.Containers <= 0 && !r.IsDangling);
 
     /// <summary>悬空数量。</summary>
-    public int DanglingCount => _all.Count(r => r.IsDangling);
+    public int DanglingCount => _all.Count(static r => r.IsDangling);
 
     /// <summary>已勾选数量。</summary>
     public int SelectedCount
@@ -143,7 +143,7 @@ public sealed class ImagesPageViewModel : PageViewModel
             {
                 return false;
             }
-            int picked = View.Count(r => r.Selected);
+            int picked = View.Count(static r => r.Selected);
             return picked == 0 ? false : picked == View.Count ? true : null;
         }
         set
@@ -186,12 +186,12 @@ public sealed class ImagesPageViewModel : PageViewModel
     /// <inheritdoc />
     public override IEnumerable<string> ColumnTexts(string key) => key switch
     {
-        "repo" => View.Select(r => r.Repository),
-        "tag" => View.Select(r => r.Tag),
-        "id" => View.Select(r => r.ShortId),
-        "size" => View.Select(r => r.SizeText),
-        "created" => View.Select(r => r.CreatedText),
-        "used" => View.Select(r => r.UsageText),
+        "repo" => View.Select(static r => r.Repository),
+        "tag" => View.Select(static r => r.Tag),
+        "id" => View.Select(static r => r.ShortId),
+        "size" => View.Select(static r => r.SizeText),
+        "created" => View.Select(static r => r.CreatedText),
+        "used" => View.Select(static r => r.UsageText),
         _ => []
     };
 
@@ -202,7 +202,7 @@ public sealed class ImagesPageViewModel : PageViewModel
     public RelayCommand LoadCommand { get; }
 
     /// <summary>能不能弹本地文件对话框。</summary>
-    public bool CanPickFiles => FilePicker.IsAvailable;
+    public static bool CanPickFiles => FilePicker.IsAvailable;
 
     /// <summary>复制镜像 id。</summary>
     public RelayCommand RowCopyIdCommand => field ??= new(async p =>
@@ -379,13 +379,13 @@ public sealed class ImagesPageViewModel : PageViewModel
 
     private void RecountSelection()
     {
-        SelectedCount = _all.Count(r => r.Selected);
+        SelectedCount = _all.Count(static r => r.Selected);
         OnPropertyChanged(nameof(AllSelected));
     }
 
     private void ClearSelection()
     {
-        foreach (ImageRow? row in _all.Where(r => r.Selected))
+        foreach (ImageRow? row in _all.Where(static r => r.Selected))
         {
             row.Selected = false;
         }
@@ -394,7 +394,7 @@ public sealed class ImagesPageViewModel : PageViewModel
     }
 
     private IReadOnlyList<ImageRow> Targets(object? parameter) =>
-        parameter is ImageRow row ? [row] : [.. _all.Where(r => r.Selected)];
+        parameter is ImageRow row ? [row] : [.. _all.Where(static r => r.Selected)];
 
     private async Task TagAsync(ImageRow row)
     {

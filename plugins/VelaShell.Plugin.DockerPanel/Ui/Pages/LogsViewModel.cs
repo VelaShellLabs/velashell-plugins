@@ -115,8 +115,8 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
     /// <summary>界面上最多留多少行。</summary>
     private const int MaxLines = 5000;
 
-    private readonly DockerPanelViewModel shell;
-    private readonly Func<bool> ttyAccessor;
+    private readonly DockerPanelViewModel _shell;
+    private readonly Func<bool> _ttyAccessor;
     private readonly List<LogLineItem> _pending = [];
     private readonly Lock _pendingGate = new();
     private readonly List<LogSource> _sources = [];
@@ -129,22 +129,16 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>单容器(详情抽屉的日志页签)。</summary>
     public LogsViewModel(DockerPanelViewModel shell, string containerId, Func<bool> ttyAccessor)
-        : this(shell, ttyAccessor)
-    {
-        _sources.Add(new(containerId, "", ttyAccessor()));
-    }
+        : this(shell, ttyAccessor) => _sources.Add(new(containerId, "", ttyAccessor()));
 
     /// <summary>多容器合并流(容器页的日志模式)。</summary>
     public LogsViewModel(DockerPanelViewModel shell, IEnumerable<LogSource> sources)
-        : this(shell, () => false)
-    {
-        _sources.AddRange(sources);
-    }
+        : this(shell, static () => false) => _sources.AddRange(sources);
 
     private LogsViewModel(DockerPanelViewModel shell, Func<bool> ttyAccessor)
     {
-        this.shell = shell;
-        this.ttyAccessor = ttyAccessor;
+        _shell = shell;
+        _ttyAccessor = ttyAccessor;
     }
 
     /// <summary>界面上的行。</summary>
@@ -297,10 +291,10 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
     /// <summary>补多少行历史。</summary>
     public string Tail
     {
-        get => shell.Settings.LogTail;
+        get => _shell.Settings.LogTail;
         set
         {
-            shell.Settings.LogTail = value;
+            _shell.Settings.LogTail = value;
             OnPropertyChanged();
             _ = RestartAsync();
         }
@@ -309,10 +303,10 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
     /// <summary>带时间戳。</summary>
     public bool Timestamps
     {
-        get => shell.Settings.LogTimestamps;
+        get => _shell.Settings.LogTimestamps;
         set
         {
-            shell.Settings.LogTimestamps = value;
+            _shell.Settings.LogTimestamps = value;
             OnPropertyChanged();
             _ = RestartAsync();
         }
@@ -321,10 +315,10 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
     /// <summary>自动换行。</summary>
     public bool Wrap
     {
-        get => shell.Settings.LogWrap;
+        get => _shell.Settings.LogWrap;
         set
         {
-            shell.Settings.LogWrap = value;
+            _shell.Settings.LogWrap = value;
             OnPropertyChanged();
         }
     }
@@ -352,14 +346,14 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
             }
             _ = sb.AppendLine(line.Text);
         }
-        return shell.Context.Clipboard.SetTextAsync(sb.ToString(), shell.Lifetime);
+        return _shell.Context.Clipboard.SetTextAsync(sb.ToString(), _shell.Lifetime);
     });
 
     /// <summary>把当前缓冲里的行存成本地文件。</summary>
     public RelayCommand DownloadCommand => field ??= new(_ => DownloadAsync());
 
     /// <summary>能不能弹本地文件对话框。</summary>
-    public bool CanPickFiles => FilePicker.IsAvailable;
+    public static bool CanPickFiles => FilePicker.IsAvailable;
 
     /// <summary>
     /// 导出当前缓冲。
@@ -395,11 +389,11 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
                 }
                 await writer.WriteLineAsync(line.Text).ConfigureAwait(true);
             }
-            _ = shell.Feedback.Notify(FeedbackKind.Success, "日志已保存", $"{target.Name} · {Lines.Count:N0} 行");
+            _ = _shell.Feedback.Notify(FeedbackKind.Success, "日志已保存", $"{target.Name} · {Lines.Count:N0} 行");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            shell.Feedback.ReportError("保存日志", ex);
+            _shell.Feedback.ReportError("保存日志", ex);
         }
     }
 
@@ -426,7 +420,7 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
     /// <summary>按当前选项重开一条日志流。</summary>
     public async Task RestartAsync()
     {
-        if (!_started || shell.Client is not { } client)
+        if (!_started || _shell.Client is not { } client)
         {
             return;
         }
@@ -439,7 +433,7 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
             OnPropertiesChanged(nameof(BufferText), nameof(LineCountText), nameof(StreamSummary));
             return;
         }
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(shell.Lifetime);
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(_shell.Lifetime);
         CancellationToken token = _cts.Token;
         _startedAt = DateTimeOffset.UtcNow;
         StartFlushTimer();
@@ -456,7 +450,7 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
         {
             LogSource source = _sources[i];
             int index = i;
-            bool tty = _sources.Count == 1 ? ttyAccessor() : source.Tty;
+            bool tty = _sources.Count == 1 ? _ttyAccessor() : source.Tty;
             _ = Task.Run(async () =>
             {
                 try
@@ -541,7 +535,7 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
             _bufferedChars -= Lines[0].Text.Length + 1;
             Lines.RemoveAt(0);
         }
-        MatchCount = _filter is null ? 0 : Lines.Count(l => l.Matched);
+        MatchCount = _filter is null ? 0 : Lines.Count(static l => l.Matched);
         OnPropertiesChanged(nameof(BufferText), nameof(LineCountText), nameof(StreamSummary));
     }
 
@@ -570,7 +564,7 @@ public sealed partial class LogsViewModel : ObservableObject, IAsyncDisposable
         {
             line.Matched = _filter?.IsMatch(line.Text) ?? false;
         }
-        MatchCount = _filter is null ? 0 : Lines.Count(l => l.Matched);
+        MatchCount = _filter is null ? 0 : Lines.Count(static l => l.Matched);
     }
 
     /// <summary>停掉流。</summary>

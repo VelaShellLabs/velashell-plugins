@@ -48,7 +48,7 @@ public sealed class PluginTests
 
         PluginCommandDescriptor command = context.RecordingCommands.Registered.Single();
         Assert.AreEqual("velashell.mongo.open", command.Id);
-        StringAssert.StartsWith(command.Title, "MongoDB");
+        Assert.StartsWith("MongoDB", command.Title);
         Assert.IsEmpty(context.RecordingWorkspaces.Registered, "连接由插件自己管,不进宿主的连接列表");
         FakePanel panel = context.FakeUi.LastPanel;
         Assert.AreEqual("MongoDB", panel.Options.Title);
@@ -154,7 +154,7 @@ public sealed class PluginTests
             ["sampleSize"] = "1",
             ["ejsonMode"] = "canonical"
         }));
-        Assert.AreSequenceEqual(new[] { "10.20.3.22:27017", "10.20.3.23:27018", "10.20.3.24" }, [.. settings.AdditionalHosts]);
+        Assert.AreSequenceEqual(["10.20.3.22:27017", "10.20.3.23:27018", "10.20.3.24"], [.. settings.AdditionalHosts]);
         Assert.AreEqual(1000, settings.PageSize);
         Assert.AreEqual(50, settings.SampleSize);
         Assert.AreEqual(EjsonMode.Canonical, settings.Ejson);
@@ -235,7 +235,7 @@ public sealed class PluginTests
         MongoConnectException translated = connector.Translate(failure, request, MongoSettings.From(request));
 
         Assert.AreEqual(ConnectFailureKind.Authentication, translated.Kind);
-        StringAssert.StartsWith(translated.Message, "认证失败");
+        Assert.StartsWith("认证失败", translated.Message);
     }
 
     /// <summary>单纯的超时是连不上;驱动附在后面的整段集群描述剪掉。</summary>
@@ -256,7 +256,7 @@ public sealed class PluginTests
 
     /// <summary>按已保存的连接连上本机 mongod。</summary>
     [TestMethod]
-    public async Task Connector_ConnectsARealServer() => await RunAgainstServerAsync(async () =>
+    public async Task Connector_ConnectsARealServer() => await RunAgainstServerAsync(static async () =>
     {
         using TestPluginContext context = NewContext();
         var connector = new MongoConnector(context, new Loc("zh-Hans"));
@@ -336,7 +336,7 @@ public sealed class PluginTests
         MongoConnectException ex = await Assert.ThrowsExactlyAsync<MongoConnectException>(() =>
             connector.ConnectAsync(profile, "", CancellationToken.None));
         Assert.AreEqual(ConnectFailureKind.Tunnel, ex.Kind);
-        StringAssert.StartsWith(ex.Message, "SSH 跳板没建起来");
+        Assert.StartsWith("SSH 跳板没建起来", ex.Message);
     }
 
     private static async Task RunAgainstServerAsync(Func<Task> body)

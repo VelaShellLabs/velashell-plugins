@@ -83,7 +83,7 @@ public static class LineDiff
 
     /// <summary>新文里有多少行与原文不同(底部那句"已修改 N 行")。</summary>
     public static int CountChanged(IReadOnlyList<DiffLine> lines) =>
-        lines.Count(l => l.Marker != DiffMarker.None);
+        lines.Count(static l => l.Marker != DiffMarker.None);
 
     /// <summary>
     /// 把"紧挨着的一删一增"合并成一条"改过"。

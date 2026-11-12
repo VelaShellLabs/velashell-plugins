@@ -12,8 +12,8 @@ public sealed class ZgfxTests
     {
         var decoder = new ZgfxDecoder();
         byte[] decoded = decoder.Decode(Compressed("0 01001001 10001 00001 110 001"));
-        Assert.AreSequenceEqual(Enumerable.Repeat((byte)0x49, 10).ToArray(), decoded);
-        Assert.AreSequenceEqual(new byte[] { 0x49, 0x49, 0x49 }, decoder.Decode(Compressed("10001 00001 0")));
+        Assert.AreSequenceEqual([.. Enumerable.Repeat((byte)0x49, 10)], decoded);
+        Assert.AreSequenceEqual("III"u8.ToArray(), decoder.Decode(Compressed("10001 00001 0")));
     }
 
     [TestMethod]
@@ -32,19 +32,17 @@ public sealed class ZgfxTests
     }
 
     [TestMethod]
-    public void TheGenericLiteralMayEncodeBytesThatAlsoHaveShortTokens()
-    {
+    public void TheGenericLiteralMayEncodeBytesThatAlsoHaveShortTokens() =>
         // 0x00 and 0xFF have short tokens; an encoder may still send them as "0" + 8 bits.
         Assert.AreSequenceEqual(new byte[] { 0x00, 0xFF, 0x41 }, new ZgfxDecoder().Decode(Compressed("0 00000000 0 11111111 0 01000001")));
-    }
 
     [TestMethod]
     public void MultipartConcatenatesSegmentsAndUsesTheirSharedHistory()
     {
         var decoder = new ZgfxDecoder();
         byte[] packet = Multipart(6, [4, 0x49, 0x4a, 0x4b], Compressed("10001 00011 0")[1..]);
-        Assert.AreSequenceEqual(new byte[] { 0x49, 0x4a, 0x4b, 0x49, 0x4a, 0x4b }, decoder.Decode(packet));
-        _ = Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(Compressed("10001 00001 0")));
+        Assert.AreSequenceEqual("IJKIJK"u8.ToArray(), decoder.Decode(packet));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(static () => new ZgfxDecoder().Decode(Compressed("10001 00001 0")));
     }
 
     [TestMethod]
@@ -75,7 +73,7 @@ public sealed class ZgfxTests
         }
         string distance = "10111101" + Convert.ToString(2_500_000 - 2_414_240, 2).PadLeft(21, '0');
         Assert.AreSequenceEqual(new byte[] { 7, 8, 9 }, decoder.Decode(Compressed(distance + "0")));
-        Assert.AreSequenceEqual(new byte[] { 9, 9, 9 }, decoder.Decode(Compressed("10001 00001 0")));
+        Assert.AreSequenceEqual("\t\t\t"u8.ToArray(), decoder.Decode(Compressed("10001 00001 0")));
     }
 
     [TestMethod]
@@ -84,7 +82,7 @@ public sealed class ZgfxTests
         string prefix = "0 01001001 10001 00001 " + new string('1', 14) + "0";
         var decoder = new ZgfxDecoder();
         byte[] maximum = decoder.Decode(Compressed(prefix + Convert.ToString(32766, 2).PadLeft(15, '0')));
-        Assert.AreEqual(65535, maximum.Length);
+        Assert.HasCount(65535, maximum);
         Assert.IsTrue(maximum.All(b => b == 0x49));
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => new ZgfxDecoder().Decode(Compressed(prefix + new string('1', 15))));
     }
@@ -128,7 +126,7 @@ public sealed class ZgfxTests
 
     private static byte[] Multipart(uint outputSize, params byte[][] segments)
     {
-        byte[] packet = new byte[7 + segments.Sum(s => 4 + s.Length)]; packet[0] = 0xe1;
+        byte[] packet = new byte[7 + segments.Sum(static s => 4 + s.Length)]; packet[0] = 0xe1;
         BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(1), (ushort)segments.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(3), outputSize);
         int offset = 7;

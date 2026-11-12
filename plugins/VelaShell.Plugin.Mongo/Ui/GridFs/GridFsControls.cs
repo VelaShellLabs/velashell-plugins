@@ -18,10 +18,7 @@ public sealed class GridFsSplitPanel : Panel
     public static readonly StyledProperty<double> MinRestProperty =
         AvaloniaProperty.Register<GridFsSplitPanel, double>(nameof(MinRest), 96);
 
-    static GridFsSplitPanel()
-    {
-        AffectsMeasure<GridFsSplitPanel>(MinRestProperty);
-    }
+    static GridFsSplitPanel() => AffectsMeasure<GridFsSplitPanel>(MinRestProperty);
 
     /// <summary>拖放区最小高度。</summary>
     public double MinRest
@@ -87,10 +84,7 @@ public sealed class GridFsBar : Control
     public static readonly StyledProperty<IBrush?> FillProperty =
         AvaloniaProperty.Register<GridFsBar, IBrush?>(nameof(Fill));
 
-    static GridFsBar()
-    {
-        AffectsRender<GridFsBar>(ValueProperty, TrackProperty, FillProperty);
-    }
+    static GridFsBar() => AffectsRender<GridFsBar>(ValueProperty, TrackProperty, FillProperty);
 
     /// <summary>进度。</summary>
     public double Value

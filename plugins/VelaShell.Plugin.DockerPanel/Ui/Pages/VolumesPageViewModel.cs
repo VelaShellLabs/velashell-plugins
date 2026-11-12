@@ -35,7 +35,7 @@ public sealed class VolumesPageViewModel : PageViewModel
     public override string Title => "卷";
 
     /// <summary>过滤后的行。</summary>
-    public KeyedCollection<VolumeRow> View { get; } = new(r => r.Id);
+    public KeyedCollection<VolumeRow> View { get; } = new(static r => r.Id);
 
     /// <summary>搜索词。</summary>
     public string Search
@@ -67,17 +67,17 @@ public sealed class VolumesPageViewModel : PageViewModel
     public int TotalCount => _all.Count;
 
     /// <summary>使用中的数量。</summary>
-    public int UsedCount => _all.Count(r => r.RefCount > 0);
+    public int UsedCount => _all.Count(static r => r.RefCount > 0);
 
     /// <summary>未使用的数量。</summary>
-    public int UnusedCount => _all.Count(r => r.RefCount == 0);
+    public int UnusedCount => _all.Count(static r => r.RefCount == 0);
 
     /// <summary>总占用文本。</summary>
     public string TotalSizeText
     {
         get
         {
-            long total = _all.Sum(r => r.Summary.UsageData is { Size: > 0 } u ? u.Size : 0);
+            long total = _all.Sum(static r => r.Summary.UsageData is { Size: > 0 } u ? u.Size : 0);
             return total > 0 ? Humanize.Bytes(total) : "未统计";
         }
     }
@@ -115,11 +115,11 @@ public sealed class VolumesPageViewModel : PageViewModel
     /// <inheritdoc />
     public override IEnumerable<string> ColumnTexts(string key) => key switch
     {
-        "name" => View.Select(r => r.Name),
-        "driver" => View.Select(r => r.Driver),
-        "users" => View.Select(r => r.UsageText),
-        "size" => View.Select(r => r.SizeText),
-        "created" => View.Select(r => r.CreatedText),
+        "name" => View.Select(static r => r.Name),
+        "driver" => View.Select(static r => r.Driver),
+        "users" => View.Select(static r => r.UsageText),
+        "size" => View.Select(static r => r.SizeText),
+        "created" => View.Select(static r => r.CreatedText),
         _ => []
     };
 
@@ -296,7 +296,7 @@ public sealed class VolumesPageViewModel : PageViewModel
         }
         try
         {
-            _ = await client.CreateVolumeAsync(form.Name, form.Driver, form.DriverOptions, form.LabelMap, Shell.Lifetime)
+            _ = await client.CreateVolumeAsync(form.Name, CreateVolumeForm.Driver, form.DriverOptions, form.LabelMap, Shell.Lifetime)
                         .ConfigureAwait(true);
             Shell.Feedback.Status(FeedbackKind.Success, $"已新建卷 {form.Name}");
             await RefreshAsync(Shell.Lifetime).ConfigureAwait(true);
@@ -390,7 +390,7 @@ public sealed class VolumesPageViewModel : PageViewModel
             [
                 "\"未使用\"只是说没有容器「现在」挂着它 —— 一个刚 down 掉的 compose 项目,它的数据卷就在这个名单里。",
                 "Docker 不做回收站。",
-                .. _all.Where(r => r.RefCount == 0).Take(5).Select(r => $"将被删除:{r.Name}({r.SizeText})")
+                .. _all.Where(static r => r.RefCount == 0).Take(5).Select(static r => $"将被删除:{r.Name}({r.SizeText})")
             ]
         })).ConfigureAwait(true);
         if (!confirmed)

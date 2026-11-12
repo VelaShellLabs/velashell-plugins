@@ -400,19 +400,19 @@ public sealed class RedisTransferForm : ObservableObject
 public sealed partial class RedisWorkspaceViewModel
 {
     /// <summary>新建键面板。</summary>
-    public RedisNewKeyForm NewKey { get; private set; } = null!;
+    public RedisNewKeyForm NewKey { get; private set; }
 
     /// <summary>导入 / 导出面板。</summary>
-    public RedisTransferForm Transfer { get; private set; } = null!;
+    public RedisTransferForm Transfer { get; private set; }
 
     /// <summary>打开新建键面板。</summary>
-    public AsyncCommand NewKeyCommand { get; private set; } = null!;
+    public AsyncCommand NewKeyCommand { get; private set; }
 
     /// <summary>打开导出面板。</summary>
-    public AsyncCommand OpenExportCommand { get; private set; } = null!;
+    public AsyncCommand OpenExportCommand { get; private set; }
 
     /// <summary>打开导入面板。</summary>
-    public AsyncCommand OpenImportCommand { get; private set; } = null!;
+    public AsyncCommand OpenImportCommand { get; private set; }
 
     private void InitializeOverlays()
     {
@@ -439,7 +439,7 @@ public sealed partial class RedisWorkspaceViewModel
     /// <summary>导出面板的默认路径:用户目录下一个按连接与库命名的文件。</summary>
     private string DefaultTransferPath(string kind)
     {
-        string safe = new([.. Title.Select(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '-')]);
+        string safe = new([.. Title.Select(static ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '-')]);
         string extension = Transfer?.Format switch
         {
             "resp" => "redis",

@@ -27,14 +27,11 @@ public sealed partial class ObjectsTabView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public ObjectsTabView()
-    {
-        InitializeComponent();
-    }
+    public ObjectsTabView() => InitializeComponent();
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (_viewModel is not null && (e.Source as Control)?.DataContext is ObjectItem item)
+        if (_viewModel is not null && e.Source is Control { DataContext: ObjectItem item })
         {
             _viewModel.SelectedItem = item;
             _viewModel.OpenSelected();
@@ -87,7 +84,7 @@ public sealed partial class ObjectsTabView : UserControl
         {
             if (items.Count > 0 && items[^1] is not Avalonia.Controls.Separator)
             {
-                items.Add(new Avalonia.Controls.Separator());
+                items.Add(new Separator());
             }
         }
 
@@ -106,7 +103,7 @@ public sealed partial class ObjectsTabView : UserControl
         Separator();
         Add(loc["Tree_Empty"], "Mongo.eraser", _viewModel.EmptyCommand, danger: true);
         Add(loc["Tree_Drop"], "Mongo.trash-2", _viewModel.DropCommand, danger: true);
-        if (items.Count > 0 && items[^1] is Avalonia.Controls.Separator)
+        if (items.Count > 0 && items[^1] is Separator)
         {
             items.RemoveAt(items.Count - 1);
         }

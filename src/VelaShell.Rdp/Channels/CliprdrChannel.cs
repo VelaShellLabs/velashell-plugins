@@ -135,7 +135,7 @@ internal sealed class CliprdrChannel(Func<byte[], CancellationToken, Task> send,
     internal async Task OfferFormatsAsync(string formats, CancellationToken ct = default)
     {
         var body = new ByteWriter(64);
-        bool asciiNames = !LongNames && formats.All(character => character <= 0x7F);
+        bool asciiNames = !LongNames && formats.All(static character => character <= 0x7F);
         foreach (string line in formats.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] parts = line.Split('\t', 2);

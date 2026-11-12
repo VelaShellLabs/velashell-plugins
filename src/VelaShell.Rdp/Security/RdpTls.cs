@@ -102,7 +102,7 @@ internal static class RdpTls
         {
             if (extension is X509EnhancedKeyUsageExtension eku)
             {
-                foreach (System.Security.Cryptography.Oid oid in eku.EnhancedKeyUsages)
+                foreach (Oid oid in eku.EnhancedKeyUsages)
                 {
                     if (oid.Value == ServerAuthOid)
                     {

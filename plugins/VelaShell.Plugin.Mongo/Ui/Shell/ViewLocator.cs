@@ -34,7 +34,7 @@ internal sealed class ViewLocator : IDataTemplate
 
     /// <inheritdoc />
     public Control? Build(object? param) =>
-        param is DialogViewModel dialog ? _dialogViews.GetValue(dialog, d => Create(d)!) : Create(param);
+        param is DialogViewModel dialog ? _dialogViews.GetValue(dialog, static d => Create(d)!) : Create(param);
 
     private static Control? Create(object? param) => param switch
     {

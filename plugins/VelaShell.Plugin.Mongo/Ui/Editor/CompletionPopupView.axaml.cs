@@ -15,7 +15,7 @@ public sealed partial class CompletionPopupView : UserControl
         InitializeComponent();
         List.AddHandler(PointerReleasedEvent, (_, e) =>
         {
-            if ((e.Source as Control)?.DataContext is CompletionItem item)
+            if (e.Source is Control { DataContext: CompletionItem item })
             {
                 ItemClicked?.Invoke(item);
             }

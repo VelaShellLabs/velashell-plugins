@@ -37,7 +37,6 @@ internal readonly record struct ChannelPayload(string ChannelName, byte[] Data, 
 internal sealed partial class RdpConnection : IAsyncDisposable
 {
     private readonly RdpConnectOptions _options;
-    private AutoReconnectCookie? _autoReconnectCookie;
     private TcpClient? _tcp;
     private RdpGatewayStream? _gateway;
     private RdpTransport _transport = null!;
@@ -59,7 +58,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     private readonly MemoryStream _fragment = new();
     private int _fragmentCode;
     private const int MaxFragment = 16 * 1024 * 1024;
-    private Graphics.Mppc? _mppc;                    // server→client bulk decompression (shared history)
+    private Mppc? _mppc;                    // server→client bulk decompression (shared history)
 
     // Replaced under _surfaceGate by classic activation or GFX updates; readers retain one surface reference.
     private volatile Framebuffer _framebuffer = new(1, 1);
@@ -80,7 +79,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             throw new ArgumentException("RemoteApp requires the classic RAIL graphics path.", nameof(options));
         }
         _options = options;
-        _autoReconnectCookie = options.ReconnectCookie;
+        AutoReconnectCookie = options.ReconnectCookie;
         RemoteWindows = options.RemoteApp is null ? null : new RemoteAppWindowDecoder();
         Network = new(options.AdaptiveNetwork);
         _autoDetect = new(Network);
@@ -97,7 +96,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     /// <summary>The security layer the server selected (<see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>).</summary>
     internal RdpSecurity Security { get; private set; }
 
-    internal AutoReconnectCookie? AutoReconnectCookie => _autoReconnectCookie;
+    internal AutoReconnectCookie? AutoReconnectCookie { get; private set; }
 
     private TlsRecordTap? _tlsTap;
     private SslStream? _ssl;
@@ -162,7 +161,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         Stage = RdpConnectStage.Mcs;
         bool extended = (negotiationFlags & 1) != 0;
         _udpAdvertised = extended && _options.Transport == RdpTransportMode.Auto && !_options.TcpTunnel && _options.Gateway is null
-            && _options.Channels.Any(c => c.Name == "drdynvc");
+            && _options.Channels.Any(static c => c.Name == "drdynvc");
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
             (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor,
             extended && (_options.AdaptiveNetwork || _udpAdvertised), _udpAdvertised, _options.AdaptiveNetwork, _options.GraphicsPipeline,
@@ -178,7 +177,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         // Client Info on the I/O channel.
         Stage = RdpConnectStage.Login;
         byte[] clientInfo = ClientInfo.Build(_options.Domain, _options.Username, _options.Password, autoLogon: true,
-            (uint)_options.Performance, _options.AudioPlayback, _options.RemoteApp is not null, _autoReconnectCookie);
+            (uint)_options.Performance, _options.AudioPlayback, _options.RemoteApp is not null, AutoReconnectCookie);
         try { await SendOnIoAsync(clientInfo, ct).ConfigureAwait(false); }
         finally { CryptographicOperations.ZeroMemory(clientInfo); }   // carries the password in the clear
 
@@ -454,7 +453,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             }
 
             var cookie = new ByteReader(fields.Take((int)fieldLength));
-            _autoReconnectCookie = AutoReconnectCookie.Parse(ref cookie);
+            AutoReconnectCookie = AutoReconnectCookie.Parse(ref cookie);
             if (cookie.Remaining != 0)
             {
                 throw new RdpProtocolException("The extended Save Session Info auto-reconnect field has trailing data.");
@@ -557,7 +556,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             return data;
         }
 
-        _mppc ??= new Graphics.Mppc((compressionFlags & Mppc.CompressionTypeMask) == 1 ? 1 : 0);
+        _mppc ??= new Mppc((compressionFlags & Mppc.CompressionTypeMask) == 1 ? 1 : 0);
         ReadOnlySpan<byte> result = _mppc.Decompress(data, compressionFlags, out bool passthrough);
         // Valid until the next Decompress call; the caller consumes it before then.
         return passthrough ? data : result;
@@ -608,7 +607,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     internal int OrderUpdates { get; private set; }
 
     /// <summary>Drawing operations by kind: "fill=… dst=… pat=… scr=… mem=…".</summary>
-    internal string OrderStats => $"fill={_orderSurface.Counts[0]} dst={_orderSurface.Counts[1]} pat={_orderSurface.Counts[2]} scr={_orderSurface.Counts[3]} mem={_orderSurface.Counts[4]}";
+    internal string OrderStats => $"fill={_orderSurface._counts[0]} dst={_orderSurface._counts[1]} pat={_orderSurface._counts[2]} scr={_orderSurface._counts[3]} mem={_orderSurface._counts[4]}";
 
     private int _ordersBpp;
     private readonly OrderSurface _orderSurface = new();
@@ -643,23 +642,23 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         internal Framebuffer Current { get; set; } = new(1, 1);
 
         /// <summary>Operations drawn per kind: fill, DstBlt, PatBlt, ScrBlt, MemBlt (diagnostics and interop tests).</summary>
-        internal readonly int[] Counts = new int[5];
+        internal readonly int[] _counts = new int[5];
 
         public int Width => Current.Width;
 
         public int Height => Current.Height;
 
-        public void FillRect(OrderRect rect, uint bgra, OrderRect? clip) { Counts[0]++; Current.FillRect(rect, bgra, clip); }
+        public void FillRect(OrderRect rect, uint bgra, OrderRect? clip) { _counts[0]++; Current.FillRect(rect, bgra, clip); }
 
-        public void DstRop(OrderRect rect, byte rop3, OrderRect? clip) { Counts[1]++; Current.DstRop(rect, rop3, clip); }
+        public void DstRop(OrderRect rect, byte rop3, OrderRect? clip) { _counts[1]++; Current.DstRop(rect, rop3, clip); }
 
-        public void PatBlt(OrderRect rect, byte rop3, OrderBrush brush, OrderRect? clip) { Counts[2]++; Current.PatBlt(rect, rop3, brush, clip); }
+        public void PatBlt(OrderRect rect, byte rop3, OrderBrush brush, OrderRect? clip) { _counts[2]++; Current.PatBlt(rect, rop3, brush, clip); }
 
-        public void ScreenCopy(int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip) { Counts[3]++; Current.ScreenCopy(srcX, srcY, dest, rop3, clip); }
+        public void ScreenCopy(int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip) { _counts[3]++; Current.ScreenCopy(srcX, srcY, dest, rop3, clip); }
 
         public void CachedBlit(CachedBitmap bitmap, int srcX, int srcY, OrderRect dest, byte rop3, OrderRect? clip)
         {
-            Counts[4]++;
+            _counts[4]++;
             Current.CachedBlit(bitmap, srcX, srcY, dest, rop3, clip);
         }
     }

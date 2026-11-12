@@ -102,12 +102,12 @@ public static class Humanize
         // 同一个容器端口可能同时绑在 0.0.0.0 与 :: 上,daemon 会给两条。
         // 界面上它们是同一件事,去重之后才不会显示成 "8080→80, 8080→80"。
         IEnumerable<string> published = ports
-            .Where(p => p.PublicPort > 0)
-            .Select(p => $"{p.PublicPort}→{p.PrivatePort}")
+            .Where(static p => p.PublicPort > 0)
+            .Select(static p => $"{p.PublicPort}→{p.PrivatePort}")
             .Distinct();
         IEnumerable<string> exposed = ports
-            .Where(p => p.PublicPort == 0)
-            .Select(p => $"{p.PrivatePort}/{p.Type ?? "tcp"}")
+            .Where(static p => p.PublicPort == 0)
+            .Select(static p => $"{p.PrivatePort}/{p.Type ?? "tcp"}")
             .Distinct();
         string text = string.Join(", ", published.Concat(exposed));
         return text.Length == 0 ? "—" : text;

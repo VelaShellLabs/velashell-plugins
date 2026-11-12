@@ -91,7 +91,7 @@ public sealed class WpdHotplugTests
         _ = await enumerated.WaitAsync(TimeSpan.FromSeconds(5));
         await Barrier();
         Assert.IsFalse(output.Reader.TryRead(out _));
-        Assert.AreEqual(1, backend.Devices.Count);
+        Assert.HasCount(1, backend.Devices);
         _ = Assert.Throws<Win32Exception>(() => backend.Open(1, new(0x80000000, 3, 3, 0x80)));
         WpdFileChannel file = owner.CreateFile(_ => Task.CompletedTask, () => Task.CompletedTask);
         await file.OnMessageAsync(Packet(1, 4, newId, 0x80000000, 3, 3, 0x80));
@@ -203,7 +203,7 @@ public sealed class WpdHotplugTests
         Assert.AreEqual(0, additions);
         var logs = new List<string>();
         await using var degraded = new WpdDeviceMonitor(["selected"], () => devices, (_, _) => new Handle(), new Notifications { Fail = true }, logs.Add);
-        Assert.AreEqual(1, degraded.Devices.Count);
-        Assert.IsTrue(logs.Any(log => log.Contains("idle removal and automatic reinsertion are disabled", StringComparison.Ordinal)));
+        Assert.HasCount(1, degraded.Devices);
+        Assert.Contains(log => log.Contains("idle removal and automatic reinsertion are disabled", StringComparison.Ordinal), logs);
     }
 }

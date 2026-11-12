@@ -112,8 +112,8 @@ public static class SocketProbe
 
     private static SocketProbeResult Parse(string output)
     {
-        string line = output.Split('\n').Select(l => l.Trim())
-                            .LastOrDefault(l => l.Length > 0) ?? "";
+        string line = output.Split('\n').Select(static l => l.Trim())
+                            .LastOrDefault(static l => l.Length > 0) ?? "";
         if (line == "OK")
         {
             return new(SocketProbeKind.Ready);

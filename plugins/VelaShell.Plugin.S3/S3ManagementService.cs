@@ -23,10 +23,7 @@ public sealed class S3ManagementService : IS3ManagementService
 
     /// <summary>创建管理服务;<paramref name="accessor" /> 提供会话到客户端的解析。</summary>
     /// <param name="accessor">会话客户端访问器,通常就是 <see cref="S3ProtocolFileSystem" />。</param>
-    internal S3ManagementService(IS3ClientAccessor accessor)
-    {
-        _accessor = accessor ?? throw new ArgumentNullException(nameof(accessor));
-    }
+    internal S3ManagementService(IS3ClientAccessor accessor) => _accessor = accessor ?? throw new ArgumentNullException(nameof(accessor));
 
     /// <summary>供 DI 使用的工厂:把文件服务同时当作客户端访问器。</summary>
     /// <param name="fileService">同一条会话上的 S3 文件服务。</param>
@@ -104,22 +101,22 @@ public sealed class S3ManagementService : IS3ManagementService
                 S3ConfigKind.Inventory =>
                 [
                     .. (await client.ListBucketInventoryConfigurationsAsync(new ListBucketInventoryConfigurationsRequest { BucketName = bucket }, cancellationToken).ConfigureAwait(false))
-                       .InventoryConfigurationList?.Select(c => c.InventoryId ?? string.Empty) ?? []
+                       .InventoryConfigurationList?.Select(static c => c.InventoryId ?? string.Empty) ?? []
                 ],
                 S3ConfigKind.Analytics =>
                 [
                     .. (await client.ListBucketAnalyticsConfigurationsAsync(new ListBucketAnalyticsConfigurationsRequest { BucketName = bucket }, cancellationToken).ConfigureAwait(false))
-                       .AnalyticsConfigurationList?.Select(c => c.AnalyticsId ?? string.Empty) ?? []
+                       .AnalyticsConfigurationList?.Select(static c => c.AnalyticsId ?? string.Empty) ?? []
                 ],
                 S3ConfigKind.Metrics =>
                 [
                     .. (await client.ListBucketMetricsConfigurationsAsync(new ListBucketMetricsConfigurationsRequest { BucketName = bucket }, cancellationToken).ConfigureAwait(false))
-                       .MetricsConfigurationList?.Select(c => c.MetricsId ?? string.Empty) ?? []
+                       .MetricsConfigurationList?.Select(static c => c.MetricsId ?? string.Empty) ?? []
                 ],
                 S3ConfigKind.IntelligentTiering =>
                 [
                     .. (await client.ListBucketIntelligentTieringConfigurationsAsync(new ListBucketIntelligentTieringConfigurationsRequest { BucketName = bucket }, cancellationToken).ConfigureAwait(false))
-                       .IntelligentTieringConfigurationList?.Select(c => c.IntelligentTieringId ?? string.Empty) ?? []
+                       .IntelligentTieringConfigurationList?.Select(static c => c.IntelligentTieringId ?? string.Empty) ?? []
                 ],
                 _ => [],
             };
@@ -359,7 +356,7 @@ public sealed class S3ManagementService : IS3ManagementService
             GetObjectTaggingResponse response = await client
                 .GetObjectTaggingAsync(new GetObjectTaggingRequest { BucketName = bucket, Key = key }, cancellationToken)
                 .ConfigureAwait(false);
-            return [.. (response.Tagging ?? []).Select(t => new S3Tag(t.Key ?? string.Empty, t.Value ?? string.Empty))];
+            return [.. (response.Tagging ?? []).Select(static t => new S3Tag(t.Key ?? string.Empty, t.Value ?? string.Empty))];
         }
         catch (Exception ex)
         {
@@ -384,7 +381,7 @@ public sealed class S3ManagementService : IS3ManagementService
             {
                 BucketName = bucket,
                 Key = key,
-                Tagging = new() { TagSet = [.. tags.Select(t => new Tag { Key = t.Key, Value = t.Value })] },
+                Tagging = new() { TagSet = [.. tags.Select(static t => new Tag { Key = t.Key, Value = t.Value })] },
             }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)

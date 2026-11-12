@@ -20,7 +20,7 @@ internal sealed class WindowsCameraBackend(string deviceId) : ICameraBackend
     private nint _activate, _source, _reader;
     private bool _started, _mfStarted;
 
-    public IReadOnlyList<CameraMediaType> MediaTypes => [.. _types.Select(x => x.Type)];
+    public IReadOnlyList<CameraMediaType> MediaTypes => [.. _types.Select(static x => x.Type)];
 
     [AllowNull]
     public CameraMediaType CurrentMediaType { get => field ?? throw new InvalidOperationException("Camera is inactive."); private set; }

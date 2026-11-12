@@ -258,7 +258,7 @@ internal sealed class PipelineStage : ObservableObject
     internal void ApplyOutcome(PipelineStageOutcome outcome)
     {
         Outcome = outcome;
-        PreviewCards = outcome.State == PipelineStageState.Ok ? [.. outcome.Documents.Take(2).Select(d => PipelineResults.Mini(d))] : [];
+        PreviewCards = outcome.State == PipelineStageState.Ok ? [.. outcome.Documents.Take(2).Select(static d => PipelineResults.Mini(d))] : [];
         RaisePropertiesChanged(nameof(Outcome), nameof(PreviewDocuments), nameof(PreviewCards), nameof(HasPreviewCards), nameof(CountText),
             nameof(CountTip), nameof(PreviewHeader), nameof(PreviewNote), nameof(PreviewNoteIsError), nameof(CanShowPreview),
             nameof(ServerError), nameof(ErrorText), nameof(HasError), nameof(ErrorBadge));

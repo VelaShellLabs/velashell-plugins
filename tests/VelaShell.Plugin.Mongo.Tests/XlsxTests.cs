@@ -18,7 +18,7 @@ public sealed class XlsxTests
     [TestMethod]
     public void Workbook_parts_are_valid_xml_and_reference_each_other()
     {
-        byte[] bytes = Write(xlsx =>
+        byte[] bytes = Write(static xlsx =>
         {
             xlsx.BeginSheet("orders", [12, 20]);
             xlsx.WriteRow([XlsxCell.OfText("id"), XlsxCell.OfText("金额")], header: true);
@@ -30,7 +30,7 @@ public sealed class XlsxTests
         using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         string[] names = [.. zip.Entries.Select(static e => e.FullName).Order(StringComparer.Ordinal)];
         Assert.AreSequenceEqual(
-            new[] { "[Content_Types].xml", "_rels/.rels", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml" }, names);
+            ["[Content_Types].xml", "_rels/.rels", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml"], names);
         foreach (ZipArchiveEntry entry in zip.Entries)
         {
             using Stream stream = entry.Open();
@@ -39,13 +39,13 @@ public sealed class XlsxTests
 
         XDocument workbook = Load(zip, "xl/workbook.xml");
         string[] sheets = [.. workbook.Descendants(Main + "sheet").Select(static s => (string)s.Attribute("name")!)];
-        Assert.AreSequenceEqual(new[] { "orders", "customers" }, sheets);
+        Assert.AreSequenceEqual(["orders", "customers"], sheets);
         Assert.AreEqual("rId2", (string)workbook.Descendants(Main + "sheet").Last().Attribute(Rel + "id")!);
 
         XDocument rels = Load(zip, "xl/_rels/workbook.xml.rels");
         XNamespace pkg = "http://schemas.openxmlformats.org/package/2006/relationships";
         string[] targets = [.. rels.Descendants(pkg + "Relationship").Select(static r => (string)r.Attribute("Target")!)];
-        Assert.AreSequenceEqual(new[] { "worksheets/sheet1.xml", "worksheets/sheet2.xml", "styles.xml" }, targets);
+        Assert.AreSequenceEqual(["worksheets/sheet1.xml", "worksheets/sheet2.xml", "styles.xml"], targets);
 
         XDocument types = Load(zip, "[Content_Types].xml");
         XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
@@ -55,7 +55,7 @@ public sealed class XlsxTests
     [TestMethod]
     public void Sheet_writes_numbers_as_values_text_inline_and_freezes_the_header()
     {
-        byte[] bytes = Write(xlsx =>
+        byte[] bytes = Write(static xlsx =>
         {
             xlsx.BeginSheet("orders");
             xlsx.WriteRow([XlsxCell.OfText("total"), XlsxCell.OfText("paid")], header: true);
@@ -87,7 +87,7 @@ public sealed class XlsxTests
     [TestMethod]
     public void Invalid_xml_characters_are_dropped_and_markup_is_escaped()
     {
-        byte[] bytes = Write(xlsx =>
+        byte[] bytes = Write(static xlsx =>
         {
             xlsx.BeginSheet("x");
             xlsx.WriteRow([XlsxCell.OfText("a\u0001b<c>&\"d\" 😀"), XlsxCell.OfText(" lead")]);
@@ -113,14 +113,14 @@ public sealed class XlsxTests
         Assert.AreEqual("Sheet1", XlsxWriter.SanitizeSheetName("/:*?"));
         Assert.AreEqual(31, XlsxWriter.SanitizeSheetName(new string('x', 40)).Length);
 
-        byte[] bytes = Write(xlsx =>
+        byte[] bytes = Write(static xlsx =>
         {
             xlsx.BeginSheet("orders");
             xlsx.BeginSheet("orders");
         });
         using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         string[] sheets = [.. Load(zip, "xl/workbook.xml").Descendants(Main + "sheet").Select(static s => (string)s.Attribute("name")!)];
-        Assert.AreSequenceEqual(new[] { "orders", "orders (2)" }, sheets, "duplicate sheet names are made unique");
+        Assert.AreSequenceEqual(["orders", "orders (2)"], sheets, "duplicate sheet names are made unique");
     }
 
     [TestMethod]

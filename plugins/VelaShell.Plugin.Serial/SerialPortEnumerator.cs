@@ -95,7 +95,7 @@ internal static class SerialPortEnumerator
             return [];
         }
         return Sort(Directory.EnumerateFiles("/dev", "cu.*")
-            .Select(path => new SerialPortInfo(path, DescribeUnixName(Path.GetFileName(path)[3..]))));
+            .Select(static path => new SerialPortInfo(path, DescribeUnixName(Path.GetFileName(path)[3..]))));
     }
 
     /// <summary>
@@ -144,12 +144,12 @@ internal static class SerialPortEnumerator
                 }
             }
         }
-        return Sort(found.Select(pair => new SerialPortInfo(pair.Key, pair.Value)));
+        return Sort(found.Select(static pair => new SerialPortInfo(pair.Key, pair.Value)));
     }
 
     /// <summary>其余平台(FreeBSD 之类):交给 <see cref="SerialPort.GetPortNames" />,取不到就空表。</summary>
     private static IReadOnlyList<SerialPortInfo> ListFallback() =>
-        Sort(SerialPort.GetPortNames().Select(name => new SerialPortInfo(name, string.Empty)));
+        Sort(SerialPort.GetPortNames().Select(static name => new SerialPortInfo(name, string.Empty)));
 
     /// <summary>
     /// <c>/sys/class/tty/&lt;名&gt;/device</c> 存在即认为背后有真硬件。
@@ -235,7 +235,7 @@ internal static class SerialPortEnumerator
     /// <param name="ports">待排序的设备。</param>
     /// <returns>排好序的列表。</returns>
     internal static IReadOnlyList<SerialPortInfo> Sort(IEnumerable<SerialPortInfo> ports) =>
-        [.. ports.OrderBy(port => port.PortName, NaturalOrder.Instance)];
+        [.. ports.OrderBy(static port => port.PortName, NaturalOrder.Instance)];
 
     /// <summary>把"字母段 + 数字段"交替比较的比较器。</summary>
     private sealed class NaturalOrder : IComparer<string>

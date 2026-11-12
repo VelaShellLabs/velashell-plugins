@@ -209,11 +209,12 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     /// certificate pin belongs to one host, so it is kept only when the host stays the same. Through an SSH tunnel only
     /// the same server is reachable.
     /// </summary>
-    internal static RdpClientOptions? Redirect(RdpClientOptions options, Pdu.ServerRedirection redirection)
+    internal static RdpClientOptions? Redirect(RdpClientOptions options, ServerRedirection redirection)
     {
         string current = string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost;
-        string? target = (redirection.Flags & Pdu.RedirectionFlags.NoRedirect) != 0 ? null
-            : redirection.TargetFqdn ?? redirection.TargetNetAddress ?? redirection.TargetNetAddresses.FirstOrDefault();
+        string? target = (redirection.Flags & RedirectionFlags.NoRedirect) != 0 ? null
+            : redirection.TargetFqdn ?? redirection.TargetNetAddress
+                ?? (redirection.TargetNetAddresses.Count > 0 ? redirection.TargetNetAddresses[0] : null);
         bool sameHost = string.IsNullOrWhiteSpace(target) || target.Equals(current, StringComparison.OrdinalIgnoreCase);
         if (sameHost && redirection.LoadBalanceInfo is not { Length: > 0 })
         {
@@ -441,15 +442,15 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             throw;
         }
         session.LogDrive($"configured drives={options.Drives.Count}; engine={typeof(RdpManagedSession).Assembly.Location}");
-        session.LogAudio($"configured playback={options.AudioPlayback}; requested={channels.Any(channel => channel.Name == "rdpsnd")}; backend={(OperatingSystem.IsWindows() ? "WinMM" : OperatingSystem.IsMacOS() ? "AudioQueue" : "ALSA")}");
+        session.LogAudio($"configured playback={options.AudioPlayback}; requested={channels.Any(static channel => channel.Name == "rdpsnd")}; backend={(OperatingSystem.IsWindows() ? "WinMM" : OperatingSystem.IsMacOS() ? "AudioQueue" : "ALSA")}");
         try
         {
             if (options.RemoteApp is { } remoteApp) { session.EnableRemoteApp(remoteApp, options.Width, options.Height); }
-            if (channels.Any(channel => channel.Name == "rdpsnd"))
+            if (channels.Any(static channel => channel.Name == "rdpsnd"))
             {
                 session.EnableAudio(options.AudioPlayback);
             }
-            if (channels.Any(channel => channel.Name == "drdynvc"))
+            if (channels.Any(static channel => channel.Name == "drdynvc"))
             {
                 session.EnableDynamicChannels(options);
             }
@@ -457,7 +458,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             {
                 session.EnableClipboard();
             }
-            if (channels.Any(channel => channel.Name == "rdpdr"))
+            if (channels.Any(static channel => channel.Name == "rdpdr"))
             {
                 session.EnableDrives(options.Drives, options.Ports, options.Printers, options.SmartCardRedirection);
             }
@@ -469,7 +470,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         {
             if (ex is OperationCanceledException && session._dynamicChannelFailure is { } failure) { ex = failure; }
             RdpConnectStage stage = session.Connection.Stage;
-            System.Security.Authentication.SslProtocols? tls = session.Connection.TlsProtocol;
+            SslProtocols? tls = session.Connection.TlsProtocol;
             string? tlsTrace = session.Connection.TlsTrace;
             await session.DisposeAsync().ConfigureAwait(false);
             // Cancellation, certificate trust and rejected credentials each mean something specific to

@@ -22,10 +22,7 @@ public sealed class UnixAbiTests
     [DataRow(0x54u, 6u, DisplayName = "PRESENT|POWERED|SPECIFIC")]
     [DataRow(0x00050054u, 6u, DisplayName = "event counter in the high word is ignored")]
     [DataRow(0x00u, 0u, DisplayName = "nothing reported")]
-    public void PcscStateBitsMapToTheWireOrdinal(uint unixState, uint wire)
-    {
-        Assert.AreEqual(wire, PcscSmartCardBackend.WireCardState(unixState));
-    }
+    public void PcscStateBitsMapToTheWireOrdinal(uint unixState, uint wire) => Assert.AreEqual(wire, PcscSmartCardBackend.WireCardState(unixState));
 
     [TestMethod]
     public void LinuxNoFollowFollowsTheArchitecture()

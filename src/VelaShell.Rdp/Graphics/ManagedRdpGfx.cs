@@ -36,7 +36,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         ThrowIfDisposed();
         if (_opened) { throw Error("Channel opened twice."); }
         _opened = true;
-        byte[] caps = Pdu(0x12, 2 + Versions.Sum(version => version == 0xa0100 ? 24 : 12));
+        byte[] caps = Pdu(0x12, 2 + Versions.Sum(static version => version == 0xa0100 ? 24 : 12));
         Put16(caps, 8, (ushort)Versions.Length);
         int offset = 10;
         foreach (uint version in Versions)
@@ -139,7 +139,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
                     Surface surface = GetSurface(id);
                     _codecs.DeleteSurface(id);
                     _ = _contexts.RemoveWhere(context => context.Surface == id);
-                    _ = _surfaces.Remove(id); _surfaceBytes -= surface.Pixels.Length;
+                    _ = _surfaces.Remove(id); _surfaceBytes -= surface._pixels.Length;
                     break;
                 }
             case 11:
@@ -201,8 +201,8 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         uint context = progressive ? reader.U32() : 0;
         byte format = reader.U8(); ValidatePixelFormat(format);
         Surface surface = GetSurface(id);
-        Rect rectangle = progressive ? new(0, 0, surface.Width, surface.Height) : reader.Rect();
-        ValidateRect(rectangle, surface.Width, surface.Height);
+        Rect rectangle = progressive ? new(0, 0, surface._width, surface._height) : reader.Rect();
+        ValidateRect(rectangle, surface._width, surface._height);
         uint length = reader.U32();
         if (length != reader.Remaining) { throw Error("Bitmap length does not match the PDU."); }
         if (progressive ? codec != 9 : codec is not (0 or 3 or 8 or 10 or 11 or 12 or 14 or 15))
@@ -216,10 +216,10 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         if (progressive && !_contexts.Contains((id, context)) && _contexts.Count >= 8192)
         { throw Error("Encoding context budget exceeded."); }
         _codecs.Decode(new GfxDecodeRequest(id, context, codec, format, rectangle.Left, rectangle.Top,
-            rectangle.Right, rectangle.Bottom, reader.Bytes((int)length).ToArray(), surface.Pixels, surface.Width, surface.Height));
+            rectangle.Right, rectangle.Bottom, reader.Bytes((int)length).ToArray(), surface._pixels, surface._width, surface._height));
         if (progressive) { _ = _contexts.Add((id, context)); }
         // AVC metadata may describe updates outside the wire command's bounding rectangle.
-        surface.Dirty = Rect.Union(surface.Dirty, codec is 11 or 14 or 15 ? new(0, 0, surface.Width, surface.Height) : rectangle);
+        surface._dirty = Rect.Union(surface._dirty, codec is 11 or 14 or 15 ? new(0, 0, surface._width, surface._height) : rectangle);
     }
 
     private void SolidFill(ref Reader reader)
@@ -227,17 +227,17 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         RequireFrame();
         Surface surface = GetSurface(reader.U16());
         uint color = reader.U32(); int count = reader.U16();
-        if (surface.Format == 0x20) { color |= 0xff000000; }
+        if (surface._format == 0x20) { color |= 0xff000000; }
         reader.Require(count * 8);
         for (int i = 0; i < count; i++)
         {
-            Rect rectangle = reader.Rect(); ValidateRect(rectangle, surface.Width, surface.Height);
+            Rect rectangle = reader.Rect(); ValidateRect(rectangle, surface._width, surface._height);
             for (int y = rectangle.Top; y < rectangle.Bottom; y++)
             {
-                Span<byte> row = surface.Pixels.AsSpan((y * surface.Width + rectangle.Left) * 4, rectangle.Width * 4);
+                Span<byte> row = surface._pixels.AsSpan((y * surface._width + rectangle.Left) * 4, rectangle.Width * 4);
                 for (int x = 0; x < row.Length; x += 4) { BinaryPrimitives.WriteUInt32LittleEndian(row[x..], color); }
             }
-            surface.Dirty = Rect.Union(surface.Dirty, rectangle);
+            surface._dirty = Rect.Union(surface._dirty, rectangle);
         }
     }
 
@@ -245,14 +245,14 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     {
         RequireFrame();
         Surface source = GetSurface(reader.U16()), target = GetSurface(reader.U16());
-        Rect rectangle = reader.Rect(); ValidateRect(rectangle, source.Width, source.Height);
+        Rect rectangle = reader.Rect(); ValidateRect(rectangle, source._width, source._height);
         int count = reader.U16();
         ReadOnlySpan<byte> points = reader.Bytes(count * 4); reader.End();
         for (int i = 0; i < count; i++)
         {
             int x = BinaryPrimitives.ReadUInt16LittleEndian(points[(i * 4)..]);
             int y = BinaryPrimitives.ReadUInt16LittleEndian(points[(i * 4 + 2)..]);
-            ValidateRect(new(x, y, x + rectangle.Width, y + rectangle.Height), target.Width, target.Height);
+            ValidateRect(new(x, y, x + rectangle.Width, y + rectangle.Height), target._width, target._height);
         }
         if (count == 0) { return; }
         // One immutable source snapshot also handles multiple destinations that overlap the source or each other.
@@ -270,7 +270,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         RequireFrame();
         Surface source = GetSurface(reader.U16());
         ulong key = reader.U64(); ushort slot = reader.U16();
-        Rect rectangle = reader.Rect(); reader.End(); ValidateRect(rectangle, source.Width, source.Height);
+        Rect rectangle = reader.Rect(); reader.End(); ValidateRect(rectangle, source._width, source._height);
         ValidateSlot(slot);
         int bytes = rectangle.Width * rectangle.Height * 4;
         int oldBytes = _cache.TryGetValue(slot, out CacheEntry? old) ? old.Pixels.Length : 0;
@@ -302,7 +302,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         }
         _ = reader.Bytes(reader.Remaining);
         _width = width; _height = height; _output = AllocatePixels(width, height);
-        foreach (Surface surface in _surfaces.Values) { surface.Dirty = new(0, 0, surface.Width, surface.Height); }
+        foreach (Surface surface in _surfaces.Values) { surface._dirty = new(0, 0, surface._width, surface._height); }
         _dirty = new(0, 0, width, height); _frameReady = true;
         Log($"graphics reset: {width}x{height}, monitors={monitors}");
     }
@@ -312,13 +312,13 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         Surface surface = GetSurface(reader.U16());
         if (reader.U16() != 0) { throw Error("Invalid reserved mapping field."); }
         uint x = reader.U32(), y = reader.U32();
-        int width = scaled ? reader.Dimension() : surface.Width, height = scaled ? reader.Dimension() : surface.Height;
+        int width = scaled ? reader.Dimension() : surface._width, height = scaled ? reader.Dimension() : surface._height;
         reader.End();
         if (scaled && (_version < 0xa0502 || (_version == 0xa0701 && (_capFlags & 0x80) != 0)))
         { throw Error("Scaled output mapping was not negotiated."); }
         if (x > Framebuffer.MaxBitmapSide || y > Framebuffer.MaxBitmapSide) { throw Error("Output origin exceeds desktop limits."); }
-        surface.Mapping = new Mapping((int)x, (int)y, width, height);
-        surface.Dirty = new(0, 0, surface.Width, surface.Height);
+        surface._mapping = new Mapping((int)x, (int)y, width, height);
+        surface._dirty = new(0, 0, surface._width, surface._height);
     }
 
     private void EndFrame(ref Reader reader)
@@ -327,8 +327,8 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         if (!_inFrame || id != _frameId) { throw Error("Frame end does not match its start."); }
         foreach (Surface surface in _surfaces.Values)
         {
-            if (!surface.Dirty.Empty && surface.Mapping is { } mapping) { Compose(surface, mapping); }
-            surface.Dirty = default;
+            if (!surface._dirty.Empty && surface._mapping is { } mapping) { Compose(surface, mapping); }
+            surface._dirty = default;
         }
         _inFrame = false;
         if (_decodedFrames == 0) { Log($"first graphics frame decoded: id={id}"); }
@@ -341,17 +341,17 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
 
     private void Compose(Surface surface, Mapping mapping)
     {
-        Rect source = surface.Dirty;
-        int left = mapping.X + (int)((long)source.Left * mapping.Width / surface.Width);
-        int top = mapping.Y + (int)((long)source.Top * mapping.Height / surface.Height);
-        int right = Math.Min(_width, mapping.X + (int)(((long)source.Right * mapping.Width + surface.Width - 1) / surface.Width));
-        int bottom = Math.Min(_height, mapping.Y + (int)(((long)source.Bottom * mapping.Height + surface.Height - 1) / surface.Height));
+        Rect source = surface._dirty;
+        int left = mapping.X + (int)((long)source.Left * mapping.Width / surface._width);
+        int top = mapping.Y + (int)((long)source.Top * mapping.Height / surface._height);
+        int right = Math.Min(_width, mapping.X + (int)(((long)source.Right * mapping.Width + surface._width - 1) / surface._width));
+        int bottom = Math.Min(_height, mapping.Y + (int)(((long)source.Bottom * mapping.Height + surface._height - 1) / surface._height));
         if (left >= right || top >= bottom) { return; }
-        if (mapping.Width == surface.Width && mapping.Height == surface.Height)
+        if (mapping.Width == surface._width && mapping.Height == surface._height)
         {
             for (int y = top; y < bottom; y++)
             {
-                surface.Pixels.AsSpan(((y - mapping.Y) * surface.Width + left - mapping.X) * 4, (right - left) * 4)
+                surface._pixels.AsSpan(((y - mapping.Y) * surface._width + left - mapping.X) * 4, (right - left) * 4)
                     .CopyTo(_output.AsSpan((y * _width + left) * 4));
             }
         }
@@ -359,11 +359,11 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         {
             for (int y = top; y < bottom; y++)
             {
-                int sy = (int)((long)(y - mapping.Y) * surface.Height / mapping.Height);
+                int sy = (int)((long)(y - mapping.Y) * surface._height / mapping.Height);
                 for (int x = left; x < right; x++)
                 {
-                    int sx = (int)((long)(x - mapping.X) * surface.Width / mapping.Width);
-                    surface.Pixels.AsSpan((sy * surface.Width + sx) * 4, 4).CopyTo(_output.AsSpan((y * _width + x) * 4, 4));
+                    int sx = (int)((long)(x - mapping.X) * surface._width / mapping.Width);
+                    surface._pixels.AsSpan((sy * surface._width + sx) * 4, 4).CopyTo(_output.AsSpan((y * _width + x) * 4, 4));
                 }
             }
         }
@@ -375,7 +375,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         byte[] result = new byte[rectangle.Width * rectangle.Height * 4];
         for (int y = 0; y < rectangle.Height; y++)
         {
-            source.Pixels.AsSpan(((rectangle.Top + y) * source.Width + rectangle.Left) * 4, rectangle.Width * 4)
+            source._pixels.AsSpan(((rectangle.Top + y) * source._width + rectangle.Left) * 4, rectangle.Width * 4)
                 .CopyTo(result.AsSpan(y * rectangle.Width * 4));
         }
         return result;
@@ -384,12 +384,12 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     private static void CopyTo(byte[] pixels, int width, int height, Surface target, int x, int y)
     {
         var rectangle = new Rect(x, y, x + width, y + height);
-        ValidateRect(rectangle, target.Width, target.Height);
+        ValidateRect(rectangle, target._width, target._height);
         for (int row = 0; row < height; row++)
         {
-            pixels.AsSpan(row * width * 4, width * 4).CopyTo(target.Pixels.AsSpan(((y + row) * target.Width + x) * 4));
+            pixels.AsSpan(row * width * 4, width * 4).CopyTo(target._pixels.AsSpan(((y + row) * target._width + x) * 4));
         }
-        target.Dirty = Rect.Union(target.Dirty, rectangle);
+        target._dirty = Rect.Union(target._dirty, rectangle);
     }
 
     private Surface GetSurface(ushort id) => _surfaces.TryGetValue(id, out Surface? surface) ? surface : throw Error($"Unknown surface {id}.");
@@ -449,11 +449,11 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
 
     private sealed class Surface(int width, int height, byte format, byte[] pixels)
     {
-        internal readonly int Width = width, Height = height;
-        internal readonly byte Format = format;
-        internal readonly byte[] Pixels = pixels;
-        internal Rect Dirty;
-        internal Mapping? Mapping;
+        internal readonly int _width = width, _height = height;
+        internal readonly byte _format = format;
+        internal readonly byte[] _pixels = pixels;
+        internal Rect _dirty;
+        internal Mapping? _mapping;
     }
     private sealed record CacheEntry(ulong Key, int Width, int Height, byte[] Pixels);
     private sealed record Mapping(int X, int Y, int Width, int Height);
@@ -469,7 +469,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     {
         private readonly ReadOnlySpan<byte> _data;
         private int _position;
-        internal Reader(ReadOnlySpan<byte> data) { _data = data; }
+        internal Reader(ReadOnlySpan<byte> data) => _data = data;
         internal readonly int Remaining => _data.Length - _position;
         internal readonly void Require(int count) { if (count < 0 || count > Remaining) { throw Error("Truncated PDU body."); } }
         internal ReadOnlySpan<byte> Bytes(int count) { Require(count); ReadOnlySpan<byte> result = _data.Slice(_position, count); _position += count; return result; }

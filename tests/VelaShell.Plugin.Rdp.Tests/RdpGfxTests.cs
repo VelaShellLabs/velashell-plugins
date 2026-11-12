@@ -18,13 +18,13 @@ public sealed class RdpGfxTests
         var options = new RdpClientOptions { Host = "example", DynamicResolution = false, GraphicsLog = log.Add };
         Assert.IsNull(RdpManagedSession.PrepareGraphics(options with { EnableGraphicsPipeline = false },
             (_, _) => throw new AssertFailedException("Classic must not initialize the graphics backend.")));
-        Assert.IsFalse(RdpManagedSession.BuildChannels(options, false).Any(c => c.Name == "drdynvc"));
+        Assert.DoesNotContain(c => c.Name == "drdynvc", RdpManagedSession.BuildChannels(options, false));
         Assert.AreEqual(0, EarlyFlags(false) & 0x100);
         using IRdpGfxBackend? ready = RdpManagedSession.PrepareGraphics(options);
         _ = Assert.IsInstanceOfType<ManagedRdpGfx>(ready);
-        Assert.IsTrue(RdpManagedSession.BuildChannels(options, ready is not null).Any(c => c.Name == "drdynvc"));
+        Assert.Contains(c => c.Name == "drdynvc", RdpManagedSession.BuildChannels(options, ready is not null));
         Assert.AreEqual(0x103, EarlyFlags(ready is not null));
-        Assert.IsTrue(log.Any(line => line.Contains("managed graphics pipeline ready", StringComparison.Ordinal)));
+        Assert.Contains(line => line.Contains("managed graphics pipeline ready", StringComparison.Ordinal), log);
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpManagedSession.PrepareGraphics(options,
             (_, _) => throw new RdpProtocolException("Initialization failed")));
     }
@@ -48,7 +48,7 @@ public sealed class RdpGfxTests
     }
 
     [TestMethod]
-    public void UnknownGraphicsSettingIsRejected() => Assert.ThrowsExactly<ProtocolConnectionException>(() =>
+    public void UnknownGraphicsSettingIsRejected() => Assert.ThrowsExactly<ProtocolConnectionException>(static () =>
         RdpSettings.From(RdpSettingsTests.Request((RdpSettings.GraphicsModeKey, "sometimes")), new("en"), []));
 
     [TestMethod]
@@ -122,7 +122,7 @@ public sealed class RdpGfxTests
         stop.Cancel();
         await dvc.CloseAsync();
         Assert.AreEqual(1, backend.Disposals);
-        Assert.AreSequenceEqual(new[] { "open", "frame", "frame", "read", "read", "dispose" }, backend.Calls);
+        Assert.AreSequenceEqual(["open", "frame", "frame", "read", "read", "dispose"], backend.Calls);
     }
 
     [TestMethod]
@@ -156,7 +156,7 @@ public sealed class RdpGfxTests
         graphics.Register(dvc);
         await dvc.ProcessAsync(Create(1));
         await dvc.ProcessAsync(Create(2));
-        Assert.AreEqual(1, backend.Calls.Count(call => call == "open"));
+        Assert.ContainsSingle(call => call == "open", backend.Calls);
         Assert.AreNotEqual(0u, BinaryPrimitives.ReadUInt32LittleEndian(responses.Last().AsSpan(2)));
         byte[] message = new byte[128 * 1024];
         message[0] = 0x30; message[1] = 1;
@@ -179,10 +179,7 @@ public sealed class RdpGfxTests
         internal int Disposals, LastMessageLength;
         internal readonly RdpGfxFrame Frame;
 
-        internal Backend()
-        {
-            Frame = new RdpGfxFrame { Pixels = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray(), Width = 3, Height = 2, Stride = 16, W = 3, H = 2 };
-        }
+        internal Backend() => Frame = new RdpGfxFrame { Pixels = [.. Enumerable.Range(0, 32).Select(static i => (byte)i)], Width = 3, Height = 2, Stride = 16, W = 3, H = 2 };
         public void Open()
         {
             Calls.Add("open");

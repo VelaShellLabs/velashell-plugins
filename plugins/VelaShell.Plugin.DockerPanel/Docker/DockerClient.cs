@@ -101,9 +101,9 @@ public sealed partial class DockerClient : IAsyncDisposable
             return null;
         }
         var map = new Dictionary<string, string[]>();
-        foreach (IGrouping<string, (string Key, string Value)> group in items.GroupBy(i => i.Key))
+        foreach (IGrouping<string, (string Key, string Value)> group in items.GroupBy(static i => i.Key))
         {
-            map[group.Key] = [.. group.Select(g => g.Value)];
+            map[group.Key] = [.. group.Select(static g => g.Value)];
         }
         return JsonSerializer.Serialize(map, DockerJson.Options);
     }

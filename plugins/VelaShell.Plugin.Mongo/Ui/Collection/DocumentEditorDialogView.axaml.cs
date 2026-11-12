@@ -24,16 +24,10 @@ public sealed partial class DocumentEditorDialogView : UserControl
 
     /// <summary>用给定的视图模型初始化。</summary>
     internal DocumentEditorDialogView(DocumentEditorDialogViewModel viewModel)
-        : this()
-    {
-        DataContext = viewModel;
-    }
+        : this() => DataContext = viewModel;
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public DocumentEditorDialogView()
-    {
-        InitializeComponent();
-    }
+    public DocumentEditorDialogView() => InitializeComponent();
 
     private DocumentEditorDialogViewModel? ViewModel => DataContext as DocumentEditorDialogViewModel;
 

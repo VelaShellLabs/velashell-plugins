@@ -30,9 +30,9 @@ public sealed class RdpUdpTests
         var packet = RdpUdpPacket.Decode(data);
         Assert.AreEqual(8u, packet.SourceSequence);
         Assert.AreSequenceEqual(data, packet.Encode());
-        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 16]));
-        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0x41, 0]));
-        _ = Assert.ThrowsExactly<RdpProtocolException>(() => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0]));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(static () => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 16]));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(static () => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0x41, 0]));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(static () => RdpUdpPacket.Decode([0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0]));
     }
 
     [TestMethod]
@@ -85,7 +85,7 @@ public sealed class RdpUdpTests
         Assert.AreSequenceEqual(new byte[] { 2 }, b.Read()!);
         Deliver(a, b, [first], 212);
         Assert.IsNull(b.Read());
-        Assert.AreEqual(0, a.Tick(1000).Count(p => RdpUdpPacket.Decode(p).Flags.HasFlag(RdpUdpFlags.Data)));
+        Assert.AreEqual(0, a.Tick(1000).Count(static p => RdpUdpPacket.Decode(p).Flags.HasFlag(RdpUdpFlags.Data)));
     }
 
     [TestMethod]
@@ -110,7 +110,7 @@ public sealed class RdpUdpTests
             Deliver(a, b, packets, i * 5 + 1);
         }
         Assert.IsNull(a.Send([9], 1300));
-        for (int i = 0; i < RdpUdpState.Capacity; i++) { Assert.AreSequenceEqual(new byte[] { (byte)i }, b.Read()!); }
+        for (int i = 0; i < RdpUdpState.Capacity; i++) { Assert.AreSequenceEqual([(byte)i], b.Read()!); }
         foreach (byte[] ack in b.Tick(3000)) { _ = a.Receive(RdpUdpPacket.Decode(ack), 3001); }
         Assert.IsNotNull(a.Send([9], 3002));
     }

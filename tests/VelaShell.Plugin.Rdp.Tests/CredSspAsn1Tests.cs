@@ -61,12 +61,12 @@ public sealed class CredSspAsn1Tests
     [TestMethod]
     public void BindingHashMatchesSpecMagicAndIsDirectional()
     {
-        byte[] nonce = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+        byte[] nonce = [.. Enumerable.Range(0, 32).Select(static i => (byte)i)];
         byte[] key = [0xDE, 0xAD, 0xBE, 0xEF];
         byte[] clientToServer = CredSsp.BindingHashForTest(true, nonce, key);
         byte[] serverToClient = CredSsp.BindingHashForTest(false, nonce, key);
         Assert.HasCount(32, clientToServer);
-        CollectionAssert.AreNotEqual(clientToServer, serverToClient, "Client/server binding hashes must differ.");
+        Assert.AreNotSequenceEqual(clientToServer, serverToClient, "Client/server binding hashes must differ.");
 
         // Recompute the client→server hash independently: SHA256(magic‖nonce‖key), magic incl. trailing NUL.
         byte[] magic = Encoding.ASCII.GetBytes("CredSSP Client-To-Server Binding Hash\0");
@@ -106,6 +106,6 @@ public sealed class CredSspAsn1Tests
         (_, uint? unsigned) = CredSsp.ParseForTest(TsRequestWithError(0x8009030CU));
         Assert.AreEqual(0x8009030Cu, unsigned);
 
-        _ = Assert.ThrowsExactly<RdpProtocolException>(() => CredSsp.ParseForTest(TsRequestWithError(System.Numerics.BigInteger.Pow(2, 40))));
+        _ = Assert.ThrowsExactly<RdpProtocolException>(static () => CredSsp.ParseForTest(TsRequestWithError(System.Numerics.BigInteger.Pow(2, 40))));
     }
 }

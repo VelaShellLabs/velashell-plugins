@@ -11,16 +11,16 @@ public readonly record struct BatchOutcome(string Target, bool Succeeded, string
 public sealed record BatchResult(IReadOnlyList<BatchOutcome> Outcomes)
 {
     /// <summary>成功数。</summary>
-    public int SucceededCount => Outcomes.Count(o => o.Succeeded);
+    public int SucceededCount => Outcomes.Count(static o => o.Succeeded);
 
     /// <summary>失败数。</summary>
-    public int FailedCount => Outcomes.Count(o => !o.Succeeded);
+    public int FailedCount => Outcomes.Count(static o => !o.Succeeded);
 
     /// <summary>全部成功。</summary>
     public bool AllSucceeded => FailedCount == 0;
 
     /// <summary>失败的那些。</summary>
-    public IEnumerable<BatchOutcome> Failures => Outcomes.Where(o => !o.Succeeded);
+    public IEnumerable<BatchOutcome> Failures => Outcomes.Where(static o => !o.Succeeded);
 }
 
 /// <summary>

@@ -28,7 +28,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     private IPointer? _pointer;
     private uint _mouseX;
     private uint _mouseY;
-    private sealed class PendingMove(uint x, uint y) { internal uint X = x; internal uint Y = y; }
+    private sealed class PendingMove(uint x, uint y) { internal uint _x = x; internal uint _y = y; }
     private PendingMove? _pendingMove;
     private PendingMove? _deferredMove;
     private readonly DispatcherTimer _moveTimer = new();
@@ -198,7 +198,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     /// copy (a blinking caret used to cost two 8 MB copies at 1080p). A new desktop size recreates the bitmap and
     /// takes one full copy.
     /// </summary>
-    private unsafe void PresentFrame()
+    private void PresentFrame()
     {
         bool resized = false, full = false;
         for (int attempt = 0; attempt < 3; attempt++)
@@ -211,7 +211,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
             else
             {
                 using ILockedFramebuffer buffer = _bitmap.Lock();
-                var target = new Span<byte>((void*)buffer.Address, buffer.RowBytes * buffer.Size.Height);
+                var target = new Span<byte>(buffer.Address.ToPointer(), buffer.RowBytes * buffer.Size.Height);
                 copy = _session.CopyFrame(target, buffer.RowBytes, buffer.Size.Width, buffer.Size.Height, full);
             }
 
@@ -410,7 +410,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
 
     /// <summary>Line breaks become '\n'; control characters other than '\n' and '\t' are dropped.</summary>
     internal static string NormalizeTypedText(string text) =>
-        string.Concat(text.ReplaceLineEndings("\n").Where(c => !char.IsControl(c) || c is '\n' or '\t'));
+        string.Concat(text.ReplaceLineEndings("\n").Where(static c => !char.IsControl(c) || c is '\n' or '\t'));
 
     private void PublishOnFocus(Func<Task> publish)
     {
@@ -720,12 +720,12 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (_deferredMove is not { } move) { return; }
         _deferredMove = null;
         _lastMove = Environment.TickCount64;
-        if (_pendingMove is { } pending) { pending.X = move.X; pending.Y = move.Y; return; }
+        if (_pendingMove is { } pending) { pending._x = move._x; pending._y = move._y; return; }
         _pendingMove = move;
         EnqueueInput(async () =>
         {
             if (ReferenceEquals(_pendingMove, move)) { _pendingMove = null; }
-            await _session.MouseAsync(0x0800, move.X, move.Y);
+            await _session.MouseAsync(0x0800, move._x, move._y);
         });
     }
 

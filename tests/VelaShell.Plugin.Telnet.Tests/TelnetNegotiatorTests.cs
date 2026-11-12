@@ -56,7 +56,7 @@ public sealed class TelnetNegotiatorTests
     public void InitialRequests_WithoutBinary_OmitsBothDirections()
     {
         byte[] hello = Create(binary: false).BuildInitialRequests(80, 24);
-        Assert.DoesNotContain(command => command[2] == 0, hello.Chunk(3), "关掉 BINARY 后不该再请求它。");
+        Assert.DoesNotContain(static command => command[2] == 0, hello.Chunk(3), "关掉 BINARY 后不该再请求它。");
     }
 
     [TestMethod]

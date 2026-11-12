@@ -118,10 +118,13 @@ public sealed class KerberosNlaTests
         {
             using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0))) writer.WriteInteger(6);
             if (token is { Length: > 0 })
+            {
                 using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
                 using (writer.PushSequence())
                 using (writer.PushSequence())
                 using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0))) writer.WriteOctetString(token);
+            }
+
             if (binding is not null)
                 using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 3))) writer.WriteOctetString(binding);
         }

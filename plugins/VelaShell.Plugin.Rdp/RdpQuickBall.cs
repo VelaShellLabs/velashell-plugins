@@ -381,15 +381,15 @@ internal sealed class RdpQuickBall : Canvas
     /// Hover and "armed" for the fan items, as styles so they can change without code: the accent ring fades
     /// in and the circle grows a little. Rest values are styles too, so the states can override them.
     /// </summary>
-    private static IEnumerable<Avalonia.Styling.Style> ItemStyles()
+    private static IEnumerable<Style> ItemStyles()
     {
-        static Avalonia.Styling.Style Set(Func<Avalonia.Styling.Selector?, Avalonia.Styling.Selector> selector, AvaloniaProperty property, object value) =>
-            new(selector) { Setters = { new Avalonia.Styling.Setter(property, value) } };
-        yield return Set(x => x.OfType<Panel>().Class("quick-item"), RenderTransformProperty, Transform(default, 1));
-        yield return Set(x => x.OfType<Panel>().Class("quick-item").Class(":pointerover"), RenderTransformProperty, Transform(default, 1.08));
-        yield return Set(x => x.OfType<Panel>().Class("quick-item").Child().OfType<Border>().Class("accent"), OpacityProperty, 0d);
-        yield return Set(x => x.OfType<Panel>().Class("quick-item").Class(":pointerover").Child().OfType<Border>().Class("accent"), OpacityProperty, 1d);
-        yield return Set(x => x.OfType<Panel>().Class("quick-item").Class("armed").Child().OfType<Border>().Class("accent"), OpacityProperty, 1d);
+        static Style Set(Func<Selector?, Selector> selector, AvaloniaProperty property, object value) =>
+            new(selector) { Setters = { new Setter(property, value) } };
+        yield return Set(static x => x.OfType<Panel>().Class("quick-item"), RenderTransformProperty, Transform(default, 1));
+        yield return Set(static x => x.OfType<Panel>().Class("quick-item").Class(":pointerover"), RenderTransformProperty, Transform(default, 1.08));
+        yield return Set(static x => x.OfType<Panel>().Class("quick-item").Child().OfType<Border>().Class("accent"), OpacityProperty, 0d);
+        yield return Set(static x => x.OfType<Panel>().Class("quick-item").Class(":pointerover").Child().OfType<Border>().Class("accent"), OpacityProperty, 1d);
+        yield return Set(static x => x.OfType<Panel>().Class("quick-item").Class("armed").Child().OfType<Border>().Class("accent"), OpacityProperty, 1d);
     }
 
     internal bool IsBallPointerOver { get; private set; }

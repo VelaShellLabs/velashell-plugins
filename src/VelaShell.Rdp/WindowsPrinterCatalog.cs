@@ -103,7 +103,7 @@ internal static partial class PrinterNative
         internal bool IsSupported => !string.IsNullOrWhiteSpace(Name) && !string.IsNullOrWhiteSpace(Driver)
             && Name.Length <= 1024 && Driver.Length <= 1024 && !Name.Any(char.IsControl) && !Driver.Any(char.IsControl)
             && (Attributes & 0x8000) == 0 && !string.IsNullOrWhiteSpace(Ports)
-            && !Ports.Split(',').Any(port => port.Trim().Equals("FILE:", StringComparison.OrdinalIgnoreCase)
+            && !Ports.Split(',').Any(static port => port.Trim().Equals("FILE:", StringComparison.OrdinalIgnoreCase)
                 || port.Trim().Equals("PORTPROMPT:", StringComparison.OrdinalIgnoreCase));
     }
 

@@ -18,10 +18,7 @@ public sealed partial class TransferWizardView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public TransferWizardView()
-    {
-        InitializeComponent();
-    }
+    public TransferWizardView() => InitializeComponent();
 
     /// <inheritdoc />
     protected override void OnDataContextChanged(EventArgs e)

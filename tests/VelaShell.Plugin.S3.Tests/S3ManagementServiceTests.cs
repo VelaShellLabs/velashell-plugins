@@ -43,7 +43,7 @@ public sealed class S3ManagementServiceTests
     public async Task GetBucketConfig_WhenNeverConfigured_ReportsEmptyStateInsteadOfThrowing()
     {
         _ = _client.GetLifecycleConfigurationAsync(Arg.Any<GetLifecycleConfigurationRequest>(), Arg.Any<CancellationToken>())
-               .Returns<Task<GetLifecycleConfigurationResponse>>(_ => throw Aws("NoSuchLifecycleConfiguration", HttpStatusCode.NotFound));
+               .Returns<Task<GetLifecycleConfigurationResponse>>(static _ => throw Aws("NoSuchLifecycleConfiguration", HttpStatusCode.NotFound));
 
         S3ConfigResult result = await _service.GetBucketConfigAsync(_session, Bucket, S3ConfigKind.Lifecycle);
 
@@ -60,7 +60,7 @@ public sealed class S3ManagementServiceTests
     public async Task GetBucketConfig_WhenServerDoesNotImplementIt_ReportsUnsupported()
     {
         _ = _client.GetBucketReplicationAsync(Arg.Any<GetBucketReplicationRequest>(), Arg.Any<CancellationToken>())
-               .Returns<Task<GetBucketReplicationResponse>>(_ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
+               .Returns<Task<GetBucketReplicationResponse>>(static _ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
 
         S3ConfigResult result = await _service.GetBucketConfigAsync(_session, Bucket, S3ConfigKind.Replication);
 
@@ -110,7 +110,7 @@ public sealed class S3ManagementServiceTests
         await _service.PutBucketConfigAsync(_session, Bucket, S3ConfigKind.Versioning, """{"Status":"Suspended"}""");
 
         _ = await _client.Received(1).PutBucketVersioningAsync(
-            Arg.Is<PutBucketVersioningRequest>(r => r.BucketName == Bucket && r.VersioningConfig.Status == VersionStatus.Suspended),
+            Arg.Is<PutBucketVersioningRequest>(static r => r.BucketName == Bucket && r.VersioningConfig.Status == VersionStatus.Suspended),
             Arg.Any<CancellationToken>());
     }
 
@@ -121,7 +121,7 @@ public sealed class S3ManagementServiceTests
         await _service.DeleteBucketConfigAsync(_session, Bucket, S3ConfigKind.Cors);
 
         _ = await _client.Received(1).DeleteCORSConfigurationAsync(
-            Arg.Is<DeleteCORSConfigurationRequest>(r => r.BucketName == Bucket), Arg.Any<CancellationToken>());
+            Arg.Is<DeleteCORSConfigurationRequest>(static r => r.BucketName == Bucket), Arg.Any<CancellationToken>());
     }
 
     /// <summary>不可删除的配置要明确报「不支持」,而不是静默什么都不做。</summary>
@@ -184,7 +184,7 @@ public sealed class S3ManagementServiceTests
         await _service.RestoreObjectVersionAsync(_session, Bucket, "a.txt", "v1");
 
         _ = await _client.Received(1).CopyObjectAsync(
-            Arg.Is<CopyObjectRequest>(r =>
+            Arg.Is<CopyObjectRequest>(static r =>
                 r.SourceBucket == Bucket && r.SourceKey == "a.txt" && r.SourceVersionId == "v1" &&
                 r.DestinationBucket == Bucket && r.DestinationKey == "a.txt"),
             Arg.Any<CancellationToken>());
@@ -200,7 +200,7 @@ public sealed class S3ManagementServiceTests
         await _service.PutObjectTagsAsync(_session, Bucket, "a.txt", []);
 
         _ = await _client.Received(1).DeleteObjectTaggingAsync(
-            Arg.Is<DeleteObjectTaggingRequest>(r => r.Key == "a.txt"), Arg.Any<CancellationToken>());
+            Arg.Is<DeleteObjectTaggingRequest>(static r => r.Key == "a.txt"), Arg.Any<CancellationToken>());
         _ = await _client.DidNotReceive().PutObjectTaggingAsync(Arg.Any<PutObjectTaggingRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -211,8 +211,8 @@ public sealed class S3ManagementServiceTests
         await _service.PutObjectTagsAsync(_session, Bucket, "a.txt", [new("env", "prod"), new("team", "infra")]);
 
         _ = await _client.Received(1).PutObjectTaggingAsync(
-            Arg.Is<PutObjectTaggingRequest>(r => r.Tagging.TagSet.Count == 2 &&
-                                                 r.Tagging.TagSet.Any(t => t.Key == "env" && t.Value == "prod")),
+            Arg.Is<PutObjectTaggingRequest>(static r => r.Tagging.TagSet.Count == 2 &&
+                                                 r.Tagging.TagSet.Any(static t => t.Key == "env" && t.Value == "prod")),
             Arg.Any<CancellationToken>());
     }
 
@@ -225,7 +225,7 @@ public sealed class S3ManagementServiceTests
         await _service.ChangeStorageClassAsync(_session, Bucket, "a.txt", "GLACIER");
 
         _ = await _client.Received(1).CopyObjectAsync(
-            Arg.Is<CopyObjectRequest>(r =>
+            Arg.Is<CopyObjectRequest>(static r =>
                 r.SourceBucket == Bucket && r.SourceKey == "a.txt" &&
                 r.DestinationBucket == Bucket && r.DestinationKey == "a.txt" &&
                 r.StorageClass == S3StorageClass.Glacier),
@@ -239,7 +239,7 @@ public sealed class S3ManagementServiceTests
         await _service.PutObjectMetadataAsync(_session, Bucket, "a.txt", [new("owner", "ops")]);
 
         _ = await _client.Received(1).CopyObjectAsync(
-            Arg.Is<CopyObjectRequest>(r => r.MetadataDirective == S3MetadataDirective.REPLACE),
+            Arg.Is<CopyObjectRequest>(static r => r.MetadataDirective == S3MetadataDirective.REPLACE),
             Arg.Any<CancellationToken>());
     }
 
@@ -248,7 +248,7 @@ public sealed class S3ManagementServiceTests
     public async Task GetObjectRetention_WhenNoneSet_ReturnsEmpty()
     {
         _ = _client.GetObjectRetentionAsync(Arg.Any<GetObjectRetentionRequest>(), Arg.Any<CancellationToken>())
-               .Returns<Task<GetObjectRetentionResponse>>(_ => throw Aws("NoSuchObjectLockConfiguration", HttpStatusCode.NotFound));
+               .Returns<Task<GetObjectRetentionResponse>>(static _ => throw Aws("NoSuchObjectLockConfiguration", HttpStatusCode.NotFound));
 
         S3Retention retention = await _service.GetObjectRetentionAsync(_session, Bucket, "a.txt");
 
@@ -263,7 +263,7 @@ public sealed class S3ManagementServiceTests
         await _service.PutObjectLegalHoldAsync(_session, Bucket, "a.txt", enabled: true);
 
         _ = await _client.Received(1).PutObjectLegalHoldAsync(
-            Arg.Is<PutObjectLegalHoldRequest>(r => r.LegalHold.Status == ObjectLockLegalHoldStatus.On),
+            Arg.Is<PutObjectLegalHoldRequest>(static r => r.LegalHold.Status == ObjectLockLegalHoldStatus.On),
             Arg.Any<CancellationToken>());
     }
 
@@ -274,7 +274,7 @@ public sealed class S3ManagementServiceTests
         await _service.RestoreArchivedObjectAsync(_session, Bucket, "a.txt", new(0, "Bulk"));
 
         _ = await _client.Received(1).RestoreObjectAsync(
-            Arg.Is<RestoreObjectRequest>(r => r.Days == 1 && r.RetrievalTier == GlacierJobTier.Bulk),
+            Arg.Is<RestoreObjectRequest>(static r => r.Days == 1 && r.RetrievalTier == GlacierJobTier.Bulk),
             Arg.Any<CancellationToken>());
     }
 
@@ -285,7 +285,7 @@ public sealed class S3ManagementServiceTests
         await _service.AbortMultipartUploadAsync(_session, Bucket, "big.bin", "upload-1");
 
         _ = await _client.Received(1).AbortMultipartUploadAsync(
-            Arg.Is<AbortMultipartUploadRequest>(r => r.Key == "big.bin" && r.UploadId == "upload-1"),
+            Arg.Is<AbortMultipartUploadRequest>(static r => r.Key == "big.bin" && r.UploadId == "upload-1"),
             Arg.Any<CancellationToken>());
     }
 
@@ -294,7 +294,7 @@ public sealed class S3ManagementServiceTests
     public async Task ListMultipartUploads_WhenUnsupported_ReturnsEmpty()
     {
         _ = _client.ListMultipartUploadsAsync(Arg.Any<ListMultipartUploadsRequest>(), Arg.Any<CancellationToken>())
-               .Returns<Task<ListMultipartUploadsResponse>>(_ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
+               .Returns<Task<ListMultipartUploadsResponse>>(static _ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
 
         Assert.IsEmpty(await _service.ListMultipartUploadsAsync(_session, Bucket));
     }
@@ -304,9 +304,9 @@ public sealed class S3ManagementServiceTests
     public async Task GetBucketOverview_SurvivesUnsupportedSubQueries()
     {
         _ = _client.GetBucketLocationAsync(Arg.Any<GetBucketLocationRequest>(), Arg.Any<CancellationToken>())
-               .Returns<Task<GetBucketLocationResponse>>(_ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
+               .Returns<Task<GetBucketLocationResponse>>(static _ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
         _ = _client.GetBucketPolicyStatusAsync(Arg.Any<GetBucketPolicyStatusRequest>(), Arg.Any<CancellationToken>())
-               .Returns<Task<GetBucketPolicyStatusResponse>>(_ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
+               .Returns<Task<GetBucketPolicyStatusResponse>>(static _ => throw Aws("NotImplemented", HttpStatusCode.NotImplemented));
         _ = _client.GetBucketVersioningAsync(Arg.Any<GetBucketVersioningRequest>(), Arg.Any<CancellationToken>())
                .Returns(new GetBucketVersioningResponse { VersioningConfig = new() { Status = VersionStatus.Enabled } });
 
