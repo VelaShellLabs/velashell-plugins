@@ -41,4 +41,39 @@ public sealed class RdpInputTests
         Assert.AreEqual(0x388u, RdpInput.Wheel(-1, false));
         Assert.AreEqual(0x478u, RdpInput.Wheel(1, true));
     }
+
+    [TestMethod]
+    [DataRow(PhysicalKey.NumPad0, 0x52u)]
+    [DataRow(PhysicalKey.NumPad7, 0x47u)]
+    [DataRow(PhysicalKey.NumPadDecimal, 0x53u)]
+    [DataRow(PhysicalKey.NumPadAdd, 0x4eu)]
+    [DataRow(PhysicalKey.NumPadSubtract, 0x4au)]
+    [DataRow(PhysicalKey.NumPadMultiply, 0x37u)]
+    [DataRow(PhysicalKey.NumPadDivide, 0x135u)]
+    [DataRow(PhysicalKey.NumPadEnter, 0x11cu)]
+    [DataRow(PhysicalKey.NumLock, 0x45u)]
+    public void KeypadKeysHaveScanCodes(PhysicalKey key, uint expected)
+    {
+        Assert.AreEqual(expected, RdpInput.ScanCode(key));
+    }
+
+    [TestMethod]
+    public void EveryKeyOfAStandardKeyboardHasAScanCode()
+    {
+        // A key without a scan code is dropped unless it produces text, so the whole 104/105-key layout must map.
+        PhysicalKey[] unmapped = Enum.GetValues<PhysicalKey>()
+            .Where(k => k is >= PhysicalKey.A and <= PhysicalKey.Z
+                or >= PhysicalKey.Digit0 and <= PhysicalKey.Digit9
+                or >= PhysicalKey.NumPad0 and <= PhysicalKey.NumPad9
+                or >= PhysicalKey.F1 and <= PhysicalKey.F24
+                or PhysicalKey.NumPadAdd or PhysicalKey.NumPadSubtract or PhysicalKey.NumPadMultiply
+                or PhysicalKey.NumPadDivide or PhysicalKey.NumPadDecimal or PhysicalKey.NumPadEnter
+                or PhysicalKey.Enter or PhysicalKey.Escape or PhysicalKey.Backspace or PhysicalKey.Tab or PhysicalKey.Space
+                or PhysicalKey.ArrowUp or PhysicalKey.ArrowDown or PhysicalKey.ArrowLeft or PhysicalKey.ArrowRight
+                or PhysicalKey.Home or PhysicalKey.End or PhysicalKey.PageUp or PhysicalKey.PageDown
+                or PhysicalKey.Insert or PhysicalKey.Delete or PhysicalKey.IntlBackslash)
+            .Where(k => RdpInput.ScanCode(k) == 0)
+            .ToArray();
+        Assert.IsEmpty(unmapped, "Unmapped: " + string.Join(", ", unmapped));
+    }
 }

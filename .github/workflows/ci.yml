@@ -16,7 +16,8 @@ jobs:
   rdp-unix-authentication:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # ubuntu-24.04-arm covers the arm64 Linux ABI (open flags, statx); macos-latest is arm64.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -26,7 +27,7 @@ jobs:
           dotnet-version: 11.0.x
       # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
       - name: Test portable RDP authentication, licensing and audio
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSsp|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~RdpTlsPlatformTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests"
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSsp|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~RdpTlsPlatformTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests|FullyQualifiedName~UnixAbiTests|FullyQualifiedName~DriveSemanticsTests"
 
       - name: Test Kerberos CredSSP against an isolated Linux KDC
         if: runner.os == 'Linux'

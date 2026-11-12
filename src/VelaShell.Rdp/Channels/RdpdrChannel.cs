@@ -413,9 +413,10 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
         r.Skip(23);
         string path = DecodeUnicode(r.Take(pathLength));
         if (!_files.TryGetValue(fileId, out DriveFile? file)) { body.U32LE(0); return NtStatus.Unsuccessful; }
+        bool matched = true;
         if (initialQuery != 0)
         {
-            file.BeginEnumeration(path);
+            matched = file.BeginEnumeration(path);
         }
 
         if (file.QueryDirectory(infoClass, body))
@@ -425,11 +426,14 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
 
         body.U32LE(0);
         body.U8(0);
-        return NtStatus.NoMoreFiles;
+        // A first query that matches nothing is STATUS_NO_SUCH_FILE (what FindFirstFile turns into
+        // ERROR_FILE_NOT_FOUND); STATUS_NO_MORE_FILES only ends an enumeration that returned entries.
+        return matched ? NtStatus.NoMoreFiles : NtStatus.NoSuchFile;
     }
 
     private static void SetInformation(DriveFile file, uint infoClass, ReadOnlySpan<byte> buffer)
     {
+        var br = new ByteReader(buffer);
         switch (infoClass)
         {
             case DriveFile.FileDispositionInformation:
@@ -437,15 +441,27 @@ internal sealed class RdpdrChannel(Func<byte[], Task> send, IReadOnlyList<DriveM
                 break;
             case DriveFile.FileRenameInformation:
                 {
-                    var br = new ByteReader(buffer);
-                    _ = br.U8();                        // ReplaceIfExists
+                    bool replaceIfExists = br.U8() != 0;
                     _ = br.U8();                        // RootDirectory
                     int nameLength = (int)br.U32LE();
                     string target = DecodeUnicode(br.Take(nameLength));
-                    file.Rename(target);
+                    file.Rename(target, replaceIfExists);
                     break;
                 }
-                // FileBasicInformation / FileEndOfFileInformation / FileAllocationInformation: accepted, no-op.
+            case DriveFile.FileEndOfFileInformation:
+                file.SetEndOfFile(br.I64LE());
+                break;
+            case DriveFile.FileAllocationInformation:
+                file.SetAllocation(br.I64LE());
+                break;
+            case DriveFile.FileBasicInformation:
+                {
+                    long creation = br.I64LE(), lastAccess = br.I64LE(), lastWrite = br.I64LE();
+                    _ = br.I64LE();                     // ChangeTime: not settable through .NET
+                    uint attributes = br.Remaining >= 4 ? br.U32LE() : 0;
+                    file.SetBasic(creation, lastAccess, lastWrite, attributes);
+                    break;
+                }
         }
     }
 
