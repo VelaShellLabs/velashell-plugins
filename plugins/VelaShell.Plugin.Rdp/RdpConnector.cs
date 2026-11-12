@@ -61,6 +61,13 @@ internal static class RdpConnector
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
+            // A redirection that ended the previous session is followed by this one connection only: should the target
+            // be unreachable, later attempts go back to the configured server, which (a broker) routes them again.
+            if (Interlocked.Exchange(ref settings.PendingRedirection, null) is { } redirection)
+            {
+                return await RdpManagedSession.ConnectRedirectedAsync(options, redirection, linked.Token).ConfigureAwait(false);
+            }
+
             return await RdpManagedSession.ConnectAsyncWithCookie(options, settings.AutoReconnectCookie, linked.Token).ConfigureAwait(false);
         }
         catch (RdpCertificateRejectedException ex)
@@ -163,7 +170,9 @@ internal static class RdpConnector
         using var certificate = X509Certificate2.CreateFromPem(Encoding.UTF8.GetString(ex.Pem));
         // A pinned certificate that no longer matches is offered again, but says so: Windows renews self-signed RDP
         // certificates, and the user must be able to tell that from a first-time approval before trusting it.
-        string reason = ex.PinMismatch ? loc["CertificateChanged"] : loc["Certificate"];
+        string reason = ex.PinMismatch ? loc["CertificateChanged"]
+            : ex.RevocationUnknown ? loc["CertificateRevocationUnknown"]
+            : loc["Certificate"];
         return new ProtocolCertificateTrustException(reason, certificate.Subject, certificate.Issuer,
             certificate.NotAfter, certificate.GetCertHashString(HashAlgorithmName.SHA256), reason);
     }

@@ -197,8 +197,9 @@ public sealed class SmartCardDeviceTests
         catch (SmartCardException ex) when (ex.Code is SmartCardException.NoService or 0x8010001E)
         {
             TestContext.WriteLine($"System PC/SC entrypoint reached; service unavailable: 0x{ex.Code:X8}");
-            try { using var device = new SmartCardDevice(); Assert.Fail("Opt-in should fail explicitly when PC/SC is unavailable."); }
-            catch (InvalidOperationException) { }
+            // Without a PC/SC service the device is skipped with a reason; the connection goes ahead without it.
+            Assert.IsNull(SmartCardDevice.TryCreate(out string? reason));
+            Assert.IsNotNull(reason);
             return;
         }
         catch (DllNotFoundException) { TestContext.WriteLine("System PC/SC library is not installed."); return; }

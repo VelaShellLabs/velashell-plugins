@@ -60,6 +60,11 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
                     "connected with TLS 1.2 instead, and later connections to this server in this session start with TLS 1.2.");
             }
 
+            if (session is RdpManagedSession { SmartCardUnavailable: { } smartCardReason })
+            {
+                _context.Log.Warn($"RDP {request.Host}:{request.Port}: smart-card redirection is not available ({smartCardReason}); connected without it.");
+            }
+
             if (session is RdpManagedSession { RedirectedTo: { } redirectedTo })
             {
                 _context.Log.Info($"RDP {request.Host}:{request.Port}: the connection broker redirected the session to {redirectedTo}.");

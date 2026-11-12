@@ -16,6 +16,9 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     int ColorDepth = RdpSettings.DefaultColorDepth)
 {
     internal AutoReconnectCookie? AutoReconnectCookie { get; set; }
+
+    /// <summary>A redirection that ended the session; the next connection follows it once (mid-session, like mstsc).</summary>
+    internal RdpServerRedirectionException? PendingRedirection;
     internal IReadOnlyList<PortMapping> Ports { get; init; } = [];
     internal IReadOnlyList<PrinterMapping> Printers { get; init; } = [];
     internal RdpCameraDevice? Camera { get; init; }

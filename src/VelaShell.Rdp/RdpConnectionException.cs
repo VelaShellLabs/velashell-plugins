@@ -180,8 +180,9 @@ public sealed class RdpAuthenticationException : Exception
 /// <summary>
 /// The server sent a Server Redirection PDU that could not be followed. Redirections received while connecting (an RD
 /// Connection Broker assigning a session host) are followed automatically; this surfaces when that is impossible —
-/// another host behind an SSH tunnel, a redirection that would change nothing, too many redirections — or when a
-/// redirection arrives during an established session.
+/// another host behind an SSH tunnel, a redirection that would change nothing, too many redirections — and, through
+/// <see cref="RdpManagedSession.Disconnected" />, when a redirection ends an established session; pass it to
+/// <see cref="RdpManagedSession.ConnectRedirectedAsync" /> to follow it.
 /// </summary>
 public sealed class RdpServerRedirectionException : Exception
 {

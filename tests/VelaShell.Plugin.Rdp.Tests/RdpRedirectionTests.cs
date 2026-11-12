@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
+using VelaShell.PluginSdk.Protocols;
+using VelaShell.PluginSdk.Testing;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Mcs;
 using VelaShell.Rdp.Pdu;
@@ -148,5 +150,75 @@ public sealed class RdpRedirectionTests
         // The same server again without a routing token would only repeat itself.
         ServerRedirection nothing = Parse(RedirectionPacket(1, RedirectionFlags.TargetFqdn, fqdn: "BROKER.example"));
         Assert.IsNull(RdpManagedSession.Redirect(Options(), nothing));
+    }
+
+    [TestMethod]
+    public async Task ARedirectionThatCannotBeFollowedMidSessionIsRethrown()
+    {
+        ServerRedirection elsewhere = Parse(RedirectionPacket(1, RedirectionFlags.TargetFqdn | RedirectionFlags.LoadBalanceInfo,
+            fqdn: "host7.example", loadBalance: Token));
+        var redirection = new RdpServerRedirectionException(elsewhere);
+        RdpServerRedirectionException thrown = await Assert.ThrowsAsync<RdpServerRedirectionException>(
+            () => RdpManagedSession.ConnectRedirectedAsync(Options(tunnel: true), redirection));
+        Assert.AreSame(redirection, thrown);
+    }
+
+    [TestMethod]
+    public async Task ARedirectionDuringTheSessionIsFollowedAtOnce()
+    {
+        using var context = new TestPluginContext { PluginId = "velashell.rdp" };
+        var sessions = new List<FakeRdpSession>();
+        var pending = new List<RdpServerRedirectionException?>();
+        await using var provider = new RdpWorkspaceProvider(context, new("en"), (_, settings, _, _) =>
+        {
+            var session = new FakeRdpSession();
+            lock (sessions)
+            {
+                sessions.Add(session);
+                pending.Add(Interlocked.Exchange(ref settings.PendingRedirection, null));
+            }
+            return Task.FromResult<IRdpSession>(session);
+        });
+        var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
+        // A delay this long would fail the test: following a redirection must not wait for it.
+        document.AutoReconnectDelays = [TimeSpan.FromMinutes(5)];
+
+        var redirection = new RdpServerRedirectionException(Parse(RedirectionPacket(7, RedirectionFlags.TargetFqdn | RedirectionFlags.LoadBalanceInfo,
+            fqdn: "host7.example", loadBalance: Token)));
+        sessions[0].Disconnect(redirection);
+        await document.AutoReconnectTask!.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.HasCount(2, sessions);
+        Assert.IsNull(pending[0]);
+        Assert.AreSame(redirection, pending[1], "the new connection follows the redirection");
+        Assert.AreEqual(ProtocolSessionState.Connected, document.Status.State);
+        Assert.Contains(e => e.Message.Contains("redirected the session to host7.example"), context.CollectingLog.Entries);
+    }
+
+    [TestMethod]
+    public async Task RedirectionsThatKeepComingStopFollowing()
+    {
+        using var context = new TestPluginContext { PluginId = "velashell.rdp" };
+        var sessions = new List<FakeRdpSession>();
+        await using var provider = new RdpWorkspaceProvider(context, new("en"), (_, _, _, _) =>
+        {
+            var session = new FakeRdpSession();
+            lock (sessions) { sessions.Add(session); }
+            return Task.FromResult<IRdpSession>(session);
+        });
+        var document = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
+        var redirection = new RdpServerRedirectionException(Parse(RedirectionPacket(7, RedirectionFlags.TargetFqdn | RedirectionFlags.LoadBalanceInfo,
+            fqdn: "host7.example", loadBalance: Token)));
+        for (int i = 0; i < RdpManagedSession.MaxRedirections; i++)
+        {
+            sessions[^1].Disconnect(redirection);
+            await document.AutoReconnectTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        Task? followed = document.AutoReconnectTask;
+        sessions[^1].Disconnect(redirection);
+        Assert.AreSame(followed, document.AutoReconnectTask, "a server that only ever redirects is not followed forever");
+        Assert.HasCount(RdpManagedSession.MaxRedirections + 1, sessions);
+        Assert.AreEqual(ProtocolSessionState.Faulted, document.Status.State);
     }
 }

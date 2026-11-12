@@ -170,6 +170,23 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     internal static Task<RdpManagedSession> ConnectAsyncWithCookie(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct = default) =>
         ConnectCoreAsync(options, cookie, ct);
 
+    /// <summary>
+    /// Follows a Server Redirection PDU that ended an established session (reported through <see cref="Disconnected" />
+    /// as <see cref="RdpServerRedirectionException" />), the way mstsc does: <paramref name="options" /> are those the
+    /// ended session was connected with, and the new connection goes to the redirection's target with its routing token
+    /// and session id, validating the target's certificate in full. Throws <paramref name="redirection" /> again when it
+    /// cannot be followed (another host behind an SSH tunnel, or a redirection that would change nothing).
+    /// </summary>
+    public static Task<RdpManagedSession> ConnectRedirectedAsync(RdpClientOptions options, RdpServerRedirectionException redirection,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(redirection);
+        return Redirect(options, redirection.Redirection) is { } next
+            ? ConnectCoreAsync(next, null, ct, followed: 1)
+            : Task.FromException<RdpManagedSession>(redirection);
+    }
+
     /// <summary>Server Redirection PDUs followed before giving up (a broker normally redirects once).</summary>
     internal const int MaxRedirections = 3;
 
@@ -180,10 +197,11 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     /// arrives over the already validated TLS channel; the target's certificate is validated in full on the new
     /// connection, and the user's own credentials are used.
     /// </summary>
-    private static async Task<RdpManagedSession> ConnectCoreAsync(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct)
+    private static async Task<RdpManagedSession> ConnectCoreAsync(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct,
+        int followed = 0)
     {
         ArgumentNullException.ThrowIfNull(options);
-        for (int redirections = 0; ; redirections++)
+        for (int redirections = followed; ; redirections++)
         {
             try
             {
@@ -546,13 +564,30 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         _cliprdrWorker = DrainCliprdrAsync();
     }
 
+    /// <summary>
+    /// Why smart-card redirection was requested but not offered to the server (no local PC/SC service), or
+    /// <see langword="null" />. The session itself is connected without it.
+    /// </summary>
+    public string? SmartCardUnavailable { get; private set; }
+
     private void EnableDrives(IReadOnlyList<DriveMapping> mappings, IReadOnlyList<PortMapping> ports,
         IReadOnlyList<PrinterMapping> printers, bool smartCards)
     {
         var devices = new List<IRdpdrDevice>();
         try
         {
-            if (smartCards) { devices.Add(new SmartCardDevice()); }
+            if (smartCards)
+            {
+                if (SmartCardDevice.TryCreate(out string? unavailable) is { } smartCard)
+                {
+                    devices.Add(smartCard);
+                }
+                else
+                {
+                    SmartCardUnavailable = unavailable;
+                    LogDrive($"smart-card redirection skipped: {unavailable}");
+                }
+            }
             devices.AddRange(ports.Select(p => (IRdpdrDevice)new PortDevice(p)));
             devices.AddRange(printers.Select((p, i) => (IRdpdrDevice)new PrinterDevice(p, i + 1)));
             _rdpdrQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
