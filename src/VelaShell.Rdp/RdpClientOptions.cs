@@ -121,6 +121,12 @@ public sealed record RdpClientOptions
     /// <summary>Host name used for certificate validation; defaults to <see cref="Host"/> (set this when tunnelling).</summary>
     public string? CertificateHost { get; init; }
 
+    /// <summary>Load-balance info from a Server Redirection PDU, sent back as the X.224 routing token.</summary>
+    internal byte[]? RoutingToken { get; init; }
+
+    /// <summary>The session the broker redirected to, sent in the client cluster data.</summary>
+    internal uint? RedirectedSessionId { get; init; }
+
     /// <summary>Enables the bidirectional clipboard channel (cliprdr).</summary>
     public bool Clipboard { get; init; }
 

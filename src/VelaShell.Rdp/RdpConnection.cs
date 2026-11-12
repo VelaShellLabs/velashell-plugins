@@ -19,7 +19,8 @@ internal sealed record RdpConnectOptions(
     RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false,
     bool GraphicsPipeline = false, RemoteAppOptions? RemoteApp = null,
     RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0, AutoReconnectCookie? ReconnectCookie = null,
-    System.Security.Authentication.SslProtocols TlsProtocols = RdpTls.DefaultProtocols)
+    System.Security.Authentication.SslProtocols TlsProtocols = RdpTls.DefaultProtocols,
+    byte[]? RoutingToken = null, uint? RedirectedSessionId = null)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -133,7 +134,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         SecurityProtocol requested = _options.Security == RdpSecurity.Tls
             ? SecurityProtocol.Ssl
             : SecurityProtocol.Ssl | SecurityProtocol.Hybrid;
-        await _transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(_options.Username, requested), ct).ConfigureAwait(false);
+        await _transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(_options.Username, requested, _options.RoutingToken), ct).ConfigureAwait(false);
         (SecurityProtocol selected, byte negotiationFlags) = await _transport.ReadConnectionConfirmAsync(ct).ConfigureAwait(false);
         bool nla = selected.HasFlag(SecurityProtocol.Hybrid) || selected.HasFlag(SecurityProtocol.HybridEx);
         if (!nla && _options.Security == RdpSecurity.Nla)
@@ -164,7 +165,8 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             && _options.Channels.Any(c => c.Name == "drdynvc");
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
             (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor,
-            extended && (_options.AdaptiveNetwork || _udpAdvertised), _udpAdvertised, _options.AdaptiveNetwork, _options.GraphicsPipeline);
+            extended && (_options.AdaptiveNetwork || _udpAdvertised), _udpAdvertised, _options.AdaptiveNetwork, _options.GraphicsPipeline,
+            _options.RedirectedSessionId);
         _mcs = new McsLayer(_transport);
         await _mcs.ConnectAsync(gcc, _options.Channels, ct).ConfigureAwait(false);
         _ioChannel = _mcs.Server.IoChannelId;

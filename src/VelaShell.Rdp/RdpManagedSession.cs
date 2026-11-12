@@ -170,9 +170,76 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
     internal static Task<RdpManagedSession> ConnectAsyncWithCookie(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct = default) =>
         ConnectCoreAsync(options, cookie, ct);
 
+    /// <summary>Server Redirection PDUs followed before giving up (a broker normally redirects once).</summary>
+    internal const int MaxRedirections = 3;
+
+    /// <summary>
+    /// Follows Server Redirection PDUs received while connecting (MS-RDPBCGR 3.1.5.2.1): an RD Connection Broker
+    /// answers the first connection with the session host to use and a routing token. The connection is then made
+    /// again to that target, with the token in the X.224 request and the session id in the cluster data. The PDU
+    /// arrives over the already validated TLS channel; the target's certificate is validated in full on the new
+    /// connection, and the user's own credentials are used.
+    /// </summary>
     private static async Task<RdpManagedSession> ConnectCoreAsync(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(options);
+        for (int redirections = 0; ; redirections++)
+        {
+            try
+            {
+                RdpManagedSession session = await ConnectSecurityAsync(options, cookie, ct).ConfigureAwait(false);
+                session.RedirectedTo = redirections == 0 ? null : options.CertificateHost ?? options.Host;
+                return session;
+            }
+            catch (RdpServerRedirectionException redirect) when (redirections < MaxRedirections && Redirect(options, redirect.Redirection) is { } next)
+            {
+                options = next;
+                cookie = null;   // the auto-reconnect cookie belongs to the session on the previous server
+            }
+        }
+    }
+
+    /// <summary>The host this session was redirected to by a connection broker, or <see langword="null" />.</summary>
+    public string? RedirectedTo { get; private set; }
+
+    /// <summary>
+    /// The options for following <paramref name="redirection" />, or <see langword="null" /> when it cannot be followed
+    /// (the redirection exception then surfaces). The target is TargetFqdn, else TargetNetAddress, else the first of
+    /// TargetNetAddresses; with NoRedirect, or no target, the same server is asked again with the routing token. A
+    /// certificate pin belongs to one host, so it is kept only when the host stays the same. Through an SSH tunnel only
+    /// the same server is reachable.
+    /// </summary>
+    internal static RdpClientOptions? Redirect(RdpClientOptions options, Pdu.ServerRedirection redirection)
+    {
+        string current = string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost;
+        string? target = (redirection.Flags & Pdu.RedirectionFlags.NoRedirect) != 0 ? null
+            : redirection.TargetFqdn ?? redirection.TargetNetAddress ?? redirection.TargetNetAddresses.FirstOrDefault();
+        bool sameHost = string.IsNullOrWhiteSpace(target) || target.Equals(current, StringComparison.OrdinalIgnoreCase);
+        if (sameHost && redirection.LoadBalanceInfo is not { Length: > 0 })
+        {
+            return null;   // nothing would change: connecting again would only loop
+        }
+
+        RdpClientOptions next = options with
+        {
+            RoutingToken = redirection.LoadBalanceInfo,
+            RedirectedSessionId = redirection.SessionId
+        };
+        if (sameHost)
+        {
+            return next;
+        }
+
+        if (options.TcpTunnel && options.Gateway is null)
+        {
+            return null;   // the tunnel leads to the original server only
+        }
+
+        return next with { Host = target!, CertificateHost = target, CertificatePin = null };
+    }
+
+    private static async Task<RdpManagedSession> ConnectSecurityAsync(RdpClientOptions options, AutoReconnectCookie? cookie, CancellationToken ct)
+    {
         if (options.AudioInput is { } audioInput)
         {
             audioInput.Validate();
@@ -356,7 +423,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
                 string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
                 options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
                 options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null,
-                options.RemoteApp, options.Gateway, GatewayRedirections(options), cookie, tlsProtocols);
+                options.RemoteApp, options.Gateway, GatewayRedirections(options), cookie, tlsProtocols,
+                options.RoutingToken, options.RedirectedSessionId);
             session = new RdpManagedSession(new RdpConnection(connectOptions))
             {
                 _driveLog = options.DriveRedirectionLog,
@@ -406,7 +474,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             await session.DisposeAsync().ConfigureAwait(false);
             // Cancellation, certificate trust and rejected credentials each mean something specific to
             // the caller; everything else gets the failing stage and a readable cause chain.
-            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException or RdpNlaUnavailableException)
+            if (ex is OperationCanceledException or RdpCertificateRejectedException or RdpAuthenticationException or RdpNlaUnavailableException
+                or RdpServerRedirectionException)
             {
                 throw;
             }

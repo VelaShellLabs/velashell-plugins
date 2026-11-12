@@ -32,7 +32,8 @@ internal readonly record struct ServerRedirection(
     int TsvUrlLength,
     int RedirectionGuidLength,
     bool HasPasswordOrCookie,
-    bool HasTargetCertificate);
+    bool HasTargetCertificate,
+    byte[]? LoadBalanceInfo = null);
 
 internal static class ServerRedirectionParser
 {
@@ -70,7 +71,12 @@ internal static class ServerRedirectionParser
         bool hasTargetCertificate = false;
 
         if ((flags & RedirectionFlags.TargetNetAddress) != 0) { targetNetAddress = ReadUnicodeField(ref body, 80); }
-        if ((flags & RedirectionFlags.LoadBalanceInfo) != 0) { loadBalanceInfoLength = ReadOpaqueFieldLength(ref body); }
+        byte[]? loadBalanceInfo = null;
+        if ((flags & RedirectionFlags.LoadBalanceInfo) != 0)
+        {
+            loadBalanceInfo = ReadOpaqueField(ref body);
+            loadBalanceInfoLength = loadBalanceInfo.Length;
+        }
         if ((flags & RedirectionFlags.Username) != 0) { _ = ReadUnicodeField(ref body, 512); }
         if ((flags & RedirectionFlags.Domain) != 0) { _ = ReadUnicodeField(ref body, 52); }
         if ((flags & RedirectionFlags.Password) != 0)
@@ -110,7 +116,19 @@ internal static class ServerRedirectionParser
 
         return new ServerRedirection(sessionId, flags, targetNetAddress, targetFqdn, targetNetBiosName,
             targetNetAddresses, loadBalanceInfoLength, tsvUrlLength, redirectionGuidLength,
-            hasPasswordOrCookie, hasTargetCertificate);
+            hasPasswordOrCookie, hasTargetCertificate, loadBalanceInfo);
+    }
+
+    /// <summary>The routing token the client sends back to the broker; bounded well below the opaque-field limit.</summary>
+    private static byte[] ReadOpaqueField(ref ByteReader r)
+    {
+        int length = checked((int)ReadUInt32(ref r));
+        if (length < 0 || length > 4096 || length > r.Remaining)
+        {
+            throw new RdpProtocolException("The server redirection load-balance field is invalid.");
+        }
+
+        return r.Take(length).ToArray();
     }
 
     private static string ReadUnicodeField(ref ByteReader r, int maxBytes)

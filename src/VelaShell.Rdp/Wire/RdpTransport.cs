@@ -191,11 +191,25 @@ internal sealed class RdpTransport(Stream stream)
     // ---- X.224 connection request ----
 
     /// <summary>Builds the X.224 Connection Request carrying the RDP negotiation request.</summary>
-    internal static byte[] BuildConnectionRequest(string? cookieUser, SecurityProtocol requested)
+    internal static byte[] BuildConnectionRequest(string? cookieUser, SecurityProtocol requested, byte[]? routingToken = null)
     {
-        var w = new ByteWriter(64);
-        // Optional routing cookie, terminated with CR LF.
-        if (!string.IsNullOrEmpty(cookieUser))
+        var w = new ByteWriter(64 + (routingToken?.Length ?? 0));
+        if (routingToken is { Length: > 0 })
+        {
+            // MS-RDPBCGR 2.2.1.1: after a redirection the load-balance info goes back verbatim as the routingToken,
+            // in place of the cookie, terminated with CR LF. A CR or LF inside it would end the field early.
+            int end = routingToken.Length >= 2 && routingToken[^2] == 0x0D && routingToken[^1] == 0x0A ? routingToken.Length - 2 : routingToken.Length;
+            if (routingToken.AsSpan(0, end).IndexOfAny((byte)0x0D, (byte)0x0A) >= 0)
+            {
+                throw new RdpProtocolException("The server's load-balance info cannot be sent as a routing token.");
+            }
+
+            w.Bytes(routingToken.AsSpan(0, end));
+            w.U8(0x0D);
+            w.U8(0x0A);
+        }
+        // Otherwise an optional routing cookie, terminated with CR LF.
+        else if (!string.IsNullOrEmpty(cookieUser))
         {
             // Sent before TLS, in the clear: printable ASCII only (no CR/LF that would end the cookie early,
             // no truncating casts of non-ASCII characters), and bounded.

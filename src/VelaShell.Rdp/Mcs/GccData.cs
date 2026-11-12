@@ -31,12 +31,13 @@ internal static class GccData
 
     internal static byte[] BuildClientData(int width, int height, int bpp, uint serverSelectedProtocol,
         string clientName, uint keyboardLayout, IReadOnlyList<ChannelDef> channels, int scaleFactor = 100,
-        bool messageChannel = false, bool multitransport = false, bool adaptiveNetwork = false, bool graphicsPipeline = false)
+        bool messageChannel = false, bool multitransport = false, bool adaptiveNetwork = false, bool graphicsPipeline = false,
+        uint? redirectedSessionId = null)
     {
         byte[] core = BuildCore(width, height, bpp, serverSelectedProtocol, clientName, keyboardLayout, scaleFactor, messageChannel && adaptiveNetwork, graphicsPipeline);
         byte[] security = BuildSecurity();
         byte[] net = BuildNet(channels);
-        byte[] cluster = BuildCluster(serverSelectedProtocol);
+        byte[] cluster = BuildCluster(serverSelectedProtocol, redirectedSessionId);
 
         var blocks = new ByteWriter(core.Length + security.Length + net.Length + cluster.Length);
         blocks.Bytes(core);
@@ -132,14 +133,15 @@ internal static class GccData
         return w.ToArray();
     }
 
-    private static byte[] BuildCluster(uint serverSelectedProtocol)
+    internal static byte[] BuildCluster(uint serverSelectedProtocol, uint? redirectedSessionId = null)
     {
         var w = new ByteWriter(16);
         w.U16LE(CsCluster);
         w.U16LE(12);
-        // REDIRECTION_SUPPORTED | redirectionVersion 4 (<<2)
-        w.U32LE(0x0000000D);
-        w.U32LE(0);                  // RedirectedSessionID
+        // REDIRECTION_SUPPORTED | REDIRECTION_VERSION4 (<<2), plus REDIRECTED_SESSIONID_FIELD_VALID when following a
+        // Server Redirection PDU, so the target attaches the user to the session the broker chose (MS-RDPBCGR 2.2.1.3.5).
+        w.U32LE(redirectedSessionId is null ? 0x0000000Du : 0x0000000Fu);
+        w.U32LE(redirectedSessionId ?? 0);   // RedirectedSessionID
         _ = serverSelectedProtocol;
         return w.ToArray();
     }

@@ -181,8 +181,10 @@ public sealed class RdpAuthenticationException : Exception
 }
 
 /// <summary>
-/// The server sent a redirection PDU. The metadata is parsed and surfaced, but the client does not follow it because
-/// doing so requires a new target connection with repeated certificate, gateway and session policy validation.
+/// The server sent a Server Redirection PDU that could not be followed. Redirections received while connecting (an RD
+/// Connection Broker assigning a session host) are followed automatically; this surfaces when that is impossible —
+/// another host behind an SSH tunnel, a redirection that would change nothing, too many redirections — or when a
+/// redirection arrives during an established session.
 /// </summary>
 public sealed class RdpServerRedirectionException : Exception
 {
@@ -200,7 +202,11 @@ public sealed class RdpServerRedirectionException : Exception
         RedirectionGuidLength = redirection.RedirectionGuidLength;
         HasPasswordOrCookie = redirection.HasPasswordOrCookie;
         HasTargetCertificate = redirection.HasTargetCertificate;
+        Redirection = redirection;
     }
+
+    /// <summary>The parsed PDU, including the load-balance info the session sends back on the redirected connection.</summary>
+    internal Pdu.ServerRedirection Redirection { get; }
 
     /// <summary>The redirected session identifier.</summary>
     public uint SessionId { get; }
@@ -239,7 +245,7 @@ public sealed class RdpServerRedirectionException : Exception
     {
         string target = redirection.TargetFqdn ?? redirection.TargetNetAddress ?? redirection.TargetNetBiosName
             ?? (redirection.TargetNetAddresses.Count == 0 ? "unspecified target" : "target address list");
-        return $"The RDP server requested redirection to {target} (session 0x{redirection.SessionId:X8}, flags 0x{redirection.Flags:X8}); automatic redirection is unavailable.";
+        return $"The RDP server requested redirection to {target} (session 0x{redirection.SessionId:X8}, flags 0x{redirection.Flags:X8}); it could not be followed (another host through an SSH tunnel, a repeated redirection, or a redirection during an established session).";
     }
 }
 
