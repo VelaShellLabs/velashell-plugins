@@ -377,6 +377,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             string metrics = FormatMetrics(progress, loc);
             if (metrics.Length > 0) { lines.Add(metrics); }
             if (progress.Error is { } error) { lines.Add(error); }
+            else if (progress.State == "Unsupported") { lines.Add(loc["TransferUnsupportedDetail"]); }
+            else if (progress.State == "TimedOut") { lines.Add(loc["TransferTimedOutDetail"]); }
             else if (progress.State is "Sent" or "Delivered") { lines.Add(loc["TransferDeliveryDetail"]); }
 
             TopLevel? topLevel = TopLevel.GetTopLevel(anchor);

@@ -68,6 +68,8 @@ internal sealed class Loc(string locale)
         ["TransferFileName"] = ["File name", "文件名", "檔案名", "ファイル名", "파일 이름"],
         ["TransferCancelled"] = ["Cancelled", "已取消", "已取消", "キャンセル済み", "취소됨"],
         ["TransferFailed"] = ["Failed", "失败", "失敗", "失敗", "실패"],
+        ["TransferUnsupportedDetail"] = ["Pasting remote files needs Windows Explorer's delayed file transfer, which this platform does not have. Text and images still synchronize.", "粘贴远端文件需要 Windows 资源管理器的延迟文件传输,本平台没有。文本和图像仍会同步。", "貼上遠端檔案需要 Windows 檔案總管的延遲檔案傳輸,本平台沒有。文字與影像仍會同步。", "リモートのファイルを貼り付けるには Windows エクスプローラーの遅延ファイル転送が必要ですが、このプラットフォームにはありません。テキストと画像は引き続き同期されます。", "원격 파일을 붙여넣으려면 Windows 탐색기의 지연 파일 전송이 필요하지만 이 플랫폼에는 없습니다. 텍스트와 이미지는 계속 동기화됩니다."],
+        ["TransferTimedOutDetail"] = ["The remote side stopped requesting file data, or the files were not pasted in time. Copy them again to retry.", "远端停止请求文件数据,或文件没有及时粘贴。请重新复制后再试。", "遠端停止要求檔案資料,或檔案沒有及時貼上。請重新複製後再試。", "リモート側がファイル データの要求を停止したか、時間内に貼り付けられませんでした。もう一度コピーしてやり直してください。", "원격 측이 파일 데이터 요청을 중단했거나 제시간에 붙여넣지 않았습니다. 다시 복사한 후 시도하세요."],
         ["TransferTimedOut"] = ["Timed out", "已超时", "已逾時", "タイムアウト", "시간 초과"],
         ["TransferCancel"] = ["Cancel", "取消", "取消", "キャンセル", "취소"],
         ["Host"] = ["Server address", "服务器地址", "伺服器位址", "サーバーアドレス", "서버 주소"],

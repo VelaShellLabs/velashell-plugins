@@ -382,13 +382,17 @@ public sealed class RdpClipboardTests
         var window = new Window { Content = new Border() };
         window.Show();
         await window.Clipboard!.SetTextAsync("local");
-        var transport = new ClipboardTransport { RemoteFiles = [new("data", false, 10)], FileData = new byte[10] };
+        var transport = new ClipboardTransport { RemoteFiles = [new("data", false, 10)], FileData = new byte[10], SupportsClipboardLock = true };
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => null);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
         await Until(() => bridge.DownloadProgress?.State == "Unsupported");
         Assert.IsEmpty(transport.FileRequests);
+        // Nothing is locked or fetched only to be discarded, and the reason is left to the localized view text.
+        Assert.IsEmpty(transport.Locks);
+        Assert.AreEqual(0, transport.FormatRequests);
+        Assert.IsNull(bridge.DownloadProgress!.Error);
         Assert.AreEqual("local", await window.Clipboard.TryGetTextAsync());
         Assert.IsFalse(Directory.Exists(Path.Combine(context.DataDirectory, "rdp-clipboard")));
         window.Close();

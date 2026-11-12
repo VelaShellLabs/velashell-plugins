@@ -412,7 +412,14 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
             }).ConfigureAwait(false);
             if (fileFormat != 0)
             {
-                if (includeFiles && generation != _receivedFileGeneration)
+                if (includeFiles && generation != _receivedFileGeneration && _virtualClipboard is null)
+                {
+                    // No delayed file provider on this platform: say so without first locking the remote clipboard
+                    // and fetching every descriptor only to discard them.
+                    _download.Finish("Unsupported", force: true);
+                    _receivedFileGeneration = generation;
+                }
+                else if (includeFiles && generation != _receivedFileGeneration)
                 {
                     await WaitForFormatDrainAsync(ct).ConfigureAwait(false);
                     uint? version = null;
@@ -598,7 +605,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
         CheckReceive(generation, ct);
         if (_virtualClipboard is null)
         {
-            _download.Finish("Unsupported", "Remote virtual file paste requires Windows Explorer; this platform has no supported delayed file provider.", force: true);
+            _download.Finish("Unsupported", force: true);
             _receivedFileGeneration = generation;
             releaseVersion();
             return;
@@ -914,7 +921,7 @@ internal sealed class RdpClipboardBridge : IAsyncDisposable
 
                 if (_localProgress.IsStalled(LocalTransferStallTimeout, LocalSourceIdleRelease) && !IsLocalLocked(_localFiles))
                 {
-                    _localProgress.Finish("TimedOut", "The remote clipboard stopped requesting file data.");
+                    _localProgress.Finish("TimedOut");
                     lock (_requestGate) { _uploadCancellation?.Cancel(); }
                 }
                 await _localGate.WaitAsync(_stopToken).ConfigureAwait(false);
