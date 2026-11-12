@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Avalonia.Threading;
 using MongoDB.Bson;
 using VelaShell.Plugin.Mongo.Bson;
@@ -241,7 +242,7 @@ internal sealed partial class QueryTabViewModel
         }
         int caret = Math.Clamp(CaretOffset, 0, _text.Length);
         string before = _text[..caret];
-        bool afterMember = System.Text.RegularExpressions.Regex.IsMatch(before, @"db\.[\w$.]+\.\s*$|\)\.\s*$");
+        bool afterMember = AfterMemberPattern().IsMatch(before);
         string text = snippet.Text;
         if (!afterMember)
         {
@@ -345,11 +346,15 @@ internal sealed partial class QueryTabViewModel
     }
 
     /// <summary>code lens 那一行该出现哪几个按钮。</summary>
-    internal (bool Explainable, bool Pipeline) LensShape(ShellStatement statement)
+    internal static (bool Explainable, bool Pipeline) LensShape(ShellStatement statement)
     {
         (string? collection, string? method, _) = ShellCompletion.Head(statement.Text);
         bool explainable = collection is not null && method is "find" or "findOne" or "aggregate" or "countDocuments" or "distinct"
             or "updateOne" or "updateMany" or "deleteOne" or "deleteMany";
         return (explainable, method == "aggregate");
     }
+
+    /// <summary>光标前紧挨着一个成员访问点(<c>db.orders.</c>、<c>find().</c>)。</summary>
+    [GeneratedRegex(@"db\.[\w$.]+\.\s*$|\)\.\s*$")]
+    private static partial Regex AfterMemberPattern();
 }

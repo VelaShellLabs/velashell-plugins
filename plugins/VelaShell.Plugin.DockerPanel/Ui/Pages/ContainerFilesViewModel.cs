@@ -405,7 +405,7 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     public RelayCommand UploadCommand => field ??= new(_ => UploadAsync());
 
     /// <summary>能不能弹本地文件对话框(宿主没给顶层窗口时不能)。</summary>
-    public bool CanPickFiles => FilePicker.IsAvailable;
+    public static bool CanPickFiles => FilePicker.IsAvailable;
 
     /// <summary>
     /// 取一份到本地。

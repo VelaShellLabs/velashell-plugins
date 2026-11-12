@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using VelaShell.Plugin.Mongo.Core;
 using VelaShell.Plugin.Mongo.Shell;
 
@@ -51,7 +52,7 @@ with(StringComparer.Ordinal),         "insertOne", "insertMany", "insert", "bulk
     public string TargetText => Loc.Format("Query_TargetHint", ConnectionName, _database);
 
     /// <summary>切换连接(连接下拉的菜单项)。</summary>
-    public AsyncCommand<ConnectionEntry> SwitchConnectionCommand { get; private set; } = null!;
+    public AsyncCommand<ConnectionEntry> SwitchConnectionCommand { get; private set; }
 
     /// <summary>
     /// 连接下拉的候选:插件里全部已保存的连接(连着的、没连的都列,Navicat 也是这样)。
@@ -63,6 +64,7 @@ with(StringComparer.Ordinal),         "insertOne", "insertMany", "insert", "bulk
     /// <summary>是不是这个标签所属的连接(菜单里打勾)。</summary>
     internal bool IsCurrentConnection(ConnectionEntry entry) => ReferenceEquals((Workspace as MongoSession)?.Entry, entry);
 
+    [MemberNotNull(nameof(SwitchConnectionCommand))]
     private void InitializeTarget() =>
         SwitchConnectionCommand = new AsyncCommand<ConnectionEntry>(SwitchConnectionAsync);
 
@@ -106,7 +108,7 @@ with(StringComparer.Ordinal),         "insertOne", "insertMany", "insert", "bulk
         }
         MongoSession next = target.Session;
         bool keepDatabase = next.Databases.Contains(_database, StringComparer.Ordinal) || _database is "admin" or "config" or "local";
-        string database = keepDatabase ? _database : next.DefaultDatabase() ?? next.Databases.FirstOrDefault() ?? "test";
+        string database = keepDatabase ? _database : next.DefaultDatabase() ?? (next.Databases is [var firstDatabase, ..] ? firstDatabase : null) ?? "test";
         var replacement = new QueryTabViewModel(next, database, _text, run: false, next.NextQueryNumber());
         replacement.CarryOver(this);
         shell.ReplaceTab(this, replacement);

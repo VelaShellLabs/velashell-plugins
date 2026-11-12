@@ -157,7 +157,7 @@ public sealed class NetworksPageViewModel : PageViewModel
     public RelayCommand DisconnectAllCommand => field ??= new(_ => DisconnectAllAsync());
 
     /// <summary>能不能弹本地文件对话框。</summary>
-    public bool CanPickFiles => FilePicker.IsAvailable;
+    public static bool CanPickFiles => FilePicker.IsAvailable;
 
     private async Task LoadRawAsync()
     {

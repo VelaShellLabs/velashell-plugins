@@ -1581,7 +1581,7 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     }
 
     /// <summary>选了一个补全:改名;刚加的空字段顺手换成抽样里的主导类型。</summary>
-    internal void AcceptSuggestion(DocumentEditorRow row, DocumentEditorSuggestion suggestion)
+    internal static void AcceptSuggestion(DocumentEditorRow row, DocumentEditorSuggestion suggestion)
     {
         bool fresh = row.OriginalValue is null && row.Kind == BsonKind.String && row.Text.Length == 0;
         row.Name = suggestion.Name;

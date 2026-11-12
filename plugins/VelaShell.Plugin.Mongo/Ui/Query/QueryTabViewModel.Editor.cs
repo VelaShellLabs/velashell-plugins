@@ -144,7 +144,7 @@ internal sealed partial class QueryTabViewModel
                     items.Add(new CompletionItem
                     {
                         Label = info.Name,
-                        InsertText = System.Text.RegularExpressions.Regex.IsMatch(info.Name, "^[A-Za-z_$][A-Za-z0-9_$]*$") ? info.Name : $"getCollection({BsonText.Quote(info.Name)})",
+                        InsertText = BsonText.IsIdentifier(info.Name) ? info.Name : $"getCollection({BsonText.Quote(info.Name)})",
                         IconKey = info.Kind == CollectionKind.View ? "Mongo.eye" : "Mongo.table-2",
                         IconToken = "VelaInfo",
                         Category = info.Kind == CollectionKind.View ? Loc["Query_CatView"] : Loc["Query_CatCollection"]
@@ -413,7 +413,7 @@ internal sealed partial class QueryTabViewModel
         }
     }
 
-    private IEnumerable<CompletionItem> ValueSnippets(bool operators)
+    private List<CompletionItem> ValueSnippets(bool operators)
     {
         var items = new List<CompletionItem>();
         if (operators)
@@ -481,7 +481,7 @@ internal sealed partial class QueryTabViewModel
         Syntax = syntax
     };
 
-    private CompletionItem Constant(string label, string category) => new()
+    private static CompletionItem Constant(string label, string category) => new()
     {
         Label = label,
         IconKey = "Mongo.variable",

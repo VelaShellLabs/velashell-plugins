@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace VelaShell.Plugin.Redis.Ui;
@@ -126,6 +127,7 @@ public sealed partial class RedisWorkspaceViewModel
         BatchDeleteCommand.RaiseCanExecuteChanged();
     }
 
+    [MemberNotNull(nameof(ToggleMultiSelectCommand), nameof(ToggleCheckedCommand), nameof(CopyKeyNamesCommand), nameof(BatchDeleteCommand))]
     private void InitializeBatch()
     {
         ToggleMultiSelectCommand = new(() =>

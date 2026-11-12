@@ -7,6 +7,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 public sealed class RdpVirtualFileTests
 {
     [TestMethod]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [OSCondition(OperatingSystems.Windows)]
     public void OleDescriptorsAndStreamAcquisitionDoNotReadContent()
     {
@@ -52,12 +53,12 @@ public sealed class RdpVirtualFileTests
         {
             if (descriptor.unionmember != 0)
             {
-                ReleaseStgMedium(ref descriptor);
+                WindowsVirtualFileClipboard.Native.ReleaseStgMedium(ref descriptor);
             }
 
             if (stream.unionmember != 0)
             {
-                ReleaseStgMedium(ref stream);
+                WindowsVirtualFileClipboard.Native.ReleaseStgMedium(ref stream);
             }
 
             _ = Marshal.Release(unknown);
@@ -71,6 +72,7 @@ public sealed class RdpVirtualFileTests
     [DataRow("Logical Performed DropEffect", false)]
     [DataRow("Paste Succeeded", true)]
     [DataRow("TargetCLSID", true)]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [OSCondition(OperatingSystems.Windows)]
     public void NativeShellFeedbackDoesNotEndOperationOrCloseConsumerStreams(string name, bool release)
     {
@@ -126,12 +128,12 @@ public sealed class RdpVirtualFileTests
         {
             if (stream.unionmember != 0)
             {
-                ReleaseStgMedium(ref stream);
+                WindowsVirtualFileClipboard.Native.ReleaseStgMedium(ref stream);
             }
 
             if (feedback.unionmember != 0)
             {
-                ReleaseStgMedium(ref feedback);
+                WindowsVirtualFileClipboard.Native.ReleaseStgMedium(ref feedback);
             }
 
             if (capability != 0)
@@ -207,6 +209,7 @@ public sealed class RdpVirtualFileTests
     }
 
     [TestMethod]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [OSCondition(OperatingSystems.Windows)]
     public void NativeFormatProbesReturnHresultsWithoutManagedExceptionsOrTakingRejectedOwnership()
     {
@@ -215,8 +218,8 @@ public sealed class RdpVirtualFileTests
         nint unknown = Marshal.GetComInterfaceForObject(data, typeof(IVirtualFileDataObject));
         nint memory = WindowsVirtualFileClipboard.Native.GlobalAlloc(0x42, 4);
         int exceptions = 0;
-        void observed(object? _, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e) { if (e.Exception is COMException) { exceptions++; } }
-        AppDomain.CurrentDomain.FirstChanceException += observed;
+        void Observed(object? _, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e) { if (e.Exception is COMException) { exceptions++; } }
+        AppDomain.CurrentDomain.FirstChanceException += Observed;
         try
         {
             FORMATETC format = WindowsVirtualFileDataObject.Format(1, TYMED.TYMED_HGLOBAL);
@@ -231,7 +234,7 @@ public sealed class RdpVirtualFileTests
         }
         finally
         {
-            AppDomain.CurrentDomain.FirstChanceException -= observed;
+            AppDomain.CurrentDomain.FirstChanceException -= Observed;
             _ = Marshal.Release(unknown);
             _ = WindowsVirtualFileClipboard.Native.GlobalFree(memory);
         }
@@ -267,6 +270,7 @@ public sealed class RdpVirtualFileTests
     }
 
     [TestMethod]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [OSCondition(OperatingSystems.Windows)]
     public async Task ClipboardBusyRetriesAreBoundedAndCancellationStopsThem()
@@ -322,6 +326,4 @@ public sealed class RdpVirtualFileTests
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int SetData(nint self, ref FORMATETC format, ref STGMEDIUM medium, int release);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int Read(nint self, nint buffer, int count, nint fetched);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int Seek(nint self, long move, int origin, nint position);
-    // STGMEDIUM.pUnkForRelease requires runtime COM object marshalling, unsupported by LibraryImport.
-    [DllImport("ole32.dll")] private static extern void ReleaseStgMedium(ref STGMEDIUM medium);
 }

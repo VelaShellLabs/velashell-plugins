@@ -403,8 +403,8 @@ internal sealed partial class RedisConnection
                 }
                 RedisKeyName key = page.Keys[i];
                 string prefix = PrefixOf(key.Text, prefixSegments);
-                (long Keys, long Bytes) = byPrefix.GetValueOrDefault(prefix);
-                byPrefix[prefix] = (Keys + 1, Bytes + bytes);
+                (long prefixKeys, long prefixBytes) = byPrefix.GetValueOrDefault(prefix);
+                byPrefix[prefix] = (prefixKeys + 1, prefixBytes + bytes);
                 topKeys.Add(new(key.Text, 1, bytes));
                 sampled++;
             }
@@ -492,7 +492,7 @@ internal sealed partial class RedisConnection
             : -1;
     }
 
-    private static string Field(IReadOnlyDictionary<string, string> fields, params string[] names)
+    private static string Field(Dictionary<string, string> fields, params string[] names)
     {
         foreach (string name in names)
         {

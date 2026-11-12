@@ -64,7 +64,7 @@ internal sealed class AddStagedFieldDialogViewModel : DialogViewModel, IViewFact
     } = "";
 
     /// <summary>可选类型。</summary>
-    public IReadOnlyList<ValueKindChoice> Kinds => ValueKindChoice.All;
+    public static IReadOnlyList<ValueKindChoice> Kinds => ValueKindChoice.All;
 
     /// <summary>选中的类型。</summary>
     public ValueKindChoice Kind

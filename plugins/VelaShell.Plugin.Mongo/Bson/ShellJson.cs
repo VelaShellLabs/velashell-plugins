@@ -60,7 +60,7 @@ public static class ShellJson
     public static BsonValue ParseValue(string text)
     {
         string normalized = Normalize(text, out IReadOnlyList<ShellDiagnostic> diagnostics);
-        if (diagnostics.FirstOrDefault() is { } first)
+        if (diagnostics is [var first, ..])
         {
             throw new ShellJsonException(first.MessageKey + (first.Argument.Length > 0 ? ": " + first.Argument : ""), first.Offset);
         }

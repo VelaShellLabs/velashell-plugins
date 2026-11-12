@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
 using MongoDB.Bson;
@@ -260,32 +261,33 @@ internal sealed partial class DesignTabViewModel
     public Func<CompletionRequest, Task<CompletionSet?>> RuleCompletion => CompleteRuleAsync;
 
     /// <summary>选 validationLevel。</summary>
-    public RelayCommand<string> SetLevelCommand { get; private set; } = null!;
+    public RelayCommand<string> SetLevelCommand { get; private set; }
 
     /// <summary>选 validationAction。</summary>
-    public RelayCommand<string> SetActionCommand { get; private set; } = null!;
+    public RelayCommand<string> SetActionCommand { get; private set; }
 
     /// <summary>从 Schema 分析生成。</summary>
-    public AsyncCommand GenerateRuleCommand { get; private set; } = null!;
+    public AsyncCommand GenerateRuleCommand { get; private set; }
 
     /// <summary>格式化。</summary>
-    public RelayCommand FormatRuleCommand { get; private set; } = null!;
+    public RelayCommand FormatRuleCommand { get; private set; }
 
     /// <summary>恢复一个历史版本(进编辑器,不直接应用)。</summary>
-    public RelayCommand<RuleVersion> RestoreVersionCommand { get; private set; } = null!;
+    public RelayCommand<RuleVersion> RestoreVersionCommand { get; private set; }
 
     /// <summary>放弃修改。</summary>
-    public RelayCommand DiscardRuleCommand { get; private set; } = null!;
+    public RelayCommand DiscardRuleCommand { get; private set; }
 
     /// <summary>应用规则。</summary>
-    public AsyncCommand ApplyRuleCommand { get; private set; } = null!;
+    public AsyncCommand ApplyRuleCommand { get; private set; }
 
     /// <summary>重新抽样预检。</summary>
-    public AsyncCommand RefreshPrecheckCommand { get; private set; } = null!;
+    public AsyncCommand RefreshPrecheckCommand { get; private set; }
 
     /// <summary>在网格中查看某类不通过的文档。</summary>
-    public RelayCommand<FailureReasonRow> OpenFailureCommand { get; private set; } = null!;
+    public RelayCommand<FailureReasonRow> OpenFailureCommand { get; private set; }
 
+    [MemberNotNull(nameof(SetLevelCommand), nameof(SetActionCommand), nameof(GenerateRuleCommand), nameof(FormatRuleCommand), nameof(RestoreVersionCommand), nameof(DiscardRuleCommand), nameof(ApplyRuleCommand), nameof(RefreshPrecheckCommand), nameof(OpenFailureCommand))]
     private void InitializeValidation()
     {
         SetLevelCommand = new(level => RuleLevel = level);
@@ -628,7 +630,7 @@ internal sealed partial class DesignTabViewModel
     /// <summary>试写文档起手:抽样里的一份文档(去掉 <c>_id</c>,试写的是"新插入")。</summary>
     private async Task SeedTryDocAsync()
     {
-        BsonDocument? doc = Sample.FirstOrDefault();
+        BsonDocument? doc = Sample.Count > 0 ? Sample[0] : null;
         if (doc is null)
         {
             try
@@ -924,7 +926,7 @@ internal sealed partial class DesignTabViewModel
         var items = new List<CompletionItem>();
         string before = text[..start];
         bool quoted = start > 0 && text[start - 1] is '"' or '\'';
-        if (Regex.IsMatch(before, "bsonType\\s*:\\s*(\\[[^\\]]*)?[\"']?$"))
+        if (BsonTypeValuePattern().IsMatch(before))
         {
             items.AddRange(BsonTypeAliases.Select(alias => new CompletionItem
             {
@@ -1056,4 +1058,8 @@ internal sealed partial class DesignTabViewModel
         timer = t;
         t.Start();
     }
+
+    /// <summary>光标停在 <c>bsonType:</c> 的值位置(含数组形式 <c>bsonType: ["string", </c>)。</summary>
+    [GeneratedRegex("bsonType\\s*:\\s*(\\[[^\\]]*)?[\"']?$")]
+    private static partial Regex BsonTypeValuePattern();
 }

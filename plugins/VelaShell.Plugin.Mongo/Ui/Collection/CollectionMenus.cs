@@ -132,7 +132,7 @@ internal static class CollectionMenus
         menu.Open(target);
     }
 
-    private static Control Header(string label, string? hint, bool danger)
+    private static Grid Header(string label, string? hint, bool danger)
     {
         var grid = new Grid { ColumnDefinitions = [with("*,Auto")], MinWidth = 190 };
         var text = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace VelaShell.Plugin.Redis.Ui;
@@ -214,6 +215,7 @@ public sealed partial class RedisWorkspaceViewModel
     /// <summary>有说明要显示。</summary>
     public bool HasChainNotice => ChainNotice.Length > 0;
 
+    [MemberNotNull(nameof(UseCompressionCommand), nameof(UseSerializationCommand), nameof(UseJsonFormatCommand), nameof(FormatValueCommand), nameof(DownloadValueCommand))]
     private void InitializeDecode()
     {
         foreach (RedisCompression option in RedisValueCodec.Compressions)
@@ -384,7 +386,7 @@ public sealed partial class RedisWorkspaceViewModel
         RaiseChainState();
     }
 
-    private string BuildChainNotice(IReadOnlyList<string> problems)
+    private string BuildChainNotice(List<string> problems)
     {
         if (problems.Count > 0)
         {

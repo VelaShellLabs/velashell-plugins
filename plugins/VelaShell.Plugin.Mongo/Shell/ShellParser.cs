@@ -197,7 +197,7 @@ public static class ShellParser
         string? name;
         if (i < text.Length && text[i] == '(')
         {
-            IReadOnlyList<ShellArgument> args = ParseArguments(text, i, out int close);
+            List<ShellArgument> args = ParseArguments(text, i, out int close);
             name = args.Count > 0 && args[0].Value.IsString ? args[0].Value.AsString : null;
             EnsureEnd(text, close + 1);
         }
@@ -405,7 +405,7 @@ public static class ShellParser
     /// <summary>
     /// 解析从 <paramref name="open" />(左圆括号)起的实参列表。<paramref name="close" /> 返回右括号位置。
     /// </summary>
-    private static IReadOnlyList<ShellArgument> ParseArguments(string text, int open, out int close)
+    private static List<ShellArgument> ParseArguments(string text, int open, out int close)
     {
         close = ShellScript.MatchBracket(text, open);
         if (close < 0)

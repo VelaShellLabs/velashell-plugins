@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -219,10 +220,10 @@ public sealed partial class RedisWorkspaceViewModel
     public bool HasThroughput => Throughput.Count > 0;
 
     /// <summary>横轴左端刻度。数字由采样窗口算出来,不写死 —— 窗口改了刻度必须跟着改。</summary>
-    public string ThroughputAxisStart => $"−{ThroughputWindow.ToString(CultureInfo.CurrentCulture)}s";
+    public static string ThroughputAxisStart => $"−{ThroughputWindow.ToString(CultureInfo.CurrentCulture)}s";
 
     /// <summary>横轴中点刻度。</summary>
-    public string ThroughputAxisMid => $"−{(ThroughputWindow / 2).ToString(CultureInfo.CurrentCulture)}s";
+    public static string ThroughputAxisMid => $"−{(ThroughputWindow / 2).ToString(CultureInfo.CurrentCulture)}s";
 
     /// <summary>横轴右端刻度("现在")。</summary>
     public string ThroughputAxisNow => Loc["Redis_Now"];
@@ -552,6 +553,7 @@ public sealed partial class RedisWorkspaceViewModel
     public string MemorySampleSizeText => Loc.Format("Redis_MemorySampleSize",
         _connection.Settings.ScanBudget.ToString("N0", CultureInfo.CurrentCulture));
 
+    [MemberNotNull(nameof(MonitorGoSlowlogCommand), nameof(MonitorGoKeyspaceCommand), nameof(ToggleClusterMastersCommand), nameof(ToggleClusterSortCommand), nameof(CopyClusterTopologyCommand), nameof(ToggleClientsBusyCommand), nameof(TogglePubSubPauseCommand), nameof(ClearMessagesCommand), nameof(TogglePubSubAutoScrollCommand), nameof(ExportMessagesCommand), nameof(ToggleMemoryGroupingCommand))]
     private void InitializeDrawerExtras()
     {
         ToggleClusterMastersCommand = new(() =>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Avalonia.Threading;
@@ -82,6 +83,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>按列排序(点列头):降序 → 升序 → 不排。</summary>
     public AsyncCommand<CollectionColumn> SortByColumnCommand { get; private set; }
 
+    [MemberNotNull(nameof(FindCommand), nameof(ResetCommand), nameof(ClearFilterCommand), nameof(ExplainCommand), nameof(ToggleFavoriteCommand), nameof(ApplyHistoryCommand), nameof(RefreshCommand), nameof(StopCommand), nameof(FirstPageCommand), nameof(PreviousPageCommand), nameof(NextPageCommand), nameof(LastPageCommand), nameof(GoToPageCommand), nameof(SortByColumnCommand))]
     private void InitializeQueryCommands()
     {
         FindCommand = new(() => RunQueryAsync(resetPage: true));

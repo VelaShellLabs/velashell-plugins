@@ -259,7 +259,7 @@ internal sealed class MonitorTabViewModel : WorkspaceTab
     } = 3;
 
     /// <summary>两张柱状图至少分几格(满窗口的柱数;刚开始采样时柱子也保持最终宽度,靠右排)。</summary>
-    public int ChartSlots => Bars;
+    public static int ChartSlots => Bars;
 
     /// <summary>连接数柱状图。</summary>
     public IReadOnlyList<ChartSeries> ConnSeries

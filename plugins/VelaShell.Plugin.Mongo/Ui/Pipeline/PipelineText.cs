@@ -380,7 +380,7 @@ internal static class PipelineText
             return new(null, "Pipe_ErrEmptyBody", "", 0, 1);
         }
         IReadOnlyList<ShellDiagnostic> diagnostics = ShellJson.Diagnose(body);
-        if (diagnostics.FirstOrDefault() is { } first)
+        if (diagnostics is [var first, ..])
         {
             return new(null, first.MessageKey, first.Argument, first.Offset, Math.Max(1, first.Length), first.Fix);
         }

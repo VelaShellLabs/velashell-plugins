@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Bson;
@@ -12,131 +13,132 @@ namespace VelaShell.Plugin.Mongo.Ui;
 internal sealed partial class MongoWorkspaceViewModel
 {
     /// <summary>新建连接(工具栏最左的「连接」、对象树表头的 +)。</summary>
-    public RelayCommand NewConnectionCommand { get; private set; } = null!;
+    public RelayCommand NewConnectionCommand { get; private set; }
 
     /// <summary>新查询。</summary>
-    public RelayCommand NewQueryCommand { get; private set; } = null!;
+    public RelayCommand NewQueryCommand { get; private set; }
 
     /// <summary>聚合。</summary>
-    public RelayCommand AggregateCommand { get; private set; } = null!;
+    public RelayCommand AggregateCommand { get; private set; }
 
     /// <summary>集合。</summary>
-    public RelayCommand CollectionsCommand { get; private set; } = null!;
+    public RelayCommand CollectionsCommand { get; private set; }
 
     /// <summary>视图。</summary>
-    public RelayCommand ViewsCommand { get; private set; } = null!;
+    public RelayCommand ViewsCommand { get; private set; }
 
     /// <summary>索引。</summary>
-    public RelayCommand IndexesCommand { get; private set; } = null!;
+    public RelayCommand IndexesCommand { get; private set; }
 
     /// <summary>GridFS。</summary>
-    public RelayCommand GridFsCommand { get; private set; } = null!;
+    public RelayCommand GridFsCommand { get; private set; }
 
     /// <summary>用户。</summary>
-    public RelayCommand UsersCommand { get; private set; } = null!;
+    public RelayCommand UsersCommand { get; private set; }
 
     /// <summary>角色。</summary>
-    public RelayCommand RolesCommand { get; private set; } = null!;
+    public RelayCommand RolesCommand { get; private set; }
 
     /// <summary>导入。</summary>
-    public RelayCommand ImportCommand { get; private set; } = null!;
+    public RelayCommand ImportCommand { get; private set; }
 
     /// <summary>导出。</summary>
-    public RelayCommand ExportCommand { get; private set; } = null!;
+    public RelayCommand ExportCommand { get; private set; }
 
     /// <summary>转储。</summary>
-    public RelayCommand DumpCommand { get; private set; } = null!;
+    public RelayCommand DumpCommand { get; private set; }
 
     /// <summary>数据传输。</summary>
-    public RelayCommand TransferCommand { get; private set; } = null!;
+    public RelayCommand TransferCommand { get; private set; }
 
     /// <summary>服务器监控。</summary>
-    public RelayCommand MonitorCommand { get; private set; } = null!;
+    public RelayCommand MonitorCommand { get; private set; }
 
     /// <summary>慢查询。</summary>
-    public RelayCommand ProfilerCommand { get; private set; } = null!;
+    public RelayCommand ProfilerCommand { get; private set; }
 
     /// <summary>只读开关(解锁生产连接要确认)。</summary>
-    public AsyncCommand ToggleReadOnlyCommand { get; private set; } = null!;
+    public AsyncCommand ToggleReadOnlyCommand { get; private set; }
 
     /// <summary>在这一行所在的库里新建集合(「集合」分组、集合行、库行的右键)。</summary>
-    public RelayCommand<TreeNode> NewCollectionNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> NewCollectionNodeCommand { get; private set; }
 
     /// <summary>新建视图(「视图」分组、视图行、集合行的右键;从集合 / 视图上点时源集合预填成它)。</summary>
-    public RelayCommand<TreeNode> NewViewNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> NewViewNodeCommand { get; private set; }
 
     /// <summary>新建 GridFS 存储桶(「GridFS 存储桶」分组、桶行、库行的右键)。</summary>
-    public RelayCommand<TreeNode> NewBucketNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> NewBucketNodeCommand { get; private set; }
 
     /// <summary>上传文件到这个桶(桶行右键:打开桶的标签再弹文件选择框)。</summary>
-    public AsyncCommand<TreeNode> UploadFilesNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> UploadFilesNodeCommand { get; private set; }
 
     /// <summary>上传文件夹到这个桶。</summary>
-    public AsyncCommand<TreeNode> UploadFolderNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> UploadFolderNodeCommand { get; private set; }
 
     /// <summary>刷新当前连接的树。</summary>
-    public AsyncCommand RefreshTreeCommand { get; private set; } = null!;
+    public AsyncCommand RefreshTreeCommand { get; private set; }
 
     /// <summary>当前连接列不列系统库。</summary>
-    public RelayCommand ToggleSystemDatabasesCommand { get; private set; } = null!;
+    public RelayCommand ToggleSystemDatabasesCommand { get; private set; }
 
     /// <summary>收起全部库。</summary>
-    public RelayCommand CollapseAllCommand { get; private set; } = null!;
+    public RelayCommand CollapseAllCommand { get; private set; }
 
     /// <summary>点箭头。</summary>
-    public AsyncCommand<TreeNode> ToggleNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> ToggleNodeCommand { get; private set; }
 
     /// <summary>双击 / 回车。</summary>
-    public AsyncCommand<TreeNode> OpenNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> OpenNodeCommand { get; private set; }
 
     /// <summary>连接(连接行右键)。</summary>
-    public AsyncCommand<TreeNode> ConnectNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> ConnectNodeCommand { get; private set; }
 
     /// <summary>断开(连接行右键)。</summary>
-    public AsyncCommand<TreeNode> DisconnectNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> DisconnectNodeCommand { get; private set; }
 
     /// <summary>编辑连接(连接行右键)。</summary>
-    public RelayCommand<TreeNode> EditConnectionCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> EditConnectionCommand { get; private set; }
 
     /// <summary>复制一条连接(连接行右键)。</summary>
-    public RelayCommand<TreeNode> DuplicateConnectionCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> DuplicateConnectionCommand { get; private set; }
 
     /// <summary>删除连接(连接行右键)。</summary>
-    public AsyncCommand<TreeNode> DeleteConnectionCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> DeleteConnectionCommand { get; private set; }
 
     /// <summary>设计。</summary>
-    public RelayCommand<TreeNode> DesignNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> DesignNodeCommand { get; private set; }
 
     /// <summary>聚合。</summary>
-    public RelayCommand<TreeNode> PipelineNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> PipelineNodeCommand { get; private set; }
 
     /// <summary>新查询。</summary>
-    public RelayCommand<TreeNode> QueryNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> QueryNodeCommand { get; private set; }
 
     /// <summary>导出。</summary>
-    public RelayCommand<TreeNode> ExportNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> ExportNodeCommand { get; private set; }
 
     /// <summary>导入。</summary>
-    public RelayCommand<TreeNode> ImportNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> ImportNodeCommand { get; private set; }
 
     /// <summary>复制名称。</summary>
-    public AsyncCommand<TreeNode> CopyNameCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> CopyNameCommand { get; private set; }
 
     /// <summary>清空集合。</summary>
-    public AsyncCommand<TreeNode> EmptyCollectionCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> EmptyCollectionCommand { get; private set; }
 
     /// <summary>删除集合 / 视图 / GridFS 存储桶。</summary>
-    public AsyncCommand<TreeNode> DropCollectionCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> DropCollectionCommand { get; private set; }
 
     /// <summary>删除数据库。</summary>
-    public AsyncCommand<TreeNode> DropDatabaseCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> DropDatabaseCommand { get; private set; }
 
     /// <summary>刷新这一支。</summary>
-    public AsyncCommand<TreeNode> RefreshNodeCommand { get; private set; } = null!;
+    public AsyncCommand<TreeNode> RefreshNodeCommand { get; private set; }
 
     /// <summary>慢查询。</summary>
-    public RelayCommand<TreeNode> ProfilerNodeCommand { get; private set; } = null!;
+    public RelayCommand<TreeNode> ProfilerNodeCommand { get; private set; }
 
+    [MemberNotNull(nameof(NewConnectionCommand), nameof(NewQueryCommand), nameof(AggregateCommand), nameof(CollectionsCommand), nameof(ViewsCommand), nameof(IndexesCommand), nameof(GridFsCommand), nameof(UsersCommand), nameof(RolesCommand), nameof(ImportCommand), nameof(ExportCommand), nameof(DumpCommand), nameof(TransferCommand), nameof(MonitorCommand), nameof(ProfilerCommand), nameof(ToggleReadOnlyCommand), nameof(NewCollectionNodeCommand), nameof(NewViewNodeCommand), nameof(NewBucketNodeCommand), nameof(UploadFilesNodeCommand), nameof(UploadFolderNodeCommand), nameof(RefreshTreeCommand), nameof(ToggleSystemDatabasesCommand), nameof(CollapseAllCommand), nameof(ToggleNodeCommand), nameof(OpenNodeCommand), nameof(ConnectNodeCommand), nameof(DisconnectNodeCommand), nameof(EditConnectionCommand), nameof(DuplicateConnectionCommand), nameof(DeleteConnectionCommand), nameof(DesignNodeCommand), nameof(PipelineNodeCommand), nameof(QueryNodeCommand), nameof(ExportNodeCommand), nameof(ImportNodeCommand), nameof(CopyNameCommand), nameof(EmptyCollectionCommand), nameof(DropCollectionCommand), nameof(DropDatabaseCommand), nameof(RefreshNodeCommand), nameof(ProfilerNodeCommand))]
     private void InitializeCommands()
     {
         NewConnectionCommand = new(NewConnection);
@@ -159,7 +161,7 @@ internal sealed partial class MongoWorkspaceViewModel
         GridFsCommand = new(() => WithDatabase((s, db) =>
         {
             string? bucket = SelectedNode?.Owner == s.Entry ? SelectedNode?.Bucket?.Name : null;
-            bucket ??= MongoConnection.FindBuckets(db, s.CollectionsOf(db)).FirstOrDefault()?.Name;
+            bucket ??= MongoConnection.FindBuckets(db, s.CollectionsOf(db)) is [var firstBucket, ..] ? firstBucket.Name : null;
             if (bucket is null)
             {
                 s.OpenObjects(db, ObjectFilter.GridFs);
@@ -327,7 +329,7 @@ internal sealed partial class MongoWorkspaceViewModel
     }
 
     /// <summary>桶行右键的「上传文件… / 上传文件夹…」:打开(或切到)桶的标签,再走标签里同一条上传路径。</summary>
-    private async Task UploadToBucketAsync(TreeNode node, bool folder)
+    private static async Task UploadToBucketAsync(TreeNode node, bool folder)
     {
         if (node is not { Session: { } session, Bucket: { } bucket })
         {

@@ -186,7 +186,7 @@ internal sealed class MongoConnector(IPluginContext context, Loc loc)
             // Unauthorized:连上了,但连 hello 之后的探测都不让做 —— 对用户来说就是凭据不对。
             return new(Loc.Format("Mongo_AuthFailed", Describe(command)), ConnectFailureKind.Authentication, command);
         }
-        Exception reason = causes.FirstOrDefault() ?? primary;
+        Exception reason = causes.Count > 0 ? causes[0] : primary;
         return primary switch
         {
             ArgumentException or FormatException => new(Loc.Format("Mongo_BadUri", primary.Message), ConnectFailureKind.Configuration, primary),

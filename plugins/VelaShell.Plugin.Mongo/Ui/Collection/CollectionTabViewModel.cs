@@ -104,7 +104,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     } = CollectionViewMode.Grid;
 
     /// <summary>上一次右侧面板是开着还是收着:新开的集合标签照这个来(Navicat 也记着)。</summary>
-    private static bool s_sidePanelVisible = true;
+    private static bool _sidePanelVisible = true;
 
     /// <summary>
     /// 数据区右侧的面板(网格的文档检查器、JSON 视图的大纲)开着吗。底栏右下角那颗按钮切换它;
@@ -116,11 +116,11 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
         {
             if (SetProperty(ref field, value))
             {
-                s_sidePanelVisible = value;
+                _sidePanelVisible = value;
                 RaisePropertyChanged(nameof(SidePanelTip));
             }
         }
-    } = s_sidePanelVisible;
+    } = _sidePanelVisible;
 
     /// <summary>按钮的提示:「隐藏右侧面板」/「显示右侧面板」。</summary>
     public string SidePanelTip => Loc[IsSidePanelVisible ? "Cw_HideSidePanel" : "Cw_ShowSidePanel"];
@@ -488,7 +488,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
         CollectionRow? select = rows.FirstOrDefault(r => keepId is not null && keepId.Equals(r.Id))
                           ?? rows.FirstOrDefault(r => keepInsert is not null && r.Insert?.Key == keepInsert)
                           ?? rows.FirstOrDefault();
-        _currentColumn ??= Columns.FirstOrDefault(c => c.Name != "_id") ?? Columns.FirstOrDefault();
+        _currentColumn ??= Columns.FirstOrDefault(c => c.Name != "_id") ?? (Columns.Count > 0 ? Columns[0] : null);
         if (_currentColumn is not null && Columns.FirstOrDefault(c => c.Name == _currentColumn.Name) is { } same)
         {
             _currentColumn = same;
@@ -506,7 +506,7 @@ internal sealed partial class CollectionTabViewModel : WorkspaceTab
     /// 列:本页文档顶层字段的并集,按首次出现顺序(<c>_id</c> 在前);宽度按类型与内容估,
     /// 用户拖过的宽度在翻页 / 重查之间保留(同名列沿用旧宽度)。
     /// </summary>
-    private IReadOnlyList<CollectionColumn> BuildColumns(IReadOnlyList<BsonDocument> documents, IEnumerable<BsonDocument> extra)
+    private List<CollectionColumn> BuildColumns(IReadOnlyList<BsonDocument> documents, IEnumerable<BsonDocument> extra)
     {
         var order = new List<string>();
         var kinds = new Dictionary<string, Dictionary<BsonKind, int>>(StringComparer.Ordinal);

@@ -271,7 +271,7 @@ public static partial class BsonText
     }
 
     /// <summary>键名:合法标识符不加引号(mongosh 风格),其余加双引号。</summary>
-    public static string FieldName(string name) => IdentifierPattern().IsMatch(name) ? name : Quote(name);
+    public static string FieldName(string name) => IsIdentifier(name) ? name : Quote(name);
 
     /// <summary>双引号字符串字面量(按 JSON 规则转义)。</summary>
     public static string Quote(string text)
@@ -420,6 +420,9 @@ public static partial class BsonText
 
     /// <summary>带千分位的整数(<c>1,284,902</c>)。</summary>
     public static string Grouped(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
+    /// <summary>能不能不加引号直接写成 JS 标识符(<c>db.orders</c>、<c>{ status: 1 }</c>)。</summary>
+    internal static bool IsIdentifier(string name) => IdentifierPattern().IsMatch(name);
 
     [GeneratedRegex("^[A-Za-z_$][A-Za-z0-9_$]*$")]
     private static partial Regex IdentifierPattern();

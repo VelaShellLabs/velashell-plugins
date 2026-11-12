@@ -990,7 +990,7 @@ internal sealed class ExportWizardViewModel : XferWizardViewModel
     {
         PreviewLines.Clear();
         IReadOnlyList<BsonDocument> docs = _head;
-        string collection = Collection ?? SelectedSources().FirstOrDefault()?.Name ?? "";
+        string collection = Collection ?? (SelectedSources() is [var firstSource, ..] ? firstSource.Name : "");
         switch (_format)
         {
             case ExportFormat.Csv:

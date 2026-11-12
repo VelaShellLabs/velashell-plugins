@@ -33,7 +33,7 @@ internal sealed class PipelineStagePickerViewModel : ObservableObject
             })
         ];
         _items = _all;
-        _selected = _all.FirstOrDefault();
+        _selected = _all.Count > 0 ? _all[0] : null;
     }
 
     /// <summary>文案。</summary>
@@ -73,7 +73,7 @@ internal sealed class PipelineStagePickerViewModel : ObservableObject
     public void Reset(string? current = null)
     {
         Query = "";
-        Selected = _all.FirstOrDefault(c => c.Name == current) ?? _all.FirstOrDefault();
+        Selected = _all.FirstOrDefault(c => c.Name == current) ?? (_all.Count > 0 ? _all[0] : null);
     }
 
     /// <summary>上下移动选中。</summary>
@@ -125,6 +125,6 @@ internal sealed class PipelineStagePickerViewModel : ObservableObject
                                            || c.Description.Contains(q, StringComparison.OrdinalIgnoreCase)));
             Items = [.. prefix, .. rest];
         }
-        Selected = _items.FirstOrDefault();
+        Selected = _items.Count > 0 ? _items[0] : null;
     }
 }

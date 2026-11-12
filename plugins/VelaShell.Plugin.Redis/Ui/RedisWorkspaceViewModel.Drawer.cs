@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Avalonia.Threading;
 
@@ -328,6 +329,7 @@ public sealed partial class RedisWorkspaceViewModel
 
     // ── 接线 ──────────────────────────────────────────────────────
 
+    [MemberNotNull(nameof(ShowMonitorCommand), nameof(ShowClusterCommand), nameof(MonitorGoSlowlogCommand), nameof(MonitorGoKeyspaceCommand), nameof(ToggleClusterMastersCommand), nameof(ToggleClusterSortCommand), nameof(CopyClusterTopologyCommand), nameof(ToggleClientsBusyCommand), nameof(TogglePubSubPauseCommand), nameof(ClearMessagesCommand), nameof(TogglePubSubAutoScrollCommand), nameof(ExportMessagesCommand), nameof(ToggleMemoryGroupingCommand))]
     private void InitializeDrawer()
     {
         ShowConsoleCommand = new(() => SwitchTabAsync(RedisDrawerTab.Console));

@@ -381,7 +381,7 @@ internal static class CollectionCopier
         return command;
     }
 
-    private static Task CreateAsync(MongoConnection target, string database, string name, BsonDocument sourceOptions, XferOptions options,
+    private static Task<BsonDocument> CreateAsync(MongoConnection target, string database, string name, BsonDocument sourceOptions, XferOptions options,
         CancellationToken cancellationToken) =>
         target.RunCommandAsync(database, CreateCommand(name, sourceOptions, options), cancellationToken);
 

@@ -137,7 +137,7 @@ internal static class S3Interop
             },
         };
 
-    private static Exception TranslateHttp(HttpRequestException http, string operation)
+    private static VelaS3ConnectionException TranslateHttp(HttpRequestException http, string operation)
     {
         for (Exception? inner = http.InnerException; inner is not null; inner = inner.InnerException)
         {
