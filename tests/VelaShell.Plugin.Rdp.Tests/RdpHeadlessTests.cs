@@ -259,7 +259,7 @@ public sealed class RdpHeadlessTests
 
     [TestMethod]
     [DataRow(Key.C, PhysicalKey.C, KeyModifiers.Control, "c", 0x2e)]
-    [DataRow(Key.A, PhysicalKey.A, KeyModifiers.Alt, "a", 0x1e)]
+    [DataRow(Key.F4, PhysicalKey.F4, KeyModifiers.Alt, null, 0x3e)]
     [DataRow(Key.D, PhysicalKey.D, KeyModifiers.Meta, "d", 0x20)]
     [DataRow(Key.Enter, PhysicalKey.Enter, KeyModifiers.None, null, 0x1c)]
     [DataRow(Key.Back, PhysicalKey.Backspace, KeyModifiers.None, null, 0x0e)]
@@ -273,6 +273,28 @@ public sealed class RdpHeadlessTests
         desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
         await desktop.DisposeAsync();
         Assert.AreSequenceEqual(new (uint, bool)[] { ((uint)code, true), ((uint)code, false) }, session.Keys);
+    });
+
+    [TestMethod]
+    [DataRow(Key.A, PhysicalKey.A, "a", 0x1e)]
+    [DataRow(Key.L, PhysicalKey.L, "@", 0x26)]
+    public void PrintableAltChordsUseTextOnMacAndPhysicalKeysElsewhere(Key key, PhysicalKey physicalKey, string text, int code) => Run(async () =>
+    {
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        var down = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = KeyModifiers.Alt, KeySymbol = text };
+        desktop.RaiseEvent(down);
+        // macOS Option produces local text; Windows/Linux Alt remains a remote shortcut.
+        bool localText = OperatingSystem.IsMacOS();
+        Assert.AreEqual(!localText, down.Handled);
+        if (localText)
+        {
+            desktop.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = text });
+        }
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = KeyModifiers.Alt, KeySymbol = text });
+        await desktop.DisposeAsync();
+        string[] expected = localText ? [$"'{text}'"] : [$"{code:x}+", $"{code:x}-"];
+        Assert.AreSequenceEqual(expected, session.Input);
     });
 
     [TestMethod]
