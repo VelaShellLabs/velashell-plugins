@@ -6,7 +6,7 @@ using VelaShell.Rdp.Graphics;
 namespace VelaShell.Plugin.Rdp.Tests;
 
 /// <summary>
-/// The RDP 6.0 planar decoder (<see cref="Planar"/>): FreeRDP's own sample streams, hand-built raw /
+/// The RDP 6.0 planar decoder (<see cref="Planar"/>): reference sample streams, hand-built raw /
 /// RLE / YCoCg / chroma-subsampled streams, and hostile input that must only ever surface as
 /// <see cref="RdpProtocolException"/>.
 /// </summary>
@@ -15,7 +15,7 @@ public sealed class PlanarTests
 {
     private const byte Rle = 0x10, NoAlpha = 0x20, ChromaSubsampling = 0x08;
 
-    // ── FreeRDP sample vectors ───────────────────────────────────────────────────────────────
+    // ── Reference sample vectors ──────────────────────────────────────────────────────────────
 
     /// <summary>
     /// FreeRDP 3.32.2 <c>libfreerdp/codec/test/planar</c>: <c>planar-enc-*</c> is FreeRDP's encoder
@@ -32,7 +32,7 @@ public sealed class PlanarTests
     [DataRow(nameof(Vectors.Experimental03), 64, 64, "232A27FF", "1E2225FF")]
     [DataRow(nameof(Vectors.Uncompressed16Bpp), 32, 32, "FFFFFFFF", "FFFFFFFF")]
     [DataRow(nameof(Vectors.Legacy03), 64, 64, "25221EFF", "272A23FF")]
-    public void FreeRdpVectorsDecodeToTheSourceBitmapTopDown(string name, int width, int height, string topLeft, string bottomLeft)
+    public void ReferenceVectorsDecodeToTheSourceBitmapTopDown(string name, int width, int height, string topLeft, string bottomLeft)
     {
         (byte[] stream, string sha256) = Vectors.Get(name);
         byte[] dst = new byte[width * height * 4];
@@ -126,7 +126,7 @@ public sealed class PlanarTests
     // ── Hand-built RLE planes ────────────────────────────────────────────────────────────────
 
     [TestMethod]
-    public void RleEscapesRunsAndDeltasDecodeLikeFreeRdp()
+    public void RleEscapesRunsAndDeltasDecode()
     {
         // 60x2 with an alpha plane. Each plane: first scanline absolute, second delta-coded.
         byte[] red =
@@ -212,7 +212,7 @@ public sealed class PlanarTests
     // ── YCoCg (color loss levels) and chroma subsampling ─────────────────────────────────────
 
     /// <summary>
-    /// Expected values follow FreeRDP <c>general_YCoCgToRGB_8u_AC4R</c>: Co/Cg are shifted left by
+    /// Expected values follow the MS-RDPEGDI YCoCg-to-RGB conversion: Co/Cg are shifted left by
     /// CLL - 1, truncated to a signed byte, then T = Y - Cg, R = T - Co, G = Y + Cg, B = T + Co,
     /// each clipped to 0..255.
     /// </summary>
@@ -225,7 +225,7 @@ public sealed class PlanarTests
     [DataRow(new byte[] { NoAlpha | 7, 128, 0x01, 0x03 }, 1, new byte[] { 255, 64, 128, 0xFF })]
     // Alpha plane present with YCoCg: alpha is kept.
     [DataRow(new byte[] { 0x01, 0x42, 100, 0, 0 }, 1, new byte[] { 100, 100, 100, 0x42 })]
-    public void ColorLossLevelsConvertYCoCgLikeFreeRdp(byte[] stream, int width, byte[] expected)
+    public void ColorLossLevelsConvertYCoCg(byte[] stream, int width, byte[] expected)
     {
         byte[] dst = new byte[width * 4];
 
@@ -418,8 +418,8 @@ public sealed class PlanarTests
     }
 
     /// <summary>
-    /// A deliberately simple RLE plane encoder: delta-codes every scanline after the first like
-    /// FreeRDP's <c>freerdp_bitmap_planar_delta_encode_plane</c>, then emits only raw segments
+    /// A deliberately simple RLE plane encoder: delta-codes every scanline after the first
+    /// (MS-RDPEGDI delta encoding), then emits only raw segments
     /// (control byte <c>n &lt;&lt; 4</c>, up to 15 values each, never a run).
     /// </summary>
     private static byte[] EncodeRlePlane(byte[] plane, int width, int height)

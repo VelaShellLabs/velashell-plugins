@@ -25,7 +25,7 @@ internal sealed class DriveFile
     internal const byte FileSuperseded = 0, FileOpened = 1, FileOverwritten = 3;
 
     private readonly string _basePath;
-    internal string FullPath { get; }
+    internal string FullPath { get; private set; }
     internal bool IsDirectory { get; }
     private FileStream? _stream;
     private bool _deleteOnClose;
@@ -226,15 +226,154 @@ internal sealed class DriveFile
 
     internal void MarkForDeletion() => _deleteOnClose = true;
 
-    internal void Rename(string newRdpPath)
+    /// <summary>
+    /// FileRenameInformation (MS-FSCC 2.4.37). An existing target is replaced only when the server set
+    /// ReplaceIfExists, and never when it is a directory. A case-only rename of the same entry is allowed on
+    /// case-insensitive file systems. The handle follows the file to its new name.
+    /// </summary>
+    internal void Rename(string newRdpPath, bool replaceIfExists)
     {
         string target = ResolvePath(_basePath, newRdpPath);
         RejectLinks(_basePath, target);
+        if (target.Equals(FullPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        bool targetIsDirectory = Directory.Exists(target);
+        bool targetExists = (targetIsDirectory || File.Exists(target)) && !IsSameEntryWithOtherCase(FullPath, target);
+        if (targetExists)
+        {
+            if (!replaceIfExists)
+            {
+                throw new DriveStatusException(NtStatus.ObjectNameCollision);
+            }
+
+            if (targetIsDirectory || IsDirectory)
+            {
+                throw new DriveStatusException(NtStatus.AccessDenied);
+            }
+        }
+
         if (IsDirectory)
         {
             Directory.Move(FullPath, target);
         }
-        else { _stream?.Dispose(); _stream = null; File.Move(FullPath, target, overwrite: true); }
+        else
+        {
+            _stream?.Dispose();
+            _stream = null;
+            File.Move(FullPath, target, overwrite: targetExists);
+        }
+
+        FullPath = target;
+    }
+
+    /// <summary>
+    /// True when <paramref name="target"/> differs from <paramref name="source"/> only by case and resolves to
+    /// the same entry (a case-insensitive file system), not to a second entry on a case-sensitive one.
+    /// </summary>
+    private static bool IsSameEntryWithOtherCase(string source, string target)
+    {
+        if (!source.Equals(target, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string? parent = Path.GetDirectoryName(target);
+        if (parent is null)
+        {
+            return false;
+        }
+
+        var exact = new EnumerationOptions { MatchCasing = MatchCasing.CaseSensitive, MatchType = MatchType.Simple, AttributesToSkip = 0 };
+        return !Directory.EnumerateFileSystemEntries(parent, Path.GetFileName(target), exact).Any();
+    }
+
+    /// <summary>FileEndOfFileInformation: sets the file length (truncate or extend).</summary>
+    internal void SetEndOfFile(long length)
+    {
+        FileStream stream = WritableStream();
+        if (length < 0)
+        {
+            throw new DriveStatusException(NtStatus.InvalidParameter);
+        }
+
+        if (length > stream.Length + MaxWriteGap)
+        {
+            throw new DriveStatusException(NtStatus.DiskFull);
+        }
+
+        stream.SetLength(length);
+        stream.Flush();
+    }
+
+    /// <summary>
+    /// FileAllocationInformation: an allocation below the current end of file truncates the file to it
+    /// (MS-FSCC 2.4.4); a larger one only reserves space, which is left to the local file system.
+    /// </summary>
+    internal void SetAllocation(long allocation)
+    {
+        if (allocation < 0)
+        {
+            throw new DriveStatusException(NtStatus.InvalidParameter);
+        }
+
+        FileStream stream = WritableStream();
+        if (allocation < stream.Length)
+        {
+            stream.SetLength(allocation);
+            stream.Flush();
+        }
+    }
+
+    private const FileAttributes SettableAttributes =
+        FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System | FileAttributes.Archive | FileAttributes.NotContentIndexed;
+
+    /// <summary>
+    /// FileBasicInformation (MS-FSCC 2.4.7): a time of 0 or -1 means "leave unchanged", attributes 0 likewise.
+    /// Only the attributes the local file system can hold are applied (.NET maps ReadOnly to the write bits and
+    /// Hidden to UF_HIDDEN on macOS). Creation time is applied where the platform can set it (Windows, macOS);
+    /// Linux file systems expose no settable birth time.
+    /// </summary>
+    internal void SetBasic(long creation, long lastAccess, long lastWrite, uint attributes)
+    {
+        _stream?.Flush();
+        FileSystemInfo info = IsDirectory ? new DirectoryInfo(FullPath) : new FileInfo(FullPath);
+        if (!info.Exists)
+        {
+            throw new DriveStatusException(NtStatus.NoSuchFile);
+        }
+
+        if (IsSettableTime(creation) && !OperatingSystem.IsLinux())
+        {
+            info.CreationTimeUtc = DateTime.FromFileTimeUtc(creation);
+        }
+
+        if (IsSettableTime(lastAccess))
+        {
+            info.LastAccessTimeUtc = DateTime.FromFileTimeUtc(lastAccess);
+        }
+
+        if (IsSettableTime(lastWrite))
+        {
+            info.LastWriteTimeUtc = DateTime.FromFileTimeUtc(lastWrite);
+        }
+
+        if (attributes != 0)
+        {
+            FileAttributes requested = (FileAttributes)attributes & SettableAttributes;
+            FileAttributes updated = (info.Attributes & ~SettableAttributes) | requested;
+            info.Attributes = updated == 0 ? FileAttributes.Normal : updated;
+        }
+    }
+
+    private static bool IsSettableTime(long fileTime) => fileTime > 0 && fileTime <= DateTime.MaxValue.ToFileTimeUtc();
+
+    private FileStream WritableStream()
+    {
+        _stream ??= OpenForContent(FileAccess.ReadWrite);
+        return _stream.CanWrite ? _stream : throw new DriveStatusException(NtStatus.AccessDenied);
     }
 
     // ---- Information serialization ----
@@ -278,7 +417,12 @@ internal sealed class DriveFile
         }
     }
 
-    internal void BeginEnumeration(string pattern)
+    /// <summary>
+    /// Starts a directory query. "." and ".." are listed only when the pattern matches them, as an NTFS
+    /// directory does: a query for a specific name ("\dir\missing.txt") or for "*.txt" must not report them,
+    /// or the server takes a missing file for an existing directory. Returns whether anything matched.
+    /// </summary>
+    internal bool BeginEnumeration(string pattern)
     {
         string spec = pattern.TrimStart('\\');
         string search = spec.Length == 0 ? "*" : Path.GetFileName(spec.Replace('\\', Path.DirectorySeparatorChar));
@@ -287,7 +431,15 @@ internal sealed class DriveFile
             search = "*";
         }
 
-        var entries = new List<string> { ".", ".." };
+        var entries = new List<string>(2);
+        foreach (string dots in (ReadOnlySpan<string>)[".", ".."])
+        {
+            if (System.IO.Enumeration.FileSystemName.MatchesWin32Expression(search, dots, ignoreCase: true))
+            {
+                entries.Add(dots);
+            }
+        }
+
         try
         {
             foreach (string path in Directory.EnumerateFileSystemEntries(FullPath, search))
@@ -298,6 +450,7 @@ internal sealed class DriveFile
         catch (DirectoryNotFoundException) { throw new DriveStatusException(NtStatus.NoSuchFile); }
         _enumeration = entries;
         _enumIndex = 0;
+        return entries.Count > 0;
     }
 
     /// <summary>Writes one directory entry; returns false (and resets) when enumeration is exhausted.</summary>
@@ -472,7 +625,7 @@ internal static class NtStatus
     internal const uint NoMoreFiles = 0x80000006;
     internal const uint Unsuccessful = 0xC0000001;
     internal const uint NotImplemented = 0xC0000002;
-    internal const uint NoSuchFile = 0xC000000F;   // FreeRDP maps ERROR_FILE_NOT_FOUND here; xrdp needs this to create
+    internal const uint NoSuchFile = 0xC000000F;   // ERROR_FILE_NOT_FOUND; xrdp relies on it before creating a file
     internal const uint AccessDenied = 0xC0000022;
     internal const uint EndOfFile = 0xC0000011;
     internal const uint ObjectNameNotFound = 0xC0000034;

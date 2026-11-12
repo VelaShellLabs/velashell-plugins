@@ -101,7 +101,7 @@ public sealed class RdpHardeningTests
             Assert.AreEqual(NtStatus.AccessDenied, created.Status);
 
             var file = DriveFile.Create(share, "\\inside.txt", GenericWrite, FileCreate, 0, 0);
-            DriveStatusException renamed = Assert.Throws<DriveStatusException>(() => file.Rename("\\link\\moved.txt"));
+            DriveStatusException renamed = Assert.Throws<DriveStatusException>(() => file.Rename("\\link\\moved.txt", replaceIfExists: false));
             Assert.AreEqual(NtStatus.AccessDenied, renamed.Status);
             file.Close();
 

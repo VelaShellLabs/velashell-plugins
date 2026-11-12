@@ -10,7 +10,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 
 /// <summary>
 /// Live NLA (CredSSP over TLS, NTLM) checks against a server that requires it — xrdp has no NLA, so
-/// these run against the FreeRDP shadow server (<c>freerdp-shadow-cli3 /sec:nla /sam-file:…</c>).
+/// point these at an NLA-enforcing server (a Windows host, or another CredSSP-capable test server).
 /// Skipped unless VELA_RDP_TEST_NLA_TARGET is set (host:port); credentials come from
 /// VELA_RDP_TEST_USER / VELA_RDP_TEST_PASS. Never runs in CI.
 /// </summary>

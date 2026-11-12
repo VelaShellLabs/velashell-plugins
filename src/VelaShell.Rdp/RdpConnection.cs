@@ -596,7 +596,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     }
 
     // Drawing orders (when negotiated): one decoder per connection, so the bitmap cache survives a reactivation (a
-    // resize) like FreeRDP's; its primary-order state is reset then, and it draws on whatever surface is current.
+    // resize); its primary-order state is reset then, and it draws on whatever surface is current.
     private OrderDecoder? _orders;
 
     /// <summary>Orders updates processed (diagnostics and interop tests).</summary>

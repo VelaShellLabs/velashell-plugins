@@ -4,8 +4,8 @@ namespace VelaShell.Rdp.Graphics;
 
 /// <summary>
 /// Pointer (mouse cursor) updates — MS-RDPBCGR 2.2.9.1.1.4 (slow path) and 2.2.9.1.2.1.5–.11 (fast path) — decoded
-/// into <see cref="RdpPointer"/> images and kept in the pointer cache the client advertised. The AND/XOR mask rules are
-/// ported from FreeRDP's <c>freerdp_image_copy_from_pointer_data</c> (libfreerdp/codec/color.c, Apache-2.0):
+/// into <see cref="RdpPointer"/> images and kept in the pointer cache the client advertised. The AND/XOR mask handling is
+/// adapted from FreeRDP <c>libfreerdp/codec/color.c</c> (Apache-2.0; see THIRD-PARTY-NOTICES.txt):
 /// masks are bottom-up (except 1 bpp), rows are padded to an even byte count, and an "inverted" pixel (AND set, XOR
 /// white) becomes a black/white checkerboard because no platform cursor can invert what is underneath it.
 /// </summary>
@@ -127,7 +127,7 @@ internal sealed class PointerDecoder(int cacheSize)
         _ => Inverted(x, y)              // inverted
     };
 
-    /// <summary>With the AND bit set, black means transparent and white means inverted (FreeRDP's xbpp rule).</summary>
+    /// <summary>With the AND bit set, black means transparent and white means inverted (Windows cursor mask semantics).</summary>
     private static uint Masked(bool and, uint argb, int x, int y) =>
         !and ? argb : argb == 0xFF000000u ? 0u : argb == 0xFFFFFFFFu ? Inverted(x, y) : argb;
 

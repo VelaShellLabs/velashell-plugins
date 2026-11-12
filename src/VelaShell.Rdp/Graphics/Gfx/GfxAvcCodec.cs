@@ -5,8 +5,8 @@ namespace VelaShell.Rdp.Graphics.Gfx;
 
 internal readonly record struct GfxAvcRectangle(int Left, int Top, int Right, int Bottom);
 
-// AVC444 reconstruction follows MS-RDPEGFX 3.3.8.3 and FreeRDP prim_YUV.c
-// (Apache-2.0; see THIRD-PARTY-NOTICES.txt).
+// AVC444 reconstruction follows MS-RDPEGFX 3.3.8.3. Code adapted from FreeRDP prim_YUV.c
+// (Apache-2.0; see THIRD-PARTY-NOTICES.txt); the specification, not that source, defines behaviour.
 internal sealed class GfxAvcCodec
 {
     private readonly int _width, _height;

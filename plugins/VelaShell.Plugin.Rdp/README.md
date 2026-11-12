@@ -1,7 +1,7 @@
 # RDP remote desktop plugin
 
 `velashell.rdp` embeds a remote desktop in an Avalonia workspace using a **pure-managed C#
-RDP client** — no FreeRDP or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop; explicitly selected COM/LPT ports use overlapped Windows I/O (MS-RDPESP). In the Drive mapping page, enter `COM3;LPT1` in COM / LPT ports; empty shares none. Port names are validated, transfers are capped at 256 KiB and controls are allowlisted. Reads, writes and `WAIT_ON_MASK` wait as on a local port (bounded by the remote application's own COMMTIMEOUTS) until they complete or a purge, close or disconnect cancels them; other controls get a 30-second deadline. Faulty drivers may delay native completion. Fake-backend tests do not access port hardware; real-server/hardware interoperability remains unverified. The protocol stack is the
+RDP client** — no native RDP library or bundled native binaries. Windows virtual-file clipboard uses OS OLE interop; explicitly selected COM/LPT ports use overlapped Windows I/O (MS-RDPESP). In the Drive mapping page, enter `COM3;LPT1` in COM / LPT ports; empty shares none. Port names are validated, transfers are capped at 256 KiB and controls are allowlisted. Reads, writes and `WAIT_ON_MASK` wait as on a local port (bounded by the remote application's own COMMTIMEOUTS) until they complete or a purge, close or disconnect cancels them; other controls get a 30-second deadline. Faulty drivers may delay native completion. Fake-backend tests do not access port hardware; real-server/hardware interoperability remains unverified. The protocol stack is the
 standalone [`VelaShell.Rdp`](../../src/VelaShell.Rdp) library (MIT), which implements the subset of
 MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS / MS-RDPEA this plugin needs. The plugin
 references that library and owns only the Avalonia view and input/clipboard integration; no
@@ -19,7 +19,7 @@ Malformed data after GFX negotiation ends the session rather than replaying upda
 
 The same C# implementation runs on Windows, Linux and macOS. The `.vpx` includes the pure-managed
 `ManagedCodecs.H264` 0.6.0 and `ManagedCodecs.Core` assemblies and third-party notices;
-no FreeRDP/FFmpeg binary or graphics-specific native build is needed. H.264 uses CPU decoding.
+no native RDP/FFmpeg binary or graphics-specific native build is needed. H.264 uses CPU decoding.
 Desktop/scaled-output mappings are implemented; RemoteApp window mappings and Progressive V2
 (codec 13) are not. Offline tests cover real IDR/P decoding, AVC444 reconstruction, cache/context
 lifetimes and frame acknowledgements. Real Windows-server interoperability and 4K/video performance
@@ -77,7 +77,7 @@ CREATE starts a fixed-name RAW document on the selected queue, ordered WRITE req
 
 ## Why managed
 
-The former implementation wrapped FreeRDP (C) behind a C++ ABI bridge with per-platform native
+The former implementation wrapped a native C RDP library behind a C++ ABI bridge with per-platform native
 builds and bundled OpenSSL/VC runtimes. This replaces all of it with managed C#: `SslStream`
 for TLS, `NegotiateAuthentication` for NLA/CredSSP, and a from-scratch decoder for classic
 interleaved-RLE bitmaps. The managed engine and its NuGet dependencies run on every RID with no graphics-native
@@ -95,7 +95,7 @@ clipboard bridge and codec drive it across that boundary. Layers (under `../../s
 - **MCS/GCC** — Connect-Initial/Response, erect/attach/channel-join (`Mcs/`).
 - **PDUs** — client info, licensing, capability exchange, connection finalization (`Pdu/`).
 - **Graphics** — interleaved-RLE and RDP 6.0 planar decode, GDI drawing orders with a bitmap cache
-  (`Orders.cs`, ported from FreeRDP), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
+  (`Orders.cs`), pointer (cursor) decode, and a BGRA framebuffer that tracks its changed
   region; fragmented fast-path updates are reassembled. MS-RDPEGFX adds ZGFX decompression,
   surface/cache operations and managed AVC420/AVC444 decoding (`Graphics/`).
 - **Input** — fast-path keyboard/mouse/Unicode (`Input/`).
@@ -123,7 +123,7 @@ arguments.
   any view exists and for servers without dynamic resolution. Connect timeout 1–120 seconds, default 15.
 - **Colour depth** (experience page, `colorDepth`): 16-bit High Color, 24-bit True Color, or 32-bit
   Highest Quality (default, like mstsc). 32-bit compressed bitmaps are RDP 6.0 planar
-  (`Graphics/Planar.cs`, ported from FreeRDP) with DRAW_ALLOW_SKIP_ALPHA; verified pixel-identical to
+  (`Graphics/Planar.cs`) with DRAW_ALLOW_SKIP_ALPHA; verified pixel-identical to
   24-bit against xrdp.
 - Frames: decoding and pixel conversion run on the receive thread outside the surface lock; the surface
   keeps the union of changed rectangles and `IRdpSession.CopyFrame` copies only that into the locked
@@ -131,7 +131,7 @@ arguments.
   rectangle (row padding is never painted). A view that is detached (inactive tab) or whose window is
   minimized stops presenting and sends Suppress Output (when the server supports it); coming back
   resumes updates with a Refresh Rect. Frame posts use Input priority so a frame flood never delays input.
-- **Remote pointer**: pointer updates (colour/new/cached/system, 1–32 bpp, AND/XOR rules from FreeRDP)
+- **Remote pointer**: pointer updates (colour/new/cached/system, 1–32 bpp, AND/XOR mask rules)
   are decoded and shown as the desktop's cursor — I-beam over text, resize arrows, hidden while typing.
 - Typed text (IME commits, Type clipboard) is batched up to 7 characters (15 fast-path events) per PDU.
 - Keyboard, mouse and Unicode text go to the remote desktop. Key combinations the local OS keeps
@@ -181,8 +181,7 @@ arguments.
   inferred destination, or manual receive button is involved. Local→remote is also lazy: publication
   enumerates names/sizes and opens safe source handles without reading content; the remote shell's
   FILECONTENTS requests read/send bytes after paste in its chosen directory.
-- Descriptors in both directions set FD_SHOWPROGRESSUI (0x4000), as FreeRDP's `wf_cliprdr.c` and
-  `synthetic_file.c` do, so the receiving Windows Shell runs its own copy-progress dialog instead of
+- Descriptors in both directions set FD_SHOWPROGRESSUI (0x4000), as mstsc does, so the receiving Windows Shell runs its own copy-progress dialog instead of
   a large paste looking like a hung Explorer. Background vs. blocking extraction remains the receiving
   Shell's decision (rdpclip's data object remotely; ours supports IDataObjectAsyncCapability).
 - Both transfer indicators and cancel buttons share the existing fixed **24px resolution bar**,
@@ -350,7 +349,7 @@ cover settings, clipboard codec, headless UI and CredSSP/NLA ASN.1 encoding.
 Live interoperability tests (gated on `VELA_RDP_TEST_TARGET`, skipped in CI) exercise the full
 stack against a real server — connection, TLS and leaf-pin trust, desktop rendering, keyboard and
 mouse input, text and image clipboard round-trips, and drive-redirection read and write. NLA is
-verified live against the FreeRDP shadow server (`VELA_RDP_TEST_NLA_TARGET`): logon, wrong
+verified live against an NLA-enforcing test server (`VELA_RDP_TEST_NLA_TARGET`): logon, wrong
 password without fallback, TLS-only refused by an NLA-only server. The security-layer fallback is
 covered by in-process fake-server tests (`FakeRdpServer`). `ManagedNtlmTests` also verifies Unix
 SPNEGO/NTLM with mechanism-list MICs and multiple rounds. `CredSspNegotiationTests` verifies no TLS
@@ -364,7 +363,7 @@ unrelated test compilation failures (RemoteFX, dynamic channels, RDPGFX and WPD)
 a successful NLA desktop logon against a real Windows AD server with NTLM disabled remain unverified. Interleaved-RLE decode, MCS/GCC, capability exchange and the
 channel wire formats follow MS-RDPBCGR / the published specs. Hardening, rendering, planar, pointer and
 input-batching behaviour is covered by `RdpHardeningTests` (incl. a real directory junction and a fake
-server sending oversized or pre-CVE-2018-0886 TSRequests), `RdpRenderingTests`, `PlanarTests` (FreeRDP
+server sending oversized or pre-CVE-2018-0886 TSRequests), `RdpRenderingTests`, `PlanarTests` (reference
 vectors + fuzzing) and `RdpPointerAndInputTests`; against xrdp, 24-bit and 32-bit (planar) decodes of the
 same desktop are pixel-identical (`FullColourDepthsDecodeTheSameDesktop`) and the server's pointer arrives
 as a 32×32 I-beam (`TheServersPointerShapesArrive`). Drawing orders: `OrderDecoderTests` (every order

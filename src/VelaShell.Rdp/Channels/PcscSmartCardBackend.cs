@@ -160,10 +160,22 @@ internal sealed unsafe class PcscSmartCardBackend : ISmartCardBackend
         if (bytes > names.Length || atrLength > atr.Length) { throw new SmartCardException(SmartCardException.InsufficientBuffer); }
         if (!Win)
         {
-            state = state switch { 1 => 0, 2 => 1, 4 => 2, 8 => 3, 16 => 4, 32 => 5, 64 => 6, _ => 0 };
+            state = WireCardState(state);
             protocol = WireProtocol(protocol);
         }
         return new SmartCardStatus(TextEncoding.GetString(names, 0, bytes).Split('\0', StringSplitOptions.RemoveEmptyEntries), state, protocol, atr[..(int)atrLength]);
+    }
+
+    /// <summary>
+    /// pcsc-lite and macOS PCSC.framework report SCardStatus' state as a bit set (SCARD_UNKNOWN 0x01,
+    /// ABSENT 0x02, PRESENT 0x04, SWALLOWED 0x08, POWERED 0x10, NEGOTIABLE 0x20, SPECIFIC 0x40), several at
+    /// once (e.g. PRESENT|POWERED|NEGOTIABLE = 0x34). The wire (MS-RDPESC, as WinSCard) carries one ordinal
+    /// SCARD_UNKNOWN 0 … SCARD_SPECIFIC 6: the most advanced state that is set.
+    /// </summary>
+    internal static uint WireCardState(uint unixState)
+    {
+        uint bits = unixState & 0x7F;
+        return bits == 0 ? 0u : (uint)System.Numerics.BitOperations.Log2(bits);
     }
 
     public SmartCardTransmitResult Transmit(nint card, SmartCardPci sendPci, byte[] send, SmartCardPci? receivePci, int capacity, bool lengthOnly)

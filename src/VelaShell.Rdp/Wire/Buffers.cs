@@ -132,6 +132,7 @@ internal ref struct ByteReader(ReadOnlySpan<byte> data)
     internal ushort U16LE() => BinaryPrimitives.ReadUInt16LittleEndian(Take(2));
     internal uint U32BE() => BinaryPrimitives.ReadUInt32BigEndian(Take(4));
     internal uint U32LE() => BinaryPrimitives.ReadUInt32LittleEndian(Take(4));
+    internal long I64LE() => BinaryPrimitives.ReadInt64LittleEndian(Take(8));
 
     internal ReadOnlySpan<byte> Take(int count)
     {

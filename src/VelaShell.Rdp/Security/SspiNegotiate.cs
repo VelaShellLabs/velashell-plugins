@@ -25,7 +25,7 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
     private const uint SEC_I_COMPLETE_AND_CONTINUE = 0x00090314;
     private const uint SEC_I_COMPLETE_NEEDED = 0x00090313;
 
-    // Match what Windows' RDP client / FreeRDP request so the server offers the same features.
+    // Match the context requirements Windows' RDP client (mstsc) requests so the server offers the same features.
     private const int ContextReq = 0x00000001 /*DELEGATE*/ | 0x00000002 /*MUTUAL_AUTH*/ | 0x00000004 /*REPLAY_DETECT*/
         | 0x00000008 /*SEQUENCE_DETECT*/ | 0x00000010 /*CONFIDENTIALITY*/ | 0x00000020 /*USE_SESSION_KEY*/ | 0x00010000 /*INTEGRITY*/;
 

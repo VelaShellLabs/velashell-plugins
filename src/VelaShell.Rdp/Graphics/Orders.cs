@@ -49,10 +49,10 @@ internal interface IOrderTarget
 /// <summary>
 /// An 8×8 monochrome brush for <see cref="IOrderTarget.PatBlt"/>. <see cref="Pattern8x8"/> holds eight rows, row 0
 /// at the top, bit 7 the leftmost pixel; a set bit paints <see cref="BackBgra"/> and a clear bit
-/// <see cref="ForeBgra"/> (FreeRDP <c>freerdp_image_copy_from_monochrome</c>). Desktop pixel (x, y) uses row
-/// (y − <see cref="OriginY"/>) mod 8 and bit 7 − ((x − <see cref="OriginX"/>) mod 8) (FreeRDP
-/// <c>gdi_get_brush_pointer</c>). <see cref="Style"/> is BS_SOLID 0, BS_NULL 1, BS_HATCHED 2 or BS_PATTERN 3; hatched
-/// brushes carry FreeRDP's hatch bitmap for <see cref="Hatch"/>, solid and null brushes an all-zero pattern (fore
+/// <see cref="ForeBgra"/>. Desktop pixel (x, y) uses row
+/// (y − <see cref="OriginY"/>) mod 8 and bit 7 − ((x − <see cref="OriginX"/>) mod 8) (the BRUSH
+/// origin). <see cref="Style"/> is BS_SOLID 0, BS_NULL 1, BS_HATCHED 2 or BS_PATTERN 3; hatched
+/// brushes carry the Windows GDI hatch bitmap for <see cref="Hatch"/>, solid and null brushes an all-zero pattern (fore
 /// colour everywhere). A null brush paints nothing in GDI; the target decides what to do with it.
 /// </summary>
 internal sealed record OrderBrush(int OriginX, int OriginY, int Style, int Hatch, byte[] Pattern8x8, uint ForeBgra, uint BackBgra);
@@ -75,16 +75,11 @@ internal sealed class CachedBitmap
 }
 
 /// <summary>
-/// Drawing-order parser and bitmap cache (MS-RDPEGDI 2.2.2, TS_UPDATE_ORDERS). Ported from FreeRDP's
-/// <c>libfreerdp/core/orders.c</c> (<c>update_recv_order</c>, <c>update_recv_primary_order</c>,
-/// <c>update_read_field_flags</c>, <c>update_read_bounds</c>, <c>update_read_coord</c>, the DSTBLT / PATBLT / SCRBLT /
-/// OPAQUE_RECT / MULTI_OPAQUE_RECT / MEMBLT readers, <c>update_read_brush</c>, <c>update_read_delta_rects</c>,
-/// <c>update_recv_secondary_order</c>, <c>update_read_cache_bitmap_order</c>,
-/// <c>update_read_cache_bitmap_v2_order</c> with its 2-/4-byte variable-length integers, and the alternate secondary
-/// readers), the cache rules of <c>libfreerdp/cache/bitmap.c</c> and the draw semantics of
-/// <c>libfreerdp/gdi/gdi.c</c> / <c>gdi/graphics.c</c> (Apache-2.0).
+/// Drawing-order parser and bitmap cache (MS-RDPEGDI 2.2.2, TS_UPDATE_ORDERS). Code adapted from
+/// FreeRDP <c>libfreerdp/core/orders.c</c>, <c>libfreerdp/cache/bitmap.c</c> and <c>libfreerdp/gdi</c>
+/// (Apache-2.0; see THIRD-PARTY-NOTICES.txt); MS-RDPEGDI, not that source, defines behaviour.
 /// <para>
-/// Primary-order state persists across <see cref="Process"/> calls exactly as in FreeRDP: the last order type
+/// Primary-order state persists across <see cref="Process"/> calls, as MS-RDPEGDI requires: the last order type
 /// (initially PATBLT), the last bounds (shared by every order type), and each order type's last field values, so
 /// field-flag elision, TS_ZERO_FIELD_BYTE_BIT0/1, delta coordinates and TS_ZERO_BOUNDS_DELTAS all resolve against
 /// what the server sent before. Only DSTBLT, PATBLT, SCRBLT, OPAQUE_RECT, MULTI_OPAQUE_RECT and MEMBLT are decoded;
@@ -93,8 +88,8 @@ internal sealed class CachedBitmap
 /// </para>
 /// <para>
 /// Secondary orders: CACHE_BITMAP (revision 1) and CACHE_BITMAP_V2 are decoded into the cache; every other
-/// secondary type is stepped over by its orderLength. Alternate secondary orders are stepped over where FreeRDP
-/// can determine their size (frame marker, switch surface, offscreen bitmap, stream bitmap, nine-grid, GDI+, window);
+/// secondary type is stepped over by its orderLength. Alternate secondary orders are stepped over where their
+/// size can be determined (frame marker, switch surface, offscreen bitmap, stream bitmap, nine-grid, GDI+, window);
 /// anything else is rejected.
 /// </para>
 /// <para>
@@ -156,7 +151,7 @@ internal sealed class OrderDecoder
     private const byte PatCopy = 0xF0;
     private const int MaxDeltaRectangles = 45;
 
-    /// <summary>FreeRDP <c>GDI_BS_HATCHED_PATTERNS</c>: HS_HORIZONTAL … HS_DIAGCROSS, 8 rows each, row 0 at the top.</summary>
+    /// <summary>Windows GDI hatch styles HS_HORIZONTAL … HS_DIAGCROSS, 8 rows each, row 0 at the top.</summary>
     private static ReadOnlySpan<byte> HatchPatterns =>
     [
         0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, // HS_HORIZONTAL
@@ -175,7 +170,7 @@ internal sealed class OrderDecoder
     private int _desktopWidth, _desktopHeight;
     private long _budget;
 
-    // Primary-order state (FreeRDP rdp_primary_update_internal).
+    // Primary-order state (MS-RDPEGDI primary drawing order history).
     private byte _orderType = PatBltOrder;
     private int _boundsLeft, _boundsTop, _boundsRight, _boundsBottom;
     private DstBltState _dstBlt;
@@ -218,8 +213,7 @@ internal sealed class OrderDecoder
 
     /// <summary>
     /// Decodes <paramref name="orderCount"/> orders from a TS_UPDATE_ORDERS payload that starts at the first order
-    /// (the caller strips the slow-path / fast-path update header). Bytes after the last order are ignored, as in
-    /// FreeRDP.
+    /// (the caller strips the slow-path / fast-path update header). Bytes after the last order are ignored.
     /// </summary>
     internal void Process(ReadOnlySpan<byte> ordersData, int orderCount)
     {
@@ -253,7 +247,7 @@ internal sealed class OrderDecoder
     }
 
     /// <summary>
-    /// Forgets all primary-order state (FreeRDP <c>update_reset_state</c>): last order type back to PATBLT, bounds
+    /// Forgets all primary-order state: last order type back to PATBLT, bounds
     /// and every order's fields zeroed. Call it on deactivation-reactivation. The bitmap cache is kept (a MemBlt
     /// into an empty slot just draws nothing).
     /// </summary>
@@ -443,7 +437,7 @@ internal sealed class OrderDecoder
     }
 
     /// <summary>
-    /// The 8×8 pattern, row 0 at the top. For BS_PATTERN FreeRDP stores BrushHatch as row 0 and BrushExtra[0..6] as
+    /// The 8×8 pattern, row 0 at the top. For BS_PATTERN, BrushHatch is stored as row 0 and BrushExtra[0..6] as
     /// rows 7..1 (the wire carries the rows bottom-up, the last one in BrushHatch).
     /// </summary>
     private byte[] BuildPattern(byte style, byte hatch)
@@ -499,7 +493,7 @@ internal sealed class OrderDecoder
 
     private void MultiOpaqueRect(ref ByteReader r, uint f, bool delta, OrderRect? clip)
     {
-        // Fields 1–4 are the bounding rectangle; FreeRDP's gdi_multi_opaque_rect draws only the delta list.
+        // Fields 1–4 are the bounding rectangle; only the delta list is drawn.
         ref MultiOpaqueRectState s = ref _multiOpaqueRect;
         ReadCoordField(ref r, f, 1, delta, ref s.Left);
         ReadCoordField(ref r, f, 2, delta, ref s.Top);
@@ -515,7 +509,7 @@ internal sealed class OrderDecoder
 
         if (HasField(f, 9))
         {
-            // cbData: like FreeRDP, the rectangles are decoded straight from the stream.
+            // cbData is skipped; the rectangles are decoded straight from the stream.
             _ = r.U16LE();
             ReadDeltaRects(ref r, count);
             s.Count = count;
@@ -541,7 +535,7 @@ internal sealed class OrderDecoder
     }
 
     /// <summary>
-    /// TS_DELTA_RECTS (FreeRDP <c>update_read_delta_rects</c>): a nibble of zero bits per rectangle (left, top,
+    /// TS_DELTA_RECTS (MS-RDPEGDI DELTA_RECTS_FIELD): a nibble of zero bits per rectangle (left, top,
     /// width, height absent), then the present fields as variable-length deltas. Left/top accumulate from the
     /// previous rectangle (the first is relative to 0,0); an absent width/height repeats the previous one.
     /// </summary>
@@ -602,7 +596,7 @@ internal sealed class OrderDecoder
         }
     }
 
-    /// <summary>FreeRDP <c>update_read_delta</c>: 1 byte (7-bit signed) or 2 bytes (15-bit signed) when bit 7 is set.</summary>
+    /// <summary>DELTA_RECTS_FIELD delta value: 1 byte (7-bit signed) or 2 bytes (15-bit signed) when bit 7 is set.</summary>
     private static int ReadDelta(ref ByteReader r)
     {
         int first = r.U8();
@@ -629,7 +623,7 @@ internal sealed class OrderDecoder
         ReadUInt16Field(ref r, f, 9, ref s.CacheIndex);
 
         // The high byte of cacheId is a colour-table index (palette sessions only); it is ignored. A slot that
-        // was never filled is skipped: FreeRDP notes XP-SP2 servers ask for cached bitmaps they never defined.
+        // was never filled is skipped: some servers (e.g. Windows XP SP2) reference slots they never filled.
         CachedBitmap? bitmap = Lookup(s.CacheId & 0xFF, s.CacheIndex);
         if (bitmap is not null && Admit(s.Left, s.Top, s.Width, s.Height, clip))
         {
@@ -642,7 +636,7 @@ internal sealed class OrderDecoder
     private static bool HasField(uint fieldFlags, int field) => (fieldFlags & (1u << (field - 1))) != 0;
 
     /// <summary>
-    /// FreeRDP <c>update_read_coord</c>: an absolute int16, or an int8 delta added to the previous value. Results
+    /// MS-RDPEGDI COORD_FIELD: an absolute int16, or an int8 delta added to the previous value. Results
     /// wrap to int16 (a legitimate server never leaves that range), so no later arithmetic can overflow.
     /// </summary>
     private static int ReadCoord(ref ByteReader r, bool delta, int value) =>
@@ -672,7 +666,7 @@ internal sealed class OrderDecoder
         }
     }
 
-    /// <summary>FreeRDP <c>update_read_color</c>: three bytes, the first in bits 0–7.</summary>
+    /// <summary>MS-RDPEGDI TS_COLOR: three bytes, the first in bits 0–7.</summary>
     private static void ReadColorField(ref ByteReader r, uint f, int field, ref uint value)
     {
         if (HasField(f, field))
@@ -702,7 +696,7 @@ internal sealed class OrderDecoder
     }
 
     /// <summary>
-    /// Wire colour to opaque BGRA (FreeRDP <c>gdi_decode_color</c>): 24/32 bpp sessions send BGR24 (first byte red),
+    /// Wire colour to opaque BGRA: 24/32 bpp sessions send BGR24 (first byte red),
     /// 16 bpp RGB565 and 15 bpp RGB555 in the low 16 bits, 8 bpp a palette index (grey here, as for bitmaps). 15/16
     /// bpp expand through <see cref="Framebuffer.ConvertRow"/> so fills match bitmap pixels exactly.
     /// </summary>
@@ -766,7 +760,7 @@ internal sealed class OrderDecoder
         byte orderType = r.U8();
 
         // MS-RDPEGDI 2.2.2.2.1.2.1.1: orderLength is the order size minus 13, so orderLength + 7 bytes follow the
-        // 6-byte header. FreeRDP rejects a negative length rather than reading a header-only order.
+        // 6-byte header. A negative length is rejected rather than read as a header-only order.
         if (orderLength < 0)
         {
             throw new RdpProtocolException($"Secondary drawing order 0x{orderType:X2} has a negative length {orderLength}.");
@@ -778,7 +772,7 @@ internal sealed class OrderDecoder
             throw new RdpProtocolException($"Secondary drawing order 0x{orderType:X2} needs {bodyLength} bytes, {r.Remaining} left.");
         }
 
-        // Parsing inside the body slice enforces FreeRDP's "read too much" check; any shortfall is skipped.
+        // Parsing inside the body slice keeps every field read within orderLength; any shortfall is skipped.
         var body = new ByteReader(r.Take(bodyLength));
         switch (orderType)
         {
@@ -796,7 +790,7 @@ internal sealed class OrderDecoder
         }
     }
 
-    /// <summary>TS_CACHE_BITMAP_ORDER (FreeRDP <c>update_read_cache_bitmap_order</c>).</summary>
+    /// <summary>TS_CACHE_BITMAP_ORDER (MS-RDPEGDI).</summary>
     private void CacheBitmapV1(ref ByteReader r, bool compressed, ushort extraFlags)
     {
         int cacheId = r.U8();
@@ -830,7 +824,7 @@ internal sealed class OrderDecoder
         StoreBitmap(cacheId, cacheIndex, width, height, bpp, compressed, r.Take(bitmapLength));
     }
 
-    /// <summary>TS_CACHE_BITMAP_REV2_ORDER (FreeRDP <c>update_read_cache_bitmap_v2_order</c>).</summary>
+    /// <summary>TS_CACHE_BITMAP_REV2_ORDER (MS-RDPEGDI).</summary>
     private void CacheBitmapV2(ref ByteReader r, bool compressed, ushort extraFlags)
     {
         // extraFlags: cacheId bits 0–2, bitsPerPixelId bits 3–6, CBR2 flags bits 7–15.
@@ -868,8 +862,8 @@ internal sealed class OrderDecoder
 
         if (compressed && (flags & Cbr2NoBitmapCompressionHdr) == 0)
         {
-            // TS_CD_HEADER: cbCompFirstRowSize, cbCompMainBodySize, cbScanWidth, cbUncompressedSize. FreeRDP
-            // takes the main body size as the data length.
+            // TS_CD_HEADER: cbCompFirstRowSize, cbCompMainBodySize, cbScanWidth, cbUncompressedSize. The main
+            // body size is the data length.
             r.Skip(2);
             bitmapLength = r.U16LE();
             r.Skip(4);
@@ -883,14 +877,14 @@ internal sealed class OrderDecoder
         StoreBitmap(cacheId, cacheIndex, width, height, bpp, compressed, r.Take(bitmapLength));
     }
 
-    /// <summary>FreeRDP <c>update_read_2byte_unsigned</c>: 7 bits, or 15 bits when bit 7 of the first byte is set.</summary>
+    /// <summary>MS-RDPEGDI TWO_BYTE_UNSIGNED_ENCODING: 7 bits, or 15 bits when bit 7 of the first byte is set.</summary>
     private static int ReadTwoByteUnsigned(ref ByteReader r)
     {
         int first = r.U8();
         return (first & 0x80) != 0 ? ((first & 0x7F) << 8) | r.U8() : first;
     }
 
-    /// <summary>FreeRDP <c>update_read_4byte_unsigned</c>: the top two bits count extra bytes, big-endian, 30 bits max.</summary>
+    /// <summary>MS-RDPEGDI FOUR_BYTE_UNSIGNED_ENCODING: the top two bits count extra bytes, big-endian, 30 bits max.</summary>
     private static int ReadFourByteUnsigned(ref ByteReader r)
     {
         int first = r.U8();
@@ -904,9 +898,9 @@ internal sealed class OrderDecoder
     }
 
     /// <summary>
-    /// Decodes and stores one cache entry under FreeRDP's <c>bitmap_cache_put</c> rules: each cell has one extra
-    /// slot reached by BITMAP_CACHE_WAITING_LIST_INDEX (0x7FFF), and an id one past the last cell is FreeRDP's
-    /// over-allocated cell for off-by-one servers (MemBlt can never read it, so the bitmap is decoded and dropped).
+    /// Decodes and stores one cache entry under these rules: each cell has one extra
+    /// slot reached by BITMAP_CACHE_WAITING_LIST_INDEX (0x7FFF), and an id one past the last cell is tolerated
+    /// for off-by-one servers (MemBlt can never read it, so the bitmap is decoded and dropped).
     /// </summary>
     private void StoreBitmap(int cacheId, int cacheIndex, int width, int height, int bpp, bool compressed, ReadOnlySpan<byte> data)
     {
@@ -966,7 +960,7 @@ internal sealed class OrderDecoder
     }
 
     /// <summary>
-    /// FreeRDP <c>gdi_Bitmap_Decompress</c>: uncompressed rows are bottom-up in the bitmap's own depth; compressed
+    /// Cached bitmap decode: uncompressed rows are bottom-up in the bitmap's own depth; compressed
     /// 32 bpp is RDP 6.0 planar (decoded top-down), anything shallower interleaved RLE (bottom-up).
     /// </summary>
     private CachedBitmap DecodeBitmap(int width, int height, int bpp, bool compressed, ReadOnlySpan<byte> data)
@@ -1036,9 +1030,9 @@ internal sealed class OrderDecoder
     // ── Alternate secondary orders ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Steps over an alternate secondary order using the sizes FreeRDP's readers consume (none is negotiated, so
-    /// nothing is drawn). Types whose size cannot be determined — composed desktop orders, which FreeRDP accepts
-    /// without consuming anything, and unknown types — are rejected.
+    /// Steps over an alternate secondary order using the sizes their MS-RDPEGDI layouts define (none is negotiated, so
+    /// nothing is drawn). Types whose size cannot be determined — composed desktop orders
+    /// and unknown types — are rejected.
     /// </summary>
     private void SkipAltSecondary(ref ByteReader r, byte controlFlags)
     {

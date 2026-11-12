@@ -67,8 +67,8 @@ public sealed class RdpConnectionException : Exception
     /// </summary>
     public string? TlsTrace { get; }
 
-    // Servers differ in how they handle TLS versions (FreeRDP keeps /tls:enforce:1.2 for "buggy TLS
-    // version negotiation"), so a failure after the handshake names the version that was in use.
+    // Servers differ in how they handle TLS versions, so a failure after the handshake names the version
+    // that was in use.
     private static string WithTls(string detail, SslProtocols? tls) => tls switch
     {
         SslProtocols.Tls13 => detail + " [TLS 1.3]",

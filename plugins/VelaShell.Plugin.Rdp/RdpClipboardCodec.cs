@@ -48,7 +48,7 @@ internal static class RdpClipboardCodec
     /// <summary>
     /// FD_SHOWPROGRESSUI asks the Windows Shell that consumes these descriptors (the server's Explorer
     /// for local → remote, the local Explorer for remote → local) to run its own copy-progress dialog,
-    /// as it does for mstsc/FreeRDP pastes. Without it a large paste shows nothing on that side while
+    /// as it does for mstsc pastes. Without it a large paste shows nothing on that side while
     /// the bytes stream in, so the Explorer window looks hung even though the copy is progressing.
     /// </summary>
     internal static uint DescriptorFlags(bool directory) =>

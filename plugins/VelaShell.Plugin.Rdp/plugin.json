@@ -6,7 +6,7 @@
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.Rdp.dll",
   "apiLevel": 2,
-  "minSdkVersion": "2.1.5",
+  "minSdkVersion": "2.1.7",
   "hostMode": "inProcess",
   "license": "MIT",
   "homepage": "https://github.com/VelaShellLabs/velashell-plugins",
