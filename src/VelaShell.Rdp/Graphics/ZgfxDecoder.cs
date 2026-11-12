@@ -112,7 +112,8 @@ internal sealed class ZgfxDecoder
             int value = t.Value + reader.Read(t.Extra);
             if (!t.Match)
             {
-                if (t.Bits == 1 && IsShortLiteral(value)) { throw Error("Reserved literal encoding."); }
+                // The generic literal may carry any byte, including those that also have a shorter token: the token
+                // table (MS-RDPEGFX 2.2.5.1) reserves no values, and the output is the same byte either way.
                 Emit((byte)value, ref count);
                 continue;
             }
@@ -156,8 +157,6 @@ internal sealed class ZgfxDecoder
         if (_historyCount < HistorySize) { _historyCount++; }
     }
 
-    private static bool IsShortLiteral(int value) => value is <= 0x0c or 0x38 or 0x39 or 0x3a or 0x3b
-        or 0x3c or 0x3d or 0x3e or 0x3f or 0x40 or 0x66 or 0x80 or 0xff;
     private static RdpProtocolException Error(string detail) => new($"Invalid ZGFX data: {detail}");
 
     private ref struct Bits
