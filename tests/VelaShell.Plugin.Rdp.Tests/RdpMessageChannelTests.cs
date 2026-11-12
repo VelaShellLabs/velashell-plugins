@@ -60,7 +60,8 @@ public sealed class RdpMessageChannelTests
         _ = await Assert.ThrowsAsync<VelaShell.PluginSdk.Protocols.ProtocolConnectionException>(
             () => RdpConnector.ConnectAsync(request, settings, new("en"), stop.Token));
         byte[] gcc = await captured.Task.WaitAsync(stop.Token);
-        Assert.AreEqual(expectUdp, gcc.AsSpan().IndexOf(new byte[] { 10, 0xC0, 8, 0, 5, 2, 0, 0 }) >= 0);
+        // TS_UD_CS_MULTITRANSPORT offers reliable UDP with soft-sync only (0x201), not lossy UDP.
+        Assert.AreEqual(expectUdp, gcc.AsSpan().IndexOf(new byte[] { 10, 0xC0, 8, 0, 1, 2, 0, 0 }) >= 0);
     }
 
     [TestMethod]
@@ -70,12 +71,22 @@ public sealed class RdpMessageChannelTests
             messageChannel: true, multitransport: true, adaptiveNetwork: true);
         byte[] legacy = GccData.BuildClientData(800, 600, 32, 1, "test", 0, [],
             messageChannel: false, multitransport: true, adaptiveNetwork: true);
-        byte[] extensions = [6, 0xC0, 8, 0, 0, 0, 0, 0, 10, 0xC0, 8, 0, 5, 2, 0, 0];
+        byte[] extensions = [6, 0xC0, 8, 0, 0, 0, 0, 0, 10, 0xC0, 8, 0, 1, 2, 0, 0];
         Assert.IsTrue(enabled.AsSpan().EndsWith(extensions));
         Assert.IsFalse(legacy.AsSpan().EndsWith(extensions));
         int core = enabled.AsSpan().IndexOf(new byte[] { 1, 0xC0, 0xD8, 0, 4, 0, 8, 0 });
         Assert.IsGreaterThanOrEqualTo(0, core);
         Assert.AreEqual(0xA0, BinaryPrimitives.ReadUInt16LittleEndian(enabled.AsSpan(core + 144)) & 0xA0);
         Assert.AreEqual((byte)7, enabled[core + 210]);
+    }
+
+    [TestMethod]
+    [DataRow(true, (ushort)1, 0x205u, true, DisplayName = "reliable UDP requested and supported")]
+    [DataRow(true, (ushort)2, 0x205u, false, DisplayName = "lossy UDP is declined")]
+    [DataRow(false, (ushort)1, 0x205u, false, DisplayName = "UDP not offered")]
+    [DataRow(true, (ushort)1, 0x004u, false, DisplayName = "server lacks reliable UDP and soft-sync")]
+    public void OnlyReliableUdpTunnelsAreAccepted(bool advertised, ushort protocol, uint serverFlags, bool accepted)
+    {
+        Assert.AreEqual(accepted, RdpConnection.AcceptsTunnel(advertised, protocol, serverFlags));
     }
 }

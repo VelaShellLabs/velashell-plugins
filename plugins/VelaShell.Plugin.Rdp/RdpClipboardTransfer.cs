@@ -23,9 +23,20 @@ internal sealed class RdpClipboardTransfer
     private long _startedAt;
 
     internal RdpClipboardProgress? Snapshot { get { lock (_gate) { return _progress; } } }
-    internal bool IsStalled(TimeSpan timeout)
+    /// <summary>
+    /// Whether the transfer should be ended: an active one (preparing, transferring, retrying) after
+    /// <paramref name="activeTimeout" /> without progress, and a prepared or delivered one ("Ready", "Sent") — which is
+    /// only waiting for the remote side to paste — after <paramref name="idleTimeout" />, when its local file handles are
+    /// released.
+    /// </summary>
+    internal bool IsStalled(TimeSpan activeTimeout, TimeSpan idleTimeout)
     {
-        lock (_gate) { return (_progress?.Active == true || _progress?.State is "Sent" or "Ready") && Environment.TickCount64 - _lastActivity > timeout.TotalMilliseconds; }
+        lock (_gate)
+        {
+            long idle = Environment.TickCount64 - _lastActivity;
+            return _progress?.Active == true ? idle > activeTimeout.TotalMilliseconds
+                : _progress?.State is "Sent" or "Ready" && idle > idleTimeout.TotalMilliseconds;
+        }
     }
     internal void Touch() { lock (_gate) { _lastActivity = Environment.TickCount64; } }
     internal void Retry()

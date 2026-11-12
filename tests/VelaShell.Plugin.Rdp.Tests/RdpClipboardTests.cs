@@ -128,6 +128,25 @@ public sealed class RdpClipboardTests
     }
 
     [TestMethod]
+    public async Task AnActiveUploadStallsOnItsOwnTimeoutAndAReadySourceOnTheIdleRelease()
+    {
+        Assert.AreEqual(TimeSpan.FromSeconds(30), RdpClipboardBridge.LocalTransferStallTimeout);
+        Assert.AreEqual(TimeSpan.FromSeconds(60), RdpClipboardBridge.LocalSourceIdleRelease);
+
+        var ready = new RdpClipboardTransfer();
+        ready.Start(10, "Ready");
+        var active = new RdpClipboardTransfer();
+        active.Start(10, "Transferring");
+        await Task.Delay(20);
+        // A prepared source waits for the remote paste: only the idle release applies to it.
+        Assert.IsFalse(ready.IsStalled(TimeSpan.Zero, TimeSpan.FromHours(1)));
+        Assert.IsTrue(ready.IsStalled(TimeSpan.FromHours(1), TimeSpan.Zero));
+        // A transfer in progress stalls on the active timeout.
+        Assert.IsTrue(active.IsStalled(TimeSpan.Zero, TimeSpan.FromHours(1)));
+        Assert.IsFalse(active.IsStalled(TimeSpan.FromHours(1), TimeSpan.Zero));
+    }
+
+    [TestMethod]
     public async Task LocalSnapshotUsesChunksAndRejectsInvalidRanges()
     {
         string root = Path.Combine(Path.GetTempPath(), "vela-rdp-test-" + Guid.NewGuid().ToString("N"));

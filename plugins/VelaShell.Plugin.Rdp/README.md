@@ -195,8 +195,9 @@ arguments.
   retain local source handles across new copies. Retired versions unlock after consumers finish or release
   their streams/data object. Explicit cancellation, disconnect and disposal invalidate active leases.
   Without peer locking, remote source replacement cannot be preserved; provider failure or process exit
-  can still fail a transfer even with locks. Only unlocked idle local handles expire after 30 seconds
-  and are prepared again on the next remote paste.
+  can still fail a transfer even with locks. Only unlocked idle local handles expire after 60 seconds
+  and are prepared again on the next Ctrl+V in this window; a transfer in progress times out after
+  30 seconds without progress.
 - A sent file-block request waits up to 30 seconds for its response. Only that response timeout gets
   up to two additional attempts, after cancellable 500/1000 ms delays. Each attempt keeps the same
   file version, index, offset and length but uses a fresh streamId; late responses are discarded.

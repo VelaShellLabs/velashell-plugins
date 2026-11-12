@@ -14,6 +14,14 @@ internal sealed partial class RdpConnection
     private bool _udpAdvertised;
     internal RdpNetworkMonitor Network { get; }
 
+    /// <summary>
+    /// Whether to accept an Initiate Multitransport Request: only the reliable transport (UDP-R, requestedProtocol 1)
+    /// with soft-sync, when the client offered UDP and the server supports both. A request for lossy UDP-L is declined
+    /// (the client does not offer it, see GccData), so the server keeps that traffic on TCP.
+    /// </summary>
+    internal static bool AcceptsTunnel(bool udpAdvertised, ushort requestedProtocol, uint serverFlags) =>
+        udpAdvertised && requestedProtocol == 1 && (serverFlags & 0x200) != 0 && (serverFlags & 1u) != 0;
+
     private async Task ProcessMessageChannelAsync(byte[] payload, CancellationToken ct)
     {
         var r = new ByteReader(payload);
@@ -33,8 +41,7 @@ internal sealed partial class RdpConnection
         if (r.Remaining != 0) { throw new RdpProtocolException("Trailing multitransport initiation data."); }
         int type = protocol == 1 ? 1 : 3;
         uint serverFlags = _mcs.Server.MultitransportFlags;
-        bool supported = _udpAdvertised && protocol is 1 or 2 && (serverFlags & 0x200) != 0
-            && (serverFlags & (protocol == 1 ? 1u : 4u)) != 0;
+        bool supported = AcceptsTunnel(_udpAdvertised, protocol, serverFlags);
         if (!supported || _tunnelAttempts.ContainsKey(type))
         {
             CryptographicOperations.ZeroMemory(cookie);
