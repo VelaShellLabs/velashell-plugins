@@ -38,8 +38,15 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
             BitsPerChannel = format.BitsPerSample
         };
         _blockAlign = format.BlockAlign;
-        // A native callback must keep the collectible plugin alive until AudioQueueDispose has joined it.
-        _callbackRoot = GCHandle.Alloc(this);
+        // A native callback must keep the collectible plugin alive until AudioQueueDispose has joined it. After a
+        // failed dispose the old queue may still call back through the existing root, so it is reused rather than
+        // replaced (replacing it leaked one handle per reopen) and never freed early.
+        bool allocated = !_callbackRoot.IsAllocated;
+        if (allocated)
+        {
+            _callbackRoot = GCHandle.Alloc(this);
+        }
+
         try
         {
             Check(Native.AudioQueueNewOutput(ref description, &BufferReturned, GCHandle.ToIntPtr(_callbackRoot),
@@ -47,7 +54,7 @@ internal sealed partial class AudioQueueDevice : IPcmDevice
         }
         catch
         {
-            if (_queue == 0)
+            if (_queue == 0 && allocated)
             {
                 _callbackRoot.Free();
             }

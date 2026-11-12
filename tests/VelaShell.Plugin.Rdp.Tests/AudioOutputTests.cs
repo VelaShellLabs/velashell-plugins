@@ -345,6 +345,27 @@ public sealed class AudioOutputTests
     }
 
     [TestMethod]
+    public void AlsaSuspendIsRecoveredLikeAnUnderrunInsteadOfEndingPlayback()
+    {
+        var api = new FakeAlsaApi([2, -86, 1]);
+        var device = new AlsaDevice(api);
+        byte[] samples = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        try
+        {
+            device.Open(Stereo);
+            device.Start(samples);
+            int polls = 0;
+            while (!device.IsComplete() && polls++ < 10) { }
+            Assert.IsLessThan(10, polls, "Playback must finish after the suspend.");
+            Assert.AreEqual(1, api.Prepares);
+            Assert.HasCount(3, api.Writes);
+            Assert.AreSequenceEqual(samples.AsSpan(8).ToArray(), api.Writes[2], "Only the unwritten frame is retried.");
+        }
+        finally { device.Close(); }
+        Assert.IsTrue(api.Closed);
+    }
+
+    [TestMethod]
     public void AlsaFeedsLaterBuffersBeforeCompletionAndRecoversTheirUnwrittenSuffix()
     {
         var api = new FakeAlsaApi([3, 1, -32, -11, 1]) { DelayResults = new Queue<int>([3, 1, 0]) };
@@ -411,6 +432,10 @@ public sealed class AudioOutputTests
             if (result == -32)
             {
                 _state = 4;
+            }
+            else if (result == -86)
+            {
+                _state = 7;   // SND_PCM_STATE_SUSPENDED
             }
 
             return result;

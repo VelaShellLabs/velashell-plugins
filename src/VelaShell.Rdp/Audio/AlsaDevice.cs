@@ -4,7 +4,8 @@ namespace VelaShell.Rdp.Audio;
 
 internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
 {
-    private const int Again = -11, Interrupted = -4, Underrun = -32;
+    // -EAGAIN, -EINTR, -EPIPE (xrun) and -ESTRPIPE (the PCM was suspended, e.g. across system sleep).
+    private const int Again = -11, Interrupted = -4, Underrun = -32, Suspended = -86;
     private readonly IAlsaApi _api = api ?? new SystemAlsaApi();
     private nint _pcm;
     private readonly Queue<Buffer> _buffers = new();
@@ -66,11 +67,12 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
                 return;
             }
 
-            if (written == Underrun)
+            if (written is Underrun or Suspended)
             {
-                // Accepted frames have played; retry only the unwritten suffix, across all buffers.
+                // Accepted frames have played (or were lost to the suspend); retry only the unwritten suffix, across all
+                // buffers. A suspended PCM recovers with prepare, as ALSA documents for devices that cannot resume.
                 _playedFrames = _writtenFrames;
-                Check(_api.Prepare(_pcm), "recover output after underrun");
+                Check(_api.Prepare(_pcm), written == Underrun ? "recover output after underrun" : "recover output after suspend");
                 return;
             }
             Check((int)written, "write PCM samples");
@@ -96,8 +98,9 @@ internal sealed partial class AlsaDevice(IAlsaApi? api = null) : IPcmDevice
         }
 
         int result = _api.Delay(_pcm, out nint remainingFrames);
-        if (result == Underrun && _api.State(_pcm) == 4)
+        if ((result == Underrun && _api.State(_pcm) == 4) || result == Suspended)
         {
+            // The next write reports the same condition and recovers the device.
             _playedFrames = _writtenFrames;
             return true;
         }
