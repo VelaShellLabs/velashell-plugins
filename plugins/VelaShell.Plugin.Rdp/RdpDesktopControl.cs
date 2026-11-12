@@ -166,9 +166,17 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
 
         if (_cursors.Count >= 32)
         {
-            // Pointers are cached by the server too (21 slots): an evicted shape is rebuilt if it ever returns.
-            foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { if (!ReferenceEquals(cursor, Cursor)) { cursor.Dispose(); bitmap.Dispose(); } }
+            // Pointers are cached by the server too (21 slots): an evicted shape is rebuilt if it ever returns. The
+            // cursor on screen stays cached — dropping it without disposing leaked it and its bitmap for good.
+            var keep = new List<KeyValuePair<RdpPointer, (Cursor Cursor, Bitmap Bitmap)>>(1);
+            foreach (KeyValuePair<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> entry in _cursors)
+            {
+                if (ReferenceEquals(entry.Value.Cursor, Cursor)) { keep.Add(entry); }
+                else { entry.Value.Cursor.Dispose(); entry.Value.Bitmap.Dispose(); }
+            }
+
             _cursors.Clear();
+            foreach (KeyValuePair<RdpPointer, (Cursor Cursor, Bitmap Bitmap)> entry in keep) { _cursors[entry.Key] = entry.Value; }
         }
 
         var image = new WriteableBitmap(new PixelSize(pointer.Width, pointer.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
@@ -771,6 +779,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
             pointers.PointerChanged -= OnPointer;
         }
 
+        Cursor = null;   // never leave a disposed cursor attached to the control
         foreach ((Cursor cursor, Bitmap bitmap) in _cursors.Values) { cursor.Dispose(); bitmap.Dispose(); }
         _cursors.Clear();
         _ = _input.Writer.TryComplete();

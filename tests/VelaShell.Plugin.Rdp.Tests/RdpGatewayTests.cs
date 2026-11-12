@@ -44,6 +44,25 @@ public sealed class RdpGatewayTests
     }
 
     [TestMethod]
+    [DataRow((ushort)0x2, DisplayName = "authnCookie alone")]
+    [DataRow((ushort)0x4, DisplayName = "udpPort alone")]
+    [DataRow((ushort)0x7, DisplayName = "channelId, udpPort, authnCookie")]
+    public async Task ChannelResponseOptionalFieldsFollowTheSpecifiedOrder(ushort fields)
+    {
+        // HTTP_CHANNEL_RESPONSE_OPTIONAL (MS-TSGU 2.2.10.5): channelId (0x1, 4 bytes), udpPort (0x4, 2 bytes),
+        // authnCookie (0x2, HTTP_BYTE_BLOB), in that order.
+        var body = new List<byte> { 0, 0, 0, 0, (byte)fields, (byte)(fields >> 8), 0, 0 };
+        if ((fields & 1) != 0) { body.AddRange([1, 0, 0, 0]); }
+        if ((fields & 4) != 0) { body.AddRange([0x3F, 0x0D]); }                 // 3391
+        if ((fields & 2) != 0) { body.AddRange([3, 0, 0xAA, 0xBB, 0xCC]); }     // cbLen 3 + blob
+        byte[][] replies = Responses();
+        replies[3] = Packet(9, [.. body]);
+        var socket = new ScriptedSocket([.. replies, Packet(13, []), Packet(16, new byte[4])]);
+        using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "desktop.example", 3389, 0, CancellationToken.None);
+        Assert.HasCount(4, socket.Sent, "The channel response was accepted.");
+    }
+
+    [TestMethod]
     public async Task ConsumesServiceMessageAndContinuesReadingData()
     {
         var messages = new List<string>();
@@ -112,6 +131,22 @@ public sealed class RdpGatewayTests
         Assert.IsTrue(RdpGatewayStream.IsRedirectionForbidden(0x40000000u, 0x20u));
         Assert.IsFalse(RdpGatewayStream.IsRedirectionForbidden(0x40000000u, 0u), "Nothing requested, nothing forbidden.");
         Assert.IsFalse(RdpGatewayStream.IsRedirectionForbidden(0x01u, 0x08u), "Drives forbidden, clipboard requested.");
+    }
+
+    [TestMethod]
+    public async Task AStatementOfHealthRequestIsSkippedWhenNapWasNotAdvertised()
+    {
+        // Tunnel response with capsFlags (0x2) and SOH_REQ (0x4): a 16-byte nonce and an HTTP_UNICODE_STRING serverCert.
+        var tunnel = new List<byte>(new byte[10]);
+        tunnel[6] = 0x06;
+        tunnel.AddRange([8, 0, 0, 0]);                       // capsFlags
+        tunnel.AddRange(new byte[16]);                       // nonce
+        tunnel.AddRange([4, 0, (byte)'c', 0, (byte)'e', 0]); // serverCert: cbLen 4
+        byte[][] replies = Responses();
+        replies[1] = Packet(5, [.. tunnel]);
+        var socket = new ScriptedSocket([.. replies, Packet(13, []), Packet(16, new byte[4])]);
+        using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "desktop.example", 3389, 0, CancellationToken.None);
+        Assert.HasCount(4, socket.Sent, "Tunnel, authorization and channel creation proceeded.");
     }
 
     [TestMethod]
