@@ -1,6 +1,6 @@
 # VelaShell 第一方插件
 
-> 当前版本 **2.1.4** · SDK **2.1.5**
+> 当前版本 **2.1.5** · SDK **2.1.5**
 
 [VelaShell](https://github.com/joesdu/VelaShell) 官方维护的插件,一个解决方案管起来:
 Redis、MongoDB、S3、Telnet、串口、Docker 面板、RDP 远程桌面。
