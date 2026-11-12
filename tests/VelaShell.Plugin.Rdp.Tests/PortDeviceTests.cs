@@ -20,7 +20,7 @@ public sealed class PortDeviceTests
     public void SettingsAreExplicitAndRegisterCompanionChannel()
     {
         Assert.IsEmpty(RdpSettings.From(RdpSettingsTests.Request(), new("en"), []).Ports);
-        var settings = RdpSettings.From(RdpSettingsTests.Request(("ports", "com3;LPT1")), new("en"), []);
+        var settings = RdpSettings.From(RdpSettingsTests.Request(("ports", "com3;LPT1")), new("en"), [], windowsDevices: true);
         Assert.AreEqual("COM3", settings.Ports[0].Name);
         var options = new RdpClientOptions { Host = "unused", Ports = settings.Ports, DynamicResolution = false };
         Assert.HasCount(2, RdpManagedSession.BuildChannels(options));
