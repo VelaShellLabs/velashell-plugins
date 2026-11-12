@@ -591,12 +591,14 @@ internal sealed partial class ObjectsTabViewModel
         return Math.Max(0, second - first) / Math.Max(0.001, watch.Elapsed.TotalSeconds);
     }
 
+    private static readonly string[] TopWriteOperations = ["insert", "update", "remove"];
+
     private async Task<long> TopWritesAsync(string ns, CancellationToken cancellationToken)
     {
         BsonDocument top = await Workspace.Connection.RunCommandAsync("admin", new BsonDocument("top", 1), cancellationToken).ConfigureAwait(true);
         if (top.GetValue("totals", new BsonDocument()).AsBsonDocument.TryGetValue(ns, out BsonValue entry) && entry.IsBsonDocument)
         {
-            return new[] { "insert", "update", "remove" }
+            return TopWriteOperations
                 .Sum(op => entry.AsBsonDocument.TryGetValue(op, out BsonValue counter) && counter.IsBsonDocument
                     ? counter.AsBsonDocument.GetValue("count", 0).ToInt64()
                     : 0);

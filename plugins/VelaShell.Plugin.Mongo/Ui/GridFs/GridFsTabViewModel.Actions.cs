@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -32,28 +33,28 @@ internal sealed partial class GridFsTabViewModel
     private string? _reselectPath;
 
     /// <summary>上传文件(多选)。</summary>
-    public AsyncCommand UploadFilesCommand { get; private set; } = null!;
+    public AsyncCommand UploadFilesCommand { get; private set; }
 
     /// <summary>上传文件夹(递归,保留相对路径)。</summary>
-    public AsyncCommand UploadFolderCommand { get; private set; } = null!;
+    public AsyncCommand UploadFolderCommand { get; private set; }
 
     /// <summary>下载勾选 / 选中的项。</summary>
-    public AsyncCommand DownloadCommand { get; private set; } = null!;
+    public AsyncCommand DownloadCommand { get; private set; }
 
     /// <summary>重命名。</summary>
-    public AsyncCommand RenameCommand { get; private set; } = null!;
+    public AsyncCommand RenameCommand { get; private set; }
 
     /// <summary>删除(每个文件的全部版本)。</summary>
-    public AsyncCommand DeleteCommand { get; private set; } = null!;
+    public AsyncCommand DeleteCommand { get; private set; }
 
     /// <summary>新建存储桶。</summary>
-    public RelayCommand NewBucketCommand { get; private set; } = null!;
+    public RelayCommand NewBucketCommand { get; private set; }
 
     /// <summary>检查孤儿块。</summary>
-    public AsyncCommand CheckOrphansCommand { get; private set; } = null!;
+    public AsyncCommand CheckOrphansCommand { get; private set; }
 
     /// <summary>取消全部传输。</summary>
-    public RelayCommand CancelTransfersCommand { get; private set; } = null!;
+    public RelayCommand CancelTransfersCommand { get; private set; }
 
     /// <summary>
     /// 交给系统打开一个本地文件(视图在构造时接上 —— 只有 TopLevel 拿得到 Launcher)。
@@ -61,6 +62,7 @@ internal sealed partial class GridFsTabViewModel
     /// </summary>
     internal Func<string, Task<bool>>? Launcher { get; set; }
 
+    [MemberNotNull(nameof(UploadFilesCommand), nameof(UploadFolderCommand), nameof(DownloadCommand), nameof(RenameCommand), nameof(DeleteCommand), nameof(NewBucketCommand), nameof(CheckOrphansCommand), nameof(CancelTransfersCommand))]
     private void InitializeActions()
     {
         UploadFilesCommand = new(UploadFilesAsync);
@@ -385,7 +387,7 @@ internal sealed partial class GridFsTabViewModel
 
     // ── 传输队列 ───────────────────────────────────────────────────────────
 
-    private void Enqueue(IReadOnlyList<GridFsTransfer> jobs)
+    private void Enqueue(List<GridFsTransfer> jobs)
     {
         if (jobs.Count == 0)
         {

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MongoDB.Bson;
 using VelaShell.Plugin.Mongo.Bson;
@@ -88,11 +89,12 @@ internal sealed partial class CollectionTabViewModel
     public string DrillSummary => Drill?.Summary(Loc) ?? "";
 
     /// <summary>面包屑左侧的「‹」。</summary>
-    public RelayCommand DrillBackCommand { get; private set; } = null!;
+    public RelayCommand DrillBackCommand { get; private set; }
 
     /// <summary>点面包屑的某一段。</summary>
-    public RelayCommand<DrillCrumb> DrillToCommand { get; private set; } = null!;
+    public RelayCommand<DrillCrumb> DrillToCommand { get; private set; }
 
+    [MemberNotNull(nameof(DrillBackCommand), nameof(DrillToCommand))]
     private void InitializeDrillCommands()
     {
         DrillBackCommand = new(DrillBack, () => Drill is not null);
@@ -243,7 +245,7 @@ internal sealed partial class CollectionTabViewModel
         select ??= rows.FirstOrDefault(r => r.Number == keepIndex) ?? rows.FirstOrDefault();
         column ??= drill.Columns.FirstOrDefault(c => c.Name == keepColumn)
                    ?? drill.Columns.FirstOrDefault(static c => c.Name != "_id")
-                   ?? drill.Columns.FirstOrDefault();
+                   ?? (drill.Columns.Count > 0 ? drill.Columns[0] : null);
         _currentColumn = column;
         RaisePropertyChanged(nameof(CurrentColumn));
         GridSelectedRow = select;

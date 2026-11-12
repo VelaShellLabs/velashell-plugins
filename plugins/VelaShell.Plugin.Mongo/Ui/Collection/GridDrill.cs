@@ -122,7 +122,7 @@ internal sealed class GridDrill
         return columns;
     }
 
-    private static List<CollectionColumn> DocumentColumns(IReadOnlyList<BsonDocument> documents, IReadOnlyList<CollectionColumn>? previous)
+    private static List<CollectionColumn> DocumentColumns(List<BsonDocument> documents, IReadOnlyList<CollectionColumn>? previous)
     {
         var order = new List<string>();
         var kinds = new Dictionary<string, Dictionary<BsonKind, int>>(StringComparer.Ordinal);

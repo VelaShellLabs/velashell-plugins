@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Avalonia.Threading;
 using MongoDB.Bson;
@@ -45,6 +46,7 @@ internal sealed partial class CollectionTabViewModel
     /// <summary>只读横幅「解锁写入 15 分钟」。</summary>
     public AsyncCommand UnlockCommand { get; private set; } = null!;
 
+    [MemberNotNull(nameof(DrillBackCommand), nameof(DrillToCommand))]
     private void InitializeEditCommands()
     {
         AddDocumentCommand = new(OpenNewDocument);

@@ -37,6 +37,12 @@ public sealed record RedisExportResult(int Keys, long Bytes, IReadOnlyList<strin
 /// </summary>
 internal sealed partial class RedisConnection
 {
+    /// <summary>导出行的序列化选项:中文、引号等原样输出,不转成 <c>\uXXXX</c>。</summary>
+    private static readonly JsonSerializerOptions ExportJsonOptions = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     /// <summary>
     /// 新建一个键。
     /// <para>
@@ -171,7 +177,7 @@ internal sealed partial class RedisConnection
         return new(written, new FileInfo(path).Length, skipped, path);
     }
 
-    private async Task<string?> BuildExportLineAsync(IDatabase db, RedisKeyName key, RedisExportFormat format)
+    private static async Task<string?> BuildExportLineAsync(IDatabase db, RedisKeyName key, RedisExportFormat format)
     {
         var redisKey = key.ToRedisKey();
         TimeSpan? ttl = await db.KeyTimeToLiveAsync(redisKey).ConfigureAwait(false);
@@ -307,11 +313,7 @@ internal sealed partial class RedisConnection
             default:
                 return null;
         }
-        return JsonSerializer.Serialize(payload,
-            new JsonSerializerOptions
-            {
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            });
+        return JsonSerializer.Serialize(payload, ExportJsonOptions);
     }
 
     /// <summary>

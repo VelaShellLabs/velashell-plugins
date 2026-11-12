@@ -190,7 +190,7 @@ public static class CodeExport
         _ = b.Append("db");
         if (command.Collection is { } collection)
         {
-            _ = b.Append(System.Text.RegularExpressions.Regex.IsMatch(collection, "^[A-Za-z_$][A-Za-z0-9_$]*$")
+            _ = b.Append(BsonText.IsIdentifier(collection)
                 ? "." + collection
                 : $".getCollection({BsonText.Quote(collection)})");
         }
@@ -476,7 +476,7 @@ public static class CodeExport
             }
         }
 
-        private string Lit(BsonValue value, int level)
+        private static string Lit(BsonValue value, int level)
         {
             switch (value.BsonType)
             {
@@ -665,7 +665,7 @@ public static class CodeExport
                     return;
                 case "deleteOne" or "deleteMany" or "findOneAndDelete":
                     Var("filter", Op.Filter!);
-                    _ = Body.Append("\n").Append(Op.Name switch
+                    _ = Body.Append('\n').Append(Op.Name switch
                     {
                         "deleteOne" => "result = collection.delete_one(filter)\n",
                         "deleteMany" => "result = collection.delete_many(filter)\n",
@@ -994,7 +994,7 @@ public static class CodeExport
         }
 
         private static string Key(string name) =>
-            System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_$][A-Za-z0-9_$]*$") ? name : Escape(name);
+            BsonText.IsIdentifier(name) ? name : Escape(name);
     }
 
     // ── Java ────────────────────────────────────────────────────────────────

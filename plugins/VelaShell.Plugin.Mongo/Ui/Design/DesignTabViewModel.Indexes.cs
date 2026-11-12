@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -87,17 +88,18 @@ internal sealed partial class DesignTabViewModel
     public string HideIcon => SelectedIndex?.IsHidden == true ? "Mongo.eye" : "Mongo.eye-off";
 
     /// <summary>隐藏 / 取消隐藏选中的索引。</summary>
-    public AsyncCommand ToggleHiddenCommand { get; private set; } = null!;
+    public AsyncCommand ToggleHiddenCommand { get; private set; }
 
     /// <summary>删除选中的索引。</summary>
-    public AsyncCommand DropIndexCommand { get; private set; } = null!;
+    public AsyncCommand DropIndexCommand { get; private set; }
 
     /// <summary>刷新索引页。</summary>
-    public AsyncCommand RefreshIndexesCommand { get; private set; } = null!;
+    public AsyncCommand RefreshIndexesCommand { get; private set; }
 
     /// <summary>建议卡片上的按钮。</summary>
-    public AsyncCommand<AdviceCard> AdviceActionCommand { get; private set; } = null!;
+    public AsyncCommand<AdviceCard> AdviceActionCommand { get; private set; }
 
+    [MemberNotNull(nameof(ToggleHiddenCommand), nameof(DropIndexCommand), nameof(RefreshIndexesCommand), nameof(AdviceActionCommand))]
     private void InitializeIndexes()
     {
         ToggleHiddenCommand = new(() => SelectedIndex is { } row ? SetHiddenAsync(row, !row.IsHidden) : Task.CompletedTask, () => CanHideSelected);
@@ -567,7 +569,7 @@ internal sealed partial class DesignTabViewModel
     }];
 
     /// <summary>属性列的标签。</summary>
-    private IReadOnlyList<IndexAttrChip> Attributes(BsonDocument spec, int unusedDays)
+    private List<IndexAttrChip> Attributes(BsonDocument spec, int unusedDays)
     {
         var list = new List<IndexAttrChip>();
         // _id_ 的规格里不写 unique,但它天然唯一 —— 设计稿 07 也给它标了「唯一」。

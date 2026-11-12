@@ -1258,8 +1258,6 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
     }
 
     private static string Approx(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
-
-    private const int PageSize = 200;
 }
 
 /// <summary>

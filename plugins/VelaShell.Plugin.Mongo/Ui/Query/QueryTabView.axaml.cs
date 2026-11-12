@@ -324,7 +324,7 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
 
     private void JumpToProblem()
     {
-        if (_viewModel?.Diagnostics.FirstOrDefault() is not { } diagnostic)
+        if (_viewModel?.Diagnostics is not [var diagnostic, ..])
         {
             return;
         }
@@ -485,7 +485,7 @@ public sealed partial class QueryTabView : UserControl, IQueryEditor
     {
         Loc loc = vm.Loc;
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Height = 16 };
-        (bool explainable, bool pipeline) = vm.LensShape(statement);
+        (bool explainable, bool pipeline) = QueryTabViewModel.LensShape(statement);
         panel.Children.Add(LensButton("Mongo.play", loc["Query_LensRun"], vm.LensRunCommand, statement));
         if (explainable)
         {

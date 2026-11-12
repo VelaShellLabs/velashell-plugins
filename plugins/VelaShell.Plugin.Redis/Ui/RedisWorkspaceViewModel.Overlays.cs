@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace VelaShell.Plugin.Redis.Ui;
@@ -414,6 +415,7 @@ public sealed partial class RedisWorkspaceViewModel
     /// <summary>打开导入面板。</summary>
     public AsyncCommand OpenImportCommand { get; private set; }
 
+    [MemberNotNull(nameof(NewKey), nameof(Transfer), nameof(NewKeyCommand), nameof(OpenExportCommand), nameof(OpenImportCommand))]
     private void InitializeOverlays()
     {
         NewKey = new(Loc, CreateKeyAsync);

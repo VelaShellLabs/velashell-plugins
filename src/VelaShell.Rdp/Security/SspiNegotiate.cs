@@ -18,7 +18,7 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
     private const int SECURITY_NATIVE_DREP = 0x10;
     private const int SECPKG_ATTR_SIZES = 0;
     private const int SECBUFFER_VERSION = 0;
-    private const int SECBUFFER_EMPTY = 0, SECBUFFER_DATA = 1, SECBUFFER_TOKEN = 2, SECBUFFER_PADDING = 9, SECBUFFER_STREAM = 10;
+    private const int SECBUFFER_DATA = 1, SECBUFFER_TOKEN = 2, SECBUFFER_PADDING = 9, SECBUFFER_STREAM = 10;
     private const int SEC_WINNT_AUTH_IDENTITY_UNICODE = 2;
     private const uint SEC_E_OK = 0;
     private const uint SEC_I_CONTINUE_NEEDED = 0x00090312;
@@ -77,7 +77,7 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
 
     public bool IsComplete { get; private set; }
 
-    public unsafe byte[] Step(byte[] incoming)
+    public byte[] Step(byte[] incoming)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -86,11 +86,11 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
         fixed (byte* outPtr = outBytes)
         fixed (byte* inPtr = incoming.Length > 0 ? incoming : new byte[1])
         {
-            var outBuf = new SecBuffer { cbBuffer = outBytes.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)outPtr };
-            var outDesc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 1, pBuffers = (IntPtr)(&outBuf) };
+            var outBuf = new SecBuffer { CbBuffer = outBytes.Length, BufferType = SECBUFFER_TOKEN, PvBuffer = (IntPtr)outPtr };
+            var outDesc = new SecBufferDesc { UlVersion = SECBUFFER_VERSION, CBuffers = 1, PBuffers = (IntPtr)(&outBuf) };
 
-            var inBuf = new SecBuffer { cbBuffer = incoming.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)inPtr };
-            var inDesc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 1, pBuffers = (IntPtr)(&inBuf) };
+            var inBuf = new SecBuffer { CbBuffer = incoming.Length, BufferType = SECBUFFER_TOKEN, PvBuffer = (IntPtr)inPtr };
+            var inDesc = new SecBufferDesc { UlVersion = SECBUFFER_VERSION, CBuffers = 1, PBuffers = (IntPtr)(&inBuf) };
 
             // The service target enables Kerberos for DNS names; IP literals keep the null target (see constructor).
             uint rc = (uint)InitializeSecurityContext(_cred, _hasContext ? _ctx : IntPtr.Zero, _target, ContextReq, 0,
@@ -108,11 +108,11 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
                 throw NlaFailure.FromSspi(rc);
             }
 
-            return outBuf.cbBuffer == 0 ? [] : outBytes.AsSpan(0, outBuf.cbBuffer).ToArray();
+            return outBuf.CbBuffer == 0 ? [] : outBytes.AsSpan(0, outBuf.CbBuffer).ToArray();
         }
     }
 
-    private unsafe void QuerySizes()
+    private void QuerySizes()
     {
         Span<int> sizes = stackalloc int[4];   // cbMaxToken, cbMaxSignature, cbBlockSize, cbSecurityTrailer
         fixed (int* p = sizes)
@@ -127,7 +127,7 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
         _trailer = sizes[3];
     }
 
-    public unsafe byte[] Seal(byte[] plaintext)
+    public byte[] Seal(byte[] plaintext)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         byte[] token = new byte[_trailer];
@@ -139,13 +139,13 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
         {
             Span<SecBuffer> buffers =
             [
-                new() { cbBuffer = token.Length, BufferType = SECBUFFER_TOKEN, pvBuffer = (IntPtr)tPtr },
-                new() { cbBuffer = data.Length, BufferType = SECBUFFER_DATA, pvBuffer = (IntPtr)dPtr },
-                new() { cbBuffer = padding.Length, BufferType = SECBUFFER_PADDING, pvBuffer = (IntPtr)pPtr }
+                new() { CbBuffer = token.Length, BufferType = SECBUFFER_TOKEN, PvBuffer = (IntPtr)tPtr },
+                new() { CbBuffer = data.Length, BufferType = SECBUFFER_DATA, PvBuffer = (IntPtr)dPtr },
+                new() { CbBuffer = padding.Length, BufferType = SECBUFFER_PADDING, PvBuffer = (IntPtr)pPtr }
             ];
             fixed (SecBuffer* bp = buffers)
             {
-                var desc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 3, pBuffers = (IntPtr)bp };
+                var desc = new SecBufferDesc { UlVersion = SECBUFFER_VERSION, CBuffers = 3, PBuffers = (IntPtr)bp };
                 int rc = EncryptMessage(_ctx, 0, ref desc, 0);
                 if (rc != 0)
                 {
@@ -153,12 +153,12 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
                 }
 
                 // CredSSP carries the sealed value as signature(token) || ciphertext(data) [|| padding].
-                byte[] result = new byte[buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer];
+                byte[] result = new byte[buffers[0].CbBuffer + buffers[1].CbBuffer + buffers[2].CbBuffer];
                 int o = 0;
                 foreach (SecBuffer b in buffers)
                 {
-                    new Span<byte>((void*)b.pvBuffer, b.cbBuffer).CopyTo(result.AsSpan(o));
-                    o += b.cbBuffer;
+                    new Span<byte>((void*)b.PvBuffer, b.CbBuffer).CopyTo(result.AsSpan(o));
+                    o += b.CbBuffer;
                 }
 
                 return result;
@@ -166,7 +166,7 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
         }
     }
 
-    public unsafe byte[] Unseal(byte[] wrapped)
+    public byte[] Unseal(byte[] wrapped)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         byte[] buffer = (byte[])wrapped.Clone();
@@ -174,20 +174,20 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
         {
             Span<SecBuffer> buffers =
             [
-                new() { cbBuffer = buffer.Length, BufferType = SECBUFFER_STREAM, pvBuffer = (IntPtr)bPtr },
-                new() { cbBuffer = 0, BufferType = SECBUFFER_DATA, pvBuffer = IntPtr.Zero }
+                new() { CbBuffer = buffer.Length, BufferType = SECBUFFER_STREAM, PvBuffer = (IntPtr)bPtr },
+                new() { CbBuffer = 0, BufferType = SECBUFFER_DATA, PvBuffer = IntPtr.Zero }
             ];
             fixed (SecBuffer* bp = buffers)
             {
-                var desc = new SecBufferDesc { ulVersion = SECBUFFER_VERSION, cBuffers = 2, pBuffers = (IntPtr)bp };
+                var desc = new SecBufferDesc { UlVersion = SECBUFFER_VERSION, CBuffers = 2, PBuffers = (IntPtr)bp };
                 int rc = DecryptMessage(_ctx, ref desc, 0, out _);
                 if (rc != 0)
                 {
                     throw new RdpProtocolException($"NLA DecryptMessage failed (0x{rc:X8}).");
                 }
 
-                SecBuffer dataBuf = buffers[1].BufferType == SECBUFFER_DATA && buffers[1].cbBuffer > 0 ? buffers[1] : buffers[0];
-                return new Span<byte>((void*)dataBuf.pvBuffer, dataBuf.cbBuffer).ToArray();
+                SecBuffer dataBuf = buffers[1].BufferType == SECBUFFER_DATA && buffers[1].CbBuffer > 0 ? buffers[1] : buffers[0];
+                return new Span<byte>((void*)dataBuf.PvBuffer, dataBuf.CbBuffer).ToArray();
             }
         }
     }
@@ -215,21 +215,21 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
     [StructLayout(LayoutKind.Sequential)]
     private struct SecBuffer
     {
-        public int cbBuffer;
+        public int CbBuffer;
         public int BufferType;
-        public IntPtr pvBuffer;
+        public IntPtr PvBuffer;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SecBufferDesc
     {
-        public int ulVersion;
-        public int cBuffers;
-        public IntPtr pBuffers;
+        public int UlVersion;
+        public int CBuffers;
+        public IntPtr PBuffers;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private unsafe struct SEC_WINNT_AUTH_IDENTITY
+    private struct SEC_WINNT_AUTH_IDENTITY
     {
         public char* User;
         public int UserLength;

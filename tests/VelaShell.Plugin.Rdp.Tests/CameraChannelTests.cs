@@ -11,8 +11,11 @@ public sealed class CameraChannelTests
     private static readonly CameraMediaType Mjpg = new(2, 640, 480, 30, 1, 1, 1, 1);
     private sealed class FakeCamera : ICameraBackend
     {
-        internal int Activations, Reads, Stops, Disposals;
-        internal TaskCompletionSource<byte[]> Next = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int Activations { get; private set; }
+        internal int Reads { get; private set; }
+        internal int Stops { get; private set; }
+        internal int Disposals { get; private set; }
+        internal TaskCompletionSource<byte[]> Next { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public IReadOnlyList<CameraMediaType> MediaTypes => [Mjpg];
         public CameraMediaType CurrentMediaType => Mjpg;
         public void Activate() => Activations++;
@@ -24,9 +27,9 @@ public sealed class CameraChannelTests
     }
     private sealed class Harness
     {
-        internal readonly ConcurrentQueue<byte[]> Sent = new();
-        internal readonly FakeCamera Backend = new();
-        internal readonly DrdynvcChannel Dvc;
+        internal ConcurrentQueue<byte[]> Sent { get; } = new();
+        internal FakeCamera Backend { get; } = new();
+        internal DrdynvcChannel Dvc { get; }
         internal Harness()
         {
             Dvc = new((bytes, _) => { Sent.Enqueue(bytes); return Task.CompletedTask; }, CancellationToken.None);
@@ -56,6 +59,7 @@ public sealed class CameraChannelTests
     private static byte[] Create(byte id, string name) => [0x10, id, .. Encoding.ASCII.GetBytes(name), 0];
 
     [TestMethod]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [OSCondition(OperatingSystems.Windows)]
     public void AsyncCallbackExposesNativeComInterfaceWithoutOpeningCamera()
     {

@@ -55,7 +55,7 @@ public sealed class RedisPlugin : IVelaPlugin
     /// 用户在某一条提议上按了取消就停下:那是"够了"的信号,继续弹下一个只会烦人。
     /// </para>
     /// </summary>
-    private async Task DiscoverAsync(IPluginContext context, CancellationToken cancellationToken)
+    private static async Task DiscoverAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         var loc = new Loc(context.Host.Locale);
         var discovery = new RedisDiscovery(context);

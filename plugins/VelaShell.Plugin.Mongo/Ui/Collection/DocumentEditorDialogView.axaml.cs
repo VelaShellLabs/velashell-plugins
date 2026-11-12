@@ -376,9 +376,9 @@ public sealed partial class DocumentEditorDialogView : UserControl
 
     private void AcceptSuggestion()
     {
-        if (ViewModel is { } vm && _suggestRow is { } row && SuggestList.SelectedItem is DocumentEditorSuggestion suggestion)
+        if (ViewModel is not null && _suggestRow is { } row && SuggestList.SelectedItem is DocumentEditorSuggestion suggestion)
         {
-            vm.AcceptSuggestion(row, suggestion);
+            DocumentEditorDialogViewModel.AcceptSuggestion(row, suggestion);
             if (_suggestBox is { } box)
             {
                 box.CaretIndex = box.Text?.Length ?? 0;

@@ -418,7 +418,7 @@ internal static class UserAdmin
 
     /// <summary>头部显示的机制:有 SCRAM-SHA-256 就说它(更强的那个才是实际协商出来的),否则第一个。</summary>
     public static string PrimaryMechanism(IReadOnlyList<string> mechanisms) =>
-        mechanisms.Contains("SCRAM-SHA-256") ? "SCRAM-SHA-256" : mechanisms.FirstOrDefault() ?? "";
+        mechanisms.Contains("SCRAM-SHA-256") ? "SCRAM-SHA-256" : (mechanisms.Count > 0 ? mechanisms[0] : "");
 
     /// <summary>机制选项 → 命令里的数组。</summary>
     public static BsonArray Mechanisms(MechanismChoice choice) => choice switch

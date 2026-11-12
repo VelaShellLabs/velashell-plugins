@@ -114,7 +114,7 @@ internal sealed class MongoSession : IMongoWorkspace, IDisposable
     internal string? DefaultDatabase() =>
         Connection.Settings.Database is { Length: > 0 } configured
             ? configured
-            : _databases.FirstOrDefault(static d => !d.IsSystem)?.Name ?? _databases.FirstOrDefault()?.Name;
+            : _databases.FirstOrDefault(static d => !d.IsSystem)?.Name ?? (_databases.Count > 0 ? _databases[0].Name : null);
 
     internal CollectionInfo FindCollection(string database, string collection) =>
         CollectionsOf(database).FirstOrDefault(c => c.Name == collection)

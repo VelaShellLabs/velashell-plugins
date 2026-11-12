@@ -304,6 +304,6 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
             Title = title,
             AllowMultiple = false
         }).ConfigureAwait(true);
-        return folders.FirstOrDefault()?.TryGetLocalPath();
+        return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
     }
 }

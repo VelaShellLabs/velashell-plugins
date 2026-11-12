@@ -248,7 +248,7 @@ internal sealed class ExplainPlan
         get
         {
             ExplainStage? access = Stages.FirstOrDefault(static s => s.IsAccess);
-            return access?.ShortName ?? Stages.FirstOrDefault()?.Name ?? "";
+            return access?.ShortName ?? (Stages.Count > 0 ? Stages[0].Name : null) ?? "";
         }
     }
 
@@ -318,7 +318,7 @@ internal sealed class ExplainPlan
         }
         ExplainStage? rootStage = root is null ? null : Build(root, pipelineStages.Count, tree);
         var linear = new List<ExplainStage>();
-        for (ExplainStage? s = rootStage; s is not null; s = s.Children.FirstOrDefault())
+        for (ExplainStage? s = rootStage; s is not null; s = s.Children.Count > 0 ? s.Children[0] : null)
         {
             linear.Add(s);
         }

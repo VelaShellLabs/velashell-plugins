@@ -328,7 +328,7 @@ internal sealed class RdpQuickBall : Canvas
     }
 
     /// <summary>translate + scale built directly: string parsing chokes on values such as 1E-14px (cos 90°).</summary>
-    private static ITransform Transform(Vector offset, double scale)
+    private static TransformOperations Transform(Vector offset, double scale)
     {
         TransformOperations.Builder builder = TransformOperations.CreateBuilder(2);
         builder.AppendTranslate(offset.X, offset.Y);
@@ -336,7 +336,7 @@ internal sealed class RdpQuickBall : Canvas
         return builder.Build();
     }
 
-    private static ITransform Rotation(double degrees)
+    private static TransformOperations Rotation(double degrees)
     {
         TransformOperations.Builder builder = TransformOperations.CreateBuilder(1);
         builder.AppendRotate(degrees * Math.PI / 180);

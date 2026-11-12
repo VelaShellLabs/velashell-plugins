@@ -588,7 +588,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual("67%", all[0].RatioText);
         IReadOnlyList<DocumentEditorSuggestion> typed = vm.SuggestNames(fresh, "ship");
         Assert.HasCount(1, typed);
-        vm.AcceptSuggestion(fresh, typed[0]);
+        DocumentEditorDialogViewModel.AcceptSuggestion(fresh, typed[0]);
         Assert.AreEqual("shippedAt", fresh.Name);
         Assert.AreEqual(BsonKind.Date, fresh.Kind, "a fresh empty field takes the sampled type");
 

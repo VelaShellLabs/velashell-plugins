@@ -1008,7 +1008,7 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
 
     private static TimeSpan? MaxTime(int ms) => ms > 0 ? TimeSpan.FromMilliseconds(ms) : null;
 
-    private static BsonValue? Comment(ShellRunOptions options) => options.Comment is { Length: > 0 } c ? new BsonString(c) : null;
+    private static BsonString? Comment(ShellRunOptions options) => options.Comment is { Length: > 0 } c ? new BsonString(c) : null;
 
     /// <summary>与 mongosh / 驱动一致的默认索引名:<c>status_1_createdAt_-1</c>。</summary>
     internal static string IndexName(BsonDocument keys) =>
@@ -1017,7 +1017,7 @@ internal sealed class ShellExecutor(MongoConnection connection, IShellGuard guar
     private static List<BsonDocument> Docs(BsonValue value) =>
         value is BsonArray array ? [.. array.OfType<BsonDocument>()] : [];
 
-    private ShellResult Documents(ShellCommand command, string database, string? collection, IReadOnlyList<BsonDocument> documents, bool truncated) => new()
+    private ShellResult Documents(ShellCommand command, string database, string? collection, List<BsonDocument> documents, bool truncated) => new()
     {
         Kind = ShellResultKind.Documents,
         Operation = command.Operation,

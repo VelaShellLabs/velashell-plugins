@@ -520,7 +520,7 @@ internal sealed class ConnectionDialogViewModel : DialogViewModel, IDisposable
     }
 
     /// <summary>读偏好的候选。</summary>
-    public IReadOnlyList<string> ReadPreferences => ReadPreferenceNames;
+    public static IReadOnlyList<string> ReadPreferences => ReadPreferenceNames;
 
     /// <summary>读偏好。</summary>
     public string ReadPreference

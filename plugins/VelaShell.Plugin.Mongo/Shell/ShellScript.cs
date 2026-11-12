@@ -129,7 +129,7 @@ public static class ShellScript
                 before = statement;
             }
         }
-        return before ?? statements.FirstOrDefault();
+        return before ?? (statements.Count > 0 ? statements[0] : null);
     }
 
     /// <summary>与某个区间有交集的语句(运行选区用)。</summary>

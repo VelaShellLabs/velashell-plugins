@@ -60,7 +60,7 @@ public sealed partial class ContainerFilesView : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        bool acceptable = DataContext is ContainerFilesViewModel { CanPickFiles: true }
+        bool acceptable = DataContext is ContainerFilesViewModel && ContainerFilesViewModel.CanPickFiles
                           && e.DataTransfer.TryGetFiles()?.Length > 0;
         e.DragEffects = acceptable ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
