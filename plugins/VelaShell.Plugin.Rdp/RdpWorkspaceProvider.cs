@@ -60,6 +60,11 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
                     "connected with TLS 1.2 instead, and later connections to this server in this session start with TLS 1.2.");
             }
 
+            if (session is RdpManagedSession { RedirectedTo: { } redirectedTo })
+            {
+                _context.Log.Info($"RDP {request.Host}:{request.Port}: the connection broker redirected the session to {redirectedTo}.");
+            }
+
             if (session is RdpManagedSession { NlaRefusal: { } refusal })
             {
                 _context.Log.Warn($"RDP {request.Host}:{request.Port}: the server refused NLA before any credentials were sent " +

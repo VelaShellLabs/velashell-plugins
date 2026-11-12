@@ -32,6 +32,13 @@ public sealed class ZgfxTests
     }
 
     [TestMethod]
+    public void TheGenericLiteralMayEncodeBytesThatAlsoHaveShortTokens()
+    {
+        // 0x00 and 0xFF have short tokens; an encoder may still send them as "0" + 8 bits.
+        Assert.AreSequenceEqual(new byte[] { 0x00, 0xFF, 0x41 }, new ZgfxDecoder().Decode(Compressed("0 00000000 0 11111111 0 01000001")));
+    }
+
+    [TestMethod]
     public void MultipartConcatenatesSegmentsAndUsesTheirSharedHistory()
     {
         var decoder = new ZgfxDecoder();
@@ -88,7 +95,7 @@ public sealed class ZgfxTests
         byte[][] malformed =
         [
             [], [0xe0], [0xe2, 4], [0xe0, 3, 1], [0xe0, 0x24], [0xe0, 0x24, 8],
-            [0xe0, 0x24, 7], Compressed("10000"), Compressed("000000000"), Compressed("0"),
+            [0xe0, 0x24, 7], Compressed("10000"), Compressed("0"),
             Compressed("1000100000" + new string('1', 15)),
             Multipart(2, [4, 1]), Multipart(0, [4, 1]),
             [0xe1, 1, 0, 0xff, 0xff, 0xff, 0x7f, 1, 0, 0, 0, 4],

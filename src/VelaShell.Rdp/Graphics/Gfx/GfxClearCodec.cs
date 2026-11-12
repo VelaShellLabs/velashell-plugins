@@ -194,7 +194,10 @@ internal sealed class GfxClearCodec
             int left = reader.UInt16(), top = reader.UInt16(), w = reader.UInt16(), h = reader.UInt16();
             int length = reader.Length();
             int codec = reader.Byte();
-            if (w == 0 || h == 0 || left + w > width || top + h > height || length > (long)w * h * 3)
+            // A bound, not an exact size (the raw subcodec checks its exact size below): NSCodec with unencoded planes
+            // carries Y, Co, Cg and an optional alpha plane plus its 20-byte header, and with chroma subsampling the
+            // luma rows are padded to a multiple of 8 — more than w*h*3 on its own, especially for narrow rectangles.
+            if (w == 0 || h == 0 || left + w > width || top + h > height || length > (long)(w + 8) * (h + 1) * 4 + 32)
             {
                 throw new RdpProtocolException("Invalid ClearCodec subcodec rectangle or size.");
             }

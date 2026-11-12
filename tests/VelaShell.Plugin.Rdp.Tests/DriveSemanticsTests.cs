@@ -341,6 +341,65 @@ public sealed class DriveSemanticsTests
     }
 
     [TestMethod]
+    public void NamesMatchWithoutRegardToCaseAsOnWindows()
+    {
+        string share = NewShare();
+        try
+        {
+            _ = Directory.CreateDirectory(Path.Combine(share, "Docs"));
+            File.WriteAllText(Path.Combine(share, "Docs", "ReadMe.txt"), "r");
+
+            // Directory queries.
+            DriveFile docs = DriveFile.Create(share, "\\docs", GenericRead, FileOpen, FileDirectoryFile, 0);
+            Assert.IsTrue(docs.BeginEnumeration("\\*.TXT"));
+            CollectionAssert.AreEqual(new[] { "ReadMe.txt" }, Names(docs));
+            Assert.IsTrue(docs.BeginEnumeration("\\readme.txt"));
+            CollectionAssert.AreEqual(new[] { "ReadMe.txt" }, Names(docs));
+            docs.Close();
+
+            // Opening an existing file in another case.
+            DriveFile opened = DriveFile.Create(share, "\\DOCS\\readme.TXT", GenericRead, FileOpen, 0, 0);
+            CollectionAssert.AreEqual("r"u8.ToArray(), opened.Read(0, 8));
+            opened.Close();
+
+            // A new file goes into the existing directory instead of a second one that differs only in case.
+            DriveFile created = DriveFile.Create(share, "\\docs\\new.txt", GenericWrite, FileCreate, 0, 0);
+            created.Close();
+            CollectionAssert.AreEqual(new[] { "Docs" }, Directory.GetDirectories(share).Select(Path.GetFileName).ToArray());
+            Assert.IsTrue(File.Exists(Path.Combine(share, "Docs", "new.txt")));
+
+            // Creating a name that exists in another case is a collision, as on Windows.
+            DriveStatusException collision = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\docs\\README.TXT", GenericWrite, FileCreate, 0, 0));
+            Assert.AreEqual(NtStatus.ObjectNameCollision, collision.Status);
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    [TestMethod]
+    public void OnACaseSensitiveFileSystemAnAmbiguousNameIsNotGuessed()
+    {
+        string share = NewShare();
+        try
+        {
+            File.WriteAllText(Path.Combine(share, "a.txt"), "lower");
+            File.WriteAllText(Path.Combine(share, "A.txt"), "upper");
+            if (Directory.GetFiles(share).Length != 2)
+            {
+                Assert.Inconclusive("This file system is case-insensitive.");
+            }
+
+            // Exact names still open their own file ...
+            DriveFile upper = DriveFile.Create(share, "\\A.txt", GenericRead, FileOpen, 0, 0);
+            CollectionAssert.AreEqual("upper"u8.ToArray(), upper.Read(0, 8));
+            upper.Close();
+            // ... but a third spelling matches both and is not resolved to either.
+            DriveStatusException missing = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\a.TXT", GenericRead, FileOpen, 0, 0));
+            Assert.AreEqual(NtStatus.NoSuchFile, missing.Status);
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
+
+    [TestMethod]
     public void MacOsDecomposedNamesReachTheServerComposedAndStillOpen()
     {
         const string decomposed = "été.txt";   // "été.txt" as macOS commonly stores it (NFD)

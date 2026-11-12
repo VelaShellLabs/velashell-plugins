@@ -12,7 +12,9 @@ Adapted codec algorithms and bundled managed dependencies retain the notices in
 ## What it does
 
 - **Connection sequence** — X.224 negotiation, MCS/GCC, client info, licensing, capability
-  exchange and finalization (MS-RDPBCGR).
+  exchange and finalization (MS-RDPBCGR). A Server Redirection PDU from an RD Connection Broker during connect is
+  followed automatically (routing token, redirected session id, full certificate validation of the target);
+  `RdpManagedSession.RedirectedTo` names the host connected.
 - **Security** — TLS 1.2/1.3 via `SslStream` with OS trust-chain validation *or* an explicit SHA-256
   leaf-certificate pin; CredSSP/NLA (v5+ only) via the native SSPI Negotiate package on Windows and
   `NegotiateAuthentication` elsewhere. `RdpNlaUnavailableException` reports a server that stopped offering NLA, so a

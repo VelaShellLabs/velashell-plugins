@@ -78,6 +78,22 @@ public sealed class GfxClearCodecTests
     }
 
     [TestMethod]
+    public void AnUnencodedNsCodecSubcodecLargerThanThreeBytesPerPixelIsAccepted()
+    {
+        // 1x1, no subsampling, all four planes unencoded: 20-byte header + 4 bytes, above the old w*h*3 bound.
+        byte[] ns = Bytes(w =>
+        {
+            w.Write(1u); w.Write(1u); w.Write(1u); w.Write(1u);
+            w.Write((byte)1); w.Write((byte)0); w.Write((ushort)0);
+            w.Write(new byte[] { 100, 0, 0, 200 });
+        });
+        Assert.HasCount(24, ns);
+        byte[] pixels = new byte[4];
+        new GfxClearCodec().Decode(Packet(0, 0, [], [], Subcodec(0, 0, 1, 1, 1, ns)), 1, 1, pixels, 4);
+        AssertBytes(new byte[] { 100, 100, 100 }, pixels.AsSpan(0, 3));
+    }
+
+    [TestMethod]
     public void ExtendedRunsAndEveryTruncationAreBounded()
     {
         byte[] packet = Packet(0, 0, [1, 2, 3, 255, 4, 0], [], []);
