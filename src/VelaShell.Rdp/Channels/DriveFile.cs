@@ -48,7 +48,7 @@ internal sealed class DriveFile
     internal static DriveFile Create(string basePath, string rdpPath, uint desiredAccess, uint disposition,
         uint options, uint fileAttributes)
     {
-        string full = ResolvePath(basePath, rdpPath);
+        string full = MatchExistingCase(basePath, ResolvePath(basePath, rdpPath));
         RejectLinks(basePath, full);
         bool wantDirectory = (options & FileDirectoryFile) != 0;
         bool exists = File.Exists(full) || Directory.Exists(full);
@@ -275,7 +275,13 @@ internal sealed class DriveFile
     /// </summary>
     internal void Rename(string newRdpPath, bool replaceIfExists)
     {
-        string target = ResolvePath(_basePath, newRdpPath);
+        // Only the directories are matched case-insensitively: the new name is taken as given, so a case-only rename
+        // ("readme.txt" to "README.txt") changes the case instead of resolving back to the file itself.
+        string resolved = ResolvePath(_basePath, newRdpPath);
+        string? parent = Path.GetDirectoryName(resolved);
+        string target = parent is null || resolved.Length <= Path.GetFullPath(_basePath).Length
+            ? resolved
+            : Path.Join(MatchExistingCase(_basePath, parent), Path.GetFileName(resolved));
         RejectLinks(_basePath, target);
         if (target.Equals(FullPath, StringComparison.Ordinal))
         {
@@ -484,7 +490,7 @@ internal sealed class DriveFile
 
         try
         {
-            foreach (string path in Directory.EnumerateFileSystemEntries(FullPath, search))
+            foreach (string path in Directory.EnumerateFileSystemEntries(FullPath, search, WindowsMatching))
             {
                 entries.Add(Path.GetFileName(path));
             }
@@ -584,6 +590,86 @@ internal sealed class DriveFile
         try { ft = utc.ToFileTimeUtc(); } catch { ft = 0; }
         w.U32LE((uint)ft);
         w.U32LE((uint)(ft >> 32));
+    }
+
+    /// <summary>Directory queries match as an NTFS directory does on every platform: Win32 wildcards, any case.</summary>
+    private static readonly EnumerationOptions WindowsMatching = new()
+    {
+        MatchType = MatchType.Win32,
+        MatchCasing = MatchCasing.CaseInsensitive,
+        AttributesToSkip = 0,
+        IgnoreInaccessible = false
+    };
+
+    /// <summary>
+    /// The server names files as Windows does, without regard to case; a case-sensitive local file system (Linux,
+    /// case-sensitive APFS) would otherwise miss "README.TXT" for "readme.txt", or create a second "docs" next to
+    /// "Docs". Each path component that does not exist as given is looked up case-insensitively in its parent and
+    /// replaced when exactly one entry matches; an exact match always wins, an ambiguous one (both "A" and "a") is
+    /// left as given, and names with wildcard characters are only taken literally. Windows and case-insensitive
+    /// volumes already behave this way, so the walk changes nothing there. The result stays below the mapping root
+    /// (entries come from enumerating directories inside it) and is checked for links by the caller as before.
+    /// </summary>
+    internal static string MatchExistingCase(string basePath, string full)
+    {
+        if (OperatingSystem.IsWindows() || File.Exists(full) || Directory.Exists(full))
+        {
+            return full;
+        }
+
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(basePath));
+        string relative = Path.GetRelativePath(root, full);
+        if (relative == "." || relative.StartsWith("..", StringComparison.Ordinal))
+        {
+            return full;
+        }
+
+        string current = root;
+        string[] components = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < components.Length; i++)
+        {
+            string component = components[i];
+            string exact = Path.Join(current, component);
+            if (File.Exists(exact) || Directory.Exists(exact))
+            {
+                current = exact;
+                continue;
+            }
+
+            string? folded = Directory.Exists(current) && component.IndexOfAny(['*', '?']) < 0
+                ? SingleCaseInsensitiveMatch(current, component)
+                : null;
+            if (folded is null)
+            {
+                // Nothing (or more than one entry) matches: the rest of the path is new or missing, keep it as given.
+                return Path.Join([current, .. components[i..]]);
+            }
+
+            current = folded;
+        }
+        return current;
+    }
+
+    private static readonly EnumerationOptions ExactNameAnyCase = new()
+    {
+        MatchType = MatchType.Simple,
+        MatchCasing = MatchCasing.CaseInsensitive,
+        AttributesToSkip = 0
+    };
+
+    private static string? SingleCaseInsensitiveMatch(string directory, string name)
+    {
+        string? found = null;
+        foreach (string entry in Directory.EnumerateFileSystemEntries(directory, name, ExactNameAnyCase))
+        {
+            if (found is not null)
+            {
+                return null;   // ambiguous on a case-sensitive file system
+            }
+
+            found = entry;
+        }
+        return found;
     }
 
     // ---- Path confinement ----
