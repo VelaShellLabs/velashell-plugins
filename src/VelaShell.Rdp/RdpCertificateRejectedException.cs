@@ -33,4 +33,11 @@ public sealed class RdpCertificateRejectedException : Exception
     /// than present it as a first-time approval.
     /// </summary>
     public bool PinMismatch { get; }
+
+    /// <summary>
+    /// <see langword="true" /> when the certificate's only problem is that its revocation status could not be
+    /// determined (no reachable CRL or OCSP responder), so the caller can say so when asking for approval, as mstsc
+    /// does. A revoked certificate is never offered for approval.
+    /// </summary>
+    public bool RevocationUnknown { get; init; }
 }

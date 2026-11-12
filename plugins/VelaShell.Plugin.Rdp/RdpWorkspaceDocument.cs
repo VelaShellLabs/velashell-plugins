@@ -154,6 +154,25 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             _settings.AutoReconnectCookie = cookie;
         }
 
+        // Redirections arriving one right after another (a server that only ever redirects) are followed a few times only.
+        if (failure is RdpServerRedirectionException && Environment.TickCount64 - _attachedAt >= (long)AutoReconnectStableAfter.TotalMilliseconds)
+        {
+            _ = Interlocked.Exchange(ref _redirectionsFollowed, 0);
+        }
+
+        if (failure is RdpServerRedirectionException redirection && AutoReconnectDelays.Length > 0
+            && Interlocked.Increment(ref _redirectionsFollowed) <= RdpManagedSession.MaxRedirections)
+        {
+            // The server (e.g. an RD Connection Broker moving the session) sent a Server Redirection PDU during the
+            // session: follow it at once, like mstsc. The auto-reconnect cookie belongs to the session being left.
+            string target = redirection.TargetFqdn ?? redirection.TargetNetAddress ?? _request?.Host ?? "";
+            _context.Log.Info($"RDP {_request?.Host}:{_request?.Port}: the server redirected the session to {target}; following it.");
+            _settings.AutoReconnectCookie = null;
+            _settings.PendingRedirection = redirection;
+            StartAutoReconnect(session, immediate: true, loc => loc.Format("Redirecting", target));
+            return;
+        }
+
         if (failure is RdpConnectionLostException lost && AutoReconnectDelays.Length > 0)
         {
             // The network dropped, not the server: the remote Windows session waits in the disconnected state, so
@@ -219,6 +238,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
 
     private CancellationTokenSource? _autoCancel;
     private int _autoAttempt;
+    private int _redirectionsFollowed;
     private long _attachedAt;
 
     /// <summary>The running automatic reconnect, if any (tests).</summary>
@@ -229,7 +249,7 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         private set;
     }
 
-    private void StartAutoReconnect(IRdpSession lost)
+    private void StartAutoReconnect(IRdpSession lost, bool immediate = false, Func<Loc, string>? firstWording = null)
     {
         CancellationTokenSource? superseded;
         lock (_disposeGate)
@@ -252,15 +272,16 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             superseded = _autoCancel;
             _autoCancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             CancellationToken token = _autoCancel.Token;
-            AutoReconnectTask = Task.Run(() => AutoReconnectAsync(lost, token));
+            AutoReconnectTask = Task.Run(() => AutoReconnectAsync(lost, token, immediate, firstWording));
         }
 
         superseded?.Cancel();
     }
 
-    private async Task AutoReconnectAsync(IRdpSession lost, CancellationToken ct)
+    private async Task AutoReconnectAsync(IRdpSession lost, CancellationToken ct, bool immediate = false, Func<Loc, string>? firstWording = null)
     {
         Exception? last = null;
+        bool first = true;
         while (!ct.IsCancellationRequested)
         {
             int attempt = Interlocked.Increment(ref _autoAttempt);
@@ -270,10 +291,15 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             }
 
             int shown = attempt;
-            ShowDisconnected(lost, loc => loc.Format("AutoReconnecting", shown, AutoReconnectAttempts));
+            ShowDisconnected(lost, first && firstWording is not null ? firstWording : loc => loc.Format("AutoReconnecting", shown, AutoReconnectAttempts));
             try
             {
-                await Task.Delay(AutoReconnectDelays[Math.Min(attempt, AutoReconnectDelays.Length) - 1], ct).ConfigureAwait(false);
+                if (!(first && immediate))
+                {
+                    await Task.Delay(AutoReconnectDelays[Math.Min(attempt, AutoReconnectDelays.Length) - 1], ct).ConfigureAwait(false);
+                }
+
+                first = false;
                 if (await ReconnectCoreAsync(lost, ct).ConfigureAwait(false))
                 {
                     _context.Log.Info($"RDP {_request?.Host}:{_request?.Port} reconnected automatically (attempt {attempt}).");
@@ -283,12 +309,15 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (ObjectDisposedException) when (_disposed != 0) { return; }
-            catch (Exception ex) when (ex is ProtocolAuthenticationException or ProtocolCertificateTrustException)
+            catch (Exception ex) when (ex is ProtocolAuthenticationException or ProtocolCertificateTrustException
+                || ex.InnerException is RdpServerRedirectionException)
             {
-                last = ex;   // the password or the certificate changed: only the user can resolve that
+                // The password or the certificate changed, or a redirection cannot be followed (another host behind an
+                // SSH tunnel): only the user can resolve that.
+                last = ex;
                 break;
             }
-            catch (Exception ex) { last = ex; }   // the factory logged it; try again after the next delay
+            catch (Exception ex) { first = false; last = ex; }   // the factory logged it; try again after the next delay
         }
 
         if (ct.IsCancellationRequested)
@@ -299,7 +328,8 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
         _context.Log.Warn($"RDP {_request?.Host}:{_request?.Port}: automatic reconnect gave up after {Math.Min(_autoAttempt, AutoReconnectAttempts)} attempt(s): {last?.Message}");
         // An authentication or certificate reason is already localized text from the connector; keep it as it is.
         Exception? final = last;
-        ShowDisconnected(lost, loc => final is ProtocolAuthenticationException or ProtocolCertificateTrustException ? final.Message : loc["AutoReconnectFailed"]);
+        ShowDisconnected(lost, loc => final is ProtocolAuthenticationException or ProtocolCertificateTrustException
+            || final?.InnerException is RdpServerRedirectionException ? final.Message : loc["AutoReconnectFailed"]);
     }
 
     /// <summary>The disconnected card and status for <paramref name="session"/>, unless it has been replaced since.</summary>

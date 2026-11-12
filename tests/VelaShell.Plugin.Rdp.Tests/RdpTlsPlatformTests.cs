@@ -229,4 +229,22 @@ public sealed class RdpTlsPlatformTests
         Assert.IsInstanceOfType<RdpCertificateRejectedException>(failure);
         Assert.IsFalse(((RdpCertificateRejectedException)failure!).PinMismatch);
     }
+
+    [TestMethod]
+    public void RevocationFailuresAreClassifiedLikeMstsc()
+    {
+        const SslPolicyErrors chain = SslPolicyErrors.RemoteCertificateChainErrors;
+        Assert.AreEqual(RdpTls.RevocationProblem.Revoked, RdpTls.ClassifyRevocation(chain, X509ChainStatusFlags.Revoked));
+        Assert.AreEqual(RdpTls.RevocationProblem.Revoked,
+            RdpTls.ClassifyRevocation(chain | SslPolicyErrors.RemoteCertificateNameMismatch, X509ChainStatusFlags.Revoked | X509ChainStatusFlags.UntrustedRoot));
+        Assert.AreEqual(RdpTls.RevocationProblem.Unknown, RdpTls.ClassifyRevocation(chain, X509ChainStatusFlags.RevocationStatusUnknown));
+        Assert.AreEqual(RdpTls.RevocationProblem.Unknown,
+            RdpTls.ClassifyRevocation(chain, X509ChainStatusFlags.RevocationStatusUnknown | X509ChainStatusFlags.OfflineRevocation));
+        // Anything beyond the unknown revocation status is an ordinary trust failure.
+        Assert.AreEqual(RdpTls.RevocationProblem.None,
+            RdpTls.ClassifyRevocation(chain, X509ChainStatusFlags.RevocationStatusUnknown | X509ChainStatusFlags.UntrustedRoot));
+        Assert.AreEqual(RdpTls.RevocationProblem.None,
+            RdpTls.ClassifyRevocation(chain | SslPolicyErrors.RemoteCertificateNameMismatch, X509ChainStatusFlags.OfflineRevocation));
+        Assert.AreEqual(RdpTls.RevocationProblem.None, RdpTls.ClassifyRevocation(SslPolicyErrors.None, X509ChainStatusFlags.Revoked));
+    }
 }
