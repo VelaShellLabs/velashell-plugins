@@ -58,10 +58,7 @@ public sealed class BarChart : Control
 
     private int _hover = -1;
 
-    static BarChart()
-    {
-        AffectsRender<BarChart>(SeriesProperty, LabelsProperty, MaxValueProperty, ShowAxesProperty, GapRatioProperty, MinSlotsProperty);
-    }
+    static BarChart() => AffectsRender<BarChart>(SeriesProperty, LabelsProperty, MaxValueProperty, ShowAxesProperty, GapRatioProperty, MinSlotsProperty);
 
     /// <summary>数据。</summary>
     public IReadOnlyList<ChartSeries>? Series

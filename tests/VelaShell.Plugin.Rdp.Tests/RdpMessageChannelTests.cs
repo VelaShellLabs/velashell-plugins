@@ -57,7 +57,7 @@ public sealed class RdpMessageChannelTests
             ("trustedThumbprint", Convert.ToHexString(FakeRdpServer.Pin))) with
         { Host = "127.0.0.1", Port = server.Port, Tunnel = jump ? new("localhost", 3389, "Jump") : null };
         var settings = RdpSettings.From(request, new("en"), []);
-        _ = await Assert.ThrowsAsync<VelaShell.PluginSdk.Protocols.ProtocolConnectionException>(
+        _ = await Assert.ThrowsAsync<PluginSdk.Protocols.ProtocolConnectionException>(
             () => RdpConnector.ConnectAsync(request, settings, new("en"), stop.Token));
         byte[] gcc = await captured.Task.WaitAsync(stop.Token);
         // TS_UD_CS_MULTITRANSPORT offers reliable UDP with soft-sync only (0x201), not lossy UDP.
@@ -85,8 +85,5 @@ public sealed class RdpMessageChannelTests
     [DataRow(true, (ushort)2, 0x205u, false, DisplayName = "lossy UDP is declined")]
     [DataRow(false, (ushort)1, 0x205u, false, DisplayName = "UDP not offered")]
     [DataRow(true, (ushort)1, 0x004u, false, DisplayName = "server lacks reliable UDP and soft-sync")]
-    public void OnlyReliableUdpTunnelsAreAccepted(bool advertised, ushort protocol, uint serverFlags, bool accepted)
-    {
-        Assert.AreEqual(accepted, RdpConnection.AcceptsTunnel(advertised, protocol, serverFlags));
-    }
+    public void OnlyReliableUdpTunnelsAreAccepted(bool advertised, ushort protocol, uint serverFlags, bool accepted) => Assert.AreEqual(accepted, RdpConnection.AcceptsTunnel(advertised, protocol, serverFlags));
 }

@@ -15,7 +15,7 @@ public sealed class LocalWpdDevicesTests
         Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
         Assert.AreEqual("false", field.DefaultValue);
         var settings = RdpSettings.From(RdpSettingsTests.Request((field.Key, "true")), new("en"), [], enumerateWpdDevices: () => [device], windowsDevices: true);
-        Assert.AreSequenceEqual(new[] { device.Id }, settings.WpdDevices);
+        Assert.AreSequenceEqual([device.Id], settings.WpdDevices);
         var options = new VelaShell.Rdp.RdpClientOptions { Host = "example", DynamicResolution = false, WpdDevices = settings.WpdDevices };
         Assert.Contains("drdynvc", [.. VelaShell.Rdp.RdpManagedSession.BuildChannels(options).Select(c => c.Name)]);
         Assert.IsEmpty(VelaShell.Rdp.RdpManagedSession.BuildChannels(options with { WpdDevices = [] }));
@@ -41,7 +41,7 @@ public sealed class LocalWpdDevicesTests
         var other = new RdpWpdDevice("fake-other-interface", "Other device");
         WorkspaceConnectRequest request = RdpSettingsTests.Request((LocalWpdDevices.Key(selected), "true"));
         IReadOnlyList<string> actual = LocalWpdDevices.Selected(request, loc, () => [other, selected]);
-        Assert.AreSequenceEqual(new[] { selected.Id }, actual);
+        Assert.AreSequenceEqual([selected.Id], actual);
         _ = Assert.Throws<ProtocolConnectionException>(() => LocalWpdDevices.Selected(request, loc, () => [other]));
         _ = Assert.Throws<ProtocolConnectionException>(() => LocalWpdDevices.Selected(
             RdpSettingsTests.Request((LocalWpdDevices.Key(selected), "yes")), loc, () => [selected]));

@@ -102,7 +102,7 @@ public sealed class BsonTests
         Assert.AreEqual("Shell_DottedKey", diagnostic.MessageKey);
         Assert.AreEqual("\"customer.name\"", diagnostic.Fix);
         Assert.AreEqual(14, diagnostic.Offset);
-        _ = Assert.ThrowsExactly<ShellJsonException>(() => ShellJson.ParseDocument("{ customer.name: 1 }"));
+        _ = Assert.ThrowsExactly<ShellJsonException>(static () => ShellJson.ParseDocument("{ customer.name: 1 }"));
         Assert.AreEqual(1, ShellJson.ParseDocument("{ \"customer.name\": 1 }")["customer.name"].AsInt32);
     }
 
@@ -183,8 +183,8 @@ public sealed class BsonTests
         Assert.AreEqual(1, doc["items"].AsBsonArray.Count);
         Assert.IsFalse(BsonPath.Unset(doc, "nope"));
         string[] paths = [.. BsonPath.Walk(doc).Select(static p => p.Path)];
-        CollectionAssert.Contains(paths, "items.sku", "数组里的对象合并成一条路径");
-        CollectionAssert.Contains(paths, "customer.level");
+        Assert.Contains("items.sku", paths, "数组里的对象合并成一条路径");
+        Assert.Contains("customer.level", paths);
     }
 
     [TestMethod]

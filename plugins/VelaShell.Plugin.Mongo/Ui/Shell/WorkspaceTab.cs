@@ -47,10 +47,7 @@ internal abstract class WorkspaceTab : ObservableObject, IDisposable
     /// <summary>构造一条连接里的标签页。</summary>
     /// <param name="workspace">这条连接的服务。</param>
     protected WorkspaceTab(IMongoWorkspace workspace)
-        : this((IWorkbench)workspace)
-    {
-        Owner = workspace;
-    }
+        : this((IWorkbench)workspace) => Owner = workspace;
 
     /// <summary>
     /// 构造外壳自己的标签页(连接中 / 连接失败的占位卡):不属于任何一条连接,<see cref="Workspace" /> 不可用。

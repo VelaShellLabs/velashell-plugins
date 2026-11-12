@@ -92,7 +92,7 @@ public sealed class CliprdrChannelTests
     public async Task NegotiatedFormatNamesSurviveAsynchronousAcknowledgement(bool longNames, bool ascii)
     {
         List<RdpClipboardEvent> events = [];
-        var channel = new CliprdrChannel(async _ => await Task.Yield(), events.Add);
+        var channel = new CliprdrChannel(static async _ => await Task.Yield(), events.Add);
         if (longNames) { await channel.ProcessAsync(Capabilities(2)); }
         byte[] name = (ascii ? Encoding.ASCII : Encoding.Unicode).GetBytes("PNG\0");
         byte[] body = new byte[longNames ? 4 + name.Length : 36];
@@ -172,10 +172,10 @@ public sealed class CliprdrChannelTests
     {
         await using RdpConnection connection = CreateConnection();
         using var wire = new MemoryStream();
-        var transport = new VelaShell.Rdp.Wire.RdpTransport(wire);
-        var mcs = new VelaShell.Rdp.Mcs.McsLayer(transport);
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("UserId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(mcs, (ushort)1001);
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("Channels", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+        var transport = new RdpTransport(wire);
+        var mcs = new McsLayer(transport);
+        typeof(McsLayer).GetProperty("UserId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(mcs, (ushort)1001);
+        typeof(McsLayer).GetProperty("Channels", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(mcs, new Dictionary<string, ushort> { ["cliprdr"] = 1004 });
         typeof(RdpConnection).GetField("_mcs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(connection, mcs);
         await connection.SendVirtualChannelAsync("cliprdr", new byte[1700], default);
@@ -196,27 +196,27 @@ public sealed class CliprdrChannelTests
     {
         await using RdpConnection connection = CreateConnection();
         using var wire = new PausingWire();
-        var transport = new VelaShell.Rdp.Wire.RdpTransport(wire);
-        var mcs = new VelaShell.Rdp.Mcs.McsLayer(transport);
+        var transport = new RdpTransport(wire);
+        var mcs = new McsLayer(transport);
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("UserId", flags)!.SetValue(mcs, (ushort)1001);
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("Channels", flags)!.SetValue(mcs, new Dictionary<string, ushort> { ["cliprdr"] = 1004 });
+        typeof(McsLayer).GetProperty("UserId", flags)!.SetValue(mcs, (ushort)1001);
+        typeof(McsLayer).GetProperty("Channels", flags)!.SetValue(mcs, new Dictionary<string, ushort> { ["cliprdr"] = 1004 });
         typeof(RdpConnection).GetField("_mcs", flags)!.SetValue(connection, mcs);
         typeof(RdpConnection).GetField("_transport", flags)!.SetValue(connection, transport);
         using var cancel = new CancellationTokenSource();
         Task first = connection.SendVirtualChannelAsync("cliprdr", new byte[256 * 1024], cancel.Token);
-        await wire.Started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await wire._started.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Task second = connection.SendVirtualChannelAsync("cliprdr", new byte[1], default);
         Task input = connection.SendScancodeAsync(0x1e, true, default);
         cancel.Cancel();
-        wire.Release.SetResult();
+        wire._release.SetResult();
         await Task.WhenAll(first, second, input).WaitAsync(TimeSpan.FromSeconds(3));
-        Assert.AreNotEqual((byte)3, wire.Frames[1][0], "Keyboard input must precede the second clipboard fragment.");
-        byte[][] clipboard = [.. wire.Frames.Where(frame => frame[0] == 3)];
+        Assert.AreNotEqual((byte)3, wire._frames[1][0], "Keyboard input must precede the second clipboard fragment.");
+        byte[][] clipboard = [.. wire._frames.Where(static frame => frame[0] == 3)];
         for (int index = 0; index < clipboard.Length; index++)
         {
             using var source = new MemoryStream(clipboard[index]);
-            RdpFramePdu packet = await new VelaShell.Rdp.Wire.RdpTransport(source).ReadPduAsync(default);
+            RdpFramePdu packet = await new RdpTransport(source).ReadPduAsync(default);
             packet.Data[3] = 0x68;
             byte[] payload = McsLayer.ParseSendDataIndication(packet.Data)!.Value.Payload;
             Assert.AreEqual(index == clipboard.Length - 1 ? 1u : 256u * 1024, BinaryPrimitives.ReadUInt32LittleEndian(payload));
@@ -247,16 +247,16 @@ public sealed class CliprdrChannelTests
 
     private sealed class PausingWire : MemoryStream
     {
-        internal readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal readonly List<byte[]> Frames = [];
+        internal readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly List<byte[]> _frames = [];
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            Frames.Add(buffer.ToArray());
-            if (Frames.Count == 1)
+            _frames.Add(buffer.ToArray());
+            if (_frames.Count == 1)
             {
-                Started.SetResult();
-                await Release.Task.WaitAsync(cancellationToken);
+                _started.SetResult();
+                await _release.Task.WaitAsync(cancellationToken);
             }
         }
     }
@@ -321,7 +321,7 @@ public sealed class CliprdrChannelTests
 
     private static RdpConnection CreateConnection() => new(new RdpConnectOptions(
         "localhost", 3389, "", "", "", 800, 600, 32, null, "localhost",
-        [new VelaShell.Rdp.Mcs.ChannelDef("cliprdr", 0xC0A00000)]));
+        [new ChannelDef("cliprdr", 0xC0A00000)]));
 
     private static void Deliver(RdpConnection connection, uint length, uint flags, byte[] data)
     {

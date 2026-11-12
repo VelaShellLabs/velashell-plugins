@@ -32,7 +32,7 @@ public sealed class NewCollectionTests
 
     /// <summary>时序选项拼成 <c>create</c> 命令,预览与之同形(90 天 = 7,776,000 秒,写成 Int32)。</summary>
     [TestMethod]
-    public void Timeseries_command_and_preview_agree() => Screens.OnUi(async () =>
+    public void Timeseries_command_and_preview_agree() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -55,7 +55,7 @@ public sealed class NewCollectionTests
         Assert.AreEqual(BsonType.Int32, command["expireAfterSeconds"].BsonType);
         Assert.AreEqual(7_776_000, command["expireAfterSeconds"].AsInt32);
         Assert.AreEqual("= 7,776,000 s", vm.ExpireSecondsText);
-        StringAssert.StartsWith(vm.Preview, "db.createCollection(\n  \"device_metrics\",");
+        Assert.StartsWith("db.createCollection(\n  \"device_metrics\",", vm.Preview);
         Assert.Contains("expireAfterSeconds: 7776000", vm.Preview);
         Assert.IsTrue(vm.CanCreate, vm.Error);
         Assert.AreEqual(CollectionNameState.Available, vm.NameState);
@@ -63,7 +63,7 @@ public sealed class NewCollectionTests
 
     /// <summary>选项错误会拦住创建并显示在底栏。</summary>
     [TestMethod]
-    public void Option_errors_block_creation() => Screens.OnUi(async () =>
+    public void Option_errors_block_creation() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -131,7 +131,7 @@ public sealed class NewCollectionTests
 
     /// <summary>只读模式下点「创建集合」什么也不发。</summary>
     [TestMethod]
-    public void Read_only_mode_blocks_creation() => Screens.OnUi(async () =>
+    public void Read_only_mode_blocks_creation() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         string db = $"velashell_newcoll_{Guid.NewGuid():N}"[..28];
@@ -146,7 +146,7 @@ public sealed class NewCollectionTests
     /// <summary>设计稿 17:时序集合填好(device_metrics),不真建。</summary>
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board17_new_collection_renders() => Screens.OnUi(async () =>
+    public void Board17_new_collection_renders() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

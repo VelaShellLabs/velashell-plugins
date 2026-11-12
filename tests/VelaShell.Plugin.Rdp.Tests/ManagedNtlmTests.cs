@@ -75,13 +75,10 @@ public sealed class ManagedNtlmTests
     [DataRow("Domain", "User", "password")]
     [DataRow("域", "用户", "密码")]
     [DataRow("", "User", "password")]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [OSCondition(OperatingSystems.Windows)]
     public void WindowsSspiCompletesChallengeQueriesSizesAndSeals(string domain, string user, string password)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.Inconclusive("Windows SSPI requires Windows.");
-            return;
-        }
         using var auth = new SspiNegotiate(domain, user, password, "127.0.0.1");
         _ = auth.Step([]);
         byte[] response = auth.Step(BuildChallenge());
@@ -91,7 +88,7 @@ public sealed class ManagedNtlmTests
         Assert.AreEqual(domain, Encoding.Unicode.GetString(Field(response, 28)));
         Assert.AreEqual(user, Encoding.Unicode.GetString(Field(response, 36)));
         byte[] sealedMessage = auth.Seal([1, 2, 3, 4]);
-        Assert.IsTrue(sealedMessage.Length > 4, "The queried context sizes must provide space for the sealing signature.");
+        Assert.IsGreaterThan(4, sealedMessage.Length, "The queried context sizes must provide space for the sealing signature.");
     }
 
     private static byte[] Complete(NegotiateSecurityContext auth)
@@ -124,13 +121,9 @@ public sealed class ManagedNtlmTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
+    [OSCondition(ConditionMode.Exclude, OperatingSystems.Windows)]
     public void UnixDefaultNegotiatesSpnegoNtlmAndSeals(bool requestMic)
     {
-        if (OperatingSystem.IsWindows())
-        {
-            Assert.Inconclusive("Exercises the Unix managed SPNEGO provider.");
-            return;
-        }
         using INlaSecurityContext auth = NlaSecurityContext.Create("Domain", "User", "password", "127.0.0.1");
         Assert.IsInstanceOfType<NegotiateSecurityContext>(auth);
         byte[] first = auth.Step([]);
@@ -180,8 +173,10 @@ public sealed class ManagedNtlmTests
                     writer.WriteOctetString(token);
             }
             if (mic is not null)
+            {
                 using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 3)))
                     writer.WriteOctetString(mic);
+            }
         }
         return writer.Encode();
     }
@@ -201,7 +196,7 @@ public sealed class ManagedNtlmTests
         writer.Write((ushort)48);
         writer.Write((ushort)48);
         writer.Write(68u);
-        writer.Write(new byte[] { 10, 0, 0, 0, 0, 0, 0, 15 });
+        writer.Write([10, 0, 0, 0, 0, 0, 0, 15]);
         writer.Write(Encoding.Unicode.GetBytes("Domain"));
         WriteAvPair(writer, 2, Encoding.Unicode.GetBytes("Domain"));
         WriteAvPair(writer, 1, Encoding.Unicode.GetBytes("Server"));
@@ -238,7 +233,7 @@ public sealed class ManagedNtlmTests
     // Independent server-side RC4 fixture for MS-NLMP sealing; never used by production code.
     private sealed class TestRc4
     {
-        private readonly byte[] _state = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
+        private readonly byte[] _state = [.. Enumerable.Range(0, 256).Select(static i => (byte)i)];
         private int _x, _y;
 
         internal TestRc4(byte[] key)

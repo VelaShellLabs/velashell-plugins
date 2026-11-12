@@ -66,7 +66,7 @@ public sealed class FileEntryItem(ContainerFileEntry entry, string changeMarker)
     /// 树里一行只有 24px,塞不下三列;挂在提示上是它们唯一放得下的位置。
     /// </para>
     /// </summary>
-    public string Details => string.Join("  ", new[] { Mode, SizeText, Modified }.Where(s => s.Length > 0));
+    public string Details => string.Join("  ", new[] { Mode, SizeText, Modified }.Where(static s => s.Length > 0));
 
     /// <summary>相对镜像的变更标记(A/C/D);没变过为空。</summary>
     public string ChangeMarker { get; } = changeMarker;
@@ -544,8 +544,8 @@ public sealed class ContainerFilesViewModel(DockerPanelViewModel shell, string c
     private string DescribeEdit()
     {
         IReadOnlyList<DiffLine> diff = LineDiff.Compute(_originalText, EditorText);
-        int added = diff.Count(l => l.Marker is DiffMarker.Added or DiffMarker.Changed);
-        int removed = diff.Count(l => l.Marker is DiffMarker.Removed or DiffMarker.Changed);
+        int added = diff.Count(static l => l.Marker is DiffMarker.Added or DiffMarker.Changed);
+        int removed = diff.Count(static l => l.Marker is DiffMarker.Removed or DiffMarker.Changed);
         return _originalText.Length == 0 ? "新建"
             : added == 0 && removed == 0 ? "无改动"
             : $"+{added} −{removed}";

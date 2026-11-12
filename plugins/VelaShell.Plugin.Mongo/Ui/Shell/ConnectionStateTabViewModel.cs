@@ -99,7 +99,7 @@ internal sealed class ConnectionStateTabViewModel : WorkspaceTab
         }
         try
         {
-            IReadOnlyList<VelaShell.PluginSdk.Sessions.SavedSessionInfo> saved =
+            IReadOnlyList<PluginSdk.Sessions.SavedSessionInfo> saved =
                 await _shell.Context.Sessions.ListSavedAsync().ConfigureAwait(true);
             Detail = saved.FirstOrDefault(s => s.SavedSessionId == id)?.Name ?? "";
             RaisePropertyChanged(nameof(Detail));

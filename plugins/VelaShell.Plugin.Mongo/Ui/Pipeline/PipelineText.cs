@@ -594,7 +594,7 @@ internal static class PipelineText
     internal static string Flat(BsonValue value) => value switch
     {
         BsonDocument { ElementCount: 0 } => "{}",
-        BsonDocument doc => "{ " + string.Join(", ", doc.Select(e => BsonText.FieldName(e.Name) + ": " + Flat(e.Value))) + " }",
+        BsonDocument doc => "{ " + string.Join(", ", doc.Select(static e => BsonText.FieldName(e.Name) + ": " + Flat(e.Value))) + " }",
         BsonArray { Count: 0 } => "[]",
         BsonArray array => "[ " + string.Join(", ", array.Select(Flat)) + " ]",
         BsonDateTime date when IsMidnight(date) =>

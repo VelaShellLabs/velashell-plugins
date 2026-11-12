@@ -71,7 +71,7 @@ internal sealed partial class DrdynvcChannel
                 if (!routes.TryAdd(id, type)) { throw new RdpProtocolException("Duplicate Soft-Sync channel."); }
                 lock (_lock)
                 {
-                    if (!_instances.TryGetValue(id, out Instance? instance) || instance.Buffer is not null
+                    if (!_instances.TryGetValue(id, out Instance? instance) || instance._buffer is not null
                         || (_routes.TryGetValue(id, out int previous) && previous != type))
                     { throw new RdpProtocolException("Invalid Soft-Sync channel transition."); }
                 }

@@ -57,7 +57,7 @@ public sealed class RedisValueTextTests
                      [0xC3, 0x28],
                      Encoding.UTF8.GetBytes("plain"),
                      Encoding.UTF8.GetBytes("双引号\" 反斜杠\\ 换行\n 制表\t"),
-                     [.. Enumerable.Range(0, 256).Select(b => (byte)b)]
+                     [.. Enumerable.Range(0, 256).Select(static b => (byte)b)]
                  })
         {
             string escaped = RedisValueText.Escape(raw);
@@ -77,7 +77,7 @@ public sealed class RedisValueTextTests
         byte[] naive = Encoding.UTF8.GetBytes(escaped);
 
         Assert.AreNotEqual(Gzip.Length, naive.Length);
-        CollectionAssert.AreNotEqual(Gzip, naive);
+        Assert.AreNotSequenceEqual(Gzip, naive);
         // 正确的那条路必须还原原值。
         Assert.IsTrue(RedisValueText.TryUnescape(escaped, out byte[] correct, out _));
         Assert.AreSequenceEqual(Gzip, correct);

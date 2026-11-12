@@ -78,7 +78,7 @@ public sealed class ProfilerTests
         Assert.AreEqual("customer.level 为等值条件,total 同时用于排序与范围,按 ESR 建议:", detail.AdviceText);
         Assert.IsTrue(detail.CanCreateIndex);
         Assert.AreEqual("是 · 18.0 MB", detail.InMemorySort);
-        StringAssert.StartsWith(detail.Statement, "db.orders.find({");
+        Assert.StartsWith("db.orders.find({", detail.Statement);
     }
 
     [TestMethod]

@@ -36,8 +36,8 @@ public static class TableColumns
 
     static TableColumns()
     {
-        _ = HeaderProperty.Changed.AddClassHandler<Grid>((grid, e) => Hook(grid, e.NewValue as string, isHeader: true));
-        _ = RowProperty.Changed.AddClassHandler<Grid>((grid, e) => Hook(grid, e.NewValue as string, isHeader: false));
+        _ = HeaderProperty.Changed.AddClassHandler<Grid>(static (grid, e) => Hook(grid, e.NewValue as string, isHeader: true));
+        _ = RowProperty.Changed.AddClassHandler<Grid>(static (grid, e) => Hook(grid, e.NewValue as string, isHeader: false));
     }
 
     /// <summary>取列头组名。</summary>

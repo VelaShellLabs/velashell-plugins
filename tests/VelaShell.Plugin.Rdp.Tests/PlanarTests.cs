@@ -474,7 +474,7 @@ public sealed class PlanarTests
             using var plain = new MemoryStream();
             brotli.CopyTo(plain);
             byte[] stream = plain.ToArray();
-            Assert.AreEqual(length, stream.Length, $"Vector {name} length.");
+            Assert.HasCount(length, stream, $"Vector {name} length.");
             return (stream, sha256);
         }
 

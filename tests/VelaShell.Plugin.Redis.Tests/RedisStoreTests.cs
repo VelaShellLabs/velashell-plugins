@@ -94,7 +94,7 @@ public sealed class RedisStoreTests
 
         Assert.IsEmpty(await store.LoadHistoryAsync("host:6379"));
         Assert.Contains(
-            entry =>
+            static entry =>
                 entry.Message.Contains("not persisted", StringComparison.OrdinalIgnoreCase), context.CollectingLog.Entries,
             "降级要留一条可查的日志。");
     }

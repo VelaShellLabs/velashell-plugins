@@ -64,7 +64,7 @@ internal sealed class WpdDeviceMonitor : IWpdDeviceBackend, IWpdDeviceMonitor
         }
     }
     public IReadOnlyList<WpdDeviceDescription> Devices
-    { get { lock (_gate) { return [.. _present.Select(d => Describe(d.Key, d.Value))]; } } }
+    { get { lock (_gate) { return [.. _present.Select(static d => Describe(d.Key, d.Value))]; } } }
     public IWpdDeviceHandle Open(uint id, WpdOpenOptions options)
     {
         lock (_gate)

@@ -13,8 +13,5 @@ public sealed partial class HintCompareDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public HintCompareDialogView()
-    {
-        InitializeComponent();
-    }
+    public HintCompareDialogView() => InitializeComponent();
 }

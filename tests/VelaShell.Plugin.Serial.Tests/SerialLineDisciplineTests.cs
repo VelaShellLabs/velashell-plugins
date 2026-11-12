@@ -31,7 +31,7 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config());
 
-        byte[] result = Receive(discipline, (byte)'a', Cr, (byte)'b', Lf);
+        byte[] result = Receive(discipline, "a\rb\n"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'a', Cr, (byte)'b', Lf], result);
     }
@@ -42,7 +42,7 @@ public sealed class SerialLineDisciplineTests
         // 症状:设备只发 CR,于是每一行都盖在上一行上。这是串口最常见的一条抱怨。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        byte[] result = Receive(discipline, (byte)'a', Cr, (byte)'b');
+        byte[] result = Receive(discipline, "a\rb"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
@@ -52,7 +52,7 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        byte[] result = Receive(discipline, (byte)'a', Cr, Lf, (byte)'b');
+        byte[] result = Receive(discipline, "a\r\nb"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
@@ -63,7 +63,7 @@ public sealed class SerialLineDisciplineTests
         // CR CR 是"回行首两次"。开了补 LF 就该是两次换行 —— 漏掉第一次是很容易犯的循环写法错误。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        byte[] result = Receive(discipline, Cr, Cr, (byte)'x');
+        byte[] result = Receive(discipline, "\r\rx"u8.ToArray());
 
         Assert.AreSequenceEqual([Cr, Lf, Cr, Lf, (byte)'x'], result);
     }
@@ -75,7 +75,7 @@ public sealed class SerialLineDisciplineTests
         // 把这个 CR 扣下来等下一块,那一行就永远不出现。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        byte[] result = Receive(discipline, (byte)'h', Cr);
+        byte[] result = Receive(discipline, "h\r"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'h', Cr, Lf], result);
     }
@@ -87,8 +87,8 @@ public sealed class SerialLineDisciplineTests
         // 否则一次 CRLF 被读取切开就变成了空行。**跨块状态**正是这层最容易漏的地方。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        byte[] first = Receive(discipline, (byte)'h', Cr);
-        byte[] second = Receive(discipline, Lf, (byte)'i');
+        byte[] first = Receive(discipline, "h\r"u8.ToArray());
+        byte[] second = Receive(discipline, "\ni"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'h', Cr, Lf], first);
         Assert.AreSequenceEqual([(byte)'i'], second);
@@ -100,8 +100,8 @@ public sealed class SerialLineDisciplineTests
         // 吞掉的必须只有紧挨着的那一个;第二块开头是别的字节时,一个字节都不能少。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true));
 
-        _ = Receive(discipline, Cr);
-        byte[] second = Receive(discipline, (byte)'x', Lf);
+        _ = Receive(discipline, "\r"u8.ToArray());
+        byte[] second = Receive(discipline, "x\n"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'x', Lf], second, "上一块末尾那个 CR 已经结清,第二块开头不该再补 LF;而这里的裸 LF 也不该被吞");
     }
@@ -112,7 +112,7 @@ public sealed class SerialLineDisciplineTests
         // 症状:设备只发 LF,VT 引擎只下移不回行首,输出一路往右下走成阶梯。
         var discipline = new SerialLineDiscipline(Config(implicitCr: true));
 
-        byte[] result = Receive(discipline, (byte)'a', Lf, (byte)'b');
+        byte[] result = Receive(discipline, "a\nb"u8.ToArray());
 
         Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
@@ -122,7 +122,7 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(implicitCr: true));
 
-        byte[] result = Receive(discipline, Cr, Lf);
+        byte[] result = Receive(discipline, "\r\n"u8.ToArray());
 
         Assert.AreSequenceEqual([Cr, Lf], result);
     }
@@ -132,8 +132,8 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(implicitCr: true));
 
-        _ = Receive(discipline, (byte)'a', Cr);
-        byte[] second = Receive(discipline, Lf, (byte)'b');
+        _ = Receive(discipline, "a\r"u8.ToArray());
+        byte[] second = Receive(discipline, "\nb"u8.ToArray());
 
         Assert.AreSequenceEqual([Lf, (byte)'b'], second, "上一块以 CR 收尾,这个 LF 就是它的另一半,不该再补一个 CR");
     }
@@ -155,7 +155,7 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(enterMode: SerialEnterMode.CrLf));
 
-        byte[] result = discipline.Transmit(new byte[] { (byte)'l', (byte)'s', Cr }).ToArray();
+        byte[] result = discipline.Transmit("ls\r"u8.ToArray()).ToArray();
 
         Assert.AreSequenceEqual([(byte)'l', (byte)'s', Cr, Lf], result);
     }
@@ -166,7 +166,7 @@ public sealed class SerialLineDisciplineTests
         // 粘贴一段 Windows 换行的文本时,不做这条判断就会把每一行都打成 CR LF LF。
         var discipline = new SerialLineDiscipline(Config(enterMode: SerialEnterMode.CrLf));
 
-        byte[] result = discipline.Transmit(new byte[] { (byte)'a', Cr, Lf, (byte)'b' }).ToArray();
+        byte[] result = discipline.Transmit("a\r\nb"u8.ToArray()).ToArray();
 
         Assert.AreSequenceEqual([(byte)'a', Cr, Lf, (byte)'b'], result);
     }
@@ -176,8 +176,8 @@ public sealed class SerialLineDisciplineTests
     {
         var discipline = new SerialLineDiscipline(Config(enterMode: SerialEnterMode.Lf));
 
-        Assert.AreSequenceEqual([(byte)'a', Lf], discipline.Transmit(new byte[] { (byte)'a', Cr }).ToArray());
-        Assert.AreSequenceEqual([(byte)'a', Lf], discipline.Transmit(new byte[] { (byte)'a', Cr, Lf }).ToArray());
+        Assert.AreSequenceEqual([(byte)'a', Lf], discipline.Transmit("a\r"u8.ToArray()).ToArray());
+        Assert.AreSequenceEqual([(byte)'a', Lf], discipline.Transmit("a\r\n"u8.ToArray()).ToArray());
     }
 
     // ── 本地回显 ────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ public sealed class SerialLineDisciplineTests
     public void BuildEcho_TurnsABareCrIntoCrLfSoTheCursorAdvances()
     {
         // 屏幕上的"回车"必须同时回行首并下移;只回不移的话用户敲的下一行会盖住上一行。
-        byte[] echo = SerialLineDiscipline.BuildEcho(new byte[] { (byte)'h', (byte)'i', Cr }).ToArray();
+        byte[] echo = SerialLineDiscipline.BuildEcho("hi\r"u8.ToArray()).ToArray();
 
         Assert.AreSequenceEqual([(byte)'h', (byte)'i', Cr, Lf], echo);
     }
@@ -194,7 +194,7 @@ public sealed class SerialLineDisciplineTests
     [TestMethod]
     public void BuildEcho_LeavesAnExistingCrLfAlone()
     {
-        byte[] echo = SerialLineDiscipline.BuildEcho(new byte[] { Cr, Lf }).ToArray();
+        byte[] echo = SerialLineDiscipline.BuildEcho("\r\n"u8.ToArray()).ToArray();
 
         Assert.AreSequenceEqual([Cr, Lf], echo);
     }
@@ -205,7 +205,7 @@ public sealed class SerialLineDisciplineTests
         // 8 位透明:0x00 与 0xFF 必须原样过去。ZMODEM 与固件烧写全靠这一条,
         // 而破坏它的表现是"平时都好、传文件时随机损坏"。
         var discipline = new SerialLineDiscipline(Config(implicitLf: true, implicitCr: true));
-        byte[] payload = [.. Enumerable.Range(0, 256).Select(i => (byte)i).Where(b => b is not (Cr or Lf))];
+        byte[] payload = [.. Enumerable.Range(0, 256).Select(static i => (byte)i).Where(static b => b is not (Cr or Lf))];
 
         byte[] result = Receive(discipline, payload);
 

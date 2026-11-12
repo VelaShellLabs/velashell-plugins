@@ -147,10 +147,10 @@ public sealed class TaskCenter : ObservableObject
     public ObservableCollection<PanelTask> Tasks { get; } = [];
 
     /// <summary>进行中的任务数。</summary>
-    public int RunningCount => Tasks.Count(t => t.IsRunning);
+    public int RunningCount => Tasks.Count(static t => t.IsRunning);
 
     /// <summary>已完成的任务数。</summary>
-    public int FinishedCount => Tasks.Count(t => t.IsFinished);
+    public int FinishedCount => Tasks.Count(static t => t.IsFinished);
 
     /// <summary>有没有任务在跑(顶栏那枚指示器据此显隐)。</summary>
     public bool HasRunning => RunningCount > 0;
@@ -163,8 +163,8 @@ public sealed class TaskCenter : ObservableObject
     {
         get
         {
-            List<PanelTask> determinate = [.. Tasks.Where(t => t is { IsRunning: true, Indeterminate: false })];
-            return determinate.Count == 0 ? 0 : determinate.Average(t => t.Progress);
+            List<PanelTask> determinate = [.. Tasks.Where(static t => t is { IsRunning: true, Indeterminate: false })];
+            return determinate.Count == 0 ? 0 : determinate.Average(static t => t.Progress);
         }
     }
 
@@ -217,7 +217,7 @@ public sealed class TaskCenter : ObservableObject
     /// <summary>取消全部进行中的任务(面板关闭时)。</summary>
     public void CancelAll()
     {
-        foreach (PanelTask? task in Tasks.Where(t => t.IsRunning).ToArray())
+        foreach (PanelTask? task in Tasks.Where(static t => t.IsRunning).ToArray())
         {
             task.Cancel();
         }
@@ -225,7 +225,7 @@ public sealed class TaskCenter : ObservableObject
 
     private void Trim()
     {
-        PanelTask[] finished = [.. Tasks.Where(t => t.IsFinished)];
+        PanelTask[] finished = [.. Tasks.Where(static t => t.IsFinished)];
         for (int i = MaxFinished; i < finished.Length; i++)
         {
             _ = Tasks.Remove(finished[i]);
@@ -283,22 +283,22 @@ public sealed class PullAggregator
     public int LayerCount => _layers.Count;
 
     /// <summary>已经完成的层数(含复用)。</summary>
-    public int CompletedLayers => _layers.Values.Count(l => IsComplete(l.Status));
+    public int CompletedLayers => _layers.Values.Count(static l => IsComplete(l.Status));
 
     /// <summary>复用(本地已有)的层数。</summary>
-    public int ReusedLayers => _layers.Values.Count(l =>
+    public int ReusedLayers => _layers.Values.Count(static l =>
         l.Status.Contains("Already exists", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>正在下载或解压的层数。</summary>
-    public int ActiveLayers => _layers.Values.Count(l =>
+    public int ActiveLayers => _layers.Values.Count(static l =>
         l.Status.StartsWith("Downloading", StringComparison.OrdinalIgnoreCase) ||
         l.Status.StartsWith("Extracting", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>已下载字节。</summary>
-    public long CurrentBytes => _layers.Values.Sum(l => l.Current);
+    public long CurrentBytes => _layers.Values.Sum(static l => l.Current);
 
     /// <summary>总字节(只统计报了 total 的层)。</summary>
-    public long TotalBytes => _layers.Values.Sum(l => l.Total);
+    public long TotalBytes => _layers.Values.Sum(static l => l.Total);
 
     /// <summary>
     /// 总进度 0–1。
@@ -329,15 +329,15 @@ public sealed class PullAggregator
 
     /// <summary>逐层快照,给对话框里的层列表用。</summary>
     public IReadOnlyList<(string Id, string Status, double Progress, string SizeText)> Snapshot() =>
-        [.. _layers.Select(kv => (
+        [.. _layers.Select(static kv => (
             Id: kv.Key,
             kv.Value.Status,
             Progress: kv.Value.Total > 0 ? Math.Clamp((double)kv.Value.Current / kv.Value.Total, 0, 1) : IsComplete(kv.Value.Status) ? 1d : 0d,
             SizeText: kv.Value.Total > 0
                 ? $"{Humanize.Bytes(kv.Value.Current)} / {Humanize.Bytes(kv.Value.Total)}"
                 : IsComplete(kv.Value.Status) ? "已就绪" : "待定"))
-            .OrderBy(l => IsComplete(l.Status) ? 1 : 0)
-            .ThenBy(l => l.Id, StringComparer.Ordinal)];
+            .OrderBy(static l => IsComplete(l.Status) ? 1 : 0)
+            .ThenBy(static l => l.Id, StringComparer.Ordinal)];
 
     private static bool IsComplete(string status) =>
         status.Contains("Already exists", StringComparison.OrdinalIgnoreCase) ||

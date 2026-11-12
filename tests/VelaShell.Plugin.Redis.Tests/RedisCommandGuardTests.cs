@@ -11,8 +11,8 @@ public sealed class RedisCommandGuardTests
     {
         var guard = new RedisCommandGuard();
         guard.LoadServerMetadata(entries.ToDictionary(
-            entry => entry.Command,
-            entry => (IReadOnlyList<string>)entry.Flags,
+            static entry => entry.Command,
+            static entry => (IReadOnlyList<string>)entry.Flags,
             StringComparer.OrdinalIgnoreCase));
         return guard;
     }

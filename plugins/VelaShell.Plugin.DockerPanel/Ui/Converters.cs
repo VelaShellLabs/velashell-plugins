@@ -26,7 +26,7 @@ public static class Converters
     public static readonly IValueConverter ToneBrush = new ToneBrushConverter();
 
     /// <summary>状态色 → 图标资源键。</summary>
-    public static readonly IValueConverter ToneIcon = new FuncValueConverter<RowTone, string>(tone => tone switch
+    public static readonly IValueConverter ToneIcon = new FuncValueConverter<RowTone, string>(static tone => tone switch
     {
         RowTone.Ok => "Icon.circle-check",
         RowTone.Warn => "Icon.triangle-alert",
@@ -39,7 +39,7 @@ public static class Converters
     public static readonly IValueConverter SeverityBrush = new SeverityBrushConverter();
 
     /// <summary>后果说明的严重度 → 图标。</summary>
-    public static readonly IValueConverter SeverityIcon = new FuncValueConverter<int, string>(severity => severity switch
+    public static readonly IValueConverter SeverityIcon = new FuncValueConverter<int, string>(static severity => severity switch
     {
         1 => "Icon.shield",
         2 => "Icon.triangle-alert",
@@ -52,33 +52,33 @@ public static class Converters
 
     /// <summary>0–1 的比例 → 星形宽度(进度条的已填充段)。</summary>
     public static readonly IValueConverter RatioStar =
-        new FuncValueConverter<double, GridLength>(v => new(Math.Clamp(v, 0, 1), GridUnitType.Star));
+        new FuncValueConverter<double, GridLength>(static v => new(Math.Clamp(v, 0, 1), GridUnitType.Star));
 
     /// <summary>0–1 的比例 → 剩余段的星形宽度。</summary>
     public static readonly IValueConverter RatioRestStar =
-        new FuncValueConverter<double, GridLength>(v => new(1 - Math.Clamp(v, 0, 1), GridUnitType.Star));
+        new FuncValueConverter<double, GridLength>(static v => new(1 - Math.Clamp(v, 0, 1), GridUnitType.Star));
 
     /// <summary>把 0–100 的采样值换算成 sparkline 里的柱高(最高 16)。</summary>
     public static readonly IValueConverter SampleHeight =
-        new FuncValueConverter<double, double>(v => Math.Max(2, Math.Clamp(v, 0, 100) / 100 * 16));
+        new FuncValueConverter<double, double>(static v => Math.Max(2, Math.Clamp(v, 0, 100) / 100 * 16));
 
     /// <summary>把 0–100 的采样值换算成抽屉里那张卡片的柱高(最高 30)。</summary>
     public static readonly IValueConverter CardSampleHeight =
-        new FuncValueConverter<double, double>(v => Math.Max(2, Math.Clamp(v, 0, 100) / 100 * 30));
+        new FuncValueConverter<double, double>(static v => Math.Max(2, Math.Clamp(v, 0, 100) / 100 * 30));
 
     /// <summary>把 0–100 的采样值换算成趋势图里的柱高(最高 96)。</summary>
     public static readonly IValueConverter TrendHeight =
-        new FuncValueConverter<double, double>(v => Math.Max(2, Math.Clamp(v, 0, 100) / 100 * 96));
+        new FuncValueConverter<double, double>(static v => Math.Max(2, Math.Clamp(v, 0, 100) / 100 * 96));
 
     /// <summary>0–1 的比例 → 剩下那一段的权重(配合 <see cref="WeightedStackPanel" />)。</summary>
     public static readonly IValueConverter RemainingWeight =
-        new FuncValueConverter<double, double>(v => Math.Max(0.0001, 1 - Math.Clamp(v, 0, 1)));
+        new FuncValueConverter<double, double>(static v => Math.Max(0.0001, 1 - Math.Clamp(v, 0, 1)));
 
     /// <summary>
     /// 值为 0(含极小的浮点残留)为 true。进度条据此在"不知道分母"时退化成不确定型。
     /// </summary>
     public static readonly IValueConverter IsZero =
-        new FuncValueConverter<double, bool>(v => v <= 0.0001);
+        new FuncValueConverter<double, bool>(static v => v <= 0.0001);
 
     /// <summary>
     /// 来源序号 → 一个稳定的颜色。
@@ -97,26 +97,26 @@ public static class Converters
 
     /// <summary>非空字符串为 true。</summary>
     public static readonly IValueConverter NotEmpty =
-        new FuncValueConverter<string?, bool>(v => !string.IsNullOrEmpty(v));
+        new FuncValueConverter<string?, bool>(static v => !string.IsNullOrEmpty(v));
 
     /// <summary>取反。</summary>
-    public static readonly IValueConverter Not = new FuncValueConverter<bool, bool>(v => !v);
+    public static readonly IValueConverter Not = new FuncValueConverter<bool, bool>(static v => !v);
 
     /// <summary>文件树里的图标色:目录用强调色,文件退到弱化色。</summary>
     public static readonly IValueConverter FileIconBrush =
-        new FuncValueConverter<bool, IBrush>(isDirectory => isDirectory
+        new FuncValueConverter<bool, IBrush>(static isDirectory => isDirectory
             ? ThemeBrush("VelaAccent", Brushes.MediumPurple)
             : ThemeBrush("VelaTextTertiary", Brushes.Gray));
 
     /// <summary>「这一行是当前打开的那个」→ 选中底色,否则透明。</summary>
     public static readonly IValueConverter CurrentRowBackground =
-        new FuncValueConverter<bool, IBrush>(current => current
+        new FuncValueConverter<bool, IBrush>(static current => current
             ? ThemeBrush("VelaAccentDim", Brushes.Transparent)
             : Brushes.Transparent);
 
     /// <summary>「换行」开关 → 文本换行模式。关掉时长行横向截断,不折成好几屏。</summary>
     public static readonly IValueConverter WrapMode =
-        new FuncValueConverter<bool, TextWrapping>(v => v ? TextWrapping.Wrap : TextWrapping.NoWrap);
+        new FuncValueConverter<bool, TextWrapping>(static v => v ? TextWrapping.Wrap : TextWrapping.NoWrap);
 
     /// <summary>
     /// 「换行」开关 → 横向滚动条。
@@ -126,7 +126,7 @@ public static class Converters
     /// </para>
     /// </summary>
     public static readonly IValueConverter WrapScroll =
-        new FuncValueConverter<bool, ScrollBarVisibility>(wrap =>
+        new FuncValueConverter<bool, ScrollBarVisibility>(static wrap =>
             wrap ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 
     /// <summary>
@@ -138,11 +138,11 @@ public static class Converters
     /// </para>
     /// </summary>
     public static readonly IValueConverter TipText =
-        new FuncValueConverter<string?, object?>(text => string.IsNullOrWhiteSpace(text) ? null : text);
+        new FuncValueConverter<string?, object?>(static text => string.IsNullOrWhiteSpace(text) ? null : text);
 
     /// <summary>最大化 / 还原是同一颗键,图标要跟着当前状态走 —— 否则铺开之后没人看得出怎么回去。</summary>
     public static readonly IValueConverter MaximizeIcon =
-        new FuncValueConverter<bool, string>(max => max ? "Docker.minimize-2" : "Docker.maximize-2");
+        new FuncValueConverter<bool, string>(static max => max ? "Docker.minimize-2" : "Docker.maximize-2");
 
     /// <summary>
     /// 控件宽度 ≥ 参数(像素)才为真。
@@ -161,13 +161,13 @@ public static class Converters
     /// </para>
     /// </summary>
     public static readonly IValueConverter HotAccent =
-        new FuncValueConverter<bool, IBrush>(hot => hot
+        new FuncValueConverter<bool, IBrush>(static hot => hot
             ? ThemeBrush("VelaWarning", Brushes.Orange)
             : ThemeBrush("VelaAccent", Brushes.MediumPurple));
 
     /// <summary>CPU 高负载 → 警示色,否则常规数值色。给 sparkline 旁边那个百分比用。</summary>
     public static readonly IValueConverter HotText =
-        new FuncValueConverter<bool, IBrush>(hot => hot
+        new FuncValueConverter<bool, IBrush>(static hot => hot
             ? ThemeBrush("VelaWarning", Brushes.Orange)
             : ThemeBrush("VelaTextSecondary", Brushes.Gray));
 

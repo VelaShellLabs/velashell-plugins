@@ -53,7 +53,7 @@ internal static class ThemeBrushes
         {
             return;
         }
-        _hook = (_, _) => Refresh();
+        _hook = static (_, _) => Refresh();
         app.ResourcesChanged += _hook;
     }
 

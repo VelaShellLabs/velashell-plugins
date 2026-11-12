@@ -139,5 +139,5 @@ public static class RunCommandBuilder
 
     private static IEnumerable<KeyValuePair<string, PortBinding[]?>> Ordered(
         Dictionary<string, PortBinding[]?>? bindings) =>
-        bindings is null ? [] : bindings.OrderBy(p => p.Key, StringComparer.Ordinal);
+        bindings is null ? [] : bindings.OrderBy(static p => p.Key, StringComparer.Ordinal);
 }

@@ -79,7 +79,7 @@ public sealed class ImageDetailViewModel : ObservableObject
 
     /// <summary>拿去 <c>run</c> 的引用:有标签用标签,悬空镜像只能用 id。</summary>
     public string PrimaryReference =>
-        _row.Summary.RepoTags?.FirstOrDefault(t => t != "<none>:<none>") ?? _row.Id;
+        _row.Summary.RepoTags?.FirstOrDefault(static t => t != "<none>:<none>") ?? _row.Id;
 
     /// <summary>大小。</summary>
     public string SizeText => _row.SizeText;
@@ -203,7 +203,7 @@ public sealed class ImageDetailViewModel : ObservableObject
         }
         Basics.Add(new("创建", Humanize.AgoFromIso(inspect.Created)));
         string platform = string.Join("/", new[] { inspect.Os, inspect.Architecture, inspect.Variant }
-            .Where(s => !string.IsNullOrWhiteSpace(s)));
+            .Where(static s => !string.IsNullOrWhiteSpace(s)));
         if (platform.Length > 0)
         {
             // 平台不匹配是"镜像拉下来了但跑不起来"最常见的原因,值得单独一行。
@@ -247,7 +247,7 @@ public sealed class ImageDetailViewModel : ObservableObject
             : new("用户", "root(镜像未指定 USER)", RowTone.Warn));
         if (config?.ExposedPorts is { Count: > 0 } exposed)
         {
-            Runtime.Add(new("暴露端口", string.Join(", ", exposed.Keys.OrderBy(k => k, StringComparer.Ordinal))));
+            Runtime.Add(new("暴露端口", string.Join(", ", exposed.Keys.OrderBy(static k => k, StringComparer.Ordinal))));
         }
 
         foreach (string entry in config?.Env ?? [])
@@ -289,7 +289,7 @@ public sealed class ImageDetailViewModel : ObservableObject
             ImageHistoryEntry[] history = await client.ImageHistoryAsync(ImageId, cancellationToken)
                                                      .ConfigureAwait(true);
             Layers.Clear();
-            long largest = history.Length > 0 ? history.Max(h => h.Size) : 0;
+            long largest = history.Length > 0 ? history.Max(static h => h.Size) : 0;
             // daemon 返回的是从新到旧;Dockerfile 是从旧到新读的,按后者排更容易对上。
             foreach (ImageHistoryEntry? entry in history.Reverse())
             {

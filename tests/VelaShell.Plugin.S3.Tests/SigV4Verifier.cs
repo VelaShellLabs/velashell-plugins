@@ -104,7 +104,7 @@ internal static class SigV4Verifier
         ArgumentNullException.ThrowIfNull(parameters);
         List<(string Name, string Value)> encoded =
         [
-            .. parameters.Select(p => (Name: UriEncode(p.Key, true), Value: UriEncode(p.Value, true)))
+            .. parameters.Select(static p => (Name: UriEncode(p.Key, true), Value: UriEncode(p.Value, true)))
         ];
         encoded.Sort(static (left, right) =>
         {

@@ -296,8 +296,8 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         try
         {
             PortMapping[] ports = string.IsNullOrWhiteSpace(text) ? []
-                : [.. text.Split(';', StringSplitOptions.TrimEntries).Select(p => new PortMapping(p))];
-            if (ports.Length > 32 || ports.DistinctBy(p => p.Name).Count() != ports.Length)
+                : [.. text.Split(';', StringSplitOptions.TrimEntries).Select(static p => new PortMapping(p))];
+            if (ports.Length > 32 || ports.DistinctBy(static p => p.Name).Count() != ports.Length)
             {
                 throw new ArgumentException("Port mappings must contain at most 32 unique entries.", nameof(text));
             }
@@ -353,7 +353,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
         ];
         if (devices)
         {
-            fields.Insert(fields.FindIndex(field => field.Key == SmartCardKey) + 1,
+            fields.Insert(fields.FindIndex(static field => field.Key == SmartCardKey) + 1,
                 new() { Key = PortsKey, Label = loc["Ports"], Hint = loc["PortsHint"], DefaultValue = "", Page = DrivesPage });
         }
         foreach (LocalDisk disk in disks)
@@ -407,7 +407,7 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
                 Kind = ProtocolSettingKind.Choice,
                 DefaultValue = "",
                 Page = DrivesPage,
-                Choices = [new("", loc["CameraNone"]), .. (cameras ?? []).Select(camera => new ProtocolSettingChoice(LocalCameras.Key(camera), camera.Name))]
+                Choices = [new("", loc["CameraNone"]), .. (cameras ?? []).Select(static camera => new ProtocolSettingChoice(LocalCameras.Key(camera), camera.Name))]
             });
         }
 

@@ -378,7 +378,10 @@ internal static partial class GridFsPaths
 /// 唯一整块读的是 <see cref="ReadAllAsync" />(图片预览),调用方负责先看长度。
 /// </para>
 /// </summary>
-internal sealed class GridFsService
+/// <remarks>构造。</remarks>
+/// <param name="connection">连接。</param>
+/// <param name="bucket">桶。</param>
+internal sealed class GridFsService(MongoConnection connection, GridFsBucketInfo bucket)
 {
     /// <summary>默认块大小(255 KB,规范默认值:一块正好塞进 256 KB 的 BSON 文档,不浪费)。</summary>
     public const int DefaultChunkSize = 255 * 1024;
@@ -389,28 +392,17 @@ internal sealed class GridFsService
     /// <summary>图片预览的字节上限(8 MB):再大就不往内存里读了。</summary>
     public const long PreviewLimit = 8L * 1024 * 1024;
 
-    private readonly MongoConnection _connection;
-
-    /// <summary>构造。</summary>
-    /// <param name="connection">连接。</param>
-    /// <param name="bucket">桶。</param>
-    public GridFsService(MongoConnection connection, GridFsBucketInfo bucket)
-    {
-        _connection = connection;
-        Bucket = bucket;
-    }
-
     /// <summary>桶。</summary>
-    public GridFsBucketInfo Bucket { get; }
+    public GridFsBucketInfo Bucket { get; } = bucket;
 
     /// <summary><c>&lt;bucket&gt;.files</c>。</summary>
-    public IMongoCollection<BsonDocument> Files => _connection.Collection(Bucket.Database, Bucket.FilesCollection);
+    public IMongoCollection<BsonDocument> Files => connection.Collection(Bucket.Database, Bucket.FilesCollection);
 
     /// <summary><c>&lt;bucket&gt;.chunks</c>。</summary>
-    public IMongoCollection<BsonDocument> Chunks => _connection.Collection(Bucket.Database, Bucket.ChunksCollection);
+    public IMongoCollection<BsonDocument> Chunks => connection.Collection(Bucket.Database, Bucket.ChunksCollection);
 
     private GridFSBucket Driver(int chunkSize = DefaultChunkSize) =>
-        new(_connection.Database(Bucket.Database), new GridFSBucketOptions
+        new(connection.Database(Bucket.Database), new GridFSBucketOptions
         {
             BucketName = Bucket.Name,
             ChunkSizeBytes = chunkSize
@@ -719,8 +711,8 @@ internal sealed class GridFsService
     /// </summary>
     public async Task<IReadOnlyList<GridFsOrphan>> FindOrphansAsync(CancellationToken cancellationToken = default)
     {
-        BsonDocument[] pipeline = new[]
-        {
+        BsonDocument[] pipeline =
+        [
             new BsonDocument("$sort", new BsonDocument("files_id", 1)),
             new BsonDocument("$group", new BsonDocument("_id", "$files_id")),
             new BsonDocument("$lookup", new BsonDocument
@@ -732,7 +724,7 @@ internal sealed class GridFsService
             }),
             new BsonDocument("$match", new BsonDocument("owner", new BsonDocument("$size", 0))),
             new BsonDocument("$project", new BsonDocument("_id", 1))
-        };
+        ];
         using IAsyncCursor<BsonDocument> cursor = await Chunks.AggregateAsync<BsonDocument>(pipeline,
             new AggregateOptions { AllowDiskUse = true }, cancellationToken).ConfigureAwait(false);
         List<BsonValue> ids = [.. (await cursor.ToListAsync(cancellationToken).ConfigureAwait(false)).Select(static d => d["_id"])];
@@ -744,8 +736,8 @@ internal sealed class GridFsService
         var orphans = new List<GridFsOrphan>(ids.Count);
         foreach (BsonValue[] batch in ids.Chunk(1000))
         {
-            BsonDocument[] stats = new[]
-            {
+            BsonDocument[] stats =
+            [
                 new BsonDocument("$match", new BsonDocument("files_id", new BsonDocument("$in", new BsonArray(batch)))),
                 new BsonDocument("$group", new BsonDocument
                 {
@@ -753,7 +745,7 @@ internal sealed class GridFsService
                     { "chunks", new BsonDocument("$sum", 1) },
                     { "bytes", new BsonDocument("$sum", new BsonDocument("$binarySize", "$data")) }
                 })
-            };
+            ];
             using IAsyncCursor<BsonDocument> rows = await Chunks.AggregateAsync<BsonDocument>(stats,
                 new AggregateOptions { AllowDiskUse = true }, cancellationToken).ConfigureAwait(false);
             foreach (BsonDocument row in await rows.ToListAsync(cancellationToken).ConfigureAwait(false))

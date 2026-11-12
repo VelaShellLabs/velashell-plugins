@@ -551,7 +551,7 @@ public sealed partial class DockerPanelViewModel : ObservableObject, IAsyncDispo
         Context.Events.SessionDisconnected += OnSessionChanged;
         await ReloadEndpointsAsync().ConfigureAwait(true);
         // 只有一个可用端点时直接连上 —— 让用户为一个没得选的选择再点一次没有意义。
-        EndpointItem[] usable = [.. Endpoints.Where(e => e.Available)];
+        EndpointItem[] usable = [.. Endpoints.Where(static e => e.Available)];
         if (usable.Length == 1)
         {
             await ConnectAsync(usable[0]).ConfigureAwait(true);

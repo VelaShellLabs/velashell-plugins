@@ -91,7 +91,7 @@ public sealed class RdpBackgroundSessionTests
         Assert.HasCount(2, sessions);
         Assert.AreEqual(1, sessions[0].DisposeCount);
         Assert.AreEqual(ProtocolSessionState.Connected, document.Status.State);
-        Assert.Contains(e => e.Message.Contains("reconnected automatically (attempt 1)"), context.CollectingLog.Entries);
+        Assert.Contains(static e => e.Message.Contains("reconnected automatically (attempt 1)"), context.CollectingLog.Entries);
         await document.DisposeAsync();
         Assert.AreEqual(1, sessions[1].DisposeCount);
     }
@@ -114,7 +114,7 @@ public sealed class RdpBackgroundSessionTests
         var second = (RdpWorkspaceDocument)await provider.OpenAsync(RdpSettingsTests.Request());
         sessions[0].Disconnect(new IOException("RDP drive request queue capacity exceeded; reconnect the session."));
         Assert.IsNull(second.AutoReconnectTask, "a local failure is not a network loss");
-        Assert.Contains(e => e.Message.Contains("IOException: RDP drive request queue"), context.CollectingLog.Entries);
+        Assert.Contains(static e => e.Message.Contains("IOException: RDP drive request queue"), context.CollectingLog.Entries);
     }
 
     [TestMethod]
@@ -211,7 +211,7 @@ public sealed class RdpBackgroundSessionTests
     }
 
     [TestMethod]
-    public void AReconnectWhileTheTabIsHiddenStartsWithUpdatesPaused() => RdpHeadlessTests.Run(async () =>
+    public void AReconnectWhileTheTabIsHiddenStartsWithUpdatesPaused() => RdpHeadlessTests.Run(static async () =>
     {
         // The view's debounced resize records its size for the next connection; do not leak it into later tests.
         RdpViewMetrics.ResetForTest();
@@ -232,12 +232,12 @@ public sealed class RdpBackgroundSessionTests
         await document.AutoReconnectTask!.WaitAsync(TimeSpan.FromSeconds(10));
         await Settle();
         Assert.HasCount(2, sessions);
-        Assert.AreSequenceEqual(new[] { false }, [.. sessions[1].DisplayUpdates], "nobody sees it yet: paused");
+        Assert.AreSequenceEqual([false], [.. sessions[1].DisplayUpdates], "nobody sees it yet: paused");
 
         window.Content = root;   // back to the tab
         window.UpdateLayout();
         await Settle();
-        Assert.AreSequenceEqual(new[] { false, true }, [.. sessions[1].DisplayUpdates]);
+        Assert.AreSequenceEqual([false, true], [.. sessions[1].DisplayUpdates]);
         Assert.IsTrue(((RdpWorkspaceView)root.Content!).Desktop.IsPresenting);
         await document.DisposeAsync();
         window.Close();

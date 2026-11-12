@@ -72,7 +72,7 @@ internal sealed partial class WindowsRedirectedPort : IRedirectedPort
                 throw new DriveStatusException(NtStatus.InsufficientResources);
             }
             Task<int> native = new Operation(_handle, operation, input, output).RunAsync(cancellationToken);
-            _ = native.ContinueWith(completed =>
+            _ = native.ContinueWith(static completed =>
             {
                 _ = completed.Exception; // Observe late cancellation/error after the caller's deadline.
                 _ = Interlocked.Decrement(ref _outstandingNativeOperations);

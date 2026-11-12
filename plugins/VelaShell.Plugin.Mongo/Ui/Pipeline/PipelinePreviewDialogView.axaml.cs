@@ -13,8 +13,5 @@ public sealed partial class PipelinePreviewDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public PipelinePreviewDialogView()
-    {
-        InitializeComponent();
-    }
+    public PipelinePreviewDialogView() => InitializeComponent();
 }

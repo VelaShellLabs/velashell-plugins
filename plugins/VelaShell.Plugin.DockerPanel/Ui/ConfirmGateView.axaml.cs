@@ -7,8 +7,5 @@ namespace VelaShell.Plugin.DockerPanel.Ui;
 public sealed partial class ConfirmGateView : UserControl
 {
     /// <summary>建视图。</summary>
-    public ConfirmGateView()
-    {
-        AvaloniaXamlLoader.Load(this);
-    }
+    public ConfirmGateView() => AvaloniaXamlLoader.Load(this);
 }

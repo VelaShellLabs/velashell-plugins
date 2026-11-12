@@ -8,8 +8,8 @@ public sealed class LocalDisksTests
     {
         IReadOnlyList<LocalDisk> disks = LocalDisks.FromUnix(
             ["/mnt/data", "/media/joe/My USB", "/media/joe/My-USB", "/mnt/data"], "/home/joe");
-        Assert.AreSequenceEqual(new[] { "/", "~", "/media/joe/My USB", "/media/joe/My-USB", "/mnt/data" }, [.. disks.Select(disk => disk.Id)]);
-        Assert.AreSequenceEqual(new[] { "root", "home", "MyUSB", "MyUSB2", "data" }, [.. disks.Select(disk => disk.ShareName)]);
+        Assert.AreSequenceEqual(["/", "~", "/media/joe/My USB", "/media/joe/My-USB", "/mnt/data"], [.. disks.Select(static disk => disk.Id)]);
+        Assert.AreSequenceEqual(["root", "home", "MyUSB", "MyUSB2", "data"], [.. disks.Select(static disk => disk.ShareName)]);
         Assert.AreEqual(LocalDiskKind.Home, disks[1].Kind);
         Assert.AreEqual("/home/joe", disks[1].Path);
     }
@@ -32,11 +32,11 @@ public sealed class LocalDisksTests
     {
         IReadOnlyList<LocalDisk> disks = LocalDisks.Enumerate();
         Assert.IsLessThanOrEqualTo(LocalDisks.MaxDisks, disks.Count);
-        Assert.HasCount(disks.Count, disks.Select(disk => disk.Id).Distinct(StringComparer.Ordinal));
-        Assert.HasCount(disks.Count, disks.Select(disk => disk.ShareName).Distinct(StringComparer.OrdinalIgnoreCase));
+        Assert.HasCount(disks.Count, disks.Select(static disk => disk.Id).Distinct(StringComparer.Ordinal));
+        Assert.HasCount(disks.Count, disks.Select(static disk => disk.ShareName).Distinct(StringComparer.OrdinalIgnoreCase));
         foreach (LocalDisk disk in disks)
         {
-            Assert.IsTrue(disk.ShareName.Length is >= 1 and <= 8 && disk.ShareName.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'),
+            Assert.IsTrue(disk.ShareName.Length is >= 1 and <= 8 && disk.ShareName.All(static c => char.IsAsciiLetterOrDigit(c) || c == '_'),
                 disk.ShareName);
         }
     }

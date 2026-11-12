@@ -111,8 +111,8 @@ with(StringComparer.OrdinalIgnoreCase),         "FLUSHALL", "FLUSHDB", "SHUTDOWN
         _byName.Clear();
         foreach ((string name, IReadOnlyList<string> flags) in flagsByCommand)
         {
-            bool write = flags.Any(f => f.Equals("write", StringComparison.OrdinalIgnoreCase));
-            bool admin = flags.Any(f => f.Equals("admin", StringComparison.OrdinalIgnoreCase));
+            bool write = flags.Any(static f => f.Equals("write", StringComparison.OrdinalIgnoreCase));
+            bool admin = flags.Any(static f => f.Equals("admin", StringComparison.OrdinalIgnoreCase));
             _byName[name] = Destructive.Contains(name)
                 ? RedisCommandRisk.Destructive
                 : admin || Dangerous.Contains(name)

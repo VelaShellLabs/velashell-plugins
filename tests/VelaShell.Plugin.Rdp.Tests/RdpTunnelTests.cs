@@ -14,7 +14,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 [TestClass]
 public sealed class RdpTunnelTests
 {
-    private static readonly Lazy<X509Certificate2> Certificate = new(() =>
+    private static readonly Lazy<X509Certificate2> Certificate = new(static () =>
     {
         using var rsa = RSA.Create(2048);
         var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -25,10 +25,7 @@ public sealed class RdpTunnelTests
     {
         private readonly BcTlsCrypto _crypto;
         internal DtlsServer() : this(new BcTlsCrypto(new SecureRandom())) { }
-        private DtlsServer(BcTlsCrypto crypto) : base(crypto)
-        {
-            _crypto = crypto;
-        }
+        private DtlsServer(BcTlsCrypto crypto) : base(crypto) => _crypto = crypto;
 
         protected override ProtocolVersion[] GetSupportedVersions() => [ProtocolVersion.DTLSv12];
         protected override int[] GetSupportedCipherSuites() => [CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
@@ -69,7 +66,7 @@ public sealed class RdpTunnelTests
         Assert.AreSequenceEqual(new byte[] { 0x30, 1, 8 }, second);
         await tunnel.SendAsync([0x30, 1, 7], server.Token);
         await serving.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.IsFalse(server.WirePayloads.Any(p => p.AsSpan().IndexOf(cookie) >= 0), "Cookie must be inside TLS/DTLS encryption.");
+        Assert.DoesNotContain(p => p.AsSpan().IndexOf(cookie) >= 0, server.WirePayloads, "Cookie must be inside TLS/DTLS encryption.");
     }
 
     [TestMethod]

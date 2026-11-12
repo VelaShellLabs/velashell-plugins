@@ -36,10 +36,7 @@ public sealed partial class CollectionTabView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public CollectionTabView()
-    {
-        InitializeComponent();
-    }
+    public CollectionTabView() => InitializeComponent();
 
     /// <summary>网格面板(测试用)。</summary>
     internal GridPaneView Grid => GridPane;

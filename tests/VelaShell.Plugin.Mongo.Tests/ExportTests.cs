@@ -47,19 +47,19 @@ public sealed class ExportTests
     [TestMethod]
     public void Json_array_is_a_valid_array_even_when_empty()
     {
-        string text = WriteText(output => new JsonExportWriter(output, new JsonOptions { Lines = false }), Tricky, Tricky);
+        string text = WriteText(static output => new JsonExportWriter(output, new JsonOptions { Lines = false }), Tricky, Tricky);
         BsonArray array = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(text);
         Assert.HasCount(2, array);
         Assert.AreEqual(Tricky, array[1]);
 
-        string empty = WriteText(output => new JsonExportWriter(output, new JsonOptions { Lines = false }));
+        string empty = WriteText(static output => new JsonExportWriter(output, new JsonOptions { Lines = false }));
         Assert.IsEmpty(MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(empty));
     }
 
     [TestMethod]
     public void Shell_script_batches_insert_many_statements()
     {
-        string text = WriteText(output => new ShellExportWriter(output, "shop", new ShellOptions { BatchSize = 2 }), Tricky, Tricky, Tricky);
+        string text = WriteText(static output => new ShellExportWriter(output, "shop", new ShellOptions { BatchSize = 2 }), Tricky, Tricky, Tricky);
         Assert.AreEqual(2, CountOf(text, ".insertMany(["), "3 documents in batches of 2 = 2 statements");
         Assert.AreEqual(2, CountOf(text, "]);"));
         Assert.Contains("db.getSiblingDB(\"shop\").getCollection(\"orders\")", text);
@@ -117,7 +117,7 @@ public sealed class ExportTests
         ];
         var uuid = Guid.Parse("8f3b0c1a-0000-4000-8000-00000000abcd");
         var metadata = BsonDocument.Parse(BsonDump.MetadataJson(BsonDump.Metadata(info, indexes, uuid)));
-        Assert.AreSequenceEqual(new[] { "options", "indexes", "uuid", "collectionName", "type" }, [.. metadata.Names]);
+        Assert.AreSequenceEqual(["options", "indexes", "uuid", "collectionName", "type"], [.. metadata.Names]);
         Assert.AreEqual("orders", metadata["collectionName"].AsString);
         Assert.AreEqual("collection", metadata["type"].AsString);
         Assert.AreEqual(uuid.ToString("N"), metadata["uuid"].AsString, "uuid is plain hex like mongodump writes it");
@@ -138,7 +138,7 @@ public sealed class ExportTests
         try
         {
             IMongoCollection<BsonDocument> orders = connection.Collection(db, "orders");
-            await orders.InsertManyAsync(Enumerable.Range(1, 2500).Select(i => new BsonDocument
+            await orders.InsertManyAsync(Enumerable.Range(1, 2500).Select(static i => new BsonDocument
             {
                 { "orderNo", $"SO-{i:00000}" },
                 { "customer", new BsonDocument { { "name", $"客户{i % 7}" }, { "level", i % 3 == 0 ? "VIP" : "普通" } } },
@@ -313,7 +313,7 @@ public sealed class ExportTests
         Assert.IsFalse(vm.Fields.Single(static f => f.Path == "items").Include, "arrays are off by default for CSV");
         Assert.IsTrue(vm.PreviewLines[0].IsHeader);
         Assert.IsGreaterThanOrEqualTo(2, vm.PreviewLines.Count);
-        StringAssert.StartsWith(vm.EstimateDocs, "≈ ");
+        Assert.StartsWith("≈ ", vm.EstimateDocs);
 
         vm.Format = ExportFormat.Json;
         Assert.DoesNotContain(static f => f.Path == "customer.name", vm.Fields, "JSON keeps top-level fields only");
@@ -322,7 +322,7 @@ public sealed class ExportTests
         vm.Format = ExportFormat.BsonDump;
         Assert.IsFalse(vm.ShowFieldTable);
         Assert.IsTrue(vm.TargetIsFolder);
-        StringAssert.EndsWith(vm.PreviewLines[0].Text, "orders.bson");
+        Assert.EndsWith("orders.bson", vm.PreviewLines[0].Text);
     });
 
     [TestMethod]
@@ -381,7 +381,7 @@ public sealed class ExportTests
         Assert.AreEqual("status", second.Fields[0].Path, "column order is restored");
         Assert.AreEqual("状态", second.Fields[0].Header);
         Assert.IsFalse(second.Fields.Single(static f => f.Path == "orderNo").Include);
-        StringAssert.StartsWith(second.PreviewLines[0].Text, "状态;");
+        Assert.StartsWith("状态;", second.PreviewLines[0].Text);
     });
 
     [TestMethod]

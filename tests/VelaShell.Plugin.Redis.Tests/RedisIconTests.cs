@@ -43,7 +43,7 @@ public sealed class RedisIconTests
     /// <summary>路径解析得出几何,撑满自报的视框,且不越界。</summary>
     [TestMethod]
     public void PathData_ParsesAndFillsItsOwnViewBox() =>
-        OnUi(() =>
+        OnUi(static () =>
         {
             // 解析不出来会抛(宿主那边则是吞掉、退回通用插头)—— 这一行本身就是一半的验收。
             Rect bounds = Geometry.Parse(RedisIcon.PathData).Bounds;

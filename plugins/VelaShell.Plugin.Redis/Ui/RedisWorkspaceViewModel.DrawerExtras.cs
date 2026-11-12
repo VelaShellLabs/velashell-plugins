@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Avalonia.Threading;
 
 namespace VelaShell.Plugin.Redis.Ui;
@@ -36,6 +38,11 @@ public sealed class RedisThroughputSample : ObservableObject
 /// </summary>
 public sealed partial class RedisWorkspaceViewModel
 {
+    private static readonly JsonSerializerOptions PubSubExportJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private DispatcherTimer? _throughputTimer;
 
     /// <summary>当前是监视页。</summary>
@@ -45,10 +52,10 @@ public sealed partial class RedisWorkspaceViewModel
     public bool IsClusterTab => ActiveTab == RedisDrawerTab.Cluster;
 
     /// <summary>切到监视页。</summary>
-    public AsyncCommand ShowMonitorCommand { get; private set; } = null!;
+    public AsyncCommand ShowMonitorCommand { get; private set; }
 
     /// <summary>切到集群页。</summary>
-    public AsyncCommand ShowClusterCommand { get; private set; } = null!;
+    public AsyncCommand ShowClusterCommand { get; private set; }
 
     // ── 监视(恒为空状态)────────────────────────────────────────
 
@@ -59,10 +66,10 @@ public sealed partial class RedisWorkspaceViewModel
     public string MonitorBody => Loc["Redis_MonitorBody"];
 
     /// <summary>三条出路的第一条:改看慢日志(点了就切过去)。</summary>
-    public AsyncCommand MonitorGoSlowlogCommand { get; private set; } = null!;
+    public AsyncCommand MonitorGoSlowlogCommand { get; private set; }
 
     /// <summary>第二条:订阅键空间事件(点了切到订阅页并预填频道)。</summary>
-    public AsyncCommand MonitorGoKeyspaceCommand { get; private set; } = null!;
+    public AsyncCommand MonitorGoKeyspaceCommand { get; private set; }
 
     // ── 集群 ──────────────────────────────────────────────────────
 
@@ -98,7 +105,7 @@ public sealed partial class RedisWorkspaceViewModel
     }
 
     /// <summary>切换"只看主节点"。</summary>
-    public AsyncCommand ToggleClusterMastersCommand { get; private set; } = null!;
+    public AsyncCommand ToggleClusterMastersCommand { get; private set; }
 
     /// <summary>按槽位起点排序(关掉则按服务器给的拓扑顺序:主在前、从紧随其主)。</summary>
     public bool ClusterSortBySlot
@@ -108,10 +115,10 @@ public sealed partial class RedisWorkspaceViewModel
     }
 
     /// <summary>切换排序。</summary>
-    public AsyncCommand ToggleClusterSortCommand { get; private set; } = null!;
+    public AsyncCommand ToggleClusterSortCommand { get; private set; }
 
     /// <summary>把整份拓扑复制成一段可粘贴的文本。</summary>
-    public AsyncCommand CopyClusterTopologyCommand { get; private set; } = null!;
+    public AsyncCommand CopyClusterTopologyCommand { get; private set; }
 
     private RedisClusterView? _cluster;
 
@@ -294,8 +301,8 @@ public sealed partial class RedisWorkspaceViewModel
             RaisePropertyChanged(nameof(HasThroughput));
             return;
         }
-        int peak = Throughput.Max(sample => sample.Ops);
-        double mean = Throughput.Average(sample => sample.Ops);
+        int peak = Throughput.Max(static sample => sample.Ops);
+        double mean = Throughput.Average(static sample => sample.Ops);
         foreach (RedisThroughputSample sample in Throughput)
         {
             // 峰值为 0 时给所有柱子一个可见的最小高度:一整排看不见的柱子读不出
@@ -402,7 +409,7 @@ public sealed partial class RedisWorkspaceViewModel
     }
 
     /// <summary>切换"只看非空闲"。</summary>
-    public AsyncCommand ToggleClientsBusyCommand { get; private set; } = null!;
+    public AsyncCommand ToggleClientsBusyCommand { get; private set; }
 
     /// <summary>
     /// 在客户端侧过滤。<b>不重新问服务器</b> —— <c>CLIENT LIST</c> 没有过滤参数,
@@ -465,10 +472,10 @@ public sealed partial class RedisWorkspaceViewModel
     private long _messagesSeen;
 
     /// <summary>暂停 / 继续。</summary>
-    public AsyncCommand TogglePubSubPauseCommand { get; private set; } = null!;
+    public AsyncCommand TogglePubSubPauseCommand { get; private set; }
 
     /// <summary>清空消息列表。</summary>
-    public AsyncCommand ClearMessagesCommand { get; private set; } = null!;
+    public AsyncCommand ClearMessagesCommand { get; private set; }
 
     /// <summary>
     /// 自动滚到最新一条。
@@ -482,10 +489,10 @@ public sealed partial class RedisWorkspaceViewModel
     } = true;
 
     /// <summary>切换自动滚动。</summary>
-    public AsyncCommand TogglePubSubAutoScrollCommand { get; private set; } = null!;
+    public AsyncCommand TogglePubSubAutoScrollCommand { get; private set; }
 
     /// <summary>把已收到的消息导成 JSONL。</summary>
-    public AsyncCommand ExportMessagesCommand { get; private set; } = null!;
+    public AsyncCommand ExportMessagesCommand { get; private set; }
 
     /// <summary>有新消息到达且自动滚动开着 —— 视图据此把列表滚回顶部。</summary>
     public event EventHandler? MessagesScrollRequested;
@@ -505,16 +512,13 @@ public sealed partial class RedisWorkspaceViewModel
         {
             _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             // 一行一条 JSON:给人看与喂给脚本都直接可用。
-            IEnumerable<string> lines = Messages.Reverse().Select(message => System.Text.Json.JsonSerializer.Serialize(
+            IEnumerable<string> lines = Messages.Reverse().Select(static message => JsonSerializer.Serialize(
                 new { at = message.At, channel = message.Channel, payload = message.Payload },
-                new System.Text.Json.JsonSerializerOptions
-                {
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                }));
+                PubSubExportJsonOptions));
             await File.WriteAllLinesAsync(path, lines).ConfigureAwait(true);
             StatusMessage = Loc.Format("Redis_ExportDone",
                 Messages.Count.ToString("N0", CultureInfo.CurrentCulture),
-                new System.IO.FileInfo(path).Length.ToString("N0", CultureInfo.CurrentCulture) + " B",
+                new FileInfo(path).Length.ToString("N0", CultureInfo.CurrentCulture) + " B",
                 path);
         }
         catch (Exception ex)
@@ -542,7 +546,7 @@ public sealed partial class RedisWorkspaceViewModel
         Loc.Format("Redis_MemoryGrouping", MemoryPrefixSegments.ToString(CultureInfo.CurrentCulture));
 
     /// <summary>在 1 段 / 2 段之间切换,并重跑一次抽样。</summary>
-    public AsyncCommand ToggleMemoryGroupingCommand { get; private set; } = null!;
+    public AsyncCommand ToggleMemoryGroupingCommand { get; private set; }
 
     /// <summary>内存分析页的抽样规模文案。</summary>
     public string MemorySampleSizeText => Loc.Format("Redis_MemorySampleSize",

@@ -51,7 +51,7 @@ public sealed class ManagedRdpGfxTests
             Start(8), Fill(1, 0xff060504, 0, 0, 1, 1), End(8)));
         _ = Assert.ThrowsExactly<RdpProtocolException>(gfx.ReadResponse);
         Assert.IsTrue(gfx.TryGetFrame(out RdpGfxFrame first));
-        byte[] snapshot = first.Pixels.ToArray();
+        byte[] snapshot = [.. first.Pixels];
         Assert.AreSequenceEqual(new byte[] { 1, 2, 3, 255 }, snapshot.AsSpan(16, 4).ToArray());
         Assert.AreEqual((byte)255, snapshot[3]);
         _ = Assert.ThrowsExactly<RdpProtocolException>(gfx.ReadResponse);
@@ -106,9 +106,9 @@ public sealed class ManagedRdpGfxTests
         Assert.AreSequenceEqual(new ushort[] { 0x12, 13, 13 }, commands,
             "Only capabilities and frame ACKs may be sent; there are no persistent bitmaps to import.");
         Assert.AreSequenceEqual(new uint[] { 10, 11 }, acknowledgements);
-        Assert.IsTrue(logs.Any(message => message.Contains("graphics DVC opened", StringComparison.Ordinal)));
-        Assert.IsTrue(logs.Any(message => message.Contains("server confirmed graphics capabilities", StringComparison.Ordinal)));
-        Assert.AreEqual(1, logs.Count(message => message.Contains("first graphics frame decoded", StringComparison.Ordinal)));
+        Assert.Contains(message => message.Contains("graphics DVC opened", StringComparison.Ordinal), logs);
+        Assert.Contains(message => message.Contains("server confirmed graphics capabilities", StringComparison.Ordinal), logs);
+        Assert.ContainsSingle(message => message.Contains("first graphics frame decoded", StringComparison.Ordinal), logs);
         stop.Cancel(); await dvc.CloseAsync();
     }
 
@@ -182,7 +182,7 @@ public sealed class ManagedRdpGfxTests
     public void ScaledMappingClipsToDesktopAndResizePreservesOffscreenPixels()
     {
         using ManagedRdpGfx gfx = Ready(4, 2);
-        gfx.Feed(Packet(Create(1, 2, 1), Command(23, w =>
+        gfx.Feed(Packet(Create(1, 2, 1), Command(23, static w =>
         {
             w.Write((ushort)1); w.Write((ushort)0); w.Write(1u); w.Write(0u); w.Write(4u); w.Write(2u);
         }), Start(1), Raw(1, 2, 1, [3, 7]), End(1)));
@@ -202,12 +202,12 @@ public sealed class ManagedRdpGfxTests
             [1, 0], [9, 0, 0, 0, 7, 0, 0, 0], [9, 0, 0, 0, 0xff, 0xff, 0xff, 0x7f], [9, 0, 1, 0, 8, 0, 0, 0],
             Command(9, w => { w.Write((ushort)1); w.Write((ushort)65535); w.Write((ushort)65535); w.Write((byte)0x20); }),
             Command(9, w => { w.Write((ushort)1); w.Write((ushort)2); w.Write((ushort)1); w.Write((byte)0x22); }),
-            Create(1, 2, 1).Concat(Create(1, 2, 1)).ToArray(),
-            Fill(1, 1, 0, 0, 1, 1), End(99), Start(1).Concat(Start(2)).ToArray(),
-            Start(1).Concat(End(2)).ToArray(), Command(10, w => w.Write((ushort)123)),
-            Create(1, 2, 1).Concat(Command(3, w => { w.Write((ushort)1); w.Write(123u); })).ToArray(),
-            Create(1, 2, 1).Concat(Start(1)).Concat(Fill(1, 1, 0, 0, 3, 1)).ToArray(),
-            Create(1, 2, 1).Concat(Command(4, w => { w.Write((ushort)1); w.Write(0u); w.Write((ushort)65535); })).ToArray(),
+            [.. Create(1, 2, 1), .. Create(1, 2, 1)],
+            Fill(1, 1, 0, 0, 1, 1), End(99), [.. Start(1), .. Start(2)],
+            [.. Start(1), .. End(2)], Command(10, w => w.Write((ushort)123)),
+            [.. Create(1, 2, 1), .. Command(3, w => { w.Write((ushort)1); w.Write(123u); })],
+            [.. Create(1, 2, 1), .. Start(1), .. Fill(1, 1, 0, 0, 3, 1)],
+            [.. Create(1, 2, 1), .. Command(4, w => { w.Write((ushort)1); w.Write(0u); w.Write((ushort)65535); })],
             Command(14, w => { w.Write(2u); w.Write(1u); w.Write(17u); w.Write(new byte[320]); }),
             Command(0x7777, _ => { }), Command(17, w => w.Write((ushort)0)), Command(17, w => w.Write((ushort)1))
         ];
@@ -257,14 +257,14 @@ public sealed class ManagedRdpGfxTests
         while (gfx.TryGetFrame(out _)) { }
         while (gfx.ReadResponse() is not null) { }
     }
-    private static byte[] Blue(RdpGfxFrame frame) => Enumerable.Range(0, frame.Width * frame.Height).Select(i => frame.Pixels[i * 4]).ToArray();
+    private static byte[] Blue(RdpGfxFrame frame) => [.. Enumerable.Range(0, frame.Width * frame.Height).Select(i => frame.Pixels[i * 4])];
     private static void AssertAck(byte[] ack, uint id, uint total)
     {
         Assert.AreEqual((ushort)13, BinaryPrimitives.ReadUInt16LittleEndian(ack));
         Assert.AreEqual(id, BinaryPrimitives.ReadUInt32LittleEndian(ack.AsSpan(12)));
         Assert.AreEqual(total, BinaryPrimitives.ReadUInt32LittleEndian(ack.AsSpan(16)));
     }
-    private static byte[] Packet(params byte[][] pdus) => [0xe0, 4, .. pdus.SelectMany(p => p)];
+    private static byte[] Packet(params byte[][] pdus) => [0xe0, 4, .. pdus.SelectMany(static p => p)];
     private static byte[] Command(ushort id, Action<BinaryWriter> write)
     {
         using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);

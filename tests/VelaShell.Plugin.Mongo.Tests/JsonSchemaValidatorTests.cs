@@ -134,9 +134,9 @@ public sealed class JsonSchemaValidatorTests
         Assert.AreEqual("customer.level", v.Path);
         Assert.AreEqual("enum", v.Keyword);
         Assert.AreEqual("customer.level 不在枚举中(普通 · VIP · SVIP)", v.Message);
-        StringAssert.StartsWith(Single(
+        Assert.StartsWith("customer.level is not in the enum", Single(
             "{ properties: { customer: { properties: { level: { enum: ['VIP'] } } } } }",
-            "{ customer: { level: 'x' } }", En).Message, "customer.level is not in the enum");
+            "{ customer: { level: 'x' } }", En).Message);
     }
 
     [TestMethod]
@@ -207,7 +207,7 @@ public sealed class JsonSchemaValidatorTests
         Assert.IsEmpty(Check("{ properties: { sku: { pattern: '^SKU-\\\\d+$' } } }", "{ sku: 'SKU-7710' }"));
         SchemaViolation v = Single("{ properties: { sku: { pattern: '^SKU-\\\\d+$' } } }", "{ sku: 'X-1' }");
         Assert.AreEqual("pattern", v.Keyword);
-        StringAssert.StartsWith(v.Message, "sku 不匹配");
+        Assert.StartsWith("sku 不匹配", v.Message);
         Assert.IsEmpty(Check("{ properties: { sku: { pattern: '([' } } }", "{ sku: 'anything' }"));
     }
 
@@ -232,7 +232,7 @@ public sealed class JsonSchemaValidatorTests
     {
         IReadOnlyList<SchemaViolation> found = Check(
             "{ additionalProperties: false, properties: { name: {} } }", "{ _id: 1, name: 'a', extra: true }");
-        Assert.AreSequenceEqual(new[] { "_id", "extra" }, [.. found.Select(static v => v.Path)], SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["_id", "extra"], [.. found.Select(static v => v.Path)], SequenceOrder.InAnyOrder);
         Assert.IsTrue(found.All(static v => v.Keyword == "additionalProperties"));
         Assert.IsEmpty(Check("{ additionalProperties: false, properties: { _id: {}, name: {} } }", "{ _id: 1, name: 'a' }"));
     }
@@ -301,7 +301,7 @@ public sealed class JsonSchemaValidatorTests
         Assert.IsEmpty(Check("{ properties: { v: { not: { bsonType: 'null' } } } }", "{ v: 1 }"));
 
         IReadOnlyList<SchemaViolation> all = Check("{ properties: { v: { allOf: [ { minimum: 5 }, { multipleOf: 2 } ] } } }", "{ v: 3 }");
-        Assert.AreSequenceEqual(new[] { "minimum", "multipleOf" }, [.. all.Select(static v => v.Keyword)], SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["minimum", "multipleOf"], [.. all.Select(static v => v.Keyword)], SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -334,8 +334,8 @@ public sealed class JsonSchemaValidatorTests
     [TestMethod]
     public void Arguments_are_required()
     {
-        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate(null!, [], Zh));
-        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate([], null!, Zh));
-        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JsonSchemaValidator.Validate([], [], null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(static () => JsonSchemaValidator.Validate(null!, [], Zh));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(static () => JsonSchemaValidator.Validate([], null!, Zh));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(static () => JsonSchemaValidator.Validate([], [], null!));
     }
 }

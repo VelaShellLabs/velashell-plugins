@@ -235,7 +235,7 @@ public sealed partial class DocInspectorView : UserControl
 
     private static T? IsInside<T>(object? source, string className) where T : Control
     {
-        for (var visual = source as Avalonia.Visual; visual is not null; visual = Avalonia.VisualTree.VisualExtensions.GetVisualParent(visual))
+        for (var visual = source as Visual; visual is not null; visual = Avalonia.VisualTree.VisualExtensions.GetVisualParent(visual))
         {
             if (visual is T control && control.Classes.Contains(className))
             {

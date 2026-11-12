@@ -45,7 +45,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>一条连接都没有:内容区给「新建连接」;工具栏最左是「连接」,按下去是设计稿 10 的对话框。</summary>
     [TestMethod]
-    public void Empty_workbench_offers_a_new_connection() => Screens.OnUi(async () =>
+    public void Empty_workbench_offers_a_new_connection() => Screens.OnUi(static async () =>
     {
         using var context = new TestPluginContext();
         (MongoWorkspaceViewModel shell, MongoWorkspaceView view, Window window) = await OpenEmptyAsync(context);
@@ -76,7 +76,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>已保存的连接一打开就列在树根上(灰点,不自动连);分了组的挂在组名那一节下面。</summary>
     [TestMethod]
-    public void Saved_connections_are_tree_roots_and_are_not_auto_connected() => Screens.OnUi(async () =>
+    public void Saved_connections_are_tree_roots_and_are_not_auto_connected() => Screens.OnUi(static async () =>
     {
         using var context = new TestPluginContext();
         var store = new MongoProfileStore(context);
@@ -86,7 +86,7 @@ public sealed class ConnectionManagementTests
         try
         {
             string[] rows = [.. shell.VisibleNodes.Select(static n => $"{n.Kind}:{n.Name}")];
-            Assert.AreSequenceEqual(new[] { "Connection:local-dev", "Group:生产", "Connection:orders-prod" }, rows);
+            Assert.AreSequenceEqual(["Connection:local-dev", "Group:生产", "Connection:orders-prod"], rows);
             Assert.IsTrue(shell.Connections.All(static c => c is { State: ConnectionState.Disconnected, Session: null }));
             Assert.IsTrue(shell.VisibleNodes.Where(static n => n.Kind == NodeKind.Connection).All(static n => n.DotClass == "off"));
             Assert.IsFalse(shell.HasTabs);
@@ -135,7 +135,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>设计稿 10 那一条:副本集三台、ops_reader、默认库 shop、SCRAM-SHA-256、primaryPreferred;生产 → 默认只读 + 写前确认。</summary>
     [TestMethod]
-    public void Dialog_maps_the_form_to_a_profile_and_previews_it() => Screens.OnUi(async () =>
+    public void Dialog_maps_the_form_to_a_profile_and_previews_it() => Screens.OnUi(static async () =>
     {
         using var context = new TestPluginContext();
         SavedSessionInfo bastion = context.FakeSessions.AddSaved("bastion-ops", "10.0.0.5");
@@ -171,7 +171,7 @@ public sealed class ConnectionManagementTests
             MongoProfile profile = dialog.ToProfile();
             MongoSettings settings = profile.Parsed;
             Assert.AreEqual("10.20.3.21", profile.Host);
-            Assert.AreSequenceEqual(new[] { "10.20.3.22:27017", "10.20.3.23:27017" }, [.. settings.AdditionalHosts]);
+            Assert.AreSequenceEqual(["10.20.3.22:27017", "10.20.3.23:27017"], [.. settings.AdditionalHosts]);
             Assert.AreEqual(MongoEnvironment.Production, settings.Environment);
             Assert.AreEqual(bastion.SavedSessionId, settings.JumpSessionId);
             Assert.IsTrue(settings.ReadOnly);
@@ -193,7 +193,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>名字必填、不能重名;主机必填。错误写在页脚,不弹框。</summary>
     [TestMethod]
-    public void Dialog_validates_before_saving() => Screens.OnUi(async () =>
+    public void Dialog_validates_before_saving() => Screens.OnUi(static async () =>
     {
         using var context = new TestPluginContext();
         await new MongoProfileStore(context).SaveAsync(new MongoProfile { Name = "taken", Host = "h" }, null);
@@ -225,7 +225,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>测试连接:逐步报进度,成员表里有本机这台;改了参数结果就作废。</summary>
     [TestMethod]
-    public void Dialog_test_walks_the_steps_and_clears_on_change() => Screens.OnUi(async () =>
+    public void Dialog_test_walks_the_steps_and_clears_on_change() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         using var context = new TestPluginContext();
@@ -238,9 +238,9 @@ public sealed class ConnectionManagementTests
             await Screens.PumpAsync(5);
 
             Assert.IsTrue(dialog.TestPassed, string.Join("; ", dialog.Steps.Select(static s => $"{s.Key}={s.State}:{s.Detail}")));
-            Assert.AreSequenceEqual(new[] { "tcp", "auth", "hello", "privileges" }, [.. dialog.Steps.Select(static s => s.Key)]);
+            Assert.AreSequenceEqual(["tcp", "auth", "hello", "privileges"], [.. dialog.Steps.Select(static s => s.Key)]);
             Assert.IsTrue(dialog.HasMembers);
-            StringAssert.StartsWith(dialog.TestSummary, "连接成功");
+            Assert.StartsWith("连接成功", dialog.TestSummary);
             _ = Screens.Capture(window, "10-connection-dialog-tested");
 
             dialog.Database = "other";
@@ -256,7 +256,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>「保存并连接」:存进存储、挂到树上、连上、开默认库的对象列表;口令进密钥库。</summary>
     [TestMethod]
-    public void Save_and_connect_attaches_a_session() => Screens.OnUi(async () =>
+    public void Save_and_connect_attaches_a_session() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         using var context = new TestPluginContext();
@@ -291,7 +291,7 @@ public sealed class ConnectionManagementTests
 
     /// <summary>连不上:原地变成「无法连接」卡片(不弹模态框),给编辑连接 / 关闭标签页 / 重新连接;树上红点。</summary>
     [TestMethod]
-    public void Failed_connection_shows_the_failed_card() => Screens.OnUi(async () =>
+    public void Failed_connection_shows_the_failed_card() => Screens.OnUi(static async () =>
     {
         using var context = new TestPluginContext();
         var profile = new MongoProfile { Name = "mongo-inner-01", Host = "127.0.0.1", Port = 1 };

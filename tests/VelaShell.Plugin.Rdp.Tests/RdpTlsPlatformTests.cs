@@ -166,7 +166,7 @@ public sealed class RdpTlsPlatformTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        Task serve = Task.Run(async () =>
+        var serve = Task.Run(async () =>
         {
             using TcpClient accepted = await listener.AcceptTcpClientAsync();
             await using var ssl = new SslStream(accepted.GetStream());
@@ -200,7 +200,7 @@ public sealed class RdpTlsPlatformTests
         var rejected = (RdpCertificateRejectedException)changed!;
         Assert.IsTrue(rejected.PinMismatch);
         string pem = System.Text.Encoding.UTF8.GetString(rejected.Pem);
-        using X509Certificate2 offered = X509Certificate2.CreateFromPem(pem);
+        using var offered = X509Certificate2.CreateFromPem(pem);
         Assert.AreEqual(current.Thumbprint, offered.Thumbprint, "The new certificate is the one offered for approval.");
     }
 
@@ -211,12 +211,12 @@ public sealed class RdpTlsPlatformTests
         byte[] pem = System.Text.Encoding.UTF8.GetBytes(certificate.ExportCertificatePem());
         var loc = new Loc("en");
 
-        var changed = (VelaShell.PluginSdk.Protocols.ProtocolCertificateTrustException)RdpConnector.Translate(
+        var changed = (PluginSdk.Protocols.ProtocolCertificateTrustException)RdpConnector.Translate(
             new RdpCertificateRejectedException(pem, new AuthenticationException("pin"), pinMismatch: true), loc);
         Assert.AreEqual(loc["CertificateChanged"], changed.Message);
         Assert.AreEqual(certificate.GetCertHashString(HashAlgorithmName.SHA256), changed.Thumbprint);
 
-        var first = (VelaShell.PluginSdk.Protocols.ProtocolCertificateTrustException)RdpConnector.Translate(
+        var first = (PluginSdk.Protocols.ProtocolCertificateTrustException)RdpConnector.Translate(
             new RdpCertificateRejectedException(pem, new AuthenticationException("untrusted")), loc);
         Assert.AreEqual(loc["Certificate"], first.Message);
     }

@@ -13,10 +13,7 @@ internal abstract class DialogViewModel : ObservableObject
     /// <summary>构造一条连接里的对话框。</summary>
     /// <param name="workspace">这条连接的服务。</param>
     protected DialogViewModel(IMongoWorkspace workspace)
-        : this((IWorkbench)workspace)
-    {
-        Owner = workspace;
-    }
+        : this((IWorkbench)workspace) => Owner = workspace;
 
     /// <summary>构造外壳自己的对话框(新建 / 编辑连接、确认框):不属于任何一条连接。</summary>
     /// <param name="workbench">外壳服务。</param>

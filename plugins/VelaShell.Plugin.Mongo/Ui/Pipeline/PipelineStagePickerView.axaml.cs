@@ -17,10 +17,7 @@ public sealed partial class PipelineStagePickerView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public PipelineStagePickerView()
-    {
-        InitializeComponent();
-    }
+    public PipelineStagePickerView() => InitializeComponent();
 
     /// <summary>Esc:请宿主(弹层)关掉自己。</summary>
     public event EventHandler? CloseRequested;
@@ -65,7 +62,7 @@ public sealed partial class PipelineStagePickerView : UserControl
 
     private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if ((e.Source as Control)?.DataContext is PipelineStageChoice choice)
+        if (e.Source is Control { DataContext: PipelineStageChoice choice })
         {
             ViewModel?.Accept(choice);
         }

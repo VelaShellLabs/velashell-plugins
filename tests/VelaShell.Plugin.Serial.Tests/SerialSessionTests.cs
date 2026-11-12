@@ -59,11 +59,11 @@ public sealed class SerialSessionTests
     {
         var port = new FakeSerialPort();
         await using SerialSession session = Open(port, Config(implicitLf: true));
-        port.Feed((byte)'a', 0x0D, (byte)'b');
+        port.Feed("a\rb"u8.ToArray());
 
         byte[] got = await ReadExactAsync(session, 4);
 
-        Assert.AreSequenceEqual(new byte[] { (byte)'a', 0x0D, 0x0A, (byte)'b' }, got);
+        Assert.AreSequenceEqual("a\r\nb"u8.ToArray(), got);
     }
 
     [TestMethod]
@@ -157,9 +157,9 @@ public sealed class SerialSessionTests
         var port = new FakeSerialPort();
         await using SerialSession session = Open(port);
 
-        await session.WriteAsync(new byte[] { (byte)'l', (byte)'s', 0x0D }, CancellationToken.None);
+        await session.WriteAsync("ls\r"u8.ToArray(), CancellationToken.None);
 
-        Assert.AreSequenceEqual(new byte[] { (byte)'l', (byte)'s', 0x0D }, port.Written);
+        Assert.AreSequenceEqual("ls\r"u8.ToArray(), port.Written);
     }
 
     [TestMethod]
@@ -168,9 +168,9 @@ public sealed class SerialSessionTests
         var port = new FakeSerialPort();
         await using SerialSession session = Open(port, Config(SerialEnterMode.CrLf));
 
-        await session.WriteAsync(new byte[] { (byte)'x', 0x0D }, CancellationToken.None);
+        await session.WriteAsync("x\r"u8.ToArray(), CancellationToken.None);
 
-        Assert.AreSequenceEqual(new byte[] { (byte)'x', 0x0D, 0x0A }, port.Written);
+        Assert.AreSequenceEqual("x\r\n"u8.ToArray(), port.Written);
     }
 
     [TestMethod]
@@ -180,11 +180,11 @@ public sealed class SerialSessionTests
         var port = new FakeSerialPort();
         await using SerialSession session = Open(port, Config(localEcho: true));
 
-        await session.WriteAsync(new byte[] { (byte)'A', 0x0D }, CancellationToken.None);
+        await session.WriteAsync("A\r"u8.ToArray(), CancellationToken.None);
         byte[] echoed = await ReadExactAsync(session, 3);
 
-        Assert.AreSequenceEqual(new byte[] { (byte)'A', 0x0D, 0x0A }, echoed);
-        Assert.AreSequenceEqual(new byte[] { (byte)'A', 0x0D }, port.Written, "回显只影响屏幕:线上不该多出那个补显用的 LF");
+        Assert.AreSequenceEqual("A\r\n"u8.ToArray(), echoed);
+        Assert.AreSequenceEqual("A\r"u8.ToArray(), port.Written, "回显只影响屏幕:线上不该多出那个补显用的 LF");
     }
 
     [TestMethod]
@@ -193,7 +193,7 @@ public sealed class SerialSessionTests
         var port = new FakeSerialPort();
         await using SerialSession session = Open(port);
 
-        await session.WriteAsync(new byte[] { (byte)'A' }, CancellationToken.None);
+        await session.WriteAsync("A"u8.ToArray(), CancellationToken.None);
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
         int read = 0;
@@ -318,7 +318,7 @@ public sealed class SerialSessionTests
         SerialSession? seen = null;
         session.Activity += s => seen = s;
 
-        await session.WriteAsync(new byte[] { (byte)'x' }, CancellationToken.None);
+        await session.WriteAsync("x"u8.ToArray(), CancellationToken.None);
 
         Assert.AreSame(session, seen);
     }

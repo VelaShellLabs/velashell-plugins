@@ -11,10 +11,7 @@ public sealed partial class ProfilerTabView : UserControl
 {
     /// <summary>用给定的视图模型初始化。</summary>
     internal ProfilerTabView(ProfilerTabViewModel viewModel)
-        : this()
-    {
-        DataContext = viewModel;
-    }
+        : this() => DataContext = viewModel;
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
     public ProfilerTabView()

@@ -285,20 +285,20 @@ internal sealed partial class RedisConnection
                 break;
             case "hash":
                 payload["value"] = (await db.HashGetAllAsync(redisKey).ConfigureAwait(false))
-                    .ToDictionary(entry => Text((byte[]?)entry.Name ?? []), entry => Text((byte[]?)entry.Value ?? []),
+                    .ToDictionary(static entry => Text((byte[]?)entry.Name ?? []), static entry => Text((byte[]?)entry.Value ?? []),
                         StringComparer.Ordinal);
                 break;
             case "list":
                 payload["value"] = (await db.ListRangeAsync(redisKey).ConfigureAwait(false))
-                    .Select(value => Text((byte[]?)value ?? [])).ToArray();
+                    .Select(static value => Text((byte[]?)value ?? [])).ToArray();
                 break;
             case "set":
                 payload["value"] = (await db.SetMembersAsync(redisKey).ConfigureAwait(false))
-                    .Select(value => Text((byte[]?)value ?? [])).ToArray();
+                    .Select(static value => Text((byte[]?)value ?? [])).ToArray();
                 break;
             case "zset":
                 payload["value"] = (await db.SortedSetRangeByRankWithScoresAsync(redisKey).ConfigureAwait(false))
-                    .Select(entry => new Dictionary<string, object?>(StringComparer.Ordinal)
+                    .Select(static entry => new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         ["member"] = Text((byte[]?)entry.Element ?? []),
                         ["score"] = entry.Score

@@ -60,7 +60,7 @@ public sealed class RdpRedirectionTests
         ServerRedirection redirection = Parse(RedirectionPacket(0x2A, RedirectionFlags.TargetFqdn | RedirectionFlags.LoadBalanceInfo,
             fqdn: "host7.example", loadBalance: Token));
         Assert.AreEqual("host7.example", redirection.TargetFqdn);
-        CollectionAssert.AreEqual(Token, redirection.LoadBalanceInfo);
+        Assert.AreSequenceEqual(Token, redirection.LoadBalanceInfo);
         Assert.AreEqual(Token.Length, redirection.LoadBalanceInfoLength);
     }
 
@@ -75,7 +75,7 @@ public sealed class RdpRedirectionTests
         // A token without its terminator gets one; one with CR/LF inside cannot be sent.
         string unterminated = Encoding.ASCII.GetString(RdpTransport.BuildConnectionRequest("alice", SecurityProtocol.Ssl, "tsv://Plugin.1.Pool"u8.ToArray()));
         Assert.Contains("tsv://Plugin.1.Pool\r\n", unterminated);
-        _ = Assert.Throws<RdpProtocolException>(() => RdpTransport.BuildConnectionRequest("alice", SecurityProtocol.Ssl, "a\r\nb"u8.ToArray()));
+        _ = Assert.Throws<RdpProtocolException>(static () => RdpTransport.BuildConnectionRequest("alice", SecurityProtocol.Ssl, "a\r\nb"u8.ToArray()));
 
         Assert.Contains("Cookie: mstshash=alice", Encoding.ASCII.GetString(RdpTransport.BuildConnectionRequest("alice", SecurityProtocol.Ssl)));
     }
@@ -115,7 +115,7 @@ public sealed class RdpRedirectionTests
         Assert.AreEqual("host7.example", next.Host, "The FQDN is preferred: it matches the certificate and the Kerberos SPN.");
         Assert.AreEqual("host7.example", next.CertificateHost);
         Assert.IsNull(next.CertificatePin, "A pin belongs to the broker's certificate, not the target's.");
-        CollectionAssert.AreEqual(Token, next.RoutingToken);
+        Assert.AreSequenceEqual(Token, next.RoutingToken);
         Assert.AreEqual(0x2Au, next.RedirectedSessionId);
         Assert.AreEqual(3389, next.Port);
 
@@ -131,7 +131,7 @@ public sealed class RdpRedirectionTests
         RdpClientOptions next = RdpManagedSession.Redirect(Options(), redirection)!;
         Assert.AreEqual("broker.example", next.Host);
         Assert.IsNotNull(next.CertificatePin, "Same host, same certificate pin.");
-        CollectionAssert.AreEqual(Token, next.RoutingToken);
+        Assert.AreSequenceEqual(Token, next.RoutingToken);
 
         // Through an SSH tunnel the same-server case still works ...
         Assert.IsNotNull(RdpManagedSession.Redirect(Options(tunnel: true), redirection));

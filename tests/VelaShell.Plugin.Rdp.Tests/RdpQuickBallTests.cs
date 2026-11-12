@@ -161,7 +161,7 @@ public sealed class RdpQuickBallTests
     });
 
     [TestMethod]
-    public void DraggingTheBallSnapsItToTheNearerEdgeAndDoesNotOpenTheFan() => Run(async () =>
+    public void DraggingTheBallSnapsItToTheNearerEdgeAndDoesNotOpenTheFan() => Run(static async () =>
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
@@ -196,7 +196,7 @@ public sealed class RdpQuickBallTests
     });
 
     [TestMethod]
-    public void BallRingsSitAboveTheButtonFollowTheAccentAndAnimateBetweenStates() => Run(async () =>
+    public void BallRingsSitAboveTheButtonFollowTheAccentAndAnimateBetweenStates() => Run(static async () =>
     {
         using var context = new TestPluginContext();
         await using RdpWorkspaceView view = Open(new FakeRdpSession(), context, out Window window);
@@ -240,14 +240,14 @@ public sealed class RdpQuickBallTests
         quick.Expand();
         Button task = Find<Button>(view, "QuickTaskManager");
         var face = (Panel)((Border)task.Parent!).Parent!;
-        Border itemRing = face.Children.OfType<Border>().Single(b => b.Classes.Contains("accent"));
+        Border itemRing = face.Children.OfType<Border>().Single(static b => b.Classes.Contains("accent"));
         Assert.IsGreaterThan(face.Children.IndexOf((Border)task.Parent!), face.Children.IndexOf(itemRing));
         await Animate();
         Assert.AreEqual(0d, itemRing.Opacity, 0.01);
-        ((Avalonia.Controls.IPseudoClasses)face.Classes).Set(":pointerover", true);
+        ((IPseudoClasses)face.Classes).Set(":pointerover", true);
         await Animate();
         Assert.AreEqual(1d, itemRing.Opacity, 0.01);
-        ((Avalonia.Controls.IPseudoClasses)face.Classes).Set(":pointerover", false);
+        ((IPseudoClasses)face.Classes).Set(":pointerover", false);
         quick.Arm("TaskManager");
         await Animate();
         Assert.AreEqual(1d, itemRing.Opacity, 0.01, "an armed item keeps its accent ring");
@@ -255,7 +255,7 @@ public sealed class RdpQuickBallTests
     });
 
     [TestMethod]
-    public void DisconnectFoldsAndHidesTheBall() => Run(async () =>
+    public void DisconnectFoldsAndHidesTheBall() => Run(static async () =>
     {
         using var context = new TestPluginContext();
         await using RdpWorkspaceView view = Open(new FakeRdpSession(), context, out Window window);
@@ -294,7 +294,7 @@ public sealed class RdpQuickBallTests
     });
 
     private static void StringAssertContains(string? text, string part) =>
-        Assert.IsTrue(text?.Contains(part, StringComparison.OrdinalIgnoreCase) == true, $"\"{text}\" should contain \"{part}\"");
+        Assert.AreEqual(true, text?.Contains(part, StringComparison.OrdinalIgnoreCase), $"\"{text}\" should contain \"{part}\"");
 
     /// <summary>Lets transitions (the snap to the edge) finish: wait out their duration, then tick the render clock.</summary>
     private static async Task Animate()

@@ -65,12 +65,12 @@ public sealed class RdpDrawingOrderTests
     {
         Dictionary<int, byte[]> plain = CapabilitySets(Capabilities.BuildConfirmActive(1, 1007, 1024, 768, 32, false));
         Assert.IsFalse(plain.ContainsKey(19), "no revision 2 bitmap cache without orders");
-        Assert.IsTrue(plain[3].AsSpan(32, 32).IndexOfAnyExcept((byte)0) < 0, "every orderSupport index is zero");
+        Assert.IsLessThan(0, plain[3].AsSpan(32, 32).IndexOfAnyExcept((byte)0), "every orderSupport index is zero");
 
         Dictionary<int, byte[]> sets = CapabilitySets(Capabilities.BuildConfirmActive(1, 1007, 1024, 768, 32, false, drawingOrders: true));
         byte[] support = sets[3].AsSpan(32, 32).ToArray();
         int[] enabled = [.. Enumerable.Range(0, 32).Where(i => support[i] != 0)];
-        CollectionAssert.AreEqual(new[] { 0x00, 0x01, 0x02, 0x03, 0x12 }, enabled, "DstBlt, PatBlt+OpaqueRect, ScrBlt, MemBlt, MultiOpaqueRect");
+        Assert.AreSequenceEqual([0x00, 0x01, 0x02, 0x03, 0x12], enabled, "DstBlt, PatBlt+OpaqueRect, ScrBlt, MemBlt, MultiOpaqueRect");
 
         byte[] cache = sets[19];
         Assert.HasCount(36, cache, "TS_BITMAPCACHE_CAPABILITYSET_REV2 is 40 bytes with its header");

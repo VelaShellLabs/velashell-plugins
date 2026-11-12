@@ -68,7 +68,7 @@ public sealed partial class DockerClient
                 entries.Add(entry);
             }
         }
-        return [.. entries.OrderByDescending(e => e.IsDirectory).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+        return [.. entries.OrderByDescending(static e => e.IsDirectory).ThenBy(static e => e.Name, StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary>

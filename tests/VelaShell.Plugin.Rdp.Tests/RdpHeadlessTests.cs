@@ -30,7 +30,7 @@ public sealed class RdpHeadlessApp : Application
 public sealed class RdpHeadlessTests
 {
     [TestMethod]
-    public void WorkbenchUsesFixedChromeAndDisposesAfterLocaleChange() => Run(async () =>
+    public void WorkbenchUsesFixedChromeAndDisposesAfterLocaleChange() => Run(static async () =>
     {
         using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         var session = new FakeRdpSession();
@@ -59,7 +59,7 @@ public sealed class RdpHeadlessTests
     });
 
     [TestMethod]
-    public void TransferProgressNeverChangesDesktopViewportHeight() => Run(async () =>
+    public void TransferProgressNeverChangesDesktopViewportHeight() => Run(static async () =>
     {
         using var context = new TestPluginContext();
         var session = new FakeRdpSession();
@@ -139,7 +139,7 @@ public sealed class RdpHeadlessTests
         Assert.Contains("8s", state.Text);
         Assert.AreEqual(TextWrapping.Wrap, tooltip.TextWrapping);
         Assert.AreEqual(0d, tooltip.MinWidth);
-        Assert.IsTrue(tooltip.MaxWidth < 520d, "Narrow windows should reduce the tooltip width below the preferred minimum.");
+        Assert.IsLessThan(520d, tooltip.MaxWidth, "Narrow windows should reduce the tooltip width below the preferred minimum.");
         Assert.Contains("Remote → local", tooltip.Text);
         Assert.Contains("Transferring: 50B/100B", tooltip.Text);
         Assert.Contains("File name: a-very-long-file-name-that-must-stay-in-the-tooltip", tooltip.Text);
@@ -222,7 +222,7 @@ public sealed class RdpHeadlessTests
             desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Enter, PhysicalKey = PhysicalKey.Enter });
         }
         await desktop.DisposeAsync();
-        Assert.AreSequenceEqual(new[] { "'测试'", "'输入'" }, session.Input);
+        Assert.AreSequenceEqual(["'测试'", "'输入'"], session.Input);
     });
 
     [TestMethod]
@@ -254,7 +254,7 @@ public sealed class RdpHeadlessTests
         desktop.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = text });
         desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers });
         await desktop.DisposeAsync();
-        Assert.AreSequenceEqual(new[] { $"'{text}'" }, session.Input);
+        Assert.AreSequenceEqual([$"'{text}'"], session.Input);
     });
 
     [TestMethod]
@@ -272,7 +272,7 @@ public sealed class RdpHeadlessTests
         desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
         desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
         await desktop.DisposeAsync();
-        Assert.AreSequenceEqual(new (uint, bool)[] { ((uint)code, true), ((uint)code, false) }, session.Keys);
+        Assert.AreSequenceEqual([((uint)code, true), ((uint)code, false)], session.Keys);
     });
 
     [TestMethod]
@@ -369,7 +369,7 @@ public sealed class RdpHeadlessTests
     // live managed session against xrdp, captured through Avalonia's headless Skia pipeline — the
     // same control tree the host loads, without launching the full desktop app. Skipped in CI.
     [TestMethod]
-    public void ManagedEngineRendersInsideRealWorkspaceView() => Run(async () =>
+    public void ManagedEngineRendersInsideRealWorkspaceView() => Run(static async () =>
     {
         if (RdpManagedInteropTests.Target() is not { } target) { Assert.Inconclusive("VELA_RDP_TEST_TARGET not set."); return; }
         byte[] pin = await RdpManagedInteropTests.LearnPinAsync(target);

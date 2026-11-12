@@ -240,8 +240,8 @@ internal sealed partial class RedisDiscovery(IPluginContext context)
         foreach (string token in output.Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries))
         {
             string candidate = token.StartsWith("v=", StringComparison.OrdinalIgnoreCase) ? token[2..] : token;
-            if (candidate.Count(c => c == '.') >= 2
-                && candidate.All(c => char.IsAsciiDigit(c) || c == '.'))
+            if (candidate.Count(static c => c == '.') >= 2
+                && candidate.All(static c => char.IsAsciiDigit(c) || c == '.'))
             {
                 return candidate;
             }

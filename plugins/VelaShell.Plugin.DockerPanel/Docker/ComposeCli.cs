@@ -89,8 +89,8 @@ public sealed record ComposeService
                 return "—";
             }
             IEnumerable<string> parts = Publishers
-                .Where(p => p.PublishedPort > 0)
-                .Select(p => $"{p.PublishedPort}→{p.TargetPort}")
+                .Where(static p => p.PublishedPort > 0)
+                .Select(static p => $"{p.PublishedPort}→{p.TargetPort}")
                 .Distinct();
             string text = string.Join(", ", parts);
             return text.Length == 0 ? "—" : text;

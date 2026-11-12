@@ -28,9 +28,9 @@ public sealed class AudioPlayoutTimingTests
             timing.ObserveArrival(arrival += 20, 20);
         }
 
-        Assert.IsTrue(timing.TargetMilliseconds < stable + 1);
+        Assert.IsLessThan(stable + 1, timing.TargetMilliseconds);
         timing.ObserveArrival(arrival + 10000, 20);
-        Assert.IsTrue(timing.TargetMilliseconds < stable + 1, "Idle time is not network jitter.");
+        Assert.IsLessThan(stable + 1, timing.TargetMilliseconds, "Idle time is not network jitter.");
     }
 
     [TestMethod]
@@ -45,7 +45,7 @@ public sealed class AudioPlayoutTimingTests
             double rate = timing.UpdateRate(queued, 20);
             queued += 20 / (1 + rate) - 20 / (1 + clockError);
             Assert.IsTrue(queued is > 0 and < 80, $"Buffer escaped its operating range at packet {i}: {queued} ms.");
-            Assert.IsTrue(Math.Abs(rate) <= 0.005);
+            Assert.IsLessThanOrEqualTo(0.005, Math.Abs(rate));
         }
         Assert.AreEqual(clockError, timing.RateCorrection, 0.0001);
         Assert.AreEqual(timing.TargetMilliseconds, queued, 2);
@@ -88,7 +88,7 @@ public sealed class AudioPlayoutTimingTests
             totalFrames += output.Length / format.BlockAlign;
             if (bits == 8)
             {
-                Assert.IsTrue(output.All(value => value == 128));
+                Assert.IsTrue(output.All(static value => value == 128));
             }
             else
             {

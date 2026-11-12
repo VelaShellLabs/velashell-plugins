@@ -15,10 +15,7 @@ public sealed partial class PipelineNameDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public PipelineNameDialogView()
-    {
-        InitializeComponent();
-    }
+    public PipelineNameDialogView() => InitializeComponent();
 
     /// <inheritdoc />
     protected override void OnLoaded(RoutedEventArgs e)

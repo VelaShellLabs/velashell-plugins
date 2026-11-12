@@ -16,7 +16,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 /// </summary>
 internal sealed class FakeRdpServer : IAsyncDisposable
 {
-    private static readonly Lazy<X509Certificate2> SharedCertificate = new(() =>
+    private static readonly Lazy<X509Certificate2> SharedCertificate = new(static () =>
     {
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=vela-fake-rdp", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -161,7 +161,7 @@ internal sealed class FakeRdpConnection(NetworkStream net, X509Certificate2 cert
         {
             lengthBytes = new byte[head[1] & 0x7F];
             await ssl.ReadExactlyAsync(lengthBytes);
-            length = lengthBytes.Aggregate(0, (sum, b) => (sum << 8) | b);
+            length = lengthBytes.Aggregate(0, static (sum, b) => (sum << 8) | b);
         }
         byte[] body = new byte[length];
         await ssl.ReadExactlyAsync(body);

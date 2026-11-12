@@ -791,7 +791,7 @@ public sealed class OrderDecoderTests
         ];
         decoder.Process(stream, 2);
         Assert.AreEqual(4096, target.Blits[0].Width);
-        Assert.AreEqual(4096 * 4, target.Blits[0].Bgra.Length);
+        Assert.HasCount(4096 * 4, target.Blits[0].Bgra);
     }
 
     [TestMethod]
@@ -879,17 +879,11 @@ public sealed class OrderDecoderTests
             OrderDecoder decoder = (iteration & 1) == 0
                 ? persistent
                 : new OrderDecoder(depths[random.Next(depths.Length)], new RecordingTarget(320, 200), [8, 300, 8]);
-            try
-            {
-                decoder.Process(stream, orders);
-            }
-            catch (RdpProtocolException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"Iteration {iteration}, {orders} orders over {Convert.ToHexString(stream)}: {ex}");
-            }
+            Exception? unexpected = null;
+            try { decoder.Process(stream, orders); }
+            catch (RdpProtocolException) { }
+            catch (Exception ex) { unexpected = ex; }
+            Assert.IsNull(unexpected, $"Iteration {iteration}, {orders} orders over {Convert.ToHexString(stream)}: {unexpected}");
         }
     }
 

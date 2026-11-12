@@ -24,8 +24,5 @@ public sealed partial class ResetPasswordDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public ResetPasswordDialogView()
-    {
-        InitializeComponent();
-    }
+    public ResetPasswordDialogView() => InitializeComponent();
 }

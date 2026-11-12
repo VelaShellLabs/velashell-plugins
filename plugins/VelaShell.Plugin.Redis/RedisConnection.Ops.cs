@@ -413,10 +413,10 @@ internal sealed partial class RedisConnection
         while (cursor is not "0" && sampled < sampleLimit);
 
         return new(
-            [.. byPrefix.Select(entry => new RedisMemoryBucket(entry.Key, entry.Value.Keys, entry.Value.Bytes))
-                .OrderByDescending(bucket => bucket.Bytes)
+            [.. byPrefix.Select(static entry => new RedisMemoryBucket(entry.Key, entry.Value.Keys, entry.Value.Bytes))
+                .OrderByDescending(static bucket => bucket.Bytes)
                 .Take(50)],
-            [.. topKeys.OrderByDescending(bucket => bucket.Bytes).Take(50)],
+            [.. topKeys.OrderByDescending(static bucket => bucket.Bytes).Take(50)],
             sampled,
             estimatedTotal,
             available);

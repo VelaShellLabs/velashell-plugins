@@ -11,7 +11,7 @@ public sealed class PrinterSettingsTests
     {
         var printer = new PrinterMapping("Office", "Driver");
         IReadOnlyList<PrinterMapping> selected = LocalPrinters.Selected(RdpSettingsTests.Request((LocalPrinters.Key(printer), "false")), new("en"),
-            () => throw new AssertFailedException("An unselected printer must not require discovery."));
+            static () => throw new AssertFailedException("An unselected printer must not require discovery."));
         Assert.IsEmpty(selected);
     }
 
@@ -38,7 +38,7 @@ public sealed class PrinterSettingsTests
     {
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        using var context = new VelaShell.PluginSdk.Testing.TestPluginContext { PluginId = "velashell.rdp" };
+        using var context = new PluginSdk.Testing.TestPluginContext { PluginId = "velashell.rdp" };
         var plugin = new RdpPlugin(() => [], TimeSpan.FromHours(1), () =>
         {
             entered.Set();

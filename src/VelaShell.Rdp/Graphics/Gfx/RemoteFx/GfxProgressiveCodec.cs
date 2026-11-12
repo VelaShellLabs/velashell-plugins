@@ -78,10 +78,7 @@ internal sealed class GfxProgressiveCodec
     private Dictionary<int, ProgressiveState> _states = [];
 
     internal GfxProgressiveCodec() : this(new GfxProgressiveSurfaceState()) { }
-    internal GfxProgressiveCodec(GfxProgressiveSurfaceState surface)
-    {
-        _surface = surface;
-    }
+    internal GfxProgressiveCodec(GfxProgressiveSurfaceState surface) => _surface = surface;
 
     internal void Reset()
     {

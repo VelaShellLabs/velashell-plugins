@@ -221,8 +221,8 @@ internal sealed partial class Framebuffer
 
     // ---- Pixel conversion: one tight loop per format, writing whole BGRA words (little-endian: B,G,R,A). ----
 
-    private static readonly Lazy<uint[]> Lut565 = new(() => BuildLut(rgb555: false));
-    private static readonly Lazy<uint[]> Lut555 = new(() => BuildLut(rgb555: true));
+    private static readonly Lazy<uint[]> Lut565 = new(static () => BuildLut(rgb555: false));
+    private static readonly Lazy<uint[]> Lut555 = new(static () => BuildLut(rgb555: true));
 
     private static uint[] BuildLut(bool rgb555)
     {

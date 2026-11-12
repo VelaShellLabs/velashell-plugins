@@ -281,7 +281,7 @@ public sealed class RdpManagedInteropTests
         byte[] pin = await LearnPinAsync(target);
         RdpViewMetrics.ResetForTest();
         await using var relay = new ResettingRelay(target);
-        using var context = new VelaShell.PluginSdk.Testing.TestPluginContext { PluginId = "velashell.rdp" };
+        using var context = new TestPluginContext { PluginId = "velashell.rdp" };
         await using var provider = new RdpWorkspaceProvider(context, new("en"));   // the real connector
         WorkspaceConnectRequest request = RdpSettingsTests.Request(("trustedThumbprint", Convert.ToHexString(pin)),
             ("width", "1024"), ("height", "768")) with
@@ -299,8 +299,8 @@ public sealed class RdpManagedInteropTests
         foreach (CapturedLogEntry entry in context.CollectingLog.Entries) { Console.WriteLine($"{entry.Level}: {entry.Message}"); }
         Assert.AreEqual(PluginSdk.Protocols.ProtocolSessionState.Connected, document.Status.State);
         Assert.AreEqual(2, relay.Accepted);
-        Assert.Contains(e => e.Message.Contains("connection lost") && e.Message.Contains("reconnecting automatically"), context.CollectingLog.Entries);
-        Assert.Contains(e => e.Message.Contains("reconnected automatically (attempt 1)"), context.CollectingLog.Entries);
+        Assert.Contains(static e => e.Message.Contains("connection lost") && e.Message.Contains("reconnecting automatically"), context.CollectingLog.Entries);
+        Assert.Contains(static e => e.Message.Contains("reconnected automatically (attempt 1)"), context.CollectingLog.Entries);
         await document.DisposeAsync();
         RdpViewMetrics.ResetForTest();
     }
@@ -500,15 +500,15 @@ public sealed class RdpManagedInteropTests
             var shapes = new System.Collections.Concurrent.ConcurrentQueue<RdpPointer>();
             ((IRdpPointerSource)session).PointerChanged += shapes.Enqueue;
             // Pointer updates come when the shape changes: sweep across the desktop, the taskbar and window edges.
-            for (int i = 0; i < 40 && !shapes.Any(p => p.Kind == RdpPointerKind.Image); i++)
+            for (int i = 0; i < 40 && !shapes.Any(static p => p.Kind == RdpPointerKind.Image); i++)
             {
                 await session.MouseAsync(0x0800, (uint)(i * 97 % 1024), (uint)(i * 53 % 768), default);
                 await Task.Delay(150);
             }
-            RdpPointer? image = shapes.FirstOrDefault(p => p.Kind == RdpPointerKind.Image);
+            RdpPointer? image = shapes.FirstOrDefault(static p => p.Kind == RdpPointerKind.Image);
             Console.WriteLine($"pointer updates: {shapes.Count}, first image {image?.Width}x{image?.Height} hot {image?.HotspotX},{image?.HotspotY}");
             Assert.IsNotNull(image, "No pointer image arrived from the server.");
-            Assert.IsTrue(image.Bgra.Chunk(4).Any(p => p[3] != 0), "The pointer image is fully transparent.");
+            Assert.Contains(static p => p[3] != 0, image.Bgra.Chunk(4), "The pointer image is fully transparent.");
             Assert.IsTrue(session.IsConnected);
         }
         finally { await session.DisposeAsync(); }
@@ -695,7 +695,7 @@ public sealed class RdpManagedInteropTests
 
     private static void SetRemoteClipboard(string display, string text)
     {
-        var psi = new System.Diagnostics.ProcessStartInfo("wsl.exe")
+        var psi = new ProcessStartInfo("wsl.exe")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -790,7 +790,7 @@ public sealed class RdpManagedInteropTests
         { Host = target.Host, Port = target.Port, Username = User, Password = Pass };
         var loc = new Loc("en");
         var settings = RdpSettings.From(request, loc, disks);
-        Assert.AreSequenceEqual(new[] { "V", rootName }, [.. settings.Drives.Select(drive => drive.Name)]);
+        Assert.AreSequenceEqual(["V", rootName], [.. settings.Drives.Select(drive => drive.Name)]);
 
         IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
         var pump = Task.Run(async () => { while (session.IsConnected) { _ = session.TakeFrame(); await Task.Delay(100); } });
@@ -907,7 +907,7 @@ public sealed class RdpManagedInteropTests
 
     private static string RunInSession(string display, string command)
     {
-        var psi = new System.Diagnostics.ProcessStartInfo("wsl.exe")
+        var psi = new ProcessStartInfo("wsl.exe")
         { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         psi.ArgumentList.Add("-d"); psi.ArgumentList.Add("Debian"); psi.ArgumentList.Add("-u"); psi.ArgumentList.Add("root");
         psi.ArgumentList.Add("--"); psi.ArgumentList.Add("bash"); psi.ArgumentList.Add("-lc");

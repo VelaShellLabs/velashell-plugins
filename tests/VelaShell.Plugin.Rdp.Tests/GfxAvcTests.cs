@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using ManagedCodecs;
 using VelaShell.Rdp;
-using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Graphics.Gfx;
 
 namespace VelaShell.Plugin.Rdp.Tests;
@@ -13,7 +12,7 @@ public sealed class GfxAvcTests
     public void Avc420DecodesIdrAndReferencedPFrameAndOnlyPaintsMetadataRegion()
     {
         using var dispatcher = new GfxCodecDispatcher();
-        byte[] pixels = Enumerable.Repeat((byte)17, 16 * 16 * 4).ToArray();
+        byte[] pixels = [.. Enumerable.Repeat((byte)17, 16 * 16 * 4)];
         dispatcher.Decode(Request(11, Block(Fixture("idr"), 2, 3, 8, 9), pixels));
         AssertPixel(pixels, 2, 3, 96, 96, 96, 17);
         AssertPixel(pixels, 1, 3, 17, 17, 17, 17);
@@ -98,7 +97,7 @@ public sealed class GfxAvcTests
         GfxAvcRectangle[] rects = [new(0, 0, 32, 32)];
         codec.UpdateMain(main, rects);
         codec.UpdateAuxiliary(aux, rects, version2);
-        byte[] pixels = Enumerable.Repeat((byte)77, 32 * 32 * 4).ToArray();
+        byte[] pixels = [.. Enumerable.Repeat((byte)77, 32 * 32 * 4)];
         codec.Render(pixels, rects);
         for (int y = 0; y < 32; y++)
         {
@@ -116,7 +115,7 @@ public sealed class GfxAvcTests
             }
         }
         // Rendering twice must not apply the inverse filter twice to persistent chroma.
-        byte[] previous = pixels.ToArray();
+        byte[] previous = [.. pixels];
         codec.Render(pixels, rects);
         AssertBytes(previous, pixels);
     }
@@ -132,7 +131,7 @@ public sealed class GfxAvcTests
         byte[] oversizedSps = [0, 0, 0, 1, 0x67, 0x42, 0, 0x1E, 0xDA, 0, 0x40, 0x39];
         var decoder = new ManagedH264Decoder(16, 16);
         RdpProtocolException error = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Decode(oversizedSps));
-        StringAssert.Contains(error.Message, "dimensions");
+        Assert.Contains("dimensions", error.Message);
         for (int length = 0; length < 5; length++)
         {
             byte[] data = new byte[length];
@@ -175,7 +174,7 @@ public sealed class GfxAvcTests
         return result;
     }
     private static void AssertPixel(byte[] pixels, int x, int y, byte b, byte g, byte r, byte a) =>
-        AssertBytes(new byte[] { b, g, r, a }, pixels.AsSpan((y * 16 + x) * 4, 4));
+        AssertBytes([b, g, r, a], pixels.AsSpan((y * 16 + x) * 4, 4));
     private static void AssertBytes(ReadOnlySpan<byte> expected, ReadOnlySpan<byte> actual, string? message = null) =>
         Assert.AreSequenceEqual(expected, actual, message);
 }

@@ -828,7 +828,7 @@ public sealed class ResultGrid : Control
 /// <param name="column">值从文档根算起的路径(顶层就是列名);行号列为 <see langword="null" />。</param>
 /// <param name="activated">双击或 Ctrl+C(否则是右键)。</param>
 public sealed class ResultCellEventArgs(RoutedEvent routedEvent, int documentIndex, string? column, bool activated)
-    : Avalonia.Interactivity.RoutedEventArgs(routedEvent)
+    : RoutedEventArgs(routedEvent)
 {
     /// <summary>所属文档在查询结果里的下标。</summary>
     public int DocumentIndex { get; } = documentIndex;

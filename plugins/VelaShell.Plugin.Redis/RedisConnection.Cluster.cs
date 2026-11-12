@@ -74,6 +74,7 @@ internal sealed partial class RedisConnection
         RedisResult raw;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             raw = await db.ExecuteAsync("CLUSTER", "NODES").ConfigureAwait(false);
         }
         catch (Exception ex) when (IsDeniedOrUnsupported(ex) || IsClusterDisabled(ex))
@@ -173,7 +174,7 @@ internal sealed partial class RedisConnection
         // 地址里的 @cport(总线端口)与逗号后的 hostname 对使用者没有意义,切掉。
         string address = parts[1].Split('@', 2)[0].Split(',', 2)[0];
         string slots = parts.Length > 8
-            ? string.Join(" ", parts.Skip(8).Where(part => !part.StartsWith('[')))
+            ? string.Join(" ", parts.Skip(8).Where(static part => !part.StartsWith('[')))
             : string.Empty;
         return new(
             parts[0],

@@ -107,7 +107,7 @@ public sealed class ImportTests
     public void Rules_come_from_the_json_schema_validator()
     {
         var rules = ImportRules.FromValidator(Validator, "error");
-        Assert.AreSequenceEqual(new[] { "orderNo" }, [.. rules.Required]);
+        Assert.AreSequenceEqual(["orderNo"], [.. rules.Required]);
         Assert.IsTrue(rules.Enums.ContainsKey("status"));
         Assert.IsTrue(rules.Enums.ContainsKey("customer.level"), "nested enums are found by path");
         Assert.AreEqual(BsonKind.Decimal128, SchemaSampler.KindFromSchema(rules.Properties["total"]));
@@ -187,9 +187,9 @@ public sealed class ImportTests
             Assert.AreEqual(';', source.Delimiter);
             using (IImportReader reader = source.Open())
             {
-                Assert.AreSequenceEqual(new[] { "名称", "等级" }, [.. reader.Header]);
+                Assert.AreSequenceEqual(["名称", "等级"], [.. reader.Header]);
                 Assert.IsTrue(reader.TryRead(out ImportRecord record));
-                Assert.AreSequenceEqual(new[] { "陈立", "普通" }, record.Cells);
+                Assert.AreSequenceEqual(["陈立", "普通"], record.Cells);
                 Assert.AreEqual(2, record.Line);
             }
             Assert.AreEqual(1, source.CountRecords(CancellationToken.None));
@@ -228,11 +228,11 @@ public sealed class ImportTests
             docs.Add(BsonDocument.Parse(json));
             lines.Add(line);
         }
-        Assert.AreSequenceEqual(new[] { 1, 2, 3, 4 }, [.. docs.Select(static d => d["a"].AsInt32)]);
+        Assert.AreSequenceEqual([1, 2, 3, 4], [.. docs.Select(static d => d["a"].AsInt32)]);
         Assert.AreEqual("brace } inside", docs[0]["s"].AsString);
         Assert.AreEqual("escaped \" quote {", docs[1]["s"].AsString);
         Assert.AreEqual(ObjectId.Parse("66f5c2a1b04e1c3a5d7e9f01"), docs[3]["id"].AsObjectId);
-        Assert.AreSequenceEqual(new long[] { 2, 3, 5, 6 }, lines);
+        Assert.AreSequenceEqual([2, 3, 5, 6], lines);
         Assert.IsFalse(new JsonDocumentScanner(new StringReader("[]")).Skip());
     }
 

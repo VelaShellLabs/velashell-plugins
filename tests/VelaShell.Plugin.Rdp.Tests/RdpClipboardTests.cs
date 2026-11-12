@@ -22,9 +22,9 @@ public sealed class RdpClipboardTests
     {
         byte[] text = RdpClipboardCodec.EncodeText("中文🙂\nnext");
         Assert.AreEqual("中文🙂\r\nnext", RdpClipboardCodec.DecodeText(text));
-        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.DecodeText([1]));
-        _ = Assert.Throws<DecoderFallbackException>(() => RdpClipboardCodec.DecodeText([0, 0xD8]));
-        _ = Assert.Throws<InvalidDataException>(() => RdpClipboardCodec.EncodeText("a\0b"));
+        _ = Assert.Throws<InvalidDataException>(static () => RdpClipboardCodec.DecodeText([1]));
+        _ = Assert.Throws<DecoderFallbackException>(static () => RdpClipboardCodec.DecodeText([0, 0xD8]));
+        _ = Assert.Throws<InvalidDataException>(static () => RdpClipboardCodec.EncodeText("a\0b"));
     }
 
     [TestMethod]
@@ -117,7 +117,7 @@ public sealed class RdpClipboardTests
             // Like /tmp or /var on macOS: the folder the user picked from is reached through a link.
             using (var snapshot = RdpClipboardFiles.Open([Path.Combine(linkedFolder, "picked")], default))
             {
-                CollectionAssert.AreEqual(new[] { "picked", "picked\\a.txt" }, snapshot.Entries.Select(e => e.Name).ToArray());
+                Assert.AreSequenceEqual(["picked", "picked\\a.txt"], [.. snapshot.Entries.Select(e => e.Name)]);
             }
 
             _ = File.CreateSymbolicLink(Path.Combine(picked, "escape.txt"), Path.Combine(root, "outside.txt"));
@@ -538,7 +538,7 @@ public sealed class RdpClipboardTests
     });
 
     [TestMethod]
-    public void DisabledClipboardNeverSubscribesOrPublishes() => Run(async () =>
+    public void DisabledClipboardNeverSubscribesOrPublishes() => Run(static async () =>
     {
         using var context = new TestPluginContext();
         var transport = new ClipboardTransport();
@@ -856,7 +856,7 @@ public sealed class RdpClipboardTests
         // Only "exhausted" needs retries to run. The other conditions are applied during the retry wait; a long wait
         // keeps a slow runner from issuing the second request before the test acts. Cancelling and disconnecting end
         // the wait at once; a source change is noticed when the wait ends, before any further request.
-        TimeSpan retryDelay = TimeSpan.FromMilliseconds(outcome switch { "exhausted" => 80, "sourceChanged" => 2_000, _ => 10_000 });
+        var retryDelay = TimeSpan.FromMilliseconds(outcome switch { "exhausted" => 80, "sourceChanged" => 2_000, _ => 10_000 });
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard,
             TimeSpan.FromMilliseconds(40), retryDelay);
         transport.Emit(2);

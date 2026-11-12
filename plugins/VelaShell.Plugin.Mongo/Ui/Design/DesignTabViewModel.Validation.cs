@@ -467,11 +467,11 @@ internal sealed partial class DesignTabViewModel
             IMongoCollection<BsonDocument> collection = Workspace.Connection.Collection(Database, CollectionName);
             if (resample || _precheckIds.Count == 0)
             {
-                BsonDocument[] pipeline = new[]
-                {
+                BsonDocument[] pipeline =
+                [
                     new BsonDocument("$sample", new BsonDocument("size", PrecheckSampleSize)),
                     new BsonDocument("$project", new BsonDocument("_id", 1))
-                };
+                ];
                 using IAsyncCursor<BsonDocument> cursor = await collection.AggregateAsync<BsonDocument>(pipeline, cancellationToken: Lifetime).ConfigureAwait(true);
                 _precheckIds = [.. (await cursor.ToListAsync(Lifetime).ConfigureAwait(true)).Select(static d => d["_id"])];
                 RaisePropertyChanged(nameof(PrecheckSampleText));

@@ -84,7 +84,7 @@ public sealed class RemoteComposeHost(IRemoteExecApi exec, IRemoteFsApi remoteFs
     /// </para>
     /// </summary>
     private static string Join(IReadOnlyList<string> arguments) =>
-        "docker " + string.Join(' ', arguments.Select(a => a.Length > 0 && a.All(IsBare) ? a : Sh.Quote(a)));
+        "docker " + string.Join(' ', arguments.Select(static a => a.Length > 0 && a.All(IsBare) ? a : Sh.Quote(a)));
 
     private static bool IsBare(char c) => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '/' or '=' or ':';
 }

@@ -571,7 +571,7 @@ internal static class SchemaAnalyzer
             {
                 return loc.Format("Design_VizDistinct", BsonText.Grouped(field.DistinctCount));
             }
-            var parts = top.Select(b => $"{b.Label} {Pct(b.Ratio)}%").ToList();
+            var parts = top.Select(static b => $"{b.Label} {Pct(b.Ratio)}%").ToList();
             double rest = 1 - top.Sum(static b => b.Ratio);
             if (rest > 0.005)
             {

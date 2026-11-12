@@ -13,7 +13,7 @@ public static class RdpWpdDevices
 
     [SupportedOSPlatform("windows")]
     private static IReadOnlyList<RdpWpdDevice> EnumerateWindows() =>
-        [.. WindowsWpdBackend.EnumerateInterfaces().Select(d => new RdpWpdDevice(d.Path, d.Name))];
+        [.. WindowsWpdBackend.EnumerateInterfaces().Select(static d => new RdpWpdDevice(d.Path, d.Name))];
 }
 
 [SupportedOSPlatform("windows")]
@@ -21,10 +21,7 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
 {
     private readonly WpdDeviceMonitor _monitor;
     public IReadOnlyList<WpdDeviceDescription> Devices => _monitor.Devices;
-    internal WindowsWpdBackend(IEnumerable<string> selectedIds, Action<string> log)
-    {
-        _monitor = new(selectedIds, EnumerateInterfaces, OpenDevice, new WindowsWpdNotifications(), log);
-    }
+    internal WindowsWpdBackend(IEnumerable<string> selectedIds, Action<string> log) => _monitor = new(selectedIds, EnumerateInterfaces, OpenDevice, new WindowsWpdNotifications(), log);
 
     public IWpdDeviceHandle Open(uint deviceId, WpdOpenOptions options) => _monitor.Open(deviceId, options);
     public void Start(Func<uint, Task> removed, Func<WpdDeviceDescription, Task> added) => _monitor.Start(removed, added);
@@ -58,7 +55,7 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
             List<WpdLocalDevice> devices = [];
             for (uint index = 0; index < 1024; index++)
             {
-                var item = new Native.InterfaceData { Size = (uint)Marshal.SizeOf<Native.InterfaceData>() };
+                var item = new Native.InterfaceData { _size = (uint)Marshal.SizeOf<Native.InterfaceData>() };
                 if (!Native.SetupDiEnumDeviceInterfaces(set, 0, ref guid, index, ref item))
                 {
                     int error = Marshal.GetLastPInvokeError();
@@ -69,7 +66,7 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
 
                     throw new Win32Exception(error);
                 }
-                var info = new Native.DeviceInfo { Size = (uint)Marshal.SizeOf<Native.DeviceInfo>() };
+                var info = new Native.DeviceInfo { _size = (uint)Marshal.SizeOf<Native.DeviceInfo>() };
                 _ = Native.SetupDiGetDeviceInterfaceDetailW(set, ref item, 0, 0, out uint required, ref info);
                 if (required is < 6 or > 65536)
                 {
@@ -201,9 +198,9 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
 
                 Marshal.StructureToPtr(new Native.Overlapped
                 {
-                    Offset = (uint)request.Offset,
-                    OffsetHigh = (uint)(request.Offset >> 32),
-                    Event = completed.SafeWaitHandle.DangerousGetHandle()
+                    _offset = (uint)request.Offset,
+                    _offsetHigh = (uint)(request.Offset >> 32),
+                    _event = completed.SafeWaitHandle.DangerousGetHandle()
                 }, overlapped, false);
                 bool started = request.Function switch
                 {
@@ -269,11 +266,11 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
     private static partial class Native
     {
         [StructLayout(LayoutKind.Sequential)]
-        internal struct InterfaceData { internal uint Size; internal Guid ClassGuid; internal uint Flags; internal nuint Reserved; }
+        internal struct InterfaceData { internal uint _size; internal Guid _classGuid; internal uint _flags; internal nuint _reserved; }
         [StructLayout(LayoutKind.Sequential)]
-        internal struct DeviceInfo { internal uint Size; internal Guid ClassGuid; internal uint DevInst; internal nuint Reserved; }
+        internal struct DeviceInfo { internal uint _size; internal Guid _classGuid; internal uint _devInst; internal nuint _reserved; }
         [StructLayout(LayoutKind.Sequential)]
-        internal struct Overlapped { internal nuint Internal, InternalHigh; internal uint Offset, OffsetHigh; internal nint Event; }
+        internal struct Overlapped { internal nuint _internal, _internalHigh; internal uint _offset, _offsetHigh; internal nint _event; }
         [LibraryImport("setupapi.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         internal static partial nint SetupDiGetClassDevsW(ref Guid guid, string? enumerator, nint parent, uint flags);
         [LibraryImport("setupapi.dll", SetLastError = true)]
@@ -287,7 +284,7 @@ internal sealed partial class WindowsWpdBackend : IWpdDeviceBackend, IWpdDeviceM
         internal static partial bool SetupDiGetDeviceRegistryPropertyW(nint set, ref DeviceInfo info, uint property, out uint type, [Out] byte[] data, uint size, out uint required);
         [LibraryImport("setupapi.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static unsafe partial bool SetupDiGetDeviceInstanceIdW(nint set, ref DeviceInfo info, char* instanceId, uint size, out uint required);
+        internal static partial bool SetupDiGetDeviceInstanceIdW(nint set, ref DeviceInfo info, char* instanceId, uint size, out uint required);
         [LibraryImport("setupapi.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetupDiDestroyDeviceInfoList(nint set);

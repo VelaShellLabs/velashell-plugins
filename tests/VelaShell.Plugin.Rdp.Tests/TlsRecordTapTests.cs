@@ -46,7 +46,7 @@ public sealed class TlsRecordTapTests
     [TestMethod]
     public async Task OnlyTheLatestRecordsAreKept()
     {
-        byte[] eight = [.. Enumerable.Range(0, 8).SelectMany(_ => Record(23, 10))];
+        byte[] eight = [.. Enumerable.Range(0, 8).SelectMany(static _ => Record(23, 10))];
         TlsRecordTap tap = await FeedAsync([], [.. eight, .. Record(21, 26)], chunk: 7);
         string described = tap.DescribeSinceHandshake()!;
         Assert.StartsWith("… 3 more, ", described);

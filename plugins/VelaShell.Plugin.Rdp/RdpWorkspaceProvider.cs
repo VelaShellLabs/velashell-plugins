@@ -195,7 +195,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
             documents = [.. _documents];
         }
 
-        await Task.WhenAll(documents.Select(document => document.DisposeAsync().AsTask())).ConfigureAwait(false);
+        await Task.WhenAll(documents.Select(static document => document.DisposeAsync().AsTask())).ConfigureAwait(false);
         _hostShutdown.Dispose();
         _shutdown.Dispose();
     }

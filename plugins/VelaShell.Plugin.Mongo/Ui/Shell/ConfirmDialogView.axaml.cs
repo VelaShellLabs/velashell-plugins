@@ -34,8 +34,5 @@ public sealed partial class ConfirmDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public ConfirmDialogView()
-    {
-        InitializeComponent();
-    }
+    public ConfirmDialogView() => InitializeComponent();
 }

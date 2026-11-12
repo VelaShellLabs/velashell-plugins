@@ -8,7 +8,7 @@ namespace VelaShell.Plugin.DockerPanel.Docker;
 /// 于是本机端点上目录永远算成空串,"要用绝对路径"还会拦下一个本来就绝对的路径。
 /// </para>
 /// <para>
-/// 这里<b>不</b>用 <see cref="System.IO.Path" />:那套 API 按**跑面板的这台机器**判断分隔符,
+/// 这里<b>不</b>用 <see cref="Path" />:那套 API 按**跑面板的这台机器**判断分隔符,
 /// 而路径说的是**Docker 所在的那台机器** —— 一个 Windows 客户端连远端 Linux 时,两者不是一回事。
 /// 分隔符只能从路径本身看出来。
 /// </para>

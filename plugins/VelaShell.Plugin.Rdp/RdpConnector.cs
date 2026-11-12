@@ -41,7 +41,7 @@ internal static class RdpConnector
             CertificatePin = pin,
             CertificateHost = settings.CertificateHost,
             Clipboard = settings.Clipboard,
-            Drives = [.. settings.Drives.Select(d => new DriveMapping(d.Name, d.Path))],
+            Drives = [.. settings.Drives.Select(static d => new DriveMapping(d.Name, d.Path))],
             Ports = settings.Ports,
             Printers = settings.Printers,
             Camera = settings.Camera,

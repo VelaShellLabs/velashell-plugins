@@ -16,7 +16,7 @@ public sealed class RedisSettingsTests
             SessionId = "s1",
             Host = "127.0.0.1",
             Port = 6379,
-            Settings = settings.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
+            Settings = settings.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal)
         };
 
     [TestMethod]
@@ -124,11 +124,11 @@ public sealed class RedisSettingsTests
         var fields = RedisSettings.Declare(loc).ToList();
 
         // 决定"连不连得上"的留在外面;调优类收进高级选项 —— 否则对话框会被顶出屏幕。
-        Assert.IsFalse(fields.Single(f => f.Key == "mode").IsAdvanced);
-        Assert.IsFalse(fields.Single(f => f.Key == "tls").IsAdvanced);
-        Assert.IsFalse(fields.Single(f => f.Key == "environment").IsAdvanced);
-        Assert.IsTrue(fields.Single(f => f.Key == "scanCount").IsAdvanced);
-        Assert.IsTrue(fields.Single(f => f.Key == "valuePreview").IsAdvanced);
+        Assert.IsFalse(fields.Single(static f => f.Key == "mode").IsAdvanced);
+        Assert.IsFalse(fields.Single(static f => f.Key == "tls").IsAdvanced);
+        Assert.IsFalse(fields.Single(static f => f.Key == "environment").IsAdvanced);
+        Assert.IsTrue(fields.Single(static f => f.Key == "scanCount").IsAdvanced);
+        Assert.IsTrue(fields.Single(static f => f.Key == "valuePreview").IsAdvanced);
     }
 
     [TestMethod]
@@ -137,7 +137,7 @@ public sealed class RedisSettingsTests
         // 只读的默认值随环境走,在声明里写死任一个都会让另一半环境的默认是错的。
         var loc = new Loc("en");
 
-        Assert.IsNull(RedisSettings.Declare(loc).Single(f => f.Key == "readOnly").DefaultValue);
+        Assert.IsNull(RedisSettings.Declare(loc).Single(static f => f.Key == "readOnly").DefaultValue);
     }
 
     [TestMethod]
@@ -145,7 +145,7 @@ public sealed class RedisSettingsTests
     {
         // 指纹字段必须真的在字段表里,否则宿主的"信任证书"点了等于没点。
         var loc = new Loc("en");
-        ProtocolSettingField field = RedisSettings.Declare(loc).Single(f => f.Key == RedisSettings.TrustedThumbprintKey);
+        ProtocolSettingField field = RedisSettings.Declare(loc).Single(static f => f.Key == RedisSettings.TrustedThumbprintKey);
 
         Assert.IsTrue(field.IsHidden);
     }

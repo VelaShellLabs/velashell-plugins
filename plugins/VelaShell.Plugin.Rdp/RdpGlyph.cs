@@ -21,10 +21,7 @@ internal sealed class RdpGlyph : Control
     public static readonly StyledProperty<IBrush?> ForegroundProperty =
         AvaloniaProperty.Register<RdpGlyph, IBrush?>(nameof(Foreground));
 
-    static RdpGlyph()
-    {
-        AffectsRender<RdpGlyph>(DataProperty, ForegroundProperty);
-    }
+    static RdpGlyph() => AffectsRender<RdpGlyph>(DataProperty, ForegroundProperty);
 
     public Geometry? Data { get => GetValue(DataProperty); set => SetValue(DataProperty, value); }
 

@@ -61,10 +61,7 @@ public sealed partial class DockerPanelView : UserControl
     }
 
     /// <summary>无参构造只为设计器与 XAML 装载器;运行时走带上下文的那个。</summary>
-    public DockerPanelView()
-    {
-        InitializeComponent();
-    }
+    public DockerPanelView() => InitializeComponent();
 
     private void InitializeComponent()
     {

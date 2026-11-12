@@ -12,7 +12,7 @@ namespace VelaShell.Plugin.Mongo.Tests;
 public sealed class ScreenshotTests
 {
     [TestMethod]
-    public void Board01_Workspace_shell_renders() => Screens.OnUi(async () =>
+    public void Board01_Workspace_shell_renders() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

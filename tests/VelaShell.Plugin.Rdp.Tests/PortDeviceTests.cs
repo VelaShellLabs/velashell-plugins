@@ -24,7 +24,7 @@ public sealed class PortDeviceTests
         Assert.AreEqual("COM3", settings.Ports[0].Name);
         var options = new RdpClientOptions { Host = "unused", Ports = settings.Ports, DynamicResolution = false };
         Assert.HasCount(2, RdpManagedSession.BuildChannels(options));
-        _ = Assert.Throws<ArgumentException>(() => new RdpClientOptions { Host = "unused", Ports = [new("COM1"), new("com1")] });
+        _ = Assert.Throws<ArgumentException>(static () => new RdpClientOptions { Host = "unused", Ports = [new("COM1"), new("com1")] });
     }
 
     [TestMethod]
@@ -54,7 +54,7 @@ public sealed class PortDeviceTests
         Assert.AreEqual(0u, created.Status);
         Assert.HasCount(5, created.Body);
         RdpdrIoResult read = await device.ProcessAsync(new(id, 3, 0, Transfer(5)), default);
-        CollectionAssert.AreEqual(new byte[] { 2, 0, 0, 0, 7, 8 }, read.Body);
+        Assert.AreSequenceEqual(new byte[] { 2, 0, 0, 0, 7, 8 }, read.Body);
         RdpdrIoResult written = await device.ProcessAsync(new(id, 4, 0, Transfer(3, [1, 2, 3])), default);
         Assert.AreEqual(2u, U32(written.Body));
         RdpdrIoResult baud = await device.ProcessAsync(new(id, 14, 0, Control(PortControl.GetBaud, [], 4)), default);
@@ -118,10 +118,10 @@ public sealed class PortDeviceTests
         // ntddser.h: IOCTL_SERIAL_GET_CHARS = function 22, IOCTL_SERIAL_SET_CHARS = function 23 (SERIAL_CHARS is 6 bytes).
         Assert.AreEqual((PortControl.GetChars, 6), PortControls.Validate(true, 0x1B0058, [], 6));
         Assert.AreEqual((PortControl.SetChars, 0), PortControls.Validate(true, 0x1B005C, new byte[6], 0));
-        Assert.AreEqual(NtStatus.InvalidParameter, Assert.Throws<DriveStatusException>(() => PortControls.Validate(true, 0x1B0058, new byte[6], 0)).Status);
+        Assert.AreEqual(NtStatus.InvalidParameter, Assert.Throws<DriveStatusException>(static () => PortControls.Validate(true, 0x1B0058, new byte[6], 0)).Status);
         // ntddpar.h: PARALLEL_INIT = 0x01; 0x10 is the PARALLEL_POWER_OFF status bit, not a command.
         Assert.AreEqual((PortControl.ParallelSetInformation, 0), PortControls.Validate(false, 0x160008, [0x01], 0));
-        Assert.AreEqual(NtStatus.InvalidParameter, Assert.Throws<DriveStatusException>(() => PortControls.Validate(false, 0x160008, [0x10], 0)).Status);
+        Assert.AreEqual(NtStatus.InvalidParameter, Assert.Throws<DriveStatusException>(static () => PortControls.Validate(false, 0x160008, [0x10], 0)).Status);
     }
 
     private static uint U32(byte[] bytes, int offset = 0) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset));

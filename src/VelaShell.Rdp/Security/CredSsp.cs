@@ -140,7 +140,7 @@ internal static class CredSsp
         for (Exception? current = ex; current is not null; current = current.InnerException)
         {
             if (current is IOException or System.Security.Authentication.AuthenticationException
-                || current is RdpProtocolException { Message: ClosedDuringNla })
+                or RdpProtocolException { Message: ClosedDuringNla })
             {
                 return true;
             }

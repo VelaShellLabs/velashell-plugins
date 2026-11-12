@@ -90,7 +90,7 @@ public sealed partial class DockerClient
     public async Task<Stream> SaveImagesAsync(IReadOnlyList<string> names, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        string path = "/images/get" + Query([.. names.Select(n => ("names", (string?)n))]);
+        string path = "/images/get" + Query([.. names.Select(static n => ("names", (string?)n))]);
         HttpResponseMessage response;
         try
         {

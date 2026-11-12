@@ -81,7 +81,7 @@ internal static class S3ClientFactory
     /// 让 SDK 用我们自己的 <see cref="HttpClient" />,以便挂上证书信任回调
     /// —— 自签证书在自建 MinIO / Ceph 上是常态,没有这条路径这类端点根本连不上。
     /// </summary>
-    private sealed class ProbingHttpClientFactory(S3CertificateProbe probe, bool useTls) : Amazon.Runtime.HttpClientFactory
+    private sealed class ProbingHttpClientFactory(S3CertificateProbe probe, bool useTls) : HttpClientFactory
     {
         public override HttpClient CreateHttpClient(IClientConfig clientConfig)
         {

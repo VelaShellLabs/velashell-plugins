@@ -113,7 +113,7 @@ internal static class LocalDisks
     /// </summary>
     internal static string ShareName(string label, ISet<string> taken)
     {
-        string stem = string.Concat(label.Where(c => char.IsAsciiLetterOrDigit(c) || c == '_'));
+        string stem = string.Concat(label.Where(static c => char.IsAsciiLetterOrDigit(c) || c == '_'));
         if (stem.Length == 0)
         {
             stem = "disk";

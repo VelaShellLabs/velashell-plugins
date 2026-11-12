@@ -22,10 +22,10 @@ public sealed class RdpsndChannelTests
             DynamicResolution = false,
             Drives = drives ? [new DriveMapping("work", Path.GetTempPath())] : []
         };
-        string[] names = [.. RdpManagedSession.BuildChannels(options).Select(c => c.Name)];
-        Assert.AreEqual(1, names.Count(n => n == "rdpsnd"));
-        Assert.AreEqual(1, names.Count(n => n == "rdpdr"),
-            "Windows does not send audio formats unless the companion RDPDR channel is advertised (MS-RDPEA 2.1).");
+        string[] names = [.. RdpManagedSession.BuildChannels(options).Select(static c => c.Name)];
+        Assert.ContainsSingle(static n => n == "rdpsnd", names);
+        Assert.ContainsSingle(static n => n == "rdpdr",
+names, "Windows does not send audio formats unless the companion RDPDR channel is advertised (MS-RDPEA 2.1).");
     }
 
     [TestMethod]
@@ -96,10 +96,10 @@ public sealed class RdpsndChannelTests
         Assert.AreEqual((byte)6, sent[^1][0]);
         second.SetResult();
         Assert.IsFalse(channel.DrainAsync().IsCompleted);
-        Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
+        Assert.DoesNotContain(static pdu => pdu[0] == 5, sent);
         first.SetResult();
         await channel.DrainAsync().WaitAsync(TimeSpan.FromSeconds(2));
-        Assert.AreSequenceEqual(new byte[] { 255, 0 }, sent.Where(pdu => pdu[0] == 5).Select(pdu => pdu[6]).ToArray());
+        Assert.AreSequenceEqual(new byte[] { 255, 0 }, [.. sent.Where(static pdu => pdu[0] == 5).Select(static pdu => pdu[6])]);
     }
 
     [TestMethod]
@@ -116,7 +116,7 @@ public sealed class RdpsndChannelTests
         Exception actual = await channel.PlaybackFailure.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.AreSame(error, actual);
         _ = await Assert.ThrowsExactlyAsync<IOException>(channel.DrainAsync);
-        Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
+        Assert.DoesNotContain(static pdu => pdu[0] == 5, sent);
     }
 
     [TestMethod]
@@ -135,7 +135,7 @@ public sealed class RdpsndChannelTests
         Exception actual = await channel.PlaybackFailure.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.AreSame(error, actual);
         Assert.IsFalse(first.Task.IsCompleted);
-        Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
+        Assert.DoesNotContain(static pdu => pdu[0] == 5, sent);
     }
 
     [TestMethod]
@@ -151,7 +151,7 @@ public sealed class RdpsndChannelTests
         completion.SetResult();
         _ = await Assert.ThrowsAsync<OperationCanceledException>(channel.DrainAsync);
         Assert.IsTrue(output.Disposed);
-        Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
+        Assert.DoesNotContain(static pdu => pdu[0] == 5, sent);
     }
 
     [TestMethod]
@@ -196,7 +196,7 @@ public sealed class RdpsndChannelTests
         await Process(channel, Formats(8, Format()));
         _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(1, [1, 2, 3, 4])));
         _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, Wave2(0, [1, 2, 3])));
-        await Process(channel, new byte[] { 2, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4 });
+        await Process(channel, [2, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]);
         _ = await Assert.ThrowsAsync<RdpProtocolException>(() => Process(channel, new byte[4]));
     }
 
@@ -212,7 +212,7 @@ public sealed class RdpsndChannelTests
         stop.Cancel();
         await playing;
         _ = await Assert.ThrowsAsync<OperationCanceledException>(channel.DrainAsync);
-        Assert.DoesNotContain(pdu => pdu[0] == 5, sent);
+        Assert.DoesNotContain(static pdu => pdu[0] == 5, sent);
     }
 
     [TestMethod]
@@ -240,10 +240,10 @@ public sealed class RdpsndChannelTests
         var options = new RdpConnectOptions("localhost", 3389, "", "", "", 640, 480, 32, null, "localhost", [new("rdpsnd", 0xC0000000)]);
         await using var session = new RdpManagedSession(new RdpConnection(options));
         using var wire = new MemoryStream();
-        var mcs = new VelaShell.Rdp.Mcs.McsLayer(new VelaShell.Rdp.Wire.RdpTransport(wire));
+        var mcs = new McsLayer(new RdpTransport(wire));
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("UserId", flags)!.SetValue(mcs, (ushort)1001);
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("Channels", flags)!.SetValue(mcs, new Dictionary<string, ushort> { ["rdpsnd"] = 1004 });
+        typeof(McsLayer).GetProperty("UserId", flags)!.SetValue(mcs, (ushort)1001);
+        typeof(McsLayer).GetProperty("Channels", flags)!.SetValue(mcs, new Dictionary<string, ushort> { ["rdpsnd"] = 1004 });
         typeof(RdpConnection).GetField("_mcs", flags)!.SetValue(session.Connection, mcs);
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new RecordingOutput { Completion = completion.Task };
@@ -267,11 +267,11 @@ public sealed class RdpsndChannelTests
         var options = new RdpConnectOptions("localhost", 3389, "", "", "", 640, 480, 32, null, "localhost", [new("rdpsnd", 0xC0000000)]);
         await using var session = new RdpManagedSession(new RdpConnection(options));
         using var wire = new MemoryStream();
-        var transport = new VelaShell.Rdp.Wire.RdpTransport(wire);
-        var mcs = new VelaShell.Rdp.Mcs.McsLayer(transport);
+        var transport = new RdpTransport(wire);
+        var mcs = new McsLayer(transport);
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("UserId", flags)!.SetValue(mcs, (ushort)1001);
-        typeof(VelaShell.Rdp.Mcs.McsLayer).GetProperty("Channels", flags)!.SetValue(mcs, new Dictionary<string, ushort> { ["rdpsnd"] = 1004 });
+        typeof(McsLayer).GetProperty("UserId", flags)!.SetValue(mcs, (ushort)1001);
+        typeof(McsLayer).GetProperty("Channels", flags)!.SetValue(mcs, new Dictionary<string, ushort> { ["rdpsnd"] = 1004 });
         typeof(RdpConnection).GetField("_mcs", flags)!.SetValue(session.Connection, mcs);
         var output = new RecordingOutput();
         session.EnableAudio(true, () => output);
@@ -325,7 +325,7 @@ public sealed class RdpsndChannelTests
         }
         await Process(channel, Wave2(0, samples)).WaitAsync(TimeSpan.FromSeconds(7));
         await Process(channel, Wave2(0, samples)).WaitAsync(TimeSpan.FromSeconds(7));
-        Assert.AreEqual(2, sent.Count(pdu => pdu[0] == 5));
+        Assert.AreEqual(2, sent.Count(static pdu => pdu[0] == 5));
         output.Dispose();
         await ((NativeAudioOutput)output).Completion.WaitAsync(TimeSpan.FromSeconds(2));
     }
@@ -336,17 +336,17 @@ public sealed class RdpsndChannelTests
     public async Task DiagnosticsDistinguishSilenceFromSamplesWithoutLoggingEveryWave(int bits, int silence)
     {
         var messages = new List<string>();
-        using var channel = new RdpsndChannel((_, _) => Task.CompletedTask, new RecordingOutput(), messages.Add);
+        using var channel = new RdpsndChannel(static (_, _) => Task.CompletedTask, new RecordingOutput(), messages.Add);
         await Process(channel, Formats(8, Format(channels: 1, bits: (ushort)bits)));
         await Process(channel, Wave2(0, [(byte)silence, (byte)silence]));
         await Process(channel, Wave2(0, [(byte)silence, (byte)silence]));
         await Process(channel, Wave2(0, [(byte)silence, (byte)(silence + 1)]));
         await Process(channel, Wave2(0, [(byte)silence, (byte)(silence + 1)]));
-        Assert.Contains(message => message.Contains("offered=1; accepted=1"), messages);
-        Assert.AreEqual(2, messages.Count(message => message.StartsWith("wave received;")));
-        Assert.Contains(message => message.Contains("silent=True"), messages);
-        Assert.Contains(message => message.Contains("silent=False"), messages);
-        Assert.AreEqual(1, messages.Count(message => message == "first playback completed and confirmed"));
+        Assert.Contains(static message => message.Contains("offered=1; accepted=1"), messages);
+        Assert.AreEqual(2, messages.Count(static message => message.StartsWith("wave received;")));
+        Assert.Contains(static message => message.Contains("silent=True"), messages);
+        Assert.Contains(static message => message.Contains("silent=False"), messages);
+        Assert.ContainsSingle(static message => message == "first playback completed and confirmed", messages);
     }
 
     [TestMethod]
@@ -362,7 +362,7 @@ public sealed class RdpsndChannelTests
         await Process(channel, Wave2(0, [1, 2, 3, 4]));
         await Process(channel, Packet(1, []));
         Assert.HasCount(1, output.Samples);
-        Assert.AreSequenceEqual(new byte[] { 7, 12, 6, 5 }, sent.Select(pdu => pdu[0]).ToArray());
+        Assert.AreSequenceEqual(new byte[] { 7, 12, 6, 5 }, [.. sent.Select(pdu => pdu[0])]);
     }
 
     private static RdpsndChannel Make(IAudioOutput? output, List<byte[]> sent) =>
@@ -386,7 +386,7 @@ public sealed class RdpsndChannelTests
     }
     internal static byte[] Formats(ushort version, params byte[][] formats)
     {
-        byte[] body = new byte[20 + formats.Sum(f => f.Length)];
+        byte[] body = new byte[20 + formats.Sum(static f => f.Length)];
         BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(14), (ushort)formats.Length);
         BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(17), version);
         int offset = 20;

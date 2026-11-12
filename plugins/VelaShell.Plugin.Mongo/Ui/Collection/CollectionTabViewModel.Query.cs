@@ -41,46 +41,46 @@ internal sealed partial class CollectionTabViewModel
     private int _countVersion;
 
     /// <summary>查找(Ctrl+Enter)。</summary>
-    public AsyncCommand FindCommand { get; private set; } = null!;
+    public AsyncCommand FindCommand { get; private set; }
 
     /// <summary>重置查询栏。</summary>
-    public AsyncCommand ResetCommand { get; private set; } = null!;
+    public AsyncCommand ResetCommand { get; private set; }
 
     /// <summary>清除筛选(无结果卡片)。</summary>
-    public AsyncCommand ClearFilterCommand { get; private set; } = null!;
+    public AsyncCommand ClearFilterCommand { get; private set; }
 
     /// <summary>执行计划(在新查询标签里跑 explain("executionStats"))。</summary>
-    public RelayCommand ExplainCommand { get; private set; } = null!;
+    public RelayCommand ExplainCommand { get; private set; }
 
     /// <summary>收藏 / 取消收藏当前筛选。</summary>
-    public AsyncCommand ToggleFavoriteCommand { get; private set; } = null!;
+    public AsyncCommand ToggleFavoriteCommand { get; private set; }
 
     /// <summary>从历史 / 收藏里套用一条。</summary>
-    public AsyncCommand<CollectionFilterItem> ApplyHistoryCommand { get; private set; } = null!;
+    public AsyncCommand<CollectionFilterItem> ApplyHistoryCommand { get; private set; }
 
     /// <summary>刷新本页。</summary>
-    public AsyncCommand RefreshCommand { get; private set; } = null!;
+    public AsyncCommand RefreshCommand { get; private set; }
 
     /// <summary>停止长查询(killOp)。</summary>
-    public AsyncCommand StopCommand { get; private set; } = null!;
+    public AsyncCommand StopCommand { get; private set; }
 
     /// <summary>首页。</summary>
-    public AsyncCommand FirstPageCommand { get; private set; } = null!;
+    public AsyncCommand FirstPageCommand { get; private set; }
 
     /// <summary>上一页。</summary>
-    public AsyncCommand PreviousPageCommand { get; private set; } = null!;
+    public AsyncCommand PreviousPageCommand { get; private set; }
 
     /// <summary>下一页。</summary>
-    public AsyncCommand NextPageCommand { get; private set; } = null!;
+    public AsyncCommand NextPageCommand { get; private set; }
 
     /// <summary>末页。</summary>
-    public AsyncCommand LastPageCommand { get; private set; } = null!;
+    public AsyncCommand LastPageCommand { get; private set; }
 
     /// <summary>跳到页码框里的那一页。</summary>
-    public AsyncCommand GoToPageCommand { get; private set; } = null!;
+    public AsyncCommand GoToPageCommand { get; private set; }
 
     /// <summary>按列排序(点列头):降序 → 升序 → 不排。</summary>
-    public AsyncCommand<CollectionColumn> SortByColumnCommand { get; private set; } = null!;
+    public AsyncCommand<CollectionColumn> SortByColumnCommand { get; private set; }
 
     private void InitializeQueryCommands()
     {
@@ -709,7 +709,7 @@ internal sealed partial class CollectionTabViewModel
     {
         string filter = string.IsNullOrWhiteSpace(_filterText) ? "{}" : abbreviate ? "{…}" : _filterText.Trim();
         string projection = string.IsNullOrWhiteSpace(ProjectionText) ? "" : ", " + ProjectionText.Trim();
-        StringBuilder text = new System.Text.StringBuilder()
+        StringBuilder text = new StringBuilder()
             .Append("db.").Append(MongoWorkspaceViewModel.ShellCollectionRef(CollectionName))
             .Append(".find(").Append(filter).Append(projection).Append(')');
         if (!string.IsNullOrWhiteSpace(SortText))

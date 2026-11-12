@@ -407,7 +407,7 @@ public sealed partial class RedisWorkspaceViewModel
                     continue;
                 }
                 // 全空的组不显示:一整片空白比少一组更让人以为是坏了。
-                if (group.Items.Any(item => item.Value.Length > 0))
+                if (group.Items.Any(static item => item.Value.Length > 0))
                 {
                     Overview.Add(group);
                 }

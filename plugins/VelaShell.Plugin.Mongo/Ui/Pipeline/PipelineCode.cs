@@ -61,7 +61,7 @@ internal static class PipelineCode
         var b = new StringBuilder();
         _ = b.Append("use(").Append(BsonText.Quote(database)).Append(");\n\n");
         _ = b.Append("db.").Append(MongoWorkspaceViewModel.ShellCollectionRef(collection)).Append(".aggregate(");
-        _ = b.Append(List(stages.Select(s => Js(s, 1, shell: true)), "[", "]", 0, "  "));
+        _ = b.Append(List(stages.Select(static s => Js(s, 1, shell: true)), "[", "]", 0, "  "));
         if (allowDiskUse)
         {
             _ = b.Append(", { allowDiskUse: true }");
@@ -73,7 +73,7 @@ internal static class PipelineCode
 
     private static string Node(string database, string collection, IReadOnlyList<BsonDocument> stages, bool allowDiskUse)
     {
-        string body = List(stages.Select(s => Js(s, 2, shell: false)), "[", "]", 1, "  ");
+        string body = List(stages.Select(static s => Js(s, 2, shell: false)), "[", "]", 1, "  ");
         var imports = new List<string> { "MongoClient" };
         foreach ((string token, string name) in new[]
                  {
@@ -138,7 +138,7 @@ internal static class PipelineCode
 
     private static string Python(string database, string collection, IReadOnlyList<BsonDocument> stages, bool allowDiskUse)
     {
-        string body = List(stages.Select(s => Py(s, 1)), "[", "]", 0, "    ");
+        string body = List(stages.Select(static s => Py(s, 1)), "[", "]", 0, "    ");
         var bsonImports = new List<string>();
         foreach ((string token, string name) in new[]
                  {

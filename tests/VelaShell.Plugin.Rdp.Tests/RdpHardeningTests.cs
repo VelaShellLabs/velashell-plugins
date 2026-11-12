@@ -65,13 +65,9 @@ public sealed class RdpHardeningTests
     [DataRow("\\CONIN$")]
     [DataRow("\\trailing.")]
     [DataRow("\\trailing ")]
+    [OSCondition(OperatingSystems.Windows)]
     public void WindowsAliasesAndStreamsAreRefused(string path)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.Inconclusive("Windows-only name rules.");
-        }
-
         _ = Assert.Throws<DriveStatusException>(() => DriveFile.ResolvePath("C:\\share", path));
     }
 
@@ -232,7 +228,7 @@ public sealed class RdpHardeningTests
     [TestMethod]
     public async Task AnNlaMessageClaimingGigabytesIsRefusedBeforeAllocating()
     {
-        await using var server = new FakeRdpServer(async connection =>
+        await using var server = new FakeRdpServer(static async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Hybrid);
             await using SslStream ssl = await connection.StartTlsAsync();
@@ -249,7 +245,7 @@ public sealed class RdpHardeningTests
     [TestMethod]
     public async Task APreCve2018_0886CredSspVersionIsRefusedAndNotRetriedAsTls()
     {
-        await using var server = new FakeRdpServer(async connection =>
+        await using var server = new FakeRdpServer(static async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Hybrid);
             await using SslStream ssl = await connection.StartTlsAsync();
@@ -309,11 +305,12 @@ public sealed class RdpHardeningTests
             w.U16LE(0);                               // empty stream
         }
         byte[] update = w.ToArray();
-        _ = Assert.Throws<RdpProtocolException>(() =>
+        void ApplyUpdate()
         {
             var r = new ByteReader(update);
             _ = BitmapUpdate.Apply(ref r, fb);
-        });
+        }
+        _ = Assert.Throws<RdpProtocolException>(ApplyUpdate);
     }
 
     [TestMethod]
@@ -337,7 +334,7 @@ public sealed class RdpHardeningTests
         byte[] white = [.. Enumerable.Repeat((byte)0xFF, 16)];
         fb.ApplyRect(0, 0, 3, 1, 4, 2, 16, compressed: false, white);
         fb.ApplyRect(0, 0, 3, 1, 4, 2, 16, compressed: true, []);   // decodes nothing
-        Assert.IsTrue(fb.Bgra.Chunk(4).All(p => p is [0, 0, 0, 0xFF]));
+        Assert.IsTrue(fb.Bgra.Chunk(4).All(static p => p is [0, 0, 0, 0xFF]));
     }
 
     [TestMethod]
@@ -395,7 +392,7 @@ public sealed class RdpHardeningTests
     [TestMethod]
     public void ALargeRemoteFileListIsCheckedInLinearTime()
     {
-        RdpClipboardFile[] files = [.. Enumerable.Range(0, RdpClipboardCodec.MaxFiles).Select(i => new RdpClipboardFile($"d{i % 16}\\sub\\f{i}.txt", false, 1))];
+        RdpClipboardFile[] files = [.. Enumerable.Range(0, RdpClipboardCodec.MaxFiles).Select(static i => new RdpClipboardFile($"d{i % 16}\\sub\\f{i}.txt", false, 1))];
         byte[] encoded = RdpClipboardCodec.EncodeFiles(files);
         var watch = Stopwatch.StartNew();
         Assert.HasCount(files.Length, RdpClipboardCodec.DecodeFiles(encoded));

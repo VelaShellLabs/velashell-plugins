@@ -6,8 +6,5 @@ namespace VelaShell.Plugin.Mongo.Ui;
 public sealed partial class DesignOptionsView : UserControl
 {
     /// <summary>构造。</summary>
-    public DesignOptionsView()
-    {
-        InitializeComponent();
-    }
+    public DesignOptionsView() => InitializeComponent();
 }

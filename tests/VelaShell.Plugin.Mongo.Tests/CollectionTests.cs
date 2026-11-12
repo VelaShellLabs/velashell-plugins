@@ -145,7 +145,7 @@ public sealed class CollectionTests
         after["invoice"] = new BsonDocument("title", "上海云帆");
 
         List<(string Path, BsonValue? Value)> diff = DocumentDiff.Compute(before, after);
-        Assert.AreSequenceEqual(new[] { "customer.name", "items", "status", "invoice" }, [.. diff.Select(static d => d.Path)], SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["customer.name", "items", "status", "invoice"], [.. diff.Select(static d => d.Path)], SequenceOrder.InAnyOrder);
         Assert.IsNull(diff.Single(static d => d.Path == "status").Value, "a removed field becomes $unset");
     }
 
@@ -337,7 +337,7 @@ public sealed class CollectionTests
     }
 
     [TestMethod]
-    public void Editing_a_cell_stages_it_and_apply_writes_it() => Screens.OnUi(async () =>
+    public void Editing_a_cell_stages_it_and_apply_writes_it() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         (IMongoClient client, string database, IMongoCollection<BsonDocument> collection, _) = await SeedAsync();
@@ -346,7 +346,7 @@ public sealed class CollectionTests
             await using Workbench bench = await Screens.OpenWorkbenchAsync(database);
             CollectionTabViewModel tab = await OpenTabAsync(bench, database, "orders");
             Assert.HasCount(3, tab.Rows);
-            Assert.AreSequenceEqual(new[] { "_id", "status", "customer", "qty" }, [.. tab.Columns.Select(static c => c.Name)]);
+            Assert.AreSequenceEqual(["_id", "status", "customer", "qty"], [.. tab.Columns.Select(static c => c.Name)]);
 
             CollectionRow row = tab.Rows[0];
             CollectionCell status = row.CellOf(tab.Columns.Single(static c => c.Name == "status"))!;
@@ -384,7 +384,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void Read_only_mode_blocks_staging_and_shows_the_banner() => Screens.OnUi(async () =>
+    public void Read_only_mode_blocks_staging_and_shows_the_banner() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -403,7 +403,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void A_view_is_never_editable() => Screens.OnUi(async () =>
+    public void A_view_is_never_editable() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -415,7 +415,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void Filter_errors_are_flagged_before_anything_is_sent() => Screens.OnUi(async () =>
+    public void Filter_errors_are_flagged_before_anything_is_sent() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -433,7 +433,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void Enter_in_the_filter_box_runs_the_query_instead_of_adding_a_line() => Screens.OnUi(async () =>
+    public void Enter_in_the_filter_box_runs_the_query_instead_of_adding_a_line() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -457,7 +457,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void Enter_in_the_filter_box_accepts_the_highlighted_completion() => Screens.OnUi(async () =>
+    public void Enter_in_the_filter_box_accepts_the_highlighted_completion() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -488,7 +488,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void Keyboard_editing_in_the_grid_stages_the_value() => Screens.OnUi(async () =>
+    public void Keyboard_editing_in_the_grid_stages_the_value() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -514,7 +514,7 @@ public sealed class CollectionTests
     });
 
     [TestMethod]
-    public void Fifty_thousand_rows_stay_responsive() => Screens.OnUi(async () =>
+    public void Fifty_thousand_rows_stay_responsive() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         var client = new MongoClient(TestServer.Uri);
@@ -579,7 +579,7 @@ public sealed class CollectionTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board01_collection_grid_with_inspector() => Screens.OnUi(async () =>
+    public void Board01_collection_grid_with_inspector() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -627,7 +627,7 @@ public sealed class CollectionTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board02_collection_json_cards() => Screens.OnUi(async () =>
+    public void Board02_collection_json_cards() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
@@ -681,7 +681,7 @@ public sealed class CollectionTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board22_collection_states_and_conflict() => Screens.OnUi(async () =>
+    public void Board22_collection_states_and_conflict() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

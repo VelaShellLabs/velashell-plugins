@@ -156,17 +156,17 @@ public sealed class ShellTests
     public void Parse_ErrorsPointAtTheProblem()
     {
         const string text = "db.orders.find({ customer.name: 1 })";
-        ShellParseException dotted = Assert.ThrowsExactly<ShellParseException>(() => ShellParser.Parse(new ShellStatement(0, text, 0)));
+        ShellParseException dotted = Assert.ThrowsExactly<ShellParseException>(static () => ShellParser.Parse(new ShellStatement(0, text, 0)));
         Assert.AreEqual("Shell_DottedKey", dotted.MessageKey);
         Assert.AreEqual(text.IndexOf("customer.name", StringComparison.Ordinal), dotted.Offset);
 
-        ShellParseException method = Assert.ThrowsExactly<ShellParseException>(() => ShellParser.Parse(new ShellStatement(0, "db.orders", 0)));
+        ShellParseException method = Assert.ThrowsExactly<ShellParseException>(static () => ShellParser.Parse(new ShellStatement(0, "db.orders", 0)));
         Assert.AreEqual("Query_ParseNeedsMethod", method.MessageKey);
-        ShellParseException cursor = Assert.ThrowsExactly<ShellParseException>(() => ShellParser.Parse(new ShellStatement(0, "db.a.find().frobnicate()", 0)));
+        ShellParseException cursor = Assert.ThrowsExactly<ShellParseException>(static () => ShellParser.Parse(new ShellStatement(0, "db.a.find().frobnicate()", 0)));
         Assert.AreEqual("Query_ParseUnknownCursor", cursor.MessageKey);
-        ShellParseException unclosed = Assert.ThrowsExactly<ShellParseException>(() => ShellParser.Parse(new ShellStatement(0, "db.a.find({ a: 1 }", 0)));
+        ShellParseException unclosed = Assert.ThrowsExactly<ShellParseException>(static () => ShellParser.Parse(new ShellStatement(0, "db.a.find({ a: 1 }", 0)));
         Assert.AreEqual("Query_ParseUnclosed", unclosed.MessageKey);
-        ShellParseException js = Assert.ThrowsExactly<ShellParseException>(() => ShellParser.Parse(new ShellStatement(0, "var x = 1", 0)));
+        ShellParseException js = Assert.ThrowsExactly<ShellParseException>(static () => ShellParser.Parse(new ShellStatement(0, "var x = 1", 0)));
         Assert.AreEqual("Query_ParseUnsupported", js.MessageKey);
     }
 

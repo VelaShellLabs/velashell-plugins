@@ -252,15 +252,15 @@ public sealed class CreateVolumeForm : PanelForm
     public string Name => _name.Value.Trim();
 
     /// <summary>驱动(nfs 也是 local 驱动 + 选项)。</summary>
-    public string Driver => "local";
+    public static string Driver => "local";
 
     /// <summary>驱动选项字典。</summary>
     public Dictionary<string, string>? DriverOptions =>
-        Options.Filled.ToDictionary(r => r.Key.Trim(), r => r.Value.Trim()) is { Count: > 0 } map ? map : null;
+        Options.Filled.ToDictionary(static r => r.Key.Trim(), static r => r.Value.Trim()) is { Count: > 0 } map ? map : null;
 
     /// <summary>标签字典。</summary>
     public Dictionary<string, string>? LabelMap =>
-        Labels.Filled.ToDictionary(r => r.Key.Trim(), r => r.Value.Trim()) is { Count: > 0 } map ? map : null;
+        Labels.Filled.ToDictionary(static r => r.Key.Trim(), static r => r.Value.Trim()) is { Count: > 0 } map ? map : null;
 
     /// <inheritdoc />
     public override bool Validate()
@@ -446,7 +446,7 @@ public sealed class ConnectNetworkForm : PanelForm
     public SelectListField Containers { get; }
 
     /// <summary>选中的容器 id。</summary>
-    public string[] SelectedIds => [.. Containers.SelectedItems.Select(i => i.Id)];
+    public string[] SelectedIds => [.. Containers.SelectedItems.Select(static i => i.Id)];
 
     /// <summary>别名。</summary>
     public string[] Aliases =>

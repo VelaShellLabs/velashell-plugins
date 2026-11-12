@@ -43,7 +43,7 @@ public static class RedisKeyLayout
         {
             return rows;
         }
-        List<RedisKeyName> sorted = [.. keys.OrderBy(key => key.Text, StringComparer.OrdinalIgnoreCase)];
+        List<RedisKeyName> sorted = [.. keys.OrderBy(static key => key.Text, StringComparer.OrdinalIgnoreCase)];
         if (string.IsNullOrEmpty(delimiter) || threshold < MinThreshold)
         {
             // 不分层 / 不折叠:一律平铺。这也是"分隔符设成空"的用户想要的效果。

@@ -47,7 +47,7 @@ internal sealed partial class RdpDesktopControl
     internal static IEnumerable<Rect> RemoteAppRegions(RemoteAppWindow window, int width, int height)
     {
         if (!window.Visible) { yield break; }
-        var bounds = new Rect(window.X, window.Y, window.Width, window.Height).Intersect(new Rect(0, 0, width, height));
+        Rect bounds = new Rect(window.X, window.Y, window.Width, window.Height).Intersect(new Rect(0, 0, width, height));
         foreach (RdpFrameRegion region in window.VisibilityRects)
         {
             Rect visible = new Rect(window.X + region.X, window.Y + region.Y, region.Width, region.Height).Intersect(bounds);
@@ -115,7 +115,7 @@ internal sealed partial class RdpDesktopControl
     }
     private static void DrawAppText(DrawingContext context, string value, Point position, IBrush brush) =>
         context.DrawText(new FormattedText(value, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Typeface.Default, 12, brush), position);
-    private IEnumerable<RemoteAppWindow> AppTabs() => _remoteWindows.Where(w => HasCaption(w) && !w.IsCloaked && w.ShowState != 0 && (w.ExtendedStyle & 0x80) == 0);
+    private IEnumerable<RemoteAppWindow> AppTabs() => _remoteWindows.Where(static w => HasCaption(w) && !w.IsCloaked && w.ShowState != 0 && (w.ExtendedStyle & 0x80) == 0);
     private Rect AppTab(int index)
     {
         int count = Math.Max(1, AppTabs().Count());

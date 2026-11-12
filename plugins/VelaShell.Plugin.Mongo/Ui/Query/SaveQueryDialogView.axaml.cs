@@ -23,10 +23,7 @@ public sealed partial class SaveQueryDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public SaveQueryDialogView()
-    {
-        InitializeComponent();
-    }
+    public SaveQueryDialogView() => InitializeComponent();
 
     /// <inheritdoc />
     protected override void OnLoaded(RoutedEventArgs e)

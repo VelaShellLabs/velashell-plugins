@@ -47,8 +47,8 @@ public sealed class PipelineTests
         PipelineParse parse = PipelineText.Parse(DesignPipeline);
 
         Assert.IsTrue(parse.Ok, parse.ErrorKey ?? "");
-        Assert.AreSequenceEqual(new[] { "$match", "$unwind", "$group", "$sort", "$limit", "$lookup" }, [.. parse.Stages.Select(s => s.Operator)]);
-        Assert.AreSequenceEqual(new[] { true, true, true, true, true, false }, [.. parse.Stages.Select(s => s.Enabled)]);
+        Assert.AreSequenceEqual(["$match", "$unwind", "$group", "$sort", "$limit", "$lookup"], [.. parse.Stages.Select(static s => s.Operator)]);
+        Assert.AreSequenceEqual([true, true, true, true, true, false], [.. parse.Stages.Select(static s => s.Enabled)]);
         Assert.AreEqual("{\n  status: \"paid\",\n  createdAt: { $gte: ISODate(\"2026-08-27\") }\n}", parse.Stages[0].Body);
         Assert.AreEqual("{ path: \"$items\" }", parse.Stages[1].Body);
         Assert.AreEqual("10", parse.Stages[4].Body);
@@ -185,12 +185,12 @@ public sealed class PipelineTests
         ];
 
         IReadOnlyList<PipelineFieldSample> fields = PipelineFields.Sample(docs);
-        string[] paths = [.. fields.Select(f => f.Path)];
+        string[] paths = [.. fields.Select(static f => f.Path)];
 
-        Assert.AreSequenceEqual(new[] { "_id", "items", "items.sku", "items.qty", "customer", "customer.name" }, paths);
-        Assert.AreEqual(1.0, fields.Single(f => f.Path == "_id").Ratio);
-        Assert.AreEqual(0.5, fields.Single(f => f.Path == "items.sku").Ratio);
-        Assert.AreEqual(BsonKind.Array, fields.Single(f => f.Path == "items").Kind);
+        Assert.AreSequenceEqual(["_id", "items", "items.sku", "items.qty", "customer", "customer.name"], paths);
+        Assert.AreEqual(1.0, fields.Single(static f => f.Path == "_id").Ratio);
+        Assert.AreEqual(0.5, fields.Single(static f => f.Path == "items.sku").Ratio);
+        Assert.AreEqual(BsonKind.Array, fields.Single(static f => f.Path == "items").Kind);
     }
 
     [TestMethod]
@@ -203,13 +203,13 @@ public sealed class PipelineTests
         CompletionSet? paths = PipelineFields.Complete(new(inString, inString.Length, false), "$group", upstream, 20, loc);
         Assert.IsNotNull(paths);
         Assert.AreEqual(inString.Length - 3, paths.ReplaceOffset);
-        Assert.AreSequenceEqual(new[] { "$items.qty", "$items.price" }, [.. paths.Items.Select(i => i.Label)]);
+        Assert.AreSequenceEqual(["$items.qty", "$items.price"], [.. paths.Items.Select(static i => i.Label)]);
         Assert.Contains("20", paths.Header ?? "");
 
         const string op = "{ qty: { $su";
         CompletionSet? ops = PipelineFields.Complete(new(op, op.Length, false), "$group", upstream, 20, loc);
         Assert.IsNotNull(ops);
-        Assert.Contains(i => i.Label == "$sum", ops.Items);
+        Assert.Contains(static i => i.Label == "$sum", ops.Items);
         // $group 里先给表达式(累加器),$match 里先给查询运算符。
         Assert.AreEqual("$sum", ops.Items[0].Label);
         CompletionSet? query = PipelineFields.Complete(new("{ a: { $", 8, false), "$match", upstream, 20, loc);
@@ -225,7 +225,7 @@ public sealed class PipelineTests
     private static List<BsonDocument> DesignStages()
     {
         PipelineParse parse = PipelineText.Parse(DesignPipeline);
-        return [.. parse.Stages.Where(s => s.Enabled).Select(s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!))];
+        return [.. parse.Stages.Where(static s => s.Enabled).Select(static s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value))];
     }
 
     [TestMethod]
@@ -234,7 +234,7 @@ public sealed class PipelineTests
         List<BsonDocument> stages = DesignStages();
         string code = PipelineCode.Generate(PipelineCodeLanguage.Mongosh, "shop", "orders", stages, allowDiskUse: true);
 
-        StringAssert.StartsWith(code, "use(\"shop\");");
+        Assert.StartsWith("use(\"shop\");", code);
         Assert.Contains("db.orders.aggregate([", code);
         Assert.Contains("ISODate(\"2026-08-27\")", code);
         Assert.Contains("], { allowDiskUse: true });", code);
@@ -242,7 +242,7 @@ public sealed class PipelineTests
         int close = code.LastIndexOf(']');
         PipelineParse back = PipelineText.Parse(code[open..(close + 1)]);
         Assert.IsTrue(back.Ok, back.ErrorKey ?? "");
-        Assert.AreSequenceEqual(stages, [.. back.Stages.Select(s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!))]);
+        Assert.AreSequenceEqual(stages, [.. back.Stages.Select(static s => new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!))]);
     }
 
     [TestMethod]
@@ -309,13 +309,13 @@ public sealed class PipelineTests
             ("$limit", 10, true),
             ("$lookup", new BsonDocument { { "from", "products" }, { "as", "product" } }, false)
         ];
-        IReadOnlyList<PipelineGhost> ghosts = PipelineResults.Ghosts(stages, from => from == "products" ? "name" : null);
+        IReadOnlyList<PipelineGhost> ghosts = PipelineResults.Ghosts(stages, static from => from == "products" ? "name" : null);
         Assert.AreEqual(new PipelineGhost("product.name", 3), ghosts.Single());
 
         BsonDocument[] docs = [new() { { "_id", "SKU-1182" }, { "qty", 312 }, { "revenue", new BsonDecimal128(Decimal128.Parse("405288.00")) } }];
         (IReadOnlyList<PipelineColumn> columns, IReadOnlyList<PipelineRow> rows) = PipelineResults.Build(docs, ghosts, loc);
 
-        Assert.AreSequenceEqual(new[] { "_id", "qty", "revenue", "product.name" }, [.. columns.Select(c => c.Name)]);
+        Assert.AreSequenceEqual(["_id", "qty", "revenue", "product.name"], [.. columns.Select(static c => c.Name)]);
         Assert.IsTrue(columns[1].IsNumeric);
         Assert.IsTrue(columns[3].IsGhost);
         Assert.AreEqual("\"SKU-1182\"", rows[0].Cells[0].Text);
@@ -357,7 +357,7 @@ public sealed class PipelineTests
     // ── 视图模型:阶段 ⇄ 文本同步 ─────────────────────────────────────────
 
     [TestMethod]
-    public void View_model_keeps_cards_and_text_in_sync() => Screens.OnUi(async () =>
+    public void View_model_keeps_cards_and_text_in_sync() => Screens.OnUi(static async () =>
     {
         var workspace = new PipelineTestWorkspace();
         var vm = new PipelineTabViewModel(workspace, new CollectionInfo("shop", "orders", CollectionKind.Collection, []), null) { AutoPreview = false };
@@ -374,14 +374,14 @@ public sealed class PipelineTests
         Assert.IsTrue(vm.IsModified);
         Assert.AreEqual("6 个阶段 · 5 个启用", vm.StageSummary);
         Assert.AreEqual("关联集合 · 已停用", vm.Stages[5].Description);
-        Assert.AreSequenceEqual(new[] { 1, 2, 3, 4, 5, 6 }, [.. vm.Stages.Select(s => s.Index)]);
+        Assert.AreSequenceEqual([1, 2, 3, 4, 5, 6], [.. vm.Stages.Select(static s => s.Index)]);
 
         // 执行计划:交给查询标签 explain,停用的阶段不在里面。
         vm.ExplainCommand.Execute(null);
         (string explainDb, string? explainText, bool explainRun) = workspace.Queries.Single();
         Assert.AreEqual("shop", explainDb);
-        StringAssert.StartsWith(explainText ?? "", "db.orders.aggregate([");
-        StringAssert.EndsWith(explainText ?? "", "], { allowDiskUse: true }).explain(\"executionStats\")");
+        Assert.StartsWith("db.orders.aggregate([", explainText ?? "");
+        Assert.EndsWith("], { allowDiskUse: true }).explain(\"executionStats\")", explainText ?? "");
         Assert.IsFalse((explainText ?? "").Contains("$lookup", StringComparison.Ordinal));
         Assert.IsTrue(explainRun);
 
@@ -406,7 +406,7 @@ public sealed class PipelineTests
             .Replace("// { $lookup:", "{ $lookup:", StringComparison.Ordinal)
             .Replace("  { $sort: { revenue: -1 } },\n", "", StringComparison.Ordinal);
         Assert.IsTrue(vm.ApplyText());
-        Assert.AreSequenceEqual(new[] { "$match", "$unwind", "$group", "$limit", "$lookup" }, [.. vm.Stages.Select(s => s.Operator)]);
+        Assert.AreSequenceEqual(["$match", "$unwind", "$group", "$limit", "$lookup"], [.. vm.Stages.Select(static s => s.Operator)]);
         Assert.AreEqual("3", vm.Stages[3].Body);
         Assert.IsTrue(vm.Stages[4].IsEnabled);
 
@@ -417,7 +417,7 @@ public sealed class PipelineTests
         Assert.IsTrue(vm.HasTextError);
         Assert.HasCount(1, vm.TextDiagnostics);
         Assert.HasCount(5, vm.Stages);
-        Assert.Contains(t => t.Kind == ToastKind.Warning, workspace.Toasts);
+        Assert.Contains(static t => t.Kind == ToastKind.Warning, workspace.Toasts);
 
         // 修好就能回卡片。
         vm.PipelineTextValue = "[ { $match: { status: \"paid\" } }, { $limit: 5 } ]";
@@ -445,14 +445,14 @@ public sealed class PipelineTests
         vm.MoveStageTo(added, 0);
         Assert.AreEqual("$count", vm.Stages[0].Operator);
         vm.DuplicateStage(vm.Stages[0]);
-        Assert.AreSequenceEqual(new[] { 1, 2, 3, 4 }, [.. vm.Stages.Select(s => s.Index)]);
+        Assert.AreSequenceEqual([1, 2, 3, 4], [.. vm.Stages.Select(static s => s.Index)]);
         vm.RemoveStage(vm.Stages[0]);
         Assert.HasCount(3, vm.Stages);
         await Task.CompletedTask;
     });
 
     [TestMethod]
-    public void Pipeline_handed_in_becomes_cards() => Screens.OnUi(async () =>
+    public void Pipeline_handed_in_becomes_cards() => Screens.OnUi(static async () =>
     {
         var workspace = new PipelineTestWorkspace();
         var pipeline = new BsonArray
@@ -462,7 +462,7 @@ public sealed class PipelineTests
         };
         var vm = new PipelineTabViewModel(workspace, new CollectionInfo("shop", "v_x", CollectionKind.View, []), pipeline) { AutoPreview = false };
 
-        Assert.AreSequenceEqual(new[] { "$match", "$limit" }, [.. vm.Stages.Select(s => s.Operator)]);
+        Assert.AreSequenceEqual(["$match", "$limit"], [.. vm.Stages.Select(static s => s.Operator)]);
         Assert.AreEqual("{ status: \"paid\" }", vm.Stages[0].Body);
         Assert.IsTrue(vm.Stages[0].IsExpanded);
         Assert.IsFalse(vm.IsModified);
@@ -476,7 +476,7 @@ public sealed class PipelineTests
     // ── 预览(打真实服务器)─────────────────────────────────────────────
 
     [TestMethod]
-    public void Prefix_preview_runs_each_stage_on_the_sample() => Screens.OnUi(async () =>
+    public void Prefix_preview_runs_each_stage_on_the_sample() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using MongoConnection connection = await TestServer.OpenAsync();
@@ -484,13 +484,13 @@ public sealed class PipelineTests
         PipelineParse parse = PipelineText.Parse(DesignPipeline);
         List<(BsonDocument?, bool)> stages =
         [
-            .. parse.Stages.Select(s => ((BsonDocument?)new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!), s.Enabled))
+            .. parse.Stages.Select(static s => ((BsonDocument?)new BsonDocument(s.Operator, PipelineText.ParseBody(s.Body).Value!), s.Enabled))
         ];
 
         PipelinePreviewRun run = await PipelinePreview.RunAsync(orders, stages, 20, new AggregateOptions(), CancellationToken.None);
 
         Assert.HasCount(20, run.Input);
-        Assert.IsTrue(run.Stages.Take(5).All(s => s.State == PipelineStageState.Ok), string.Join(",", run.Stages.Select(s => s.State)));
+        Assert.IsTrue(run.Stages.Take(5).All(static s => s.State == PipelineStageState.Ok), string.Join(",", run.Stages.Select(static s => s.State)));
         Assert.AreEqual(PipelineStageState.Skipped, run.Stages[5].State);
         long matched = run.Stages[0].Count;
         long unwound = run.Stages[1].Count;
@@ -500,7 +500,7 @@ public sealed class PipelineTests
         Assert.IsLessThanOrEqualTo(unwound, grouped);
         Assert.AreEqual(grouped, run.Stages[3].Count);
         Assert.AreEqual(Math.Min(10, grouped), run.Stages[4].Count);
-        Assert.AreSequenceEqual(new[] { "_id", "qty", "revenue" }, [.. run.Stages[2].Documents[0].Names]);
+        Assert.AreSequenceEqual(["_id", "qty", "revenue"], [.. run.Stages[2].Documents[0].Names]);
         // $sort 之后 revenue 降序。
         IReadOnlyList<BsonDocument> sorted = run.Stages[3].Documents;
         for (int i = 1; i < sorted.Count; i++)
@@ -510,7 +510,7 @@ public sealed class PipelineTests
     });
 
     [TestMethod]
-    public void Preview_pins_a_server_error_on_the_first_failing_stage() => Screens.OnUi(async () =>
+    public void Preview_pins_a_server_error_on_the_first_failing_stage() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using MongoConnection connection = await TestServer.OpenAsync();
@@ -541,7 +541,7 @@ public sealed class PipelineTests
     // ── 写入路径(自建临时库)──────────────────────────────────────────
 
     [TestMethod]
-    public void Run_with_out_view_creation_and_save_write_for_real() => Screens.OnUi(async () =>
+    public void Run_with_out_view_creation_and_save_write_for_real() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         string db = $"velashell_pipeline_{Guid.NewGuid():N}"[..30];
@@ -562,7 +562,7 @@ public sealed class PipelineTests
             await vm.RefreshPreviewAsync();
             Assert.AreEqual("2", vm.Stages[0].CountText);
             Assert.AreEqual(PipelineStageState.Ok, vm.Stages[1].Outcome.State);
-            Assert.AreSequenceEqual(new[] { "_id", "total" }, [.. vm.Stages[1].UpstreamFields.Select(f => f.Path)]);
+            Assert.AreSequenceEqual(["_id", "total"], [.. vm.Stages[1].UpstreamFields.Select(static f => f.Path)]);
 
             // 运行:结果进输出表。
             await vm.RunAsync();
@@ -598,8 +598,8 @@ public sealed class PipelineTests
             // 保存管道:按连接存放,内容第一行写命名空间,存完不再是"未保存"。
             await vm.SavePipelineAsync("totals");
             IReadOnlyList<SavedItem> saved = await workspace.Store.LoadSavedAsync("pipeline", workspace.ConnectionKey);
-            SavedItem item = saved.Single(i => i.Name == "totals");
-            StringAssert.StartsWith(item.Content, $"// {db}.src\n[");
+            SavedItem item = saved.Single(static i => i.Name == "totals");
+            Assert.StartsWith($"// {db}.src\n[", item.Content);
             Assert.IsTrue(PipelineText.Parse(item.Content).Ok);
             Assert.IsFalse(vm.IsModified);
             Assert.Contains("管道 · totals", vm.StatusText);
@@ -614,11 +614,11 @@ public sealed class PipelineTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board04_Pipeline_builder_renders() => Screens.OnUi(async () =>
+    public void Board04_Pipeline_builder_renders() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();
-        if (bench.ViewModel.VisibleNodes.FirstOrDefault(n => n.Kind == NodeKind.Collection && n.Name == "orders") is { } node)
+        if (bench.ViewModel.VisibleNodes.FirstOrDefault(static n => n.Kind == NodeKind.Collection && n.Name == "orders") is { } node)
         {
             bench.ViewModel.SelectedNode = node;
         }
@@ -640,7 +640,7 @@ public sealed class PipelineTests
         Assert.IsTrue(tab.Stages[0].HasPreviewCards);
         Assert.IsTrue(tab.HasRows);
         Assert.IsTrue(tab.ResultRows.Count is > 0 and <= 10);
-        Assert.Contains(c => c.IsGhost && c.Name == "product.name", tab.ResultColumns);
+        Assert.Contains(static c => c.IsGhost && c.Name == "product.name", tab.ResultColumns);
     });
 }
 

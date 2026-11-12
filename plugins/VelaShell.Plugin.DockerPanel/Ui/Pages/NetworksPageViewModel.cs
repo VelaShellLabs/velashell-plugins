@@ -38,7 +38,7 @@ public sealed class NetworksPageViewModel : PageViewModel
     public override string Title => "网络";
 
     /// <summary>过滤后的行。</summary>
-    public KeyedCollection<NetworkRow> View { get; } = new(r => r.Id);
+    public KeyedCollection<NetworkRow> View { get; } = new(static r => r.Id);
 
     /// <summary>搜索词。</summary>
     public string Search
@@ -57,10 +57,10 @@ public sealed class NetworksPageViewModel : PageViewModel
     public int TotalCount => _all.Count;
 
     /// <summary>自定义网络数。</summary>
-    public int CustomCount => _all.Count(r => !r.IsPredefined);
+    public int CustomCount => _all.Count(static r => !r.IsPredefined);
 
     /// <summary>内置网络数。</summary>
-    public int PredefinedCount => _all.Count(r => r.IsPredefined);
+    public int PredefinedCount => _all.Count(static r => r.IsPredefined);
 
     /// <summary>
     /// 只看自定义网络。
@@ -83,7 +83,7 @@ public sealed class NetworksPageViewModel : PageViewModel
     }
 
     /// <summary>未接入任何容器的自定义网络数。</summary>
-    public int UnusedCount => _all.Count(r => !r.IsPredefined && r.AttachedCount == 0);
+    public int UnusedCount => _all.Count(static r => !r.IsPredefined && r.AttachedCount == 0);
 
     /// <summary>列表空了。</summary>
     public bool IsEmpty => LoadedOnce && _all.Count == 0;
@@ -117,11 +117,11 @@ public sealed class NetworksPageViewModel : PageViewModel
     /// <inheritdoc />
     public override IEnumerable<string> ColumnTexts(string key) => key switch
     {
-        "name" => View.Select(r => r.Name),
-        "driver" => View.Select(r => r.Driver),
-        "scope" => View.Select(r => r.Scope),
-        "subnet" => View.Select(r => r.Subnet),
-        "attached" => View.Select(r => r.AttachedText),
+        "name" => View.Select(static r => r.Name),
+        "driver" => View.Select(static r => r.Driver),
+        "scope" => View.Select(static r => r.Scope),
+        "subnet" => View.Select(static r => r.Subnet),
+        "attached" => View.Select(static r => r.AttachedText),
         _ => []
     };
 

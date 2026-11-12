@@ -37,10 +37,7 @@ public sealed partial class NewCollectionDialogView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public NewCollectionDialogView()
-    {
-        InitializeComponent();
-    }
+    public NewCollectionDialogView() => InitializeComponent();
 
     private void FitPreview()
     {

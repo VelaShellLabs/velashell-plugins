@@ -1,7 +1,7 @@
 namespace VelaShell.Rdp;
 
 /// <summary>
-/// Connection settings for <see cref="RdpManagedSession.ConnectAsync(RdpClientOptions, System.Threading.CancellationToken)"/>.
+/// Connection settings for <see cref="RdpManagedSession.ConnectAsync(RdpClientOptions, CancellationToken)"/>.
 /// Only <see cref="Host"/> is required; the rest carry sensible defaults.
 /// </summary>
 public sealed record RdpClientOptions
@@ -55,7 +55,7 @@ public sealed record RdpClientOptions
 
     /// <summary>
     /// When <see langword="true" /> (the default) the dynamic display-control channel is advertised, so a
-    /// caller may follow the viewport with <see cref="RdpManagedSession.RequestResizeAsync(int, int, System.Threading.CancellationToken)"/>
+    /// caller may follow the viewport with <see cref="RdpManagedSession.RequestResizeAsync(int, int, CancellationToken)"/>
     /// and the desktop resizes to match. Set to <see langword="false" /> for a fixed desktop locked to
     /// <see cref="Width"/>×<see cref="Height"/>. A configured <see cref="MonitorLayout"/> still enables the
     /// display-control channel because it requires layout negotiation.
@@ -90,7 +90,7 @@ public sealed record RdpClientOptions
     /// <summary>
     /// Display scale in percent (100 = 96 dpi, 150 for a 150% local display), sent so the remote renders its UI at
     /// the same size as local text instead of tiny on a high-DPI screen. 100..500; the pixel count is unchanged, so it
-    /// costs no bandwidth. Follow later changes with <see cref="RdpManagedSession.RequestResizeAsync(int, int, int, System.Threading.CancellationToken)"/>.
+    /// costs no bandwidth. Follow later changes with <see cref="RdpManagedSession.RequestResizeAsync(int, int, int, CancellationToken)"/>.
     /// </summary>
     public int DesktopScaleFactor { get; init; } = 100;
 

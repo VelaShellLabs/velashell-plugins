@@ -1032,7 +1032,7 @@ public sealed partial class RedisWorkspaceViewModel : ObservableObject, IDisposa
         IReadOnlyList<string> segments = RedisKeyLayout.Breadcrumb(_scanned.Keys, _connection.Settings.Delimiter);
         Breadcrumb.Clear();
         string delimiter = _connection.Settings.Delimiter;
-        var path = new System.Text.StringBuilder();
+        var path = new StringBuilder();
         foreach (string segment in segments)
         {
             _ = path.Append(segment).Append(delimiter);

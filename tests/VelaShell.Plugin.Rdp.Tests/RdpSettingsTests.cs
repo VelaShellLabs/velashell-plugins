@@ -15,7 +15,7 @@ public sealed class RdpSettingsTests
         Port = 3389,
         Username = "alice",
         Password = "not-logged",
-        Settings = settings.ToDictionary(pair => pair.Key, pair => pair.Value)
+        Settings = settings.ToDictionary(static pair => pair.Key, static pair => pair.Value)
     };
     [TestMethod]
     public void NlaDowngradeMemoryFollowsTheRealServerThroughATunnel()
@@ -36,7 +36,7 @@ public sealed class RdpSettingsTests
         Assert.IsTrue(settings.Clipboard);
         Assert.IsFalse(RdpSettings.From(Request(("clipboard", "false")), new("en")).Clipboard);
         Assert.IsFalse(settings.SmartCardRedirection);
-        Assert.AreEqual("true", RdpSettings.Declare(new("en"), []).Single(field => field.Key == "clipboard").DefaultValue);
+        Assert.AreEqual("true", RdpSettings.Declare(new("en"), []).Single(static field => field.Key == "clipboard").DefaultValue);
         Assert.IsNull(settings.Gateway);
         Assert.IsEmpty(settings.Drives);
         Assert.AreEqual(1920, settings.Width);
@@ -58,7 +58,7 @@ public sealed class RdpSettingsTests
         Assert.AreEqual(new string('A', 64), settings.CertificateSha256);
         Assert.IsFalse(settings.ToString().Contains("gateway-secret", StringComparison.Ordinal));
         Assert.IsTrue(settings.SmartCardRedirection);
-        ProtocolSettingField password = RdpSettings.Declare(new("en"), []).Single(f => f.Key == RdpSettings.GatewayPasswordKey);
+        ProtocolSettingField password = RdpSettings.Declare(new("en"), []).Single(static f => f.Key == RdpSettings.GatewayPasswordKey);
         Assert.IsTrue(password.IsSecret);
         Assert.AreEqual(ProtocolSettingKind.Password, password.Kind);
     }
@@ -89,9 +89,9 @@ public sealed class RdpSettingsTests
         Assert.AreEqual("C:\\shared files", settings.RemoteApp.WorkingDirectory);
         var shorthand = RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "notepad")), new("en"), []);
         Assert.AreEqual("||notepad", shorthand.RemoteApp!.Program);
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "notepad.exe")), new("en"), []));
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppArgumentsKey, "orphan")), new("en"), []));
-        Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "||app"),
+        Assert.ThrowsExactly<ProtocolConnectionException>(static () => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "notepad.exe")), new("en"), []));
+        Assert.ThrowsExactly<ProtocolConnectionException>(static () => RdpSettings.From(Request((RdpSettings.RemoteAppArgumentsKey, "orphan")), new("en"), []));
+        Assert.ThrowsExactly<ProtocolConnectionException>(static () => RdpSettings.From(Request((RdpSettings.RemoteAppProgramKey, "||app"),
             (RdpSettings.RemoteAppArgumentsKey, "bad\0argument")), new("en"), []));
     }
 
@@ -231,7 +231,7 @@ public sealed class RdpSettingsTests
         string c = TempDir("c"), work = TempDir("work");
         LocalDisk[] disks = [new("C", "C", c, LocalDiskKind.Fixed)];
         var settings = RdpSettings.From(Request(("drive:C", "true"), ("drives", $"work={work}")), new("en"), disks);
-        Assert.AreSequenceEqual(new[] { "C", "work" }, [.. settings.Drives.Select(drive => drive.Name)]);
+        Assert.AreSequenceEqual(["C", "work"], [.. settings.Drives.Select(drive => drive.Name)]);
         _ = Assert.ThrowsExactly<ProtocolConnectionException>(() =>
             RdpSettings.From(Request(("drive:C", "true"), ("drives", $"c={work}")), new("en"), disks));
     }
@@ -241,16 +241,16 @@ public sealed class RdpSettingsTests
     {
         LocalDisk[] disks = [new("C", "C", @"C:\", LocalDiskKind.Fixed), new("E", "E", @"E:\", LocalDiskKind.Removable)];
         IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(new("zh-Hans"), disks);
-        ProtocolSettingField c = fields.Single(field => field.Key == "drive:C");
+        ProtocolSettingField c = fields.Single(static field => field.Key == "drive:C");
         Assert.AreEqual(ProtocolSettingKind.Boolean, c.Kind);
         Assert.AreEqual("false", c.DefaultValue);
         Assert.AreEqual(RdpSettings.DrivesPage, c.Page);
         Assert.AreEqual("本地磁盘 (C:)", c.Label);
-        Assert.AreEqual("可移动磁盘 (E:)", fields.Single(field => field.Key == "drive:E").Label);
-        ProtocolSettingField custom = fields.Single(field => field.Key == "drives");
+        Assert.AreEqual("可移动磁盘 (E:)", fields.Single(static field => field.Key == "drive:E").Label);
+        ProtocolSettingField custom = fields.Single(static field => field.Key == "drives");
         Assert.AreEqual(RdpSettings.DrivesPage, custom.Page);
         Assert.AreEqual("自定义文件夹", custom.Label);
-        List<string> keys = [.. fields.Select(field => field.Key)];
+        List<string> keys = [.. fields.Select(static field => field.Key)];
         Assert.IsTrue(keys.IndexOf("drive:C") < keys.IndexOf("drive:E") && keys.IndexOf("drive:E") < keys.IndexOf("drives"));
     }
 
@@ -291,7 +291,7 @@ public sealed class RdpSettingsTests
         Assert.IsNull(cameraField.SelectionGroup);
         Assert.AreEqual(ProtocolSettingKind.Choice, cameraField.Kind);
         Assert.AreEqual("", cameraField.DefaultValue);
-        Assert.AreSequenceEqual(new[] { "", LocalCameras.Key(camera) }, cameraField.Choices.Select(choice => choice.Value).ToArray());
+        Assert.AreSequenceEqual(["", LocalCameras.Key(camera)], [.. cameraField.Choices.Select(choice => choice.Value)]);
         foreach (string key in new[] { RdpSettings.PortsKey, "drives" })
         {
             ProtocolSettingField field = fields.Single(field => field.Key == key);
@@ -300,7 +300,7 @@ public sealed class RdpSettingsTests
             Assert.AreEqual("", field.DefaultValue);
         }
 
-        var settings = RdpSettings.From(Request(expected.Select(field => (field.Key, "false")).ToArray()), loc, disks,
+        var settings = RdpSettings.From(Request([.. expected.Select(field => (field.Key, "false"))]), loc, disks,
             () => [printer], () => [camera], () => [wpd], windowsDevices: true);
         Assert.IsEmpty(settings.Drives);
         Assert.IsEmpty(settings.Printers);
@@ -316,20 +316,20 @@ public sealed class RdpSettingsTests
         var wpd = new RdpWpdDevice("portable-device", "Phone");
         var camera = new RdpCameraDevice("camera-one", "Camera");
         IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(loc, [], [printer], [camera], [wpd], windowsDevices: false);
-        string[] keys = [.. fields.Select(field => field.Key)];
-        CollectionAssert.DoesNotContain(keys, RdpSettings.PortsKey);
-        CollectionAssert.DoesNotContain(keys, LocalCameras.SettingKey);
-        CollectionAssert.DoesNotContain(keys, LocalPrinters.Key(printer));
-        CollectionAssert.DoesNotContain(keys, LocalWpdDevices.Key(wpd));
-        CollectionAssert.Contains(keys, RdpSettings.SmartCardKey, "Smart cards work on every platform.");
+        string[] keys = [.. fields.Select(static field => field.Key)];
+        Assert.DoesNotContain(RdpSettings.PortsKey, keys);
+        Assert.DoesNotContain(LocalCameras.SettingKey, keys);
+        Assert.DoesNotContain(LocalPrinters.Key(printer), keys);
+        Assert.DoesNotContain(LocalWpdDevices.Key(wpd), keys);
+        Assert.Contains(RdpSettings.SmartCardKey, keys, "Smart cards work on every platform.");
 
         // Settings saved on Windows (e.g. synced to a Mac) are ignored, not a connection failure.
-        Func<IReadOnlyList<PrinterMapping>> printers = () => throw new AssertFailedException("Printers must not be enumerated.");
-        Func<IReadOnlyList<RdpCameraDevice>> cameras = () => throw new AssertFailedException("Cameras must not be enumerated.");
-        Func<IReadOnlyList<RdpWpdDevice>> devices = () => throw new AssertFailedException("WPD must not be enumerated.");
+        static IReadOnlyList<PrinterMapping> printers() => throw new AssertFailedException("Printers must not be enumerated.");
+        static IReadOnlyList<RdpCameraDevice> cameras() => throw new AssertFailedException("Cameras must not be enumerated.");
+        static IReadOnlyList<RdpWpdDevice> devices() => throw new AssertFailedException("WPD must not be enumerated.");
         var settings = RdpSettings.From(Request((RdpSettings.PortsKey, "COM3"), (LocalPrinters.Key(printer), "true"),
             (LocalCameras.SettingKey, LocalCameras.Key(camera)), (LocalWpdDevices.Key(wpd), "true")), loc, [],
-            printers, cameras, devices, windowsDevices: false);
+printers, cameras, devices, windowsDevices: false);
         Assert.IsEmpty(settings.Ports);
         Assert.IsEmpty(settings.Printers);
         Assert.IsNull(settings.Camera);
@@ -342,7 +342,7 @@ public sealed class RdpSettingsTests
         (string single, string several) = RdpSettings.CustomFolderExamples();
         foreach (string locale in new[] { "en", "zh-Hans", "zh-Hant", "ja", "ko" })
         {
-            ProtocolSettingField custom = RdpSettings.Declare(new(locale), []).Single(field => field.Key == "drives");
+            ProtocolSettingField custom = RdpSettings.Declare(new(locale), []).Single(static field => field.Key == "drives");
             // The hint is always shown under the box; the placeholder disappears once anything is typed.
             string[] lines = custom.Hint!.Split('\n');
             Assert.HasCount(3, lines, locale);

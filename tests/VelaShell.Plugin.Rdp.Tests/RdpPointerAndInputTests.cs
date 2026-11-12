@@ -69,9 +69,9 @@ public sealed class RdpPointerAndInputTests
     }
 
     [TestMethod]
-    public void TheDesktopShowsTheRemotePointer() => Run(async () =>
+    public void TheDesktopShowsTheRemotePointer() => Run(static async () =>
     {
-        using var context = new VelaShell.PluginSdk.Testing.TestPluginContext();
+        using var context = new PluginSdk.Testing.TestPluginContext();
         await using var view = new RdpWorkspaceView(new FakeRdpSession(), context, RdpSettings.From(RdpSettingsTests.Request(), new("en")), new("en"));
         var window = new Window { Content = view };
         window.Show();
@@ -112,7 +112,7 @@ public sealed class RdpPointerAndInputTests
         await keyed.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await done.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.AreEqual((0x0800u, 4u, 4u), session.Mouse.Last());
-        Assert.IsFalse(session.Mouse.Any(p => p.X == 2));
+        Assert.DoesNotContain(p => p.X == 2, session.Mouse);
     });
 
     [TestMethod]
@@ -141,6 +141,6 @@ public sealed class RdpPointerAndInputTests
         // 1x1, 16 bpp, rows padded to an even byte count; no AND mask.
         RdpPointer? pointer = PointerDecoder.Decode(1, 1, 0, 0, 16, [(byte)pixel, (byte)(pixel >> 8)], andMask: []);
         Assert.IsNotNull(pointer);
-        CollectionAssert.AreEqual(new[] { (byte)argb, (byte)(argb >> 8), (byte)(argb >> 16), (byte)(argb >> 24) }, pointer.Bgra);
+        Assert.AreSequenceEqual([(byte)argb, (byte)(argb >> 8), (byte)(argb >> 16), (byte)(argb >> 24)], pointer.Bgra);
     }
 }

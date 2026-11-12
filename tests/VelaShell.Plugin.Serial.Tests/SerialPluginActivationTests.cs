@@ -76,7 +76,7 @@ public sealed class SerialPluginActivationTests
 
         ProtocolDescriptor descriptor = await ActivateAsync(context);
 
-        ProtocolSettingField baud = descriptor.Fields.Single(field => field.Key == "baudRate");
+        ProtocolSettingField baud = descriptor.Fields.Single(static field => field.Key == "baudRate");
         Assert.AreEqual("115200", baud.DefaultValue);
         Assert.IsTrue(baud.AllowsCustomValue, "250000(Marlin)与 76800 都不在标准表上,但驱动认");
         Assert.IsFalse(baud.IsAdvanced, "波特率是'连不连得上'的参数,不该收进高级选项");
@@ -104,7 +104,7 @@ public sealed class SerialPluginActivationTests
 
         ProtocolDescriptor descriptor = await ActivateAsync(context);
 
-        string[] mainForm = [.. descriptor.Fields.Where(field => !field.IsAdvanced).Select(field => field.Key)];
+        string[] mainForm = [.. descriptor.Fields.Where(static field => !field.IsAdvanced).Select(static field => field.Key)];
         Assert.AreSequenceEqual(
             ["baudRate", "dataBits", "stopBits", "parity", "flowControl", "enterMode"], mainForm, SequenceOrder.InAnyOrder);
     }
@@ -116,12 +116,12 @@ public sealed class SerialPluginActivationTests
 
         ProtocolDescriptor descriptor = await ActivateAsync(context);
 
-        ProtocolSettingField rts = descriptor.Fields.Single(field => field.Key == "rts");
+        ProtocolSettingField rts = descriptor.Fields.Single(static field => field.Key == "rts");
         Assert.IsNotNull(rts.VisibleWhen);
         Assert.AreEqual("flowControl", rts.VisibleWhen.Key);
         // 流控制取 RTS/CTS 时这根线归驱动:留着一个设了也不生效的开关只会让用户以为自己设过了。
-        Assert.IsFalse(rts.VisibleWhen.IsSatisfiedBy(_ => "rtscts"));
-        Assert.IsTrue(rts.VisibleWhen.IsSatisfiedBy(_ => "none"));
+        Assert.IsFalse(rts.VisibleWhen.IsSatisfiedBy(static _ => "rtscts"));
+        Assert.IsTrue(rts.VisibleWhen.IsSatisfiedBy(static _ => "none"));
     }
 
     [TestMethod]
@@ -131,7 +131,7 @@ public sealed class SerialPluginActivationTests
 
         _ = await ActivateAsync(context);
 
-        string[] ids = [.. context.RecordingCommands.Registered.Select(command => command.Id)];
+        string[] ids = [.. context.RecordingCommands.Registered.Select(static command => command.Id)];
         Assert.AreSequenceEqual(
             [
                 "velashell.serial.break",
@@ -218,7 +218,7 @@ public sealed class SerialPluginActivationTests
         Assert.AreEqual("Serial device", descriptor.HostLabel);
         Assert.AreSame(terminal, context.RecordingProtocols.GetTerminal("velashell.serial"));
         // 带外命令同样换了语言重注册,一条不多、一条不少。
-        PluginCommandDescriptor breakCommand = context.RecordingCommands.Registered.Single(c => c.Id == "velashell.serial.break");
+        PluginCommandDescriptor breakCommand = context.RecordingCommands.Registered.Single(static c => c.Id == "velashell.serial.break");
         Assert.AreEqual("Serial: send BREAK", breakCommand.Title);
         Assert.HasCount(4, context.RecordingCommands.Registered);
 

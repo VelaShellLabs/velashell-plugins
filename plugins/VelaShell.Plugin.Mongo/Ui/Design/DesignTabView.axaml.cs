@@ -13,8 +13,5 @@ public sealed partial class DesignTabView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public DesignTabView()
-    {
-        InitializeComponent();
-    }
+    public DesignTabView() => InitializeComponent();
 }

@@ -4,7 +4,7 @@ using VelaShell.PluginSdk.RemoteFs;
 namespace VelaShell.Plugin.S3;
 
 /// <summary>
-/// 对象**保存着的**校验和 → SDK 要的摘要(小写十六进制),给 <see cref="VelaShell.PluginSdk.Protocols.IProtocolChecksum" /> 用。
+/// 对象**保存着的**校验和 → SDK 要的摘要(小写十六进制),给 <see cref="PluginSdk.Protocols.IProtocolChecksum" /> 用。
 /// <para>
 /// 只认上传时带上、由服务端存下来的完整对象摘要(<c>x-amz-checksum-sha256</c> / <c>-sha512</c> / <c>-sha1</c> /
 /// <c>-md5</c>,HEAD 带上 <c>x-amz-checksum-mode: ENABLED</c> 才会回)。契约要求「只能用服务器给的摘要」,

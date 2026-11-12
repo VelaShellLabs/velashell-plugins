@@ -53,7 +53,7 @@ public class DockerProtocolTests
         await new DockerFrameDecoder(tty: false, timestamps: false)
             .ReadAsync(new MemoryStream(data), lines.Add, CancellationToken.None);
 
-        Assert.AreSequenceEqual(["a", "b", "c"], [.. lines.Select(l => l.Text)]);
+        Assert.AreSequenceEqual(["a", "b", "c"], [.. lines.Select(static l => l.Text)]);
     }
 
     [TestMethod]
@@ -158,7 +158,7 @@ public class DockerProtocolTests
         byte[] archive = TarUtil.CreateSingleFile("a.txt", "x"u8);
         // 512 头 + 512 补齐的内容 + 两个全零块。长度不对的话 daemon 会说归档被截断。
         Assert.HasCount(512 * 4, archive);
-        Assert.IsTrue(archive[^1024..].All(b => b == 0));
+        Assert.IsTrue(archive[^1024..].All(static b => b == 0));
     }
 
     [TestMethod]

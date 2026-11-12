@@ -67,7 +67,7 @@ public sealed class DocumentEditorTests
     // ── 打开 ────────────────────────────────────────────────────────────────
 
     [TestMethod]
-    public void A_document_without_id_is_a_template_for_an_insert() => Screens.OnUi(() =>
+    public void A_document_without_id_is_a_template_for_an_insert() => Screens.OnUi(static () =>
     {
         // 网格的「克隆」传进来的是去掉 _id 的文档:它必须按新文档(insert)处理,
         // 而不是当成已存在的文档去 updateOne —— 筛选里没有 _id,那样什么都改不到。
@@ -84,11 +84,11 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Opening_an_existing_document_shows_its_fields_without_changes() => Screens.OnUi(() =>
+    public void Opening_an_existing_document_shows_its_fields_without_changes() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.AreSequenceEqual(
-            new[] { "_id", "orderNo", "customer", "items", "total", "status", "paid", "createdAt", "tags", "note" }, [.. vm.Roots.Select(static r => r.Name)]);
+            ["_id", "orderNo", "customer", "items", "total", "status", "paid", "createdAt", "tags", "note"], [.. vm.Roots.Select(static r => r.Name)]);
         Assert.AreEqual("编辑文档", vm.Title);
         Assert.AreEqual("shop.orders", vm.Subtitle);
         Assert.AreEqual("Mongo.file-pen-line", vm.IconKey);
@@ -113,7 +113,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Value_editors_follow_the_kind() => Screens.OnUi(() =>
+    public void Value_editors_follow_the_kind() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(Row(vm, "orderNo").ShowText);
@@ -140,7 +140,7 @@ public sealed class DocumentEditorTests
     // ── 行状态与更新计划 ───────────────────────────────────────────────────
 
     [TestMethod]
-    public void Edits_mark_rows_and_build_a_minimal_update() => Screens.OnUi(() =>
+    public void Edits_mark_rows_and_build_a_minimal_update() => Screens.OnUi(static () =>
     {
         var workspace = new DocEditorWorkspace();
         DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
@@ -171,7 +171,7 @@ public sealed class DocumentEditorTests
         Assert.IsTrue(vm.CanSave);
         Assert.IsFalse(vm.CanCloseWithEscape, "Esc must not throw away unsaved edits");
         Assert.AreEqual("updateOne", vm.CommandName);
-        StringAssert.StartsWith(vm.CommandText, "db.orders.updateOne(\n  { _id: ObjectId(\"66f5c2a1d38b5e1a0c7fe3b7\") },\n  { $set: {");
+        Assert.StartsWith("db.orders.updateOne(\n  { _id: ObjectId(\"66f5c2a1d38b5e1a0c7fe3b7\") },\n  { $set: {", vm.CommandText);
         Assert.Contains("\"customer.level\": \"VIP\"", vm.CommandText);
         Assert.Contains("shippedAt: ISODate(\"2026-09-27T02:30:00Z\")", vm.CommandText);
         Assert.Contains("$unset: {\n      note: \"\"", vm.CommandText);
@@ -181,7 +181,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Revert_restores_the_original_value_and_type() => Screens.OnUi(() =>
+    public void Revert_restores_the_original_value_and_type() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow total = Row(vm, "total");
@@ -200,7 +200,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Changing_the_kind_converts_or_resets_with_a_notice() => Screens.OnUi(() =>
+    public void Changing_the_kind_converts_or_resets_with_a_notice() => Screens.OnUi(static () =>
     {
         var workspace = new DocEditorWorkspace();
         DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
@@ -229,7 +229,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Name_and_parse_problems_are_errors_that_block_saving() => Screens.OnUi(() =>
+    public void Name_and_parse_problems_are_errors_that_block_saving() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow fresh = vm.AddFieldAtEnd()!;
@@ -271,11 +271,11 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Validator_violations_mark_rows_and_unmatched_ones_become_issues() => Screens.OnUi(() =>
+    public void Validator_violations_mark_rows_and_unmatched_ones_become_issues() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(OrderSchema), Order());
         DocumentEditorRow level = Row(vm, "customer.level");
-        Assert.AreSequenceEqual(new[] { "普通", "VIP", "SVIP" }, [.. level.EnumOptions]);
+        Assert.AreSequenceEqual(["普通", "VIP", "SVIP"], [.. level.EnumOptions]);
         Assert.IsTrue(level.ShowEnum);
         Assert.IsFalse(level.ShowText);
         Assert.IsTrue(level.ShowEnumHint);
@@ -291,8 +291,8 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(DocumentEditorRowState.Error, discount.State);
         Assert.AreEqual("违反验证规则:discount 须 ≥ 0", discount.Message);
         Assert.AreEqual(DocumentEditorRowState.Error, level.State);
-        StringAssert.StartsWith(level.Message, "违反验证规则:customer.level 不在枚举中");
-        CollectionAssert.Contains(vm.Issues.ToArray(), "违反验证规则:缺少必填字段 orderNo");
+        Assert.StartsWith("违反验证规则:customer.level 不在枚举中", level.Message);
+        Assert.Contains("违反验证规则:缺少必填字段 orderNo", [.. vm.Issues]);
         Assert.AreEqual("3 个错误", vm.ErrorText);
         Assert.IsFalse(vm.HasAdded, "an erroneous new field counts as an error, not as a new field");
         Assert.IsFalse(vm.CanSave);
@@ -307,7 +307,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void A_warn_only_validator_does_not_block_saving() => Screens.OnUi(() =>
+    public void A_warn_only_validator_does_not_block_saving() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(OrderSchema, action: "warn"), Order());
         DocumentEditorRow discount = vm.AddAfter(Row(vm, "total"))!;
@@ -322,12 +322,12 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Reordering_top_level_fields_switches_to_replaceOne() => Screens.OnUi(() =>
+    public void Reordering_top_level_fields_switches_to_replaceOne() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(vm.Move(Row(vm, "status"), Row(vm, "orderNo"), after: false));
         vm.RecomputeNow();
-        Assert.AreSequenceEqual(new[] { "_id", "status", "orderNo" }, [.. vm.Roots.Take(3).Select(static r => r.Name)]);
+        Assert.AreSequenceEqual(["_id", "status", "orderNo"], [.. vm.Roots.Take(3).Select(static r => r.Name)]);
         Assert.AreEqual("replaceOne", vm.CommandName);
         Assert.IsTrue(vm.HasReordered);
         Assert.AreEqual(Zh["Doc_ReplaceNoteNoVersion"], vm.CommandNote);
@@ -340,12 +340,12 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Reordering_inside_an_object_sets_that_object_and_moves_stay_on_one_level() => Screens.OnUi(() =>
+    public void Reordering_inside_an_object_sets_that_object_and_moves_stay_on_one_level() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Assert.IsTrue(vm.Move(Row(vm, "customer.level"), Row(vm, "customer.id"), after: false));
         vm.RecomputeNow();
-        Assert.AreSequenceEqual(new[] { "level", "id", "name" }, [.. Row(vm, "customer").Children.Select(static r => r.Name)]);
+        Assert.AreSequenceEqual(["level", "id", "name"], [.. Row(vm, "customer").Children.Select(static r => r.Name)]);
         Assert.AreEqual("updateOne", vm.CommandName);
         Assert.Contains("customer: { level: \"SVIP\"", vm.CommandText);
         Assert.AreEqual(DocumentEditorRowState.Modified, Row(vm, "customer").State);
@@ -358,7 +358,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Array_chips_append_and_remove_items() => Screens.OnUi(() =>
+    public void Array_chips_append_and_remove_items() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow tags = Row(vm, "tags");
@@ -370,9 +370,9 @@ public sealed class DocumentEditorTests
         Assert.AreEqual("", tags.NewItemText);
         tags.CommitItemCommand.Execute(null);
         Assert.IsFalse(tags.IsAddingItem, "an empty Enter closes it");
-        Assert.AreSequenceEqual(new[] { "企业", "开票", "VIP客户" }, [.. tags.Children.Select(static c => c.ChipText)]);
+        Assert.AreSequenceEqual(["企业", "开票", "VIP客户"], [.. tags.Children.Select(static c => c.ChipText)]);
         tags.Children[0].RemoveCommand.Execute(null);
-        Assert.AreSequenceEqual(new[] { "0", "1" }, [.. tags.Children.Select(static c => c.Name)]);
+        Assert.AreSequenceEqual(["0", "1"], [.. tags.Children.Select(static c => c.Name)]);
         vm.RecomputeNow();
         Assert.AreEqual(DocumentEditorRowState.Modified, tags.State);
         Assert.Contains("tags: [ \"开票\", \"VIP客户\" ]", vm.CommandText);
@@ -389,12 +389,12 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Search_filters_rows_and_keeps_ancestors() => Screens.OnUi(() =>
+    public void Search_filters_rows_and_keeps_ancestors() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.IsSearching = true;
         vm.Search = "LEV";
-        Assert.AreSequenceEqual(new object[] { Row(vm, "customer"), Row(vm, "customer.level") }, [.. vm.FormItems.Take(2)]);
+        Assert.AreSequenceEqual([Row(vm, "customer"), Row(vm, "customer.level")], [.. vm.FormItems.Take(2)]);
         Assert.HasCount(3, vm.FormItems);
         vm.Search = "sku";
         Assert.Contains(Row(vm, "items"), vm.FormItems, "matches inside a collapsed array are revealed");
@@ -407,7 +407,7 @@ public sealed class DocumentEditorTests
     // ── JSON / 对比 / 预览 ─────────────────────────────────────────────────
 
     [TestMethod]
-    public void Json_mode_round_trips_with_the_form() => Screens.OnUi(() =>
+    public void Json_mode_round_trips_with_the_form() => Screens.OnUi(static () =>
     {
         var workspace = new DocEditorWorkspace();
         DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
@@ -445,7 +445,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Json_dotted_keys_get_a_diagnostic_with_a_fix() => Screens.OnUi(() =>
+    public void Json_dotted_keys_get_a_diagnostic_with_a_fix() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.Mode = DocumentEditorMode.Json;
@@ -457,7 +457,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Diff_mode_marks_removed_and_added_lines() => Screens.OnUi(() =>
+    public void Diff_mode_marks_removed_and_added_lines() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         Row(vm, "status").Text = "shipped";
@@ -510,7 +510,7 @@ public sealed class DocumentEditorTests
     // ── 粘贴、补全、新建、只读 ────────────────────────────────────────────
 
     [TestMethod]
-    public void Paste_loads_the_clipboard_document_but_keeps_the_original_id() => Screens.OnUi(() =>
+    public void Paste_loads_the_clipboard_document_but_keeps_the_original_id() => Screens.OnUi(static () =>
     {
         var workspace = new DocEditorWorkspace();
         DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
@@ -534,7 +534,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Fill_from_schema_adds_frequent_missing_fields_by_their_dominant_type() => Screens.OnUi(() =>
+    public void Fill_from_schema_adds_frequent_missing_fields_by_their_dominant_type() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.Remove(Row(vm, "note"));
@@ -561,7 +561,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(10, schema.Sampled);
 
         List<string> added = vm.FillFrom(schema);
-        Assert.AreSequenceEqual(new[] { "note", "invoice", "customer.vip", "invoice.title", "invoice.amount" }, added, SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["note", "invoice", "customer.vip", "invoice.title", "invoice.amount"], added, SequenceOrder.InAnyOrder);
         Assert.AreEqual(BsonKind.Null, Row(vm, "note").Kind);
         Assert.AreEqual(BsonKind.Object, Row(vm, "invoice").Kind);
         Assert.AreEqual(BsonKind.String, Row(vm, "invoice.title").Kind);
@@ -574,7 +574,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Field_name_suggestions_come_from_the_sample() => Screens.OnUi(() =>
+    public void Field_name_suggestions_come_from_the_sample() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         vm.UseSchema(DocumentEditorSchema.From([
@@ -584,7 +584,7 @@ public sealed class DocumentEditorTests
         ]));
         DocumentEditorRow fresh = vm.AddFieldAtEnd()!;
         IReadOnlyList<DocumentEditorSuggestion> all = vm.SuggestNames(fresh, fresh.Name);
-        Assert.AreSequenceEqual(new[] { "discount", "shippedAt" }, [.. all.Select(static s => s.Name)], "existing names are left out");
+        Assert.AreSequenceEqual(["discount", "shippedAt"], [.. all.Select(static s => s.Name)], "existing names are left out");
         Assert.AreEqual("67%", all[0].RatioText);
         IReadOnlyList<DocumentEditorSuggestion> typed = vm.SuggestNames(fresh, "ship");
         Assert.HasCount(1, typed);
@@ -593,12 +593,12 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(BsonKind.Date, fresh.Kind, "a fresh empty field takes the sampled type");
 
         DocumentEditorRow nested = vm.AddChild(Row(vm, "customer"))!;
-        Assert.AreSequenceEqual(new[] { "vip" }, [.. vm.SuggestNames(nested, "").Select(static s => s.Name)]);
+        Assert.AreSequenceEqual(["vip"], [.. vm.SuggestNames(nested, "").Select(static s => s.Name)]);
         return Task.CompletedTask;
     });
 
     [TestMethod]
-    public void A_new_document_inserts_and_its_id_can_be_edited() => Screens.OnUi(() =>
+    public void A_new_document_inserts_and_its_id_can_be_edited() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace());
         Assert.AreEqual("新建文档", vm.Title);
@@ -617,12 +617,12 @@ public sealed class DocumentEditorTests
         vm.RecomputeNow();
         Assert.AreEqual("\"SKU-9999\"", vm.IdText);
         Assert.AreEqual(DocumentEditorRowState.None, id.State, "a new document has nothing to compare against");
-        StringAssert.StartsWith(vm.CommandText, "db.orders.insertOne(\n  {\n    _id: \"SKU-9999\"");
+        Assert.StartsWith("db.orders.insertOne(\n  {\n    _id: \"SKU-9999\"", vm.CommandText);
         return Task.CompletedTask;
     });
 
     [TestMethod]
-    public void A_view_is_read_only() => Screens.OnUi(() =>
+    public void A_view_is_read_only() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), Orders(kind: CollectionKind.View), Order());
         Assert.AreEqual("查看文档", vm.Title);
@@ -641,7 +641,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Copy_sends_the_full_document() => Screens.OnUi(async () =>
+    public void Copy_sends_the_full_document() => Screens.OnUi(static async () =>
     {
         var workspace = new DocEditorWorkspace();
         DocumentEditorDialogViewModel vm = Open(workspace, document: Order());
@@ -651,7 +651,7 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Picking_a_day_keeps_the_time_of_day() => Screens.OnUi(() =>
+    public void Picking_a_day_keeps_the_time_of_day() => Screens.OnUi(static () =>
     {
         DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
         DocumentEditorRow created = Row(vm, "createdAt");
@@ -680,16 +680,16 @@ public sealed class DocumentEditorTests
             await Screens.PumpAsync();
             ItemsControl list = view.GetVisualDescendants().OfType<ItemsControl>().First(static c => c.Name == "FormList");
             Control RowControl(string path) => list.ContainerFromItem(Row(vm, path)) ?? throw new AssertFailedException(path + " is not realized");
-            Avalonia.Point At(Control control, double y) => control.TranslatePoint(new Avalonia.Point(14, y), window)!.Value;
+            Point At(Control control, double y) => control.TranslatePoint(new Point(14, y), window)!.Value;
 
             // 拖动 paid 的手柄,放到 orderNo 那一行的上半。
             Control grip = RowControl("paid").GetVisualDescendants().OfType<Glyph>().First(static g => g.Key == "Mongo.grip-vertical")
                 .GetVisualParent<Control>()!;
-            window.MouseDown(grip.TranslatePoint(new Avalonia.Point(14, 16), window)!.Value, Avalonia.Input.MouseButton.Left);
+            window.MouseDown(grip.TranslatePoint(new Point(14, 16), window)!.Value, Avalonia.Input.MouseButton.Left);
             window.MouseMove(At(RowControl("orderNo"), 4), Avalonia.Input.RawInputModifiers.LeftMouseButton);
             window.MouseUp(At(RowControl("orderNo"), 4), Avalonia.Input.MouseButton.Left);
             await Screens.PumpAsync(10);
-            Assert.AreSequenceEqual(new[] { "_id", "paid", "orderNo" }, [.. vm.Roots.Take(3).Select(static r => r.Name)]);
+            Assert.AreSequenceEqual(["_id", "paid", "orderNo"], [.. vm.Roots.Take(3).Select(static r => r.Name)]);
 
             // Ctrl+Enter 在焦点那一行后面加字段;新字段的名字框拿到焦点并弹出抽样补全。
             TextBox orderNoKey = RowControl("orderNo").GetVisualDescendants().OfType<TextBox>().First(static t => t.Name == "KeyBox");
@@ -715,7 +715,7 @@ public sealed class DocumentEditorTests
             window.KeyTextInput("新标签");
             window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Enter, null);
             await Screens.PumpAsync(10);
-            Assert.AreSequenceEqual(new[] { "企业", "开票", "新标签" }, [.. Row(vm, "tags").Children.Select(static c => c.ChipText)]);
+            Assert.AreSequenceEqual(["企业", "开票", "新标签"], [.. Row(vm, "tags").Children.Select(static c => c.ChipText)]);
 
             // Ctrl+F 打开查找;Ctrl+S 走保存(只读模式下被护栏拦住)。
             window.KeyPress(Avalonia.Input.Key.F, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.F, null);
@@ -756,8 +756,8 @@ public sealed class DocumentEditorTests
         after["discount"] = -20.0;
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(before, after);
         Assert.IsFalse(plan.Replace);
-        Assert.AreSequenceEqual(new[] { "customer.level", "items.0.qty", "status", "discount" }, [.. plan.Set.Names]);
-        Assert.AreSequenceEqual(new[] { "note" }, [.. plan.Unset.Names]);
+        Assert.AreSequenceEqual(["customer.level", "items.0.qty", "status", "discount"], [.. plan.Set.Names]);
+        Assert.AreSequenceEqual(["note"], [.. plan.Unset.Names]);
         Assert.IsTrue(DocumentEditorDiff.Plan(Order(), Order()).IsEmpty);
     }
 
@@ -770,7 +770,7 @@ public sealed class DocumentEditorTests
         after["customer"] = new BsonDocument { ["name"] = "张伟", ["id"] = before["customer"]["id"], ["level"] = "SVIP" };
         after["paid"] = "yes";
         DocumentEditorPlan plan = DocumentEditorDiff.Plan(before, after);
-        Assert.AreSequenceEqual(new[] { "customer", "paid", "tags" }, [.. plan.Set.Names], SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(["customer", "paid", "tags"], [.. plan.Set.Names], SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -813,12 +813,12 @@ public sealed class DocumentEditorTests
     {
         (HashSet<int> removed, HashSet<int> added) = DocumentEditorDiff.Lines(["{", "  a: 1,", "  b: 2", "}"], ["{", "  a: 1,", "  c: 3,", "  b: 2", "}"]);
         Assert.IsEmpty(removed);
-        Assert.AreSequenceEqual(new[] { 3 }, [.. added]);
+        Assert.AreSequenceEqual([3], [.. added]);
         (removed, added) = DocumentEditorDiff.Lines(["x", "y", "z"], ["x", "Y", "z"]);
-        Assert.AreSequenceEqual(new[] { 2 }, [.. removed]);
-        Assert.AreSequenceEqual(new[] { 2 }, [.. added]);
+        Assert.AreSequenceEqual([2], [.. removed]);
+        Assert.AreSequenceEqual([2], [.. added]);
         (_, added) = DocumentEditorDiff.Lines([], ["a", "b"]);
-        Assert.AreSequenceEqual(new[] { 1, 2 }, [.. added], SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual([1, 2], [.. added], SequenceOrder.InAnyOrder);
     }
 
     [TestMethod]
@@ -835,7 +835,7 @@ public sealed class DocumentEditorTests
     }
 
     [TestMethod]
-    public void Version_field_goes_into_the_filter_and_is_refreshed() => Screens.OnUi(() =>
+    public void Version_field_goes_into_the_filter_and_is_refreshed() => Screens.OnUi(static () =>
     {
         BsonDocument order = Order();
         order["updatedAt"] = new BsonDateTime(new DateTime(2026, 9, 27, 1, 0, 0, DateTimeKind.Utc));
@@ -868,7 +868,7 @@ public sealed class DocumentEditorTests
         Assert.AreEqual(1, sku.Documents, "an array of documents counts once per document");
         Assert.AreEqual("items", sku.Parent);
         Assert.AreEqual(1.0 / 3, schema.Ratio(sku), 1e-9);
-        Assert.AreSequenceEqual(new[] { "a", "items" }, [.. schema.ChildrenOf("").Select(static f => f.Name)]);
+        Assert.AreSequenceEqual(["a", "items"], [.. schema.ChildrenOf("").Select(static f => f.Name)]);
     }
 
     [TestMethod]
@@ -1111,7 +1111,7 @@ public sealed class DocumentEditorTests
 
     [TestMethod]
     [TestCategory("Integration")]
-    public void Sampling_reads_the_collection() => Screens.OnUi(async () =>
+    public void Sampling_reads_the_collection() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using MongoConnection connection = await TestServer.OpenAsync();
@@ -1131,7 +1131,7 @@ public sealed class DocumentEditorTests
 
     [TestMethod]
     [TestCategory("Screenshots")]
-    public void Board05_Document_editor() => Screens.OnUi(async () =>
+    public void Board05_Document_editor() => Screens.OnUi(static async () =>
     {
         await TestServer.RequireAsync();
         await using Workbench bench = await Screens.OpenWorkbenchAsync();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Channels;
@@ -25,7 +26,7 @@ public sealed class DriveSemanticsTests
 
     private static void WriteFile(string share, string name, string content)
     {
-        DriveFile file = DriveFile.Create(share, "\\" + name, GenericWrite, FileCreate, 0, 0);
+        var file = DriveFile.Create(share, "\\" + name, GenericWrite, FileCreate, 0, 0);
         _ = file.Write(0, Encoding.ASCII.GetBytes(content));
         file.Close();
     }
@@ -55,19 +56,19 @@ public sealed class DriveSemanticsTests
         {
             WriteFile(share, "a.txt", "x");
             _ = Directory.CreateDirectory(Path.Combine(share, "sub"));
-            DriveFile root = DriveFile.Create(share, "\\", GenericRead, FileOpen, FileDirectoryFile, 0);
+            var root = DriveFile.Create(share, "\\", GenericRead, FileOpen, FileDirectoryFile, 0);
 
             Assert.IsFalse(root.BeginEnumeration("\\missing.txt"), "A missing name must not match '.' or '..'.");
             Assert.IsEmpty(Names(root));
 
             Assert.IsTrue(root.BeginEnumeration("\\*.txt"));
-            CollectionAssert.AreEqual(new[] { "a.txt" }, Names(root));
+            Assert.AreSequenceEqual(["a.txt"], Names(root));
 
             Assert.IsTrue(root.BeginEnumeration("\\a.txt"));
-            CollectionAssert.AreEqual(new[] { "a.txt" }, Names(root));
+            Assert.AreSequenceEqual(["a.txt"], Names(root));
 
             Assert.IsTrue(root.BeginEnumeration("\\*"));
-            CollectionAssert.AreEquivalent(new[] { ".", "..", "a.txt", "sub" }, Names(root));
+            Assert.AreSequenceEqual([".", "..", "a.txt", "sub"], Names(root), SequenceOrder.InAnyOrder);
             root.Close();
         }
         finally { Directory.Delete(share, recursive: true); }
@@ -80,7 +81,7 @@ public sealed class DriveSemanticsTests
         try
         {
             WriteFile(share, "doc.txt", "0123456789");
-            DriveFile file = DriveFile.Create(share, "\\doc.txt", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\doc.txt", GenericWrite, FileOpen, 0, 0);
             _ = file.Write(0, "abc"u8);
             file.SetEndOfFile(3);
             file.Close();
@@ -98,7 +99,7 @@ public sealed class DriveSemanticsTests
         try
         {
             WriteFile(share, "doc.txt", "0123456789");
-            DriveFile file = DriveFile.Create(share, "\\doc.txt", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\doc.txt", GenericWrite, FileOpen, 0, 0);
             file.SetAllocation(4096);
             file.SetAllocation(4);
             file.Close();
@@ -118,7 +119,7 @@ public sealed class DriveSemanticsTests
         {
             WriteFile(share, "doc.txt", "x");
             var stamp = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
-            DriveFile file = DriveFile.Create(share, "\\doc.txt", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\doc.txt", GenericWrite, FileOpen, 0, 0);
             file.SetBasic(0, 0, stamp.ToFileTimeUtc(), (uint)FileAttributes.ReadOnly);
             DateTime accessBefore = File.GetLastAccessTimeUtc(path);
             file.SetBasic(0, -1, 0, 0);
@@ -143,7 +144,7 @@ public sealed class DriveSemanticsTests
         {
             WriteFile(share, "new.txt", "new");
             WriteFile(share, "keep.txt", "keep");
-            DriveFile file = DriveFile.Create(share, "\\new.txt", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\new.txt", GenericWrite, FileOpen, 0, 0);
 
             DriveStatusException refused = Assert.Throws<DriveStatusException>(() => file.Rename("\\keep.txt", replaceIfExists: false));
             Assert.AreEqual(NtStatus.ObjectNameCollision, refused.Status);
@@ -164,7 +165,7 @@ public sealed class DriveSemanticsTests
         try
         {
             WriteFile(share, "draft.tmp", "abc");
-            DriveFile file = DriveFile.Create(share, "\\draft.tmp", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\draft.tmp", GenericWrite, FileOpen, 0, 0);
             file.Rename("\\final.txt", replaceIfExists: false);
 
             file.QueryInformation(DriveFile.FileStandardInformation, new ByteWriter(64));
@@ -184,7 +185,7 @@ public sealed class DriveSemanticsTests
         {
             WriteFile(share, "a.txt", "a");
             _ = Directory.CreateDirectory(Path.Combine(share, "folder"));
-            DriveFile file = DriveFile.Create(share, "\\a.txt", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\a.txt", GenericWrite, FileOpen, 0, 0);
 
             DriveStatusException refused = Assert.Throws<DriveStatusException>(() => file.Rename("\\folder", replaceIfExists: true));
             Assert.AreEqual(NtStatus.AccessDenied, refused.Status);
@@ -201,11 +202,11 @@ public sealed class DriveSemanticsTests
         try
         {
             WriteFile(share, "readme.txt", "r");
-            DriveFile file = DriveFile.Create(share, "\\readme.txt", GenericWrite, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\readme.txt", GenericWrite, FileOpen, 0, 0);
             file.Rename("\\README.txt", replaceIfExists: false);
             file.Close();
 
-            CollectionAssert.AreEqual(new[] { "README.txt" }, Directory.GetFiles(share).Select(Path.GetFileName).ToArray());
+            Assert.AreSequenceEqual(["README.txt"], Directory.GetFiles(share).Select(Path.GetFileName).ToArray());
         }
         finally { Directory.Delete(share, recursive: true); }
     }
@@ -228,11 +229,11 @@ public sealed class DriveSemanticsTests
     public void AReadOnlyFileOpensForReadingWithoutDemandingWriteAccess() => WithReadOnlyFile((share, _) =>
     {
         // FILE_OPEN_IF and FILE_WRITE_ATTRIBUTES used to force a writable stream and so failed with access denied.
-        DriveFile openIf = DriveFile.Create(share, "\\ro.txt", GenericRead, FileOpenIf, 0, 0);
-        CollectionAssert.AreEqual("ro"u8.ToArray(), openIf.Read(0, 16));
+        var openIf = DriveFile.Create(share, "\\ro.txt", GenericRead, FileOpenIf, 0, 0);
+        Assert.AreSequenceEqual("ro"u8.ToArray(), openIf.Read(0, 16));
         openIf.Close();
 
-        DriveFile attributes = DriveFile.Create(share, "\\ro.txt", GenericRead | FileWriteAttributes, FileOpen, 0, 0);
+        var attributes = DriveFile.Create(share, "\\ro.txt", GenericRead | FileWriteAttributes, FileOpen, 0, 0);
         attributes.Close();
 
         DriveStatusException write = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\ro.txt", GenericWrite, FileOpen, 0, 0));
@@ -244,8 +245,8 @@ public sealed class DriveSemanticsTests
     {
         WithReadOnlyFile((share, _) =>
         {
-            DriveFile file = DriveFile.Create(share, "\\ro.txt", MaximumAllowed, FileOpen, 0, 0);
-            CollectionAssert.AreEqual("ro"u8.ToArray(), file.Read(0, 16));
+            var file = DriveFile.Create(share, "\\ro.txt", MaximumAllowed, FileOpen, 0, 0);
+            Assert.AreSequenceEqual("ro"u8.ToArray(), file.Read(0, 16));
             Assert.AreEqual(NtStatus.AccessDenied, Assert.Throws<DriveStatusException>(() => file.Write(0, "x"u8)).Status);
             file.Close();
         });
@@ -254,7 +255,7 @@ public sealed class DriveSemanticsTests
         try
         {
             WriteFile(share, "rw.txt", "rw");
-            DriveFile all = DriveFile.Create(share, "\\rw.txt", GenericAll, FileOpen, 0, 0);
+            var all = DriveFile.Create(share, "\\rw.txt", GenericAll, FileOpen, 0, 0);
             _ = all.Write(0, "RW"u8);
             all.Close();
             Assert.AreEqual("RW", File.ReadAllText(Path.Combine(share, "rw.txt")));
@@ -267,7 +268,7 @@ public sealed class DriveSemanticsTests
     {
         WithReadOnlyFile((share, path) =>
         {
-            DriveFile file = DriveFile.Create(share, "\\ro.txt", GenericRead, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\ro.txt", GenericRead, FileOpen, 0, 0);
             Assert.AreEqual(NtStatus.CannotDelete, Assert.Throws<DriveStatusException>(() => file.SetDeletePending(true)).Status);
             file.Close();
             Assert.IsTrue(File.Exists(path));
@@ -278,18 +279,18 @@ public sealed class DriveSemanticsTests
         {
             _ = Directory.CreateDirectory(Path.Combine(share, "full"));
             WriteFile(share, "full\\inner.txt", "x");
-            DriveFile directory = DriveFile.Create(share, "\\full", GenericRead, FileOpen, FileDirectoryFile, 0);
+            var directory = DriveFile.Create(share, "\\full", GenericRead, FileOpen, FileDirectoryFile, 0);
             Assert.AreEqual(NtStatus.DirectoryNotEmpty, Assert.Throws<DriveStatusException>(() => directory.SetDeletePending(true)).Status);
             directory.Close();
 
             WriteFile(share, "keep.txt", "k");
-            DriveFile keep = DriveFile.Create(share, "\\keep.txt", GenericWrite, FileOpen, 0, 0);
+            var keep = DriveFile.Create(share, "\\keep.txt", GenericWrite, FileOpen, 0, 0);
             keep.SetDeletePending(true);
             keep.SetDeletePending(false);   // DeletePending = 0 withdraws the delete
             keep.Close();
             Assert.IsTrue(File.Exists(Path.Combine(share, "keep.txt")));
 
-            DriveFile gone = DriveFile.Create(share, "\\keep.txt", GenericWrite, FileOpen, 0, 0);
+            var gone = DriveFile.Create(share, "\\keep.txt", GenericWrite, FileOpen, 0, 0);
             gone.SetDeletePending(true);
             gone.Close();
             Assert.IsFalse(File.Exists(Path.Combine(share, "keep.txt")));
@@ -299,13 +300,9 @@ public sealed class DriveSemanticsTests
 
     [TestMethod]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    [OSCondition(ConditionMode.Exclude, OperatingSystems.Windows | OperatingSystems.Windows)]
     public void OnUnixADeleteInADirectoryThatCannotBeModifiedIsRefusedUpFront()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            Assert.Inconclusive("Windows governs deletion by the entry's attributes and ACL.");
-        }
-
         string share = NewShare();
         string locked = Path.Combine(share, "locked");
         _ = Directory.CreateDirectory(locked);
@@ -318,7 +315,7 @@ public sealed class DriveSemanticsTests
                 Assert.Inconclusive("Running with privileges that ignore directory permissions.");
             }
 
-            DriveFile file = DriveFile.Create(share, "\\locked\\a.txt", GenericRead, FileOpen, 0, 0);
+            var file = DriveFile.Create(share, "\\locked\\a.txt", GenericRead, FileOpen, 0, 0);
             Assert.AreEqual(NtStatus.AccessDenied, Assert.Throws<DriveStatusException>(() => file.SetDeletePending(true)).Status);
             file.Close();
             Assert.IsTrue(File.Exists(Path.Combine(locked, "a.txt")));
@@ -331,18 +328,14 @@ public sealed class DriveSemanticsTests
     }
 
     [TestMethod]
+    [OSCondition(ConditionMode.Exclude, OperatingSystems.Windows)]
     public void AFifoInAMappingIsRefusedInsteadOfBlockingTheChannel()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            Assert.Inconclusive("Windows file systems have no FIFOs.");
-        }
-
         string share = NewShare();
         try
         {
             string fifo = Path.Combine(share, "pipe");
-            using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", fifo)!) { mkfifo.WaitForExit(); }
+            using (Process mkfifo = Process.Start("mkfifo", fifo)!) { mkfifo.WaitForExit(); }
 
             Task<DriveStatusException> open = Task.Run(() => Assert.Throws<DriveStatusException>(
                 () => DriveFile.Create(share, "\\pipe", GenericRead, FileOpen, 0, 0)));
@@ -383,22 +376,22 @@ public sealed class DriveSemanticsTests
             File.WriteAllText(Path.Combine(share, "Docs", "ReadMe.txt"), "r");
 
             // Directory queries.
-            DriveFile docs = DriveFile.Create(share, "\\docs", GenericRead, FileOpen, FileDirectoryFile, 0);
+            var docs = DriveFile.Create(share, "\\docs", GenericRead, FileOpen, FileDirectoryFile, 0);
             Assert.IsTrue(docs.BeginEnumeration("\\*.TXT"));
-            CollectionAssert.AreEqual(new[] { "ReadMe.txt" }, Names(docs));
+            Assert.AreSequenceEqual(["ReadMe.txt"], Names(docs));
             Assert.IsTrue(docs.BeginEnumeration("\\readme.txt"));
-            CollectionAssert.AreEqual(new[] { "ReadMe.txt" }, Names(docs));
+            Assert.AreSequenceEqual(["ReadMe.txt"], Names(docs));
             docs.Close();
 
             // Opening an existing file in another case.
-            DriveFile opened = DriveFile.Create(share, "\\DOCS\\readme.TXT", GenericRead, FileOpen, 0, 0);
-            CollectionAssert.AreEqual("r"u8.ToArray(), opened.Read(0, 8));
+            var opened = DriveFile.Create(share, "\\DOCS\\readme.TXT", GenericRead, FileOpen, 0, 0);
+            Assert.AreSequenceEqual("r"u8.ToArray(), opened.Read(0, 8));
             opened.Close();
 
             // A new file goes into the existing directory instead of a second one that differs only in case.
-            DriveFile created = DriveFile.Create(share, "\\docs\\new.txt", GenericWrite, FileCreate, 0, 0);
+            var created = DriveFile.Create(share, "\\docs\\new.txt", GenericWrite, FileCreate, 0, 0);
             created.Close();
-            CollectionAssert.AreEqual(new[] { "Docs" }, Directory.GetDirectories(share).Select(Path.GetFileName).ToArray());
+            Assert.AreSequenceEqual(["Docs"], Directory.GetDirectories(share).Select(Path.GetFileName).ToArray());
             Assert.IsTrue(File.Exists(Path.Combine(share, "Docs", "new.txt")));
 
             // Creating a name that exists in another case is a collision, as on Windows.
@@ -422,12 +415,12 @@ public sealed class DriveSemanticsTests
             }
 
             // Exact names still open their own file ...
-            DriveFile upper = DriveFile.Create(share, "\\A.txt", GenericRead, FileOpen, 0, 0);
-            CollectionAssert.AreEqual("upper"u8.ToArray(), upper.Read(0, 8));
+            var upper = DriveFile.Create(share, "\\A.txt", GenericRead, FileOpen, 0, 0);
+            Assert.AreSequenceEqual("upper"u8.ToArray(), upper.Read(0, 8));
             upper.Close();
             // A rename onto a name that exists only in another case collides instead of creating a third spelling.
             File.WriteAllText(Path.Combine(share, "other.txt"), "o");
-            DriveFile other = DriveFile.Create(share, "\\other.txt", GenericWrite, FileOpen, 0, 0);
+            var other = DriveFile.Create(share, "\\other.txt", GenericWrite, FileOpen, 0, 0);
             File.Delete(Path.Combine(share, "a.txt"));
             DriveStatusException renamed = Assert.Throws<DriveStatusException>(() => other.Rename("\\a.TXT", replaceIfExists: false));
             Assert.AreEqual(NtStatus.ObjectNameCollision, renamed.Status);
@@ -449,17 +442,17 @@ public sealed class DriveSemanticsTests
         try
         {
             File.WriteAllText(Path.Combine(share, decomposed), "x");
-            DriveFile root = DriveFile.Create(share, "\\", GenericRead, FileOpen, FileDirectoryFile, 0);
+            var root = DriveFile.Create(share, "\\", GenericRead, FileOpen, FileDirectoryFile, 0);
             Assert.IsTrue(root.BeginEnumeration("\\*"));
-            string listed = Names(root).Single(name => name is not ("." or ".."));
+            string listed = Names(root).Single(static name => name is not ("." or ".."));
             root.Close();
 
             if (OperatingSystem.IsMacOS())
             {
                 Assert.AreEqual(composed, listed, "macOS sends the composed form.");
                 // The server opens what it was shown; APFS/HFS+ resolve the composed name to the stored file.
-                DriveFile opened = DriveFile.Create(share, "\\" + composed, GenericRead, FileOpen, 0, 0);
-                CollectionAssert.AreEqual("x"u8.ToArray(), opened.Read(0, 8));
+                var opened = DriveFile.Create(share, "\\" + composed, GenericRead, FileOpen, 0, 0);
+                Assert.AreSequenceEqual("x"u8.ToArray(), opened.Read(0, 8));
                 opened.Close();
             }
             else

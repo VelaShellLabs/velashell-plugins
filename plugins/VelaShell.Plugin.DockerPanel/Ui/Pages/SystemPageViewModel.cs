@@ -198,8 +198,8 @@ public sealed class SystemPageViewModel : PageViewModel
         // 每张卡的第三行都是"这个数字的分母或去向" —— 光看「镜像 34」说明不了任何事,
         // 「其中 14 个没人用」才是让人动手的那一句。
         int volumes = _usage?.Volumes?.Length ?? 0;
-        int volumesIdle = _usage?.Volumes?.Count(v => v.UsageData is not { RefCount: > 0 }) ?? 0;
-        int imagesDangling = _usage?.Images?.Count(i => i.IsDangling) ?? 0;
+        int volumesIdle = _usage?.Volumes?.Count(static v => v.UsageData is not { RefCount: > 0 }) ?? 0;
+        int imagesDangling = _usage?.Images?.Count(static i => i.IsDangling) ?? 0;
         int cacheRecords = _usage?.BuildCache?.Length ?? 0;
         Stats.Add(new("Docker.box", "容器", info.Containers.ToString(),
             $"运行中 {info.ContainersRunning}",
@@ -248,12 +248,12 @@ public sealed class SystemPageViewModel : PageViewModel
 
     /// <summary>借一个正在跑的容器来执行 df —— 面板没有"在宿主上执行命令"的通道。</summary>
     private string? FirstRunningContainerId =>
-        Shell.Containers.View.FirstOrDefault(r => r.IsRunning)?.Id;
+        Shell.Containers.View.FirstOrDefault(static r => r.IsRunning)?.Id;
 
     /// <summary>宿主磁盘那一句;拿不到时为空。</summary>
     public string HostDiskText { get; private set; } = "";
 
-    private static readonly string[] request = ["POST /volumes/prune"];
+    private static readonly string[] Request = ["POST /volumes/prune"];
 
     /// <summary>解一行 <c>df -PB1</c>。返回 (总量, 已用)。</summary>
     internal static (long Total, long Used)? ParseDf(string output)
@@ -279,32 +279,32 @@ public sealed class SystemPageViewModel : PageViewModel
             return;
         }
         ReclaimBreakdown reclaim = DiskMath.Reclaimable(usage);
-        long imageTotal = usage.Images?.Sum(i => i.Size) ?? 0;
+        long imageTotal = usage.Images?.Sum(static i => i.Size) ?? 0;
         long imageReclaim = reclaim.Images;
         // 可写层大小只有 /system/df 会给(/containers/json 要带 size=1 才算,那对每个容器做一次
         // diff,贵得多)—— 这一页正好是 df,所以这里能拿到真值。
-        long containerTotal = usage.Containers?.Sum(c => c.SizeRw) ?? 0;
+        long containerTotal = usage.Containers?.Sum(static c => c.SizeRw) ?? 0;
         // 「已停止的容器」能回收的是**已停止那些**的可写层,不是全部容器的。
-        long containerReclaim = usage.Containers?.Where(c => c.State != "running").Sum(c => c.SizeRw) ?? 0;
-        long volumeTotal = usage.Volumes?.Sum(v => v.UsageData is { Size: > 0 } u ? u.Size : 0) ?? 0;
+        long containerReclaim = usage.Containers?.Where(static c => c.State != "running").Sum(static c => c.SizeRw) ?? 0;
+        long volumeTotal = usage.Volumes?.Sum(static v => v.UsageData is { Size: > 0 } u ? u.Size : 0) ?? 0;
         long volumeReclaim = reclaim.Volumes;
         _buildCacheBytes = reclaim.BuildCache;
 
         DiskRows.Add(new("镜像", (usage.Images?.Length ?? 0).ToString(),
-            (usage.Images?.Count(i => i.Containers > 0) ?? 0).ToString(),
+            (usage.Images?.Count(static i => i.Containers > 0) ?? 0).ToString(),
             Humanize.Bytes(usage.LayersSize > 0 ? usage.LayersSize : imageTotal),
             Ratio(imageReclaim, imageTotal), imageReclaim > 0 ? RowTone.Warn : RowTone.Idle));
         DiskRows.Add(new("容器", (usage.Containers?.Length ?? 0).ToString(),
-            (usage.Containers?.Count(c => c.State == "running") ?? 0).ToString(),
+            (usage.Containers?.Count(static c => c.State == "running") ?? 0).ToString(),
             Humanize.Bytes(containerTotal), Ratio(containerReclaim, containerTotal),
             containerReclaim > 0 ? RowTone.Warn : RowTone.Idle));
         DiskRows.Add(new("本地卷", (usage.Volumes?.Length ?? 0).ToString(),
-            (usage.Volumes?.Count(v => v.UsageData is { RefCount: > 0 }) ?? 0).ToString(),
+            (usage.Volumes?.Count(static v => v.UsageData is { RefCount: > 0 }) ?? 0).ToString(),
             Humanize.Bytes(volumeTotal), Ratio(volumeReclaim, volumeTotal),
             volumeReclaim > 0 ? RowTone.Warn : RowTone.Idle));
         DiskRows.Add(new("构建缓存", (usage.BuildCache?.Length ?? 0).ToString(), "0",
-            Humanize.Bytes(usage.BuildCache?.Sum(c => c.Size) ?? 0),
-            Ratio(_buildCacheBytes, usage.BuildCache?.Sum(c => c.Size) ?? 0),
+            Humanize.Bytes(usage.BuildCache?.Sum(static c => c.Size) ?? 0),
+            Ratio(_buildCacheBytes, usage.BuildCache?.Sum(static c => c.Size) ?? 0),
             _buildCacheBytes > 0 ? RowTone.Danger : RowTone.Idle));
 
         long total = imageTotal + containerTotal + volumeTotal + _buildCacheBytes;
@@ -329,7 +329,7 @@ public sealed class SystemPageViewModel : PageViewModel
             card.SizeText = card.Title switch
             {
                 "已停止的容器" => Humanize.Bytes(containerReclaim),
-                "悬空镜像" => Humanize.Bytes(usage.Images?.Where(i => i.IsDangling).Sum(i => i.Size) ?? 0),
+                "悬空镜像" => Humanize.Bytes(usage.Images?.Where(static i => i.IsDangling).Sum(static i => i.Size) ?? 0),
                 "全部未使用镜像" => Humanize.Bytes(imageReclaim),
                 "构建缓存" => Humanize.Bytes(_buildCacheBytes),
                 "以上全部" => Humanize.Bytes(imageReclaim + containerReclaim + _buildCacheBytes),
@@ -442,7 +442,7 @@ public sealed class SystemPageViewModel : PageViewModel
                 "POST /images/prune?filters={\"dangling\":[\"false\"]}",
                 "POST /networks/prune",
                 "POST /build/prune",
-                .. withVolumes ? request : []
+                .. withVolumes ? Request : []
             ],
             CommandNote = $"等价于  docker system prune -a{(withVolumes ? " --volumes" : "")}",
             Consequences = withVolumes

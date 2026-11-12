@@ -159,7 +159,7 @@ public sealed class Feedback : ObservableObject
             return;
         }
         string summary = $"已{verb} {result.SucceededCount} 个,{result.FailedCount} 个失败";
-        string detail = string.Join('\n', result.Failures.Take(3).Select(f => $"{f.Target}:{f.Failure}"));
+        string detail = string.Join('\n', result.Failures.Take(3).Select(static f => $"{f.Target}:{f.Failure}"));
         if (result.FailedCount > 3)
         {
             detail += $"\n…还有 {result.FailedCount - 3} 个";

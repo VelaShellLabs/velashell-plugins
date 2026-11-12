@@ -64,8 +64,8 @@ public sealed class RdpNetworkTests
         var settings = RdpSettings.From(RdpSettingsTests.Request(("transport", "tcp"), ("adaptiveNetwork", "false")), new("en"), []);
         Assert.AreEqual(RdpTransportMode.Tcp, settings.Transport);
         Assert.IsFalse(settings.AdaptiveNetwork);
-        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("transport", "udp-only")), new("en"), []));
-        _ = Assert.ThrowsExactly<ProtocolConnectionException>(() => RdpSettings.From(RdpSettingsTests.Request(("adaptiveNetwork", "maybe")), new("en"), []));
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(static () => RdpSettings.From(RdpSettingsTests.Request(("transport", "udp-only")), new("en"), []));
+        _ = Assert.ThrowsExactly<ProtocolConnectionException>(static () => RdpSettings.From(RdpSettingsTests.Request(("adaptiveNetwork", "maybe")), new("en"), []));
     }
 
     private sealed class Sink : IDynamicChannelHandler
@@ -78,7 +78,7 @@ public sealed class RdpNetworkTests
     private static byte[] Sync(params (int Type, uint[] Channels)[] tunnels)
     {
         var w = new ByteWriter();
-        w.U8(0x80); w.U8(0); w.U32LE((uint)(8 + tunnels.Sum(t => 6 + t.Channels.Length * 4)));
+        w.U8(0x80); w.U8(0); w.U32LE((uint)(8 + tunnels.Sum(static t => 6 + t.Channels.Length * 4)));
         w.U16LE(3); w.U16LE((ushort)tunnels.Length);
         foreach ((int Type, uint[] Channels) tunnel in tunnels)
         { w.U32LE((uint)tunnel.Type); w.U16LE((ushort)tunnel.Channels.Length); foreach (uint id in tunnel.Channels) { w.U32LE(id); } }
@@ -135,7 +135,7 @@ public sealed class RdpNetworkTests
         await channels[1].SendAsync([8]);
         Assert.AreSequenceEqual(new byte[] { 0x30, 2, 8 }, tcp.Last());
         await dvc.ProcessAsync([0x30, 1, 9], 1);
-        Assert.AreSequenceEqual(new byte[] { 9 }, sink.Messages.Single());
+        Assert.AreSequenceEqual("\t"u8.ToArray(), sink.Messages.Single());
         await dvc.ProcessAsync([0x60, 1, 2, 0xe0, 4, 10], 1);
         await dvc.ProcessAsync([0x70, 1, 0xe0, 4, 11], 1);
         Assert.AreSequenceEqual(new byte[] { 10, 11 }, sink.Messages[1]);

@@ -37,7 +37,7 @@ public sealed class SchemaAnalyzerTests
                 { "customer", customer },
                 {
                     "items", new BsonArray(Enumerable.Range(0, 1 + (i % 3))
-                        .Select(k => new BsonDocument { { "sku", $"SKU-{k}" }, { "qty", 1 + k } }))
+                        .Select(static k => new BsonDocument { { "sku", $"SKU-{k}" }, { "qty", 1 + k } }))
                 }
             };
             if (i % 5 == 0)
@@ -84,7 +84,7 @@ public sealed class SchemaAnalyzerTests
         Assert.IsTrue(warning);
         Assert.AreEqual("混合类型 ⚠ 建议统一为 String", text);
         Assert.AreEqual(AnalyzedViz.Text, SchemaAnalyzer.VizOf(note));
-        StringAssert.StartsWith(SchemaAnalyzer.VizText(note, Zh), "\"加急\" 100%");
+        Assert.StartsWith("\"加急\" 100%", SchemaAnalyzer.VizText(note, Zh));
     }
 
     [TestMethod]
@@ -113,10 +113,10 @@ public sealed class SchemaAnalyzerTests
     {
         AnalyzedSchema schema = SchemaAnalyzer.Analyze(Orders());
         Assert.AreEqual("ObjectId · 唯一", SchemaAnalyzer.Describe(schema["_id"]!, Zh).Text);
-        StringAssert.StartsWith(SchemaAnalyzer.VizText(schema["_id"]!, Zh), "200 个唯一值 · 时间戳 ");
+        Assert.StartsWith("200 个唯一值 · 时间戳 ", SchemaAnalyzer.VizText(schema["_id"]!, Zh));
 
         AnalyzedField total = schema["total"]!;
-        StringAssert.StartsWith(SchemaAnalyzer.Describe(total, Zh).Text, "Decimal128 · 中位数 ");
+        Assert.StartsWith("Decimal128 · 中位数 ", SchemaAnalyzer.Describe(total, Zh).Text);
         Assert.AreEqual(AnalyzedViz.Histogram, SchemaAnalyzer.VizOf(total));
         (double[] bins, double min, double max, bool _) = SchemaAnalyzer.Histogram(total);
         Assert.HasCount(SchemaAnalyzer.HistogramBins, bins);
@@ -141,7 +141,7 @@ public sealed class SchemaAnalyzerTests
         Assert.AreEqual(AnalyzedViz.Lengths, SchemaAnalyzer.VizOf(items));
         Assert.AreEqual("Array<Object> · 子字段 100% 出现", SchemaAnalyzer.Describe(items, Zh).Text);
         IReadOnlyList<AnalyzedBucket> lengths = SchemaAnalyzer.Lengths(items);
-        Assert.AreSequenceEqual(new[] { "1", "2", "3", "4", "5+" }, [.. lengths.Select(static b => b.Label)]);
+        Assert.AreSequenceEqual(["1", "2", "3", "4", "5+"], [.. lengths.Select(static b => b.Label)]);
         Assert.AreEqual(0, lengths[3].Count);
     }
 

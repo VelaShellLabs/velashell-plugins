@@ -70,7 +70,7 @@ internal static class TarUtil
                 return null;
             }
             // 两个全零块 = 归档结束。
-            if (header.All(b => b == 0))
+            if (header.All(static b => b == 0))
             {
                 return null;
             }
@@ -114,7 +114,7 @@ internal static class TarUtil
         while (true)
         {
             if (!await ReadExactlyAsync(tar, header, cancellationToken).ConfigureAwait(false)
-                || header.All(b => b == 0))
+                || header.All(static b => b == 0))
             {
                 return 0;
             }

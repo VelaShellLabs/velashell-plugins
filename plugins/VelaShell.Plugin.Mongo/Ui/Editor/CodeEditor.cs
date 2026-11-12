@@ -748,7 +748,7 @@ public sealed class CodeEditor : UserControl
             foreach ((string resource, string[] extensions) in new[]
                      {
                          ("VelaShell.Plugin.Mongo.Syntax.Mongosh.xshd", new[] { ".mongodb.js" }),
-                         ("VelaShell.Plugin.Mongo.Syntax.Json.xshd", new[] { ".ejson" })
+                         ("VelaShell.Plugin.Mongo.Syntax.Json.xshd", [".ejson"])
                      })
             {
                 try

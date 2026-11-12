@@ -12,10 +12,7 @@ internal sealed class ByteWriter
 {
     private byte[] _buffer;
 
-    internal ByteWriter(int capacity = 256)
-    {
-        _buffer = new byte[Math.Max(16, capacity)];
-    }
+    internal ByteWriter(int capacity = 256) => _buffer = new byte[Math.Max(16, capacity)];
 
     internal int Length { get; private set; }
 

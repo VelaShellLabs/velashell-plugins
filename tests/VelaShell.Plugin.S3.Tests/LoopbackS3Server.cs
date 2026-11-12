@@ -88,7 +88,7 @@ internal sealed class LoopbackS3Server : IDisposable
 
     /// <summary>预置一个桶。</summary>
     public void AddBucket(string bucket) =>
-        _buckets.GetOrAdd(bucket, _ => new(StringComparer.Ordinal));
+        _buckets.GetOrAdd(bucket, static _ => new(StringComparer.Ordinal));
 
     /// <summary>预置一个对象。</summary>
     public void AddObject(string bucket, string key, byte[] content)
@@ -494,7 +494,7 @@ internal sealed class LoopbackS3Server : IDisposable
             ? string.Empty
             : string.Join('&', request.RawQuery
                                       .Split('&', StringSplitOptions.RemoveEmptyEntries)
-                                      .Select(p => p.Contains('=', StringComparison.Ordinal) ? p : p + "=")
+                                      .Select(static p => p.Contains('=', StringComparison.Ordinal) ? p : p + "=")
                                       .Order(StringComparer.Ordinal));
 
         string payloadHash = request.Headers.TryGetValue("x-amz-content-sha256", out string? hash)

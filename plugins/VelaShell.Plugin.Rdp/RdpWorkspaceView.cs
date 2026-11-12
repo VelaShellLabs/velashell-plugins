@@ -62,8 +62,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         };
         _clipboard = new(session, context, Desktop, settings.Clipboard);
         Desktop.PublishClipboard = () => _clipboard.PublishLocalAsync();
-        _download.Cancel.Click += (_, _) => { _clipboard.CancelTransfer(false); UpdateTransfers(); };
-        _upload.Cancel.Click += (_, _) => { _clipboard.CancelTransfer(true); UpdateTransfers(); };
+        _download._cancel.Click += (_, _) => { _clipboard.CancelTransfer(false); UpdateTransfers(); };
+        _upload._cancel.Click += (_, _) => { _clipboard.CancelTransfer(true); UpdateTransfers(); };
         _transferTimer.Tick += (_, _) => UpdateTransfers();
         if (settings.Clipboard) { _transferTimer.Start(); }
         Desktop.OperationFailed = () => { _failed = true; UpdateStatus(); };
@@ -78,7 +78,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         // host's transfer rows. They sit right-aligned (upload outermost); the connection status takes what
         // is left and is the first thing to trim.
         _status.TextTrimming = TextTrimming.CharacterEllipsis;
-        var footerContent = new StatusBarPanel { ClipToBounds = true, Margin = new Thickness(0, 0, 8, 0), Children = { _status, _download.Root, _upload.Root } };
+        var footerContent = new StatusBarPanel { ClipToBounds = true, Margin = new Thickness(0, 0, 8, 0), Children = { _status, _download._root, _upload._root } };
         _footer = new Border { Name = "RdpStatusBar", Height = 24, BorderThickness = new Thickness(0, 1, 0, 0), Child = footerContent, ClipToBounds = true };
         _footer[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSidebar");
         _footer[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaBorderPrimary");
@@ -228,7 +228,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         protected override Size ArrangeOverride(Size finalSize)
         {
             double right = finalSize.Width;
-            foreach (Control? slot in Children.Skip(1).Where(child => child.IsVisible).Reverse())
+            foreach (Control? slot in Children.Skip(1).Where(static child => child.IsVisible).Reverse())
             {
                 right -= slot.DesiredSize.Width;
                 slot.Arrange(new Rect(right, 0, slot.DesiredSize.Width, finalSize.Height));
@@ -246,30 +246,30 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         private const double TooltipScreenMargin = 64;
         // The parent status panel provides the available width. Do not impose a second cap here:
         // on narrow views the transfer slot must be able to use every pixel not needed by the status text.
-        internal readonly SlotPanel Root = new() { IsVisible = false, ClipToBounds = true, Margin = new Thickness(10, 0, 0, 0) };
-        internal readonly TextBlock Text;
-        internal readonly ProgressBar Bar;
+        internal readonly SlotPanel _root = new() { IsVisible = false, ClipToBounds = true, Margin = new Thickness(10, 0, 0, 0) };
+        internal readonly TextBlock _text;
+        internal readonly ProgressBar _bar;
         // Long state wording ("Copy completed (Shell confirmed)") trims here; the tooltip has it in full.
-        internal readonly TextBlock State = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), FontWeight = FontWeight.Medium, MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis };
-        internal readonly Button Cancel;
+        internal readonly TextBlock _state = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), FontWeight = FontWeight.Medium, MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis };
+        internal readonly Button _cancel;
         private string? _tone;
 
         internal TransferSlot(string name, string cancelName)
         {
             var divider = new Avalonia.Controls.Shapes.Rectangle { Width = 1, Height = 12, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
             divider[!Avalonia.Controls.Shapes.Shape.FillProperty] = new DynamicResourceExtension("VelaBorderPrimary");
-            Text = new() { Name = name + "Progress", VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-            Text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("VelaTextSecondary");
-            Text[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
-            Text[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize11");
+            _text = new() { Name = name + "Progress", VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            _text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("VelaTextSecondary");
+            _text[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
+            _text[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize11");
             // Same bar as the host's transfer panel: 3px, rounded, border-primary track. Fixed width so the
             // bars of two transfers line up and do not jump as the name or the state text changes.
-            Bar = new() { Name = name + "Bar", Width = 72, MinWidth = 0, Height = 3, MinHeight = 3, Maximum = 100, CornerRadius = new CornerRadius(2), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            Bar[!Avalonia.Controls.Primitives.TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("VelaBorderPrimary");
-            State[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiMonoFont");
-            State[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize10");
-            Cancel = BuildCancelButton(cancelName);
-            Root.Children.AddRange([divider, Text, Bar, State, Cancel]);
+            _bar = new() { Name = name + "Bar", Width = 72, MinWidth = 0, Height = 3, MinHeight = 3, Maximum = 100, CornerRadius = new CornerRadius(2), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            _bar[!Avalonia.Controls.Primitives.TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("VelaBorderPrimary");
+            _state[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiMonoFont");
+            _state[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize10");
+            _cancel = BuildCancelButton(cancelName);
+            _root.Children.AddRange([divider, _text, _bar, _state, _cancel]);
         }
 
         /// <summary>
@@ -289,13 +289,13 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
                 double rest = Math.Max(0, availableSize.Width - divider.DesiredSize.Width - bar.DesiredSize.Width - cancel.DesiredSize.Width);
                 state.Measure(new Size(rest, availableSize.Height));
                 text.Measure(new Size(Math.Max(0, rest - state.DesiredSize.Width), availableSize.Height));
-                return new Size(Children.Sum(child => child.DesiredSize.Width), Children.Max(child => child.DesiredSize.Height));
+                return new Size(Children.Sum(static child => child.DesiredSize.Width), Children.Max(static child => child.DesiredSize.Height));
             }
 
             protected override Size ArrangeOverride(Size finalSize)
             {
                 // Any slack beyond the desired size goes to the text, so the right-hand parts stay put.
-                double x = 0, slack = Math.Max(0, finalSize.Width - Children.Sum(child => child.DesiredSize.Width));
+                double x = 0, slack = Math.Max(0, finalSize.Width - Children.Sum(static child => child.DesiredSize.Width));
                 foreach (Control child in Children)
                 {
                     double width = child.DesiredSize.Width + (child == Children[1] ? slack : 0);
@@ -337,24 +337,24 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
 
         internal void Update(RdpClipboardProgress? progress, bool upload, bool connected, Loc loc)
         {
-            Root.IsVisible = progress is not null;
+            _root.IsVisible = progress is not null;
             if (progress is null) { return; }
             string direction = loc[upload ? "TransferUpload" : "TransferDownload"], state = loc["Transfer" + progress.State];
             string size = progress.Total > 0 ? FormatSize(progress.Bytes) + " / " + FormatSize(progress.Total)
                 : progress.Bytes > 0 ? FormatSize(progress.Bytes) : "";
             // Keep the status bar focused on measurable progress. The complete file name remains in the tooltip,
             // where it is not truncated by a narrow workspace.
-            Text.Text = string.Join(" · ", new[] { direction, size }.Where(part => part.Length > 0));
+            _text.Text = string.Join(" · ", new[] { direction, size }.Where(static part => part.Length > 0));
             string metrics = FormatMetrics(progress, loc);
-            ToolTip.SetTip(Root, BuildTooltip(Root, progress, direction, state, loc));
+            ToolTip.SetTip(_root, BuildTooltip(_root, progress, direction, state, loc));
             // Show compact live metrics beside the percentage; the tooltip retains exact values.
             string percentage = progress.State == "Transferring" && progress.Total > 0
                 ? Math.Clamp(100 * progress.Bytes / progress.Total, 0, 100).ToString(CultureInfo.InvariantCulture) + "%"
                 : state;
             string compactMetrics = FormatMetrics(progress, loc, compact: true);
-            State.Text = compactMetrics.Length > 0 ? percentage + " · " + compactMetrics : percentage;
-            Bar.IsIndeterminate = progress.State == "Preparing" && progress.Total == 0;
-            Bar.Value = progress.Total == 0 ? progress.State is "Sent" or "Delivered" or "Completed" ? 100 : 0 : 100.0 * progress.Bytes / progress.Total;
+            _state.Text = compactMetrics.Length > 0 ? percentage + " · " + compactMetrics : percentage;
+            _bar.IsIndeterminate = progress.State == "Preparing" && progress.Total == 0;
+            _bar.Value = progress.Total == 0 ? progress.State is "Sent" or "Delivered" or "Completed" ? 100 : 0 : 100.0 * progress.Bytes / progress.Total;
             SetTone(progress.State switch
             {
                 "Sent" or "Delivered" or "Completed" => "VelaStatusConnected",
@@ -364,10 +364,10 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
                 "Ready" => "VelaTextSecondary",
                 _ => "VelaAccent"
             });
-            ToolTip.SetTip(Cancel, loc["TransferCancel"]);
-            Avalonia.Automation.AutomationProperties.SetName(Cancel, loc["TransferCancel"]);
+            ToolTip.SetTip(_cancel, loc["TransferCancel"]);
+            Avalonia.Automation.AutomationProperties.SetName(_cancel, loc["TransferCancel"]);
             // Only a transfer that can still be stopped offers ×; a finished one has nothing to cancel.
-            Cancel.IsVisible = progress.Active && connected;
+            _cancel.IsVisible = progress.Active && connected;
         }
 
         private static TextBlock BuildTooltip(Control anchor, RdpClipboardProgress progress, string direction, string state, Loc loc)
@@ -381,7 +381,7 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
             else if (progress.State == "TimedOut") { lines.Add(loc["TransferTimedOutDetail"]); }
             else if (progress.State is "Sent" or "Delivered") { lines.Add(loc["TransferDeliveryDetail"]); }
 
-            TopLevel? topLevel = TopLevel.GetTopLevel(anchor);
+            var topLevel = TopLevel.GetTopLevel(anchor);
             double windowWidth = topLevel is null
                 ? 0
                 : Math.Min(topLevel.ClientSize.Width, topLevel.Bounds.Width);
@@ -425,8 +425,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         {
             if (_tone == token) { return; }
             _tone = token;
-            State[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(token);
-            Bar[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension(token);
+            _state[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(token);
+            _bar[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension(token);
         }
 
         private static string FormatSize(long bytes)
@@ -473,9 +473,9 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     /// </summary>
     internal static string ReconnectFailure(Exception ex, Loc loc) => ex switch
     {
-        VelaShell.PluginSdk.Protocols.ProtocolAuthenticationException or VelaShell.PluginSdk.Protocols.ProtocolCertificateTrustException =>
+        PluginSdk.Protocols.ProtocolAuthenticationException or PluginSdk.Protocols.ProtocolCertificateTrustException =>
             $"{ex.Message} {loc["Reconnect"]}",
-        VelaShell.PluginSdk.Protocols.ProtocolConnectionException or VelaShell.PluginSdk.Protocols.ProtocolUnsupportedException => ex.Message,
+        PluginSdk.Protocols.ProtocolConnectionException or PluginSdk.Protocols.ProtocolUnsupportedException => ex.Message,
         _ => loc["ReconnectFailed"]
     };
 

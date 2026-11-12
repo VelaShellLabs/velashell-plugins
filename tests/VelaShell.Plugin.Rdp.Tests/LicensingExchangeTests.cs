@@ -37,7 +37,7 @@ public sealed class LicensingExchangeTests
         using BinaryReader alert = ReadPacket(client.Process(server.Request()), 0xFF);
         Assert.AreEqual(1u, alert.ReadUInt32(), "ERR_INVALID_SERVER_CERTIFICATE");
         Assert.AreEqual(1u, alert.ReadUInt32(), "ST_TOTAL_ABORT");
-        Assert.AreEqual(0, ReadBlob(alert, 4).Length);
+        Assert.IsEmpty(ReadBlob(alert, 4));
         Assert.AreEqual(alert.BaseStream.Length, alert.BaseStream.Position);
         Assert.IsNotNull(client.Failure);
         Assert.IsFalse(client.CanActivate);
@@ -52,7 +52,7 @@ public sealed class LicensingExchangeTests
         await using RdpConnection connection = LicensingTests.Connection(wire);
         _ = await Assert.ThrowsAsync<RdpProtocolException>(() => LicensingTests.Receive(connection));
         byte[] frame = wire.Output.ToArray();
-        Assert.IsTrue(frame.Length > 15, "The initial licensing response must have been sent before activation was rejected.");
+        Assert.IsGreaterThan(15, frame.Length, "The initial licensing response must have been sent before activation was rejected.");
         int payloadOffset = (frame[13] & 0x80) == 0 ? 14 : 15;
         server.AcceptRequest(frame[payloadOffset..], "user", Environment.MachineName);
     }
@@ -72,7 +72,7 @@ public sealed class LicensingExchangeTests
         byte[] tampered = issuedLicense ? server.IssueLicense() : server.Challenge();
         tampered[^1] ^= 0x80;
         RdpProtocolException error = Assert.Throws<RdpProtocolException>(() => client.Process(tampered));
-        StringAssert.Contains(error.Message, "MAC");
+        Assert.Contains("MAC", error.Message);
         Assert.IsFalse(client.CanActivate);
     }
 
@@ -116,13 +116,13 @@ public sealed class LicensingExchangeTests
         // https://learn.microsoft.com/openspecs/windows_protocols/ms-rdpbcgr/c2389e29-5706-4ac4-b555-e26f93144db7
         private static readonly RSAParameters SigningKey = new()
         {
-            Modulus = Convert.FromHexString(
+            Modulus = [.. Convert.FromHexString(
                 "3D3A5EBD72433EC94DBBC11E4ABA5FCB3E882087EFF5C1E2D7B76B9AF2524595" +
-                "CE63656B583AFEEF7CE7BFFE3DF65C7D6C5E06091AF561BB2093095F056DEA87").Reverse().ToArray(),
+                "CE63656B583AFEEF7CE7BFFE3DF65C7D6C5E06091AF561BB2093095F056DEA87").Reverse()],
             Exponent = Convert.FromHexString("C0887B5B"),
-            D = Convert.FromHexString(
+            D = [.. Convert.FromHexString(
                 "87A71932DA11875558001616256568F8243EE6FAE9674994CF92CC3399E80860" +
-                "179A129F24DDB12499C73AB80A7B0DDD350779170B519BB3C7100113E73FF35F").Reverse().ToArray()
+                "179A129F24DDB12499C73AB80A7B0DDD350779170B519BB3C7100113E73FF35F").Reverse()]
         };
 
         private readonly RSA? _rsa;
@@ -172,15 +172,15 @@ public sealed class LicensingExchangeTests
             Assert.AreEqual(1u, r.ReadUInt32());
             Assert.AreEqual(0u, r.ReadUInt32());
             ClientRandom = r.ReadBytes(32);
-            Assert.AreEqual(32, ClientRandom.Length);
+            Assert.HasCount(32, ClientRandom);
             byte[] encrypted = ReadBlob(r, 2);
             RSAParameters key = _key;
             int width = key.Modulus!.Length;
-            Assert.AreEqual(width + 8, encrypted.Length);
+            Assert.HasCount(width + 8, encrypted);
             Assert.AreSequenceEqual(new byte[8], encrypted.AsSpan(width).ToArray());
             BigInteger ciphertext = new(encrypted.AsSpan(0, width), isUnsigned: true, isBigEndian: false);
             BigInteger modulus = new(key.Modulus, isUnsigned: true, isBigEndian: true);
-            Assert.IsTrue(ciphertext < modulus);
+            Assert.IsLessThan(modulus, ciphertext);
             var decrypted = BigInteger.ModPow(ciphertext,
                 new BigInteger(key.D!, isUnsigned: true, isBigEndian: true), modulus);
             byte[] premaster = new byte[48];
@@ -215,7 +215,7 @@ public sealed class LicensingExchangeTests
                 w.Write(_challenge);
             });
             Assert.AreSequenceEqual(expected, response, "Challenge response includes the complete eight-byte header.");
-            Assert.AreEqual(20, hardware.Length);
+            Assert.HasCount(20, hardware);
             Assert.AreEqual(0u, BinaryPrimitives.ReadUInt32LittleEndian(hardware));
             Assert.IsTrue(hardware.AsSpan(4).ContainsAnyExcept((byte)0));
             Assert.AreSequenceEqual(Mac([.. response, .. hardware]), mac, "MAC must cover plaintext response and HWID together.");
@@ -231,7 +231,7 @@ public sealed class LicensingExchangeTests
                 WriteString(w, "Fixture vendor", Encoding.Unicode);
                 WriteString(w, "Fixture product", Encoding.Unicode);
                 w.Write(5u);
-                w.Write(new byte[] { 0x31, 0x42, 0x53, 0x64, 0x75 });
+                w.Write([0x31, 0x42, 0x53, 0x64, 0x75]);
             });
             return LicensingTests.Packet(3, Encode(w => WriteAuthenticated(w, license)));
         }
@@ -246,26 +246,29 @@ public sealed class LicensingExchangeTests
         private void DeriveKeys(byte[] premaster)
         {
             // MS-RDPELE 5.1: the session expansion reverses the two randoms.
-            byte[] Expand(byte[] secret, byte[] first, byte[] second) => new[] { "A", "BB", "CCC" }
-                .SelectMany(label => MD5.HashData(secret.Concat(SHA1.HashData(
-                    Encoding.ASCII.GetBytes(label).Concat(secret).Concat(first).Concat(second).ToArray())).ToArray())).ToArray();
+            byte[] Expand(byte[] secret, byte[] first, byte[] second) => [.. new[] { "A", "BB", "CCC" }
+                .SelectMany(label => MD5.HashData(
+                [
+                    .. secret,
+                    .. SHA1.HashData(
+                            [.. Encoding.ASCII.GetBytes(label), .. secret, .. first, .. second]),
+                ]))];
             byte[] master = Expand(premaster, ClientRandom, _random);
             byte[] session = Expand(master, _random, ClientRandom);
-            _macSalt = session.Take(16).ToArray();
-            _encryptionKey = MD5.HashData(session.Skip(16).Take(16).Concat(ClientRandom).Concat(_random).ToArray());
+            _macSalt = [.. session.Take(16)];
+            _encryptionKey = MD5.HashData([.. session.Skip(16).Take(16), .. ClientRandom, .. _random]);
         }
 
         private byte[] Mac(byte[] data)
         {
             byte[] length = Encode(w => w.Write((uint)data.Length));
-            byte[] inner = SHA1.HashData(_macSalt.Concat(Enumerable.Repeat((byte)0x36, 40))
-                .Concat(length).Concat(data).ToArray());
-            return MD5.HashData(_macSalt.Concat(Enumerable.Repeat((byte)0x5C, 48)).Concat(inner).ToArray());
+            byte[] inner = SHA1.HashData([.. _macSalt, .. Enumerable.Repeat((byte)0x36, 40), .. length, .. data]);
+            return MD5.HashData([.. _macSalt, .. Enumerable.Repeat((byte)0x5C, 48), .. inner]);
         }
 
         private byte[] Rc4(byte[] data)
         {
-            int[] permutation = Enumerable.Range(0, 256).ToArray();
+            int[] permutation = [.. Enumerable.Range(0, 256)];
             int j = 0;
             for (int i = 0; i < 256; i++)
             {
@@ -274,13 +277,13 @@ public sealed class LicensingExchangeTests
             }
             int x = 0;
             j = 0;
-            return data.Select(value =>
+            return [.. data.Select(value =>
             {
                 x = (x + 1) % 256;
                 j = (j + permutation[x]) % 256;
                 (permutation[x], permutation[j]) = (permutation[j], permutation[x]);
                 return (byte)(value ^ permutation[(permutation[x] + permutation[j]) % 256]);
-            }).ToArray();
+            })];
         }
 
         private byte[] ProprietaryCertificate()
@@ -323,7 +326,7 @@ public sealed class LicensingExchangeTests
             var leafRequest = new CertificateRequest("CN=Licensing fixture leaf", _rsa!, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             leafRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             leafRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyEncipherment, true));
-            using X509Certificate2 leaf = leafRequest.Create(root, now.AddDays(-1), now.AddDays(1), new byte[] { 1, 2, 3, 4 });
+            using X509Certificate2 leaf = leafRequest.Create(root, now.AddDays(-1), now.AddDays(1), [1, 2, 3, 4]);
             return Encode(w =>
             {
                 w.Write(2u);
@@ -357,14 +360,14 @@ public sealed class LicensingExchangeTests
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            Assert.IsTrue(_input.Position < _input.Length, "Client read ahead without sending the required licensing reply.");
+            Assert.IsLessThan(_input.Length, _input.Position, "Client read ahead without sending the required licensing reply.");
             return _input.Read(buffer, offset, count);
         }
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             await Task.Yield();
-            Assert.IsTrue(_input.Position < _input.Length, "Client read ahead without sending the required licensing reply.");
+            Assert.IsLessThan(_input.Length, _input.Position, "Client read ahead without sending the required licensing reply.");
             return _input.Read(buffer.Span);
         }
 
@@ -375,7 +378,7 @@ public sealed class LicensingExchangeTests
             if (frame.Length < 4) { return; }
             int length = BinaryPrimitives.ReadUInt16BigEndian(frame.AsSpan(2));
             if (frame.Length < length) { return; }
-            Assert.AreEqual(length, frame.Length);
+            Assert.HasCount(length, frame);
             Assert.AreSequenceEqual(new byte[] { 3, 0 }, frame[..2]);
             Assert.AreSequenceEqual(new byte[] { 2, 0xF0, 0x80, 0x64, 0, 0, 3, 0xEB, 0x70 }, frame[4..13]);
             int payloadOffset = (frame[13] & 0x80) == 0 ? 14 : 15;
@@ -439,7 +442,7 @@ public sealed class LicensingExchangeTests
         Assert.AreEqual(expectedType, r.ReadUInt16());
         int length = r.ReadUInt16();
         byte[] data = r.ReadBytes(length);
-        Assert.AreEqual(length, data.Length);
+        Assert.HasCount(length, data);
         return data;
     }
 

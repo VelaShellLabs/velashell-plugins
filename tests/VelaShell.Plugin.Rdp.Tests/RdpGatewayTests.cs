@@ -28,16 +28,16 @@ public sealed class RdpGatewayTests
         Assert.AreEqual((ushort)3, BinaryPrimitives.ReadUInt16LittleEndian(channel.AsSpan(12)));
         Assert.AreEqual("desktop.example\0", Encoding.Unicode.GetString(channel.AsSpan(16)));
         Assert.AreEqual(channel.Length - 16, BinaryPrimitives.ReadUInt16LittleEndian(channel.AsSpan(14)));
-        var read = new byte[3];
+        byte[] read = new byte[3];
         await stream.ReadExactlyAsync(read);
         Assert.AreSequenceEqual(new byte[] { 8, 9, 10 }, read);
-        var outgoing = new byte[70000];
+        byte[] outgoing = new byte[70000];
         RandomNumberGenerator.Fill(outgoing);
         await stream.WriteAsync(outgoing);
-        byte[][] sent = socket.Sent.Skip(4).ToArray();
+        byte[][] sent = [.. socket.Sent.Skip(4)];
         Assert.HasCount(2, sent);
         Assert.AreEqual(65535, BinaryPrimitives.ReadUInt16LittleEndian(sent[0].AsSpan(8)));
-        Assert.AreSequenceEqual(outgoing, sent.SelectMany(p => p.Skip(10)).ToArray());
+        Assert.AreSequenceEqual(outgoing, [.. sent.SelectMany(static p => p.Skip(10))]);
         int eof = await stream.ReadAsync(read);
         Assert.AreEqual(0, eof);
         Assert.AreEqual((ushort)17, BinaryPrimitives.ReadUInt16LittleEndian(socket.Sent[^1]));
@@ -67,14 +67,14 @@ public sealed class RdpGatewayTests
     {
         var messages = new List<string>();
         byte[] serviceMessage = Encoding.Unicode.GetBytes("Gateway notice\0");
-        var serviceBody = new byte[2 + serviceMessage.Length];
+        byte[] serviceBody = new byte[2 + serviceMessage.Length];
         BinaryPrimitives.WriteUInt16LittleEndian(serviceBody, (ushort)serviceMessage.Length);
         serviceMessage.CopyTo(serviceBody, 2);
         var socket = new ScriptedSocket([.. Responses(), Packet(11, serviceBody), Packet(10, [3, 0, 8, 9, 10]), Packet(16, new byte[4])]);
         using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(socket, "server", 3389, 0,
             CancellationToken.None, messages.Add);
 
-        var data = new byte[3];
+        byte[] data = new byte[3];
         await stream.ReadExactlyAsync(data);
         Assert.AreEqual("Gateway notice", messages.Single());
         Assert.AreSequenceEqual(new byte[] { 8, 9, 10 }, data);
@@ -86,7 +86,7 @@ public sealed class RdpGatewayTests
         foreach (byte[] body in new[]
         {
             new byte[] { 3, 0, (byte)'A', 0, 0 },
-            new byte[] { 4, 0, (byte)'A', 0 }
+            [4, 0, (byte)'A', 0]
         })
         {
             var socket = new ScriptedSocket([.. Responses(), Packet(11, body)]);
@@ -137,8 +137,10 @@ public sealed class RdpGatewayTests
     public async Task AStatementOfHealthRequestIsSkippedWhenNapWasNotAdvertised()
     {
         // Tunnel response with capsFlags (0x2) and SOH_REQ (0x4): a 16-byte nonce and an HTTP_UNICODE_STRING serverCert.
-        var tunnel = new List<byte>(new byte[10]);
-        tunnel[6] = 0x06;
+        var tunnel = new List<byte>(new byte[10])
+        {
+            [6] = 0x06
+        };
         tunnel.AddRange([8, 0, 0, 0]);                       // capsFlags
         tunnel.AddRange(new byte[16]);                       // nonce
         tunnel.AddRange([4, 0, (byte)'c', 0, (byte)'e', 0]); // serverCert: cbLen 4
@@ -161,7 +163,7 @@ public sealed class RdpGatewayTests
         replies[1][14] = 0x10;
         var consent = new ScriptedSocket(replies);
         await Assert.ThrowsExactlyAsync<NotSupportedException>(() => RdpGatewayStream.CreateForTestAsync(consent, "server", 3389, 0, CancellationToken.None));
-        var huge = new ScriptedSocket([new byte[] { 2, 0, 0, 0, 255, 255, 255, 127 }]);
+        var huge = new ScriptedSocket([[2, 0, 0, 0, 255, 255, 255, 127]]);
         await Assert.ThrowsExactlyAsync<RdpProtocolException>(() => RdpGatewayStream.CreateForTestAsync(huge, "server", 3389, 0, CancellationToken.None));
         var mismatch = new ScriptedSocket([.. Responses(), Packet(10, [10, 0, 1])]);
         using RdpGatewayStream stream = await RdpGatewayStream.CreateForTestAsync(mismatch, "server", 3389, 0, CancellationToken.None);
@@ -187,7 +189,7 @@ public sealed class RdpGatewayTests
         listener.Start();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         string requestText = "";
-        Task server = Task.Run(async () =>
+        var server = Task.Run(async () =>
         {
             using TcpClient tcp = await listener.AcceptTcpClientAsync(timeout.Token);
             await using var tls = new SslStream(tcp.GetStream());
@@ -196,7 +198,7 @@ public sealed class RdpGatewayTests
             string key = requestText.Split("\r\n").Single(l => l.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase)).Split(':', 2)[1].Trim();
             string accept = Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
             await tls.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"), timeout.Token);
-            using WebSocket ws = WebSocket.CreateFromStream(tls, true, null, Timeout.InfiniteTimeSpan);
+            using var ws = WebSocket.CreateFromStream(tls, true, null, Timeout.InfiniteTimeSpan);
             byte[][] replies = Responses();
             int[] types = [1, 4, 6, 8];
             for (int i = 0; i < replies.Length; i++)
@@ -234,13 +236,13 @@ public sealed class RdpGatewayTests
         {
             await using RdpGatewayStream stream = await RdpGatewayStream.ConnectAsync(options, "private.invalid", 3389, "user", "secret", "realm", 0, timeout.Token);
             await stream.WriteAsync(new byte[] { 1, 2, 3 }, timeout.Token);
-            var result = new byte[2];
+            byte[] result = new byte[2];
             await stream.ReadExactlyAsync(result, timeout.Token);
             Assert.AreSequenceEqual(new byte[] { 4, 5 }, result);
         }
         await server;
-        StringAssert.StartsWith(requestText, "GET /remoteDesktopGateway/ HTTP/1.1");
-        StringAssert.Contains(requestText, "RDG-Connection-Id:");
+        Assert.StartsWith("GET /remoteDesktopGateway/ HTTP/1.1", requestText);
+        Assert.Contains("RDG-Connection-Id:", requestText);
         Assert.IsFalse(requestText.Contains("secret", StringComparison.Ordinal));
     }
 
@@ -255,7 +257,7 @@ public sealed class RdpGatewayTests
         listener.Start();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         string request = "";
-        Task server = Task.Run(async () =>
+        var server = Task.Run(async () =>
         {
             using TcpClient tcp = await listener.AcceptTcpClientAsync(timeout.Token);
             await using var tls = new SslStream(tcp.GetStream());
@@ -269,19 +271,20 @@ public sealed class RdpGatewayTests
         });
         var options = new RdpGatewayOptions
         {
-            Host = "127.0.0.1", Port = ((IPEndPoint)listener.LocalEndpoint).Port,
+            Host = "127.0.0.1",
+            Port = ((IPEndPoint)listener.LocalEndpoint).Port,
             CertificatePin = rejectCertificate ? null : certificate.GetCertHash(HashAlgorithmName.SHA256)
         };
         IOException error = await Assert.ThrowsExactlyAsync<IOException>(() => RdpGatewayStream.ConnectAsync(options, "target", 3389, "user", "secret", "", 0, timeout.Token));
         await server;
-        if (rejectCertificate) { StringAssert.Contains(error.Message, "certificate validation failed"); Assert.AreEqual("", request); }
+        if (rejectCertificate) { Assert.Contains("certificate validation failed", error.Message); Assert.AreEqual("", request); }
         Assert.IsFalse(request.Contains("Authorization:", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(error.ToString().Contains("secret", StringComparison.Ordinal));
     }
 
     private static X509Certificate2 Certificate()
     {
-        using RSA rsa = RSA.Create(2048);
+        using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using X509Certificate2 ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         return X509CertificateLoader.LoadPkcs12(ephemeral.Export(X509ContentType.Pfx), null);
@@ -290,7 +293,7 @@ public sealed class RdpGatewayTests
     private static async Task<string> ReadHeadersAsync(Stream stream, CancellationToken ct)
     {
         var text = new StringBuilder();
-        var one = new byte[1];
+        byte[] one = new byte[1];
         while (text.Length < 32768)
         {
             int count = await stream.ReadAsync(one, ct);
@@ -304,7 +307,7 @@ public sealed class RdpGatewayTests
     private static async Task<byte[]> ReceiveMessageAsync(WebSocket socket, CancellationToken ct)
     {
         using var result = new MemoryStream();
-        var buffer = new byte[4096];
+        byte[] buffer = new byte[4096];
         while (true)
         {
             ValueWebSocketReceiveResult read = await socket.ReceiveAsync(buffer.AsMemory(), ct);
@@ -316,11 +319,11 @@ public sealed class RdpGatewayTests
 
     private static byte[][] Responses()
     {
-        var handshake = new byte[10];
+        byte[] handshake = new byte[10];
         handshake[4] = 1;
         // A server may advertise extended authentication without requiring it.
         handshake[8] = 3;
-        var tunnel = new byte[14];
+        byte[] tunnel = new byte[14];
         BinaryPrimitives.WriteUInt16LittleEndian(tunnel.AsSpan(6), 2);
         BinaryPrimitives.WriteUInt32LittleEndian(tunnel.AsSpan(10), 0x00000008);
         return [Packet(2, handshake), Packet(5, tunnel), Packet(7, new byte[8]), Packet(9, new byte[8])];
@@ -328,7 +331,7 @@ public sealed class RdpGatewayTests
 
     private static byte[] Packet(ushort type, byte[] body)
     {
-        var result = new byte[8 + body.Length];
+        byte[] result = new byte[8 + body.Length];
         BinaryPrimitives.WriteUInt16LittleEndian(result, type);
         BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(4), (uint)result.Length);
         body.CopyTo(result, 8);
@@ -337,7 +340,7 @@ public sealed class RdpGatewayTests
 
     private sealed class ScriptedSocket(byte[][] input) : WebSocket
     {
-        private readonly MemoryStream _input = new(input.SelectMany(p => p).ToArray());
+        private readonly MemoryStream _input = new([.. input.SelectMany(static p => p)]);
         internal List<byte[]> Sent { get; } = [];
         internal bool Disposed { get; private set; }
         internal bool WaitForCancellation { get; init; }
@@ -351,7 +354,7 @@ public sealed class RdpGatewayTests
         public override Task CloseOutputAsync(WebSocketCloseStatus status, string? description, CancellationToken ct) => Task.CompletedTask;
         public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType type, bool end, CancellationToken ct)
         {
-            Sent.Add(buffer.ToArray());
+            Sent.Add([.. buffer]);
             return Task.CompletedTask;
         }
         public override async Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken ct)

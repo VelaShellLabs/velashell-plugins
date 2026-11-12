@@ -47,14 +47,11 @@ public sealed partial class GridFsTabView : UserControl
     }
 
     /// <summary>设计器 / headless 用的无参构造。</summary>
-    public GridFsTabView()
-    {
-        InitializeComponent();
-    }
+    public GridFsTabView() => InitializeComponent();
 
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (_viewModel is not null && (e.Source as Control)?.DataContext is GridFsEntry entry && e.Source is not CheckBox)
+        if (_viewModel is not null && e.Source is Control { DataContext: GridFsEntry entry } && e.Source is not CheckBox)
         {
             _viewModel.OpenEntryCommand.Execute(entry);
             e.Handled = true;
@@ -97,7 +94,7 @@ public sealed partial class GridFsTabView : UserControl
 
     private static bool IsInsideEditor(object? source)
     {
-        for (var element = source as Avalonia.StyledElement; element is not null; element = element.Parent)
+        for (var element = source as StyledElement; element is not null; element = element.Parent)
         {
             if (element is CodeEditor)
             {

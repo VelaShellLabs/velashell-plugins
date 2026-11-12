@@ -34,12 +34,12 @@ internal sealed partial class DrdynvcChannel
     private sealed record Listener(Func<DynamicChannel, IDynamicChannelHandler> Factory, int Limit);
     private sealed class Instance(DynamicChannel channel, IDynamicChannelHandler? handler, int limit)
     {
-        internal readonly DynamicChannel Channel = channel;
-        internal readonly IDynamicChannelHandler? Handler = handler;
-        internal readonly int Limit = limit;
-        internal MemoryStream? Buffer;
-        internal ZgfxDecoder? Decoder;
-        internal int Total;
+        internal readonly DynamicChannel _channel = channel;
+        internal readonly IDynamicChannelHandler? _handler = handler;
+        internal readonly int _limit = limit;
+        internal MemoryStream? _buffer;
+        internal ZgfxDecoder? _decoder;
+        internal int _total;
     }
     private readonly Dictionary<string, Listener> _listeners = [with(StringComparer.Ordinal)];
     private readonly Dictionary<uint, Instance> _instances = [];
@@ -50,7 +50,7 @@ internal sealed partial class DrdynvcChannel
 
     internal void RegisterListener(string name, Func<DynamicChannel, IDynamicChannelHandler> factory, int maxMessageBytes = MaxDisplayMessage)
     {
-        if (string.IsNullOrEmpty(name) || name.Length > 255 || name.Any(c => c is '\0' or > '\x7f'))
+        if (string.IsNullOrEmpty(name) || name.Length > 255 || name.Any(static c => c is '\0' or > '\x7f'))
         {
             throw new ArgumentException("A dynamic channel name must be NUL-free ASCII and at most 255 characters.", nameof(name));
         }
@@ -75,8 +75,8 @@ internal sealed partial class DrdynvcChannel
         {
             lock (_lock)
             {
-                if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance.Channel, channel)
-                    || message.Length > instance.Limit)
+                if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance._channel, channel)
+                    || message.Length > instance._limit)
                 {
                     throw new InvalidOperationException("Dynamic channel closed or message too large.");
                 }
@@ -119,7 +119,7 @@ internal sealed partial class DrdynvcChannel
             uint id = channel.Id;
             lock (_lock)
             {
-                if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance.Channel, channel))
+                if (!_instances.TryGetValue(id, out Instance? instance) || !ReferenceEquals(instance._channel, channel))
                 {
                     return;
                 }
@@ -137,7 +137,7 @@ internal sealed partial class DrdynvcChannel
         finally
         {
             _ = _sendGate.Release();
-            if (removed?.Handler is { } handler)
+            if (removed?._handler is { } handler)
             {
                 await handler.OnCloseAsync().ConfigureAwait(false);
             }
@@ -164,10 +164,10 @@ internal sealed partial class DrdynvcChannel
         List<Exception> failures = [];
         foreach (Instance instance in instances)
         {
-            instance.Buffer?.Dispose();
+            instance._buffer?.Dispose();
             try
             {
-                if (instance.Handler is { } handler)
+                if (instance._handler is { } handler)
                 {
                     await handler.OnCloseAsync().ConfigureAwait(false);
                 }
@@ -209,21 +209,21 @@ internal sealed partial class DrdynvcChannel
         try { await action().ConfigureAwait(false); }
         catch (Exception ex) when (!IsShutdown(ex))
         {
-            Log($"dynamic channel {instance.Channel.Id} handler failed ({ex.GetType().Name}); closing that channel");
+            Log($"dynamic channel {instance._channel.Id} handler failed ({ex.GetType().Name}); closing that channel");
             await CloseFailedAsync(instance).ConfigureAwait(false);
         }
     }
 
     private async Task CloseFailedAsync(Instance instance)
     {
-        try { await CloseChannelAsync(instance.Channel).ConfigureAwait(false); }
-        catch (Exception ex) when (!IsShutdown(ex)) { Log($"dynamic channel {instance.Channel.Id} close failed ({ex.GetType().Name})"); }
+        try { await CloseChannelAsync(instance._channel).ConfigureAwait(false); }
+        catch (Exception ex) when (!IsShutdown(ex)) { Log($"dynamic channel {instance._channel.Id} close failed ({ex.GetType().Name})"); }
     }
 
     private async Task RunCloseHandlerAsync(Instance instance, IDynamicChannelHandler handler)
     {
         try { await handler.OnCloseAsync().ConfigureAwait(false); }
-        catch (Exception ex) when (!IsShutdown(ex)) { Log($"dynamic channel {instance.Channel.Id} close handler failed ({ex.GetType().Name})"); }
+        catch (Exception ex) when (!IsShutdown(ex)) { Log($"dynamic channel {instance._channel.Id} close handler failed ({ex.GetType().Name})"); }
     }
 
     /// <summary>
@@ -233,7 +233,7 @@ internal sealed partial class DrdynvcChannel
     private (byte[]? Reply, Func<Task>? Work) Reject(Instance instance)
     {
         ClearBuffer(instance);
-        return instance.Handler is null ? default : (null, () => CloseFailedAsync(instance));
+        return instance._handler is null ? default : (null, () => CloseFailedAsync(instance));
     }
 
     private void Log(string message)
@@ -385,7 +385,7 @@ internal sealed partial class DrdynvcChannel
                 var w = new ByteWriter(8);
                 w.U8((byte)(0x10 | cb)); WriteVariable(w, id, cb);
                 w.U32LE(created is not null ? 0u : 0x80004001u);
-                return (w.ToArray(), created is { Handler: { } handler } opened
+                return (w.ToArray(), created is { _handler: { } handler } opened
                     ? () => RunHandlerAsync(opened, handler.OnOpenAsync) : null);
             }
             if (!_instances.TryGetValue(id, out Instance? instance))
@@ -402,7 +402,7 @@ internal sealed partial class DrdynvcChannel
                 // MS-RDPEDYC 2.2.4: the client acknowledges a server Close Request with a Close Response for the same id.
                 var close = new ByteWriter(8);
                 close.U8((byte)((CmdClose << 4) | cb)); WriteVariable(close, id, cb);
-                return (close.ToArray(), instance.Handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
+                return (close.ToArray(), instance._handler is { } handler ? () => RunCloseHandlerAsync(instance, handler) : null);
             }
             if (cmd is not (CmdData or CmdDataFirst or CmdDataCompressed or CmdDataFirstCompressed))
             {
@@ -410,7 +410,7 @@ internal sealed partial class DrdynvcChannel
             }
 
             bool first = cmd is CmdDataFirst or CmdDataFirstCompressed;
-            int limit = instance.Buffer is { } pending ? instance.Total - (int)pending.Length : instance.Limit;
+            int limit = instance._buffer is { } pending ? instance._total - (int)pending.Length : instance._limit;
             if (first)
             {
                 ClearBuffer(instance);
@@ -420,7 +420,7 @@ internal sealed partial class DrdynvcChannel
                 }
 
                 uint total = ReadVariable(ref r, sp);
-                if (total > instance.Limit || total > MaxBufferedBytes - _reservedBytes)
+                if (total > instance._limit || total > MaxBufferedBytes - _reservedBytes)
                 {
                     return Reject(instance);
                 }
@@ -430,23 +430,23 @@ internal sealed partial class DrdynvcChannel
             if (cmd is CmdDataCompressed or CmdDataFirstCompressed)
             {
                 // DVC compression history belongs to the channel, independently of any GFX payload compression.
-                try { data = (instance.Decoder ??= new ZgfxDecoder()).Decode(data, limit); }
+                try { data = (instance._decoder ??= new ZgfxDecoder()).Decode(data, limit); }
                 catch (RdpProtocolException) { return Reject(instance); }
             }
             if (data.Length > limit) { return Reject(instance); }
             if (first && data.Length < limit)
             {
-                instance.Total = limit;
+                instance._total = limit;
                 _reservedBytes += limit;
-                instance.Buffer = new MemoryStream(limit);
-                instance.Buffer.Write(data);
+                instance._buffer = new MemoryStream(limit);
+                instance._buffer.Write(data);
                 return default;
             }
             byte[] message;
-            if (instance.Buffer is { } buffer)
+            if (instance._buffer is { } buffer)
             {
                 buffer.Write(data);
-                if (buffer.Length < instance.Total)
+                if (buffer.Length < instance._total)
                 {
                     return default;
                 }
@@ -458,7 +458,7 @@ internal sealed partial class DrdynvcChannel
             {
                 message = data.ToArray();
             }
-            return instance.Handler is { } receiver
+            return instance._handler is { } receiver
                 ? (null, () => RunHandlerAsync(instance, () => receiver.OnMessageAsync(message)))
                 : (OnDisplayControl(message), null);
         }
@@ -466,13 +466,13 @@ internal sealed partial class DrdynvcChannel
 
     private void ClearBuffer(Instance instance)
     {
-        if (instance.Buffer is null)
+        if (instance._buffer is null)
         {
             return;
         }
 
-        _reservedBytes -= instance.Total;
-        instance.Buffer.Dispose(); instance.Buffer = null; instance.Total = 0;
+        _reservedBytes -= instance._total;
+        instance._buffer.Dispose(); instance._buffer = null; instance._total = 0;
     }
     /// <summary>Processes a Display Control PDU; returns a buffered monitor layout once capabilities arrive.</summary>
     private byte[]? OnDisplayControl(byte[] message)
@@ -493,7 +493,7 @@ internal sealed partial class DrdynvcChannel
         uint maxMonitors = r.U32LE();
         lock (_lock)
         {
-            _maxMonitors = Math.Min(maxMonitors == 0 ? 1u : maxMonitors, (uint)RdpMonitorLayout.MaxMonitors);
+            _maxMonitors = Math.Min(maxMonitors == 0 ? 1u : maxMonitors, RdpMonitorLayout.MaxMonitors);
             _displayReady = true;
             if (_pending is not { } p)
             {
@@ -567,15 +567,4 @@ internal sealed partial class DrdynvcChannel
         }
     }
 
-    private static string ReadAsciiZ(ref ByteReader r)
-    {
-        ReadOnlySpan<byte> rest = r.Rest();
-        int end = rest.IndexOf((byte)0);
-        if (end < 0)
-        {
-            end = rest.Length;
-        }
-
-        return Encoding.ASCII.GetString(rest[..end]);
-    }
 }

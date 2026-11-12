@@ -42,7 +42,7 @@ internal static class MenuKit
     {
         if (items.Count > 0 && items[^1] is not Avalonia.Controls.Separator)
         {
-            items.Add(new Avalonia.Controls.Separator());
+            items.Add(new Separator());
         }
     }
 }

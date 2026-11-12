@@ -31,7 +31,7 @@ public sealed class S3ConfigFormTests
         // 描述表不能有重复项(重复会让左侧导航出现两行同名条目)。
         Assert.HasCount(
             Enum.GetValues<S3ConfigKind>().Length,
-            S3ConfigDescriptor.All.Select(d => d.Kind).Distinct());
+            S3ConfigDescriptor.All.Select(static d => d.Kind).Distinct());
     }
 
     /// <summary>表单类配置都能构造出至少一个字段;文档类配置不构造字段。</summary>
@@ -60,8 +60,8 @@ public sealed class S3ConfigFormTests
             S3ConfigKind.Versioning,
             """{"Status":"Enabled","EnableMfaDelete":true}""", Loc);
 
-        Assert.AreEqual("Enabled", fields.Single(f => f.Path == "Status").Text);
-        Assert.IsTrue(fields.Single(f => f.Path == "EnableMfaDelete").Toggle);
+        Assert.AreEqual("Enabled", fields.Single(static f => f.Path == "Status").Text);
+        Assert.IsTrue(fields.Single(static f => f.Path == "EnableMfaDelete").Toggle);
     }
 
     /// <summary>写回:字段的值进入 JSON。</summary>
@@ -69,8 +69,8 @@ public sealed class S3ConfigFormTests
     public void Apply_WritesValuesBackToJson()
     {
         List<S3FormFieldViewModel> fields = S3ConfigForm.Build(S3ConfigKind.Versioning, string.Empty, Loc);
-        fields.Single(f => f.Path == "Status").Text = "Suspended";
-        fields.Single(f => f.Path == "EnableMfaDelete").Toggle = true;
+        fields.Single(static f => f.Path == "Status").Text = "Suspended";
+        fields.Single(static f => f.Path == "EnableMfaDelete").Toggle = true;
 
         JsonNode root = JsonNode.Parse(S3ConfigForm.Apply(S3ConfigKind.Versioning, string.Empty, fields))!;
 
@@ -93,7 +93,7 @@ public sealed class S3ConfigFormTests
                                 }
                                 """;
         List<S3FormFieldViewModel> fields = S3ConfigForm.Build(S3ConfigKind.Versioning, original, Loc);
-        fields.Single(f => f.Path == "Status").Text = "Suspended";
+        fields.Single(static f => f.Path == "Status").Text = "Suspended";
 
         JsonNode root = JsonNode.Parse(S3ConfigForm.Apply(S3ConfigKind.Versioning, original, fields))!;
 
@@ -107,8 +107,8 @@ public sealed class S3ConfigFormTests
     public void Apply_CreatesNestedContainersOnDemand()
     {
         List<S3FormFieldViewModel> fields = S3ConfigForm.Build(S3ConfigKind.Encryption, string.Empty, Loc);
-        fields.Single(f => f.Path.EndsWith("ServerSideEncryptionAlgorithm", StringComparison.Ordinal)).Text = "AES256";
-        fields.Single(f => f.Path.EndsWith("BucketKeyEnabled", StringComparison.Ordinal)).Toggle = true;
+        fields.Single(static f => f.Path.EndsWith("ServerSideEncryptionAlgorithm", StringComparison.Ordinal)).Text = "AES256";
+        fields.Single(static f => f.Path.EndsWith("BucketKeyEnabled", StringComparison.Ordinal)).Toggle = true;
 
         JsonNode root = JsonNode.Parse(S3ConfigForm.Apply(S3ConfigKind.Encryption, string.Empty, fields))!;
         JsonNode rule = root["ServerSideEncryptionRules"]!.AsArray()[0]!;
@@ -127,7 +127,7 @@ public sealed class S3ConfigFormTests
         List<S3FormFieldViewModel> fields = S3ConfigForm.Build(
             S3ConfigKind.Encryption,
             """{"ServerSideEncryptionRules":[{"ServerSideEncryptionByDefault":{"ServerSideEncryptionKeyManagementServiceKeyId":"old-key"}}]}""", Loc);
-        fields.Single(f => f.Path.EndsWith("KeyManagementServiceKeyId", StringComparison.Ordinal)).Text = "  ";
+        fields.Single(static f => f.Path.EndsWith("KeyManagementServiceKeyId", StringComparison.Ordinal)).Text = "  ";
 
         JsonNode root = JsonNode.Parse(S3ConfigForm.Apply(S3ConfigKind.Encryption, string.Empty, fields))!;
         JsonNode? keyId = root["ServerSideEncryptionRules"]!.AsArray()[0]!["ServerSideEncryptionByDefault"]!["ServerSideEncryptionKeyManagementServiceKeyId"];
@@ -140,7 +140,7 @@ public sealed class S3ConfigFormTests
     public void Apply_NumberFieldsAreWrittenAsJsonNumbers()
     {
         List<S3FormFieldViewModel> fields = S3ConfigForm.Build(S3ConfigKind.ObjectLock, string.Empty, Loc);
-        fields.Single(f => f.Path.EndsWith("Days", StringComparison.Ordinal)).Text = "30";
+        fields.Single(static f => f.Path.EndsWith("Days", StringComparison.Ordinal)).Text = "30";
 
         JsonNode root = JsonNode.Parse(S3ConfigForm.Apply(S3ConfigKind.ObjectLock, string.Empty, fields))!;
         JsonNode days = root["Rule"]!["DefaultRetention"]!["Days"]!;
@@ -171,7 +171,7 @@ public sealed class S3ConfigFormTests
 
         Assert.HasCount(3, written);
         Assert.AreSequenceEqual(
-            ["env", "team", "owner"], [.. written.Select(t => t!["Key"]!.GetValue<string>())], SequenceOrder.InAnyOrder);
+            ["env", "team", "owner"], [.. written.Select(static t => t!["Key"]!.GetValue<string>())], SequenceOrder.InAnyOrder);
     }
 
     /// <summary>损坏的 JSON 不能把表单打崩,退化成空表单即可。</summary>
@@ -181,7 +181,7 @@ public sealed class S3ConfigFormTests
         List<S3FormFieldViewModel> fields = S3ConfigForm.Build(S3ConfigKind.Versioning, "{not json", Loc);
 
         Assert.IsNotEmpty(fields);
-        Assert.IsEmpty(fields.Single(f => f.Path == "Status").Text);
+        Assert.IsEmpty(fields.Single(static f => f.Path == "Status").Text);
     }
 
     /// <summary>只有 Form 类配置才声明有表单;这是界面分支的判据,要与描述表一致。</summary>

@@ -9,8 +9,8 @@ namespace VelaShell.Plugin.Serial.Tests;
 public sealed class SerialPortEnumeratorTests
 {
     private static string[] SortNames(params string[] names) =>
-        [.. SerialPortEnumerator.Sort(names.Select(name => new SerialPortInfo(name, string.Empty)))
-            .Select(port => port.PortName)];
+        [.. SerialPortEnumerator.Sort(names.Select(static name => new SerialPortInfo(name, string.Empty)))
+            .Select(static port => port.PortName)];
 
     [TestMethod]
     public void Sort_PutsCom2BeforeCom10()
