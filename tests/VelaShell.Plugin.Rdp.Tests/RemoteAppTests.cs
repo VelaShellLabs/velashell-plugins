@@ -37,7 +37,8 @@ public sealed class RemoteAppTests
         Assert.AreEqual((ushort)0, BitConverter.ToUInt16(highContrast, 16));
         byte[] workArea = sent.Single(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) == 0x2f);
         Assert.AreEqual((ushort)1280, BitConverter.ToUInt16(workArea, 12), "server-negotiated dimensions replace requested dimensions");
-        Assert.AreEqual((ushort)800, BitConverter.ToUInt16(workArea, 14), "work area uses the negotiated virtual desktop");
+        Assert.AreEqual((ushort)(800 - RemoteAppOptions.WorkspaceStripHeight), BitConverter.ToUInt16(workArea, 14),
+            "the work area uses the negotiated desktop and ends above the local application tabs");
         Assert.IsFalse(sent.Any(p => BitConverter.ToUInt16(p) == 3 && BitConverter.ToUInt32(p, 4) is 0xf000 or 0xf001), "startup does not send optional taskbar/display-change orders");
         byte[] execute = sent.Single(p => BitConverter.ToUInt16(p) == 1);
         var r = new ByteReader(execute);

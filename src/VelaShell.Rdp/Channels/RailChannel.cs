@@ -53,7 +53,11 @@ internal sealed class RailChannel(RemoteAppOptions options, int width, int heigh
                 {
                     await send(Packet(3, w => { w.U32LE(parameter); w.U8(0); }), ct).ConfigureAwait(false);
                 }
-                await send(Packet(3, w => { w.U32LE(0x2f); Rectangle(w, 0, 0, width, height); }), ct).ConfigureAwait(false);
+                // SPI_SETWORKAREA: the client draws its application tabs over the bottom WorkspaceStripHeight pixels of
+                // the desktop, so the work area ends above them — a maximized remote window would otherwise have its
+                // status bar and scroll bar under the tabs, and clicks there would go to the tabs.
+                int workHeight = Math.Max(1, height - RemoteAppOptions.WorkspaceStripHeight);
+                await send(Packet(3, w => { w.U32LE(0x2f); Rectangle(w, 0, 0, width, workHeight); }), ct).ConfigureAwait(false);
                 await send(BuildExecute(options), ct).ConfigureAwait(false);
             }
             else
