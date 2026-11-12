@@ -90,6 +90,18 @@ Docker 面板是个例外:它从独立仓库 `VelaShell.Plugin.DockerPanel` 并�
 
 `README.md`、`LICENSE`,以及各插件目录下的 `README.md`(该插件自己的实现说明与偏离记录)。
 
+### RDP 协议栈:行为依据只有微软协议规范
+
+`src/VelaShell.Rdp` 的行为依据只有微软公开的协议规范(MS-RDPBCGR、MS-CSSP、MS-RDPEGDI、
+MS-RDPEGFX、MS-RDPEFS、MS-RDPECLIP 等),以及对真实 Windows 服务器的实测结果。
+
+- **不要**把任何开源 RDP 实现(包括 FreeRDP)当成设计依据、对照标准或"应该怎么做"的理由。
+  不要写"like FreeRDP"、"与 FreeRDP 一致"这类注释、提交信息或审查意见。需要依据时,引用规范里的结构名或章节。
+- 少数文件头部和 `THIRD-PARTY-NOTICES.txt` 里有 "Code adapted from FreeRDP …" 字样。那是 Apache-2.0
+  要求保留的**来源声明**,不是行为依据,也**不许删除**。新增改编代码时,同步补全这两处的登记。
+- 三个平台(Windows / macOS / Linux)的行为必须一致。按 `OperatingSystem.Is*` 分支的逻辑要写明原因,
+  并且要有在该平台上真实运行过的测试或实测记录。
+
 ### 测试:不要把 `await` 写进带集合实参的断言里
 
 本仓库跑在 `net11.0` + `LangVersion preview`(C# 的 first-class span)。在这套语义下,

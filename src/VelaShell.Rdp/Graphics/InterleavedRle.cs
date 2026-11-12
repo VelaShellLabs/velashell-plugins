@@ -1,8 +1,8 @@
 namespace VelaShell.Rdp.Graphics;
 
 /// <summary>
-/// Interleaved RLE bitmap decompressor (MS-RDPBCGR 3.1.9). Ported value-for-value from
-/// FreeRDP's <c>interleaved.c</c> / <c>include/bitmap.h</c> (Apache-2.0), parameterised by
+/// Interleaved RLE bitmap decompressor (MS-RDPBCGR 3.1.9). Code adapted from
+/// FreeRDP <c>interleaved.c</c> / <c>include/bitmap.h</c> (Apache-2.0; see THIRD-PARTY-NOTICES.txt), parameterised by
 /// bytes-per-pixel (1/2/3 for 8/15-16/24 bpp). Output is bottom-up DIB order; callers flip
 /// vertically for a top-down surface. Written without closures so it decodes straight from
 /// the wire span into a caller-provided (poolable) destination — no per-rectangle allocation.

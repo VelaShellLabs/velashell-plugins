@@ -2,7 +2,7 @@ namespace VelaShell.Rdp.Graphics;
 
 /// <summary>
 /// MPPC bulk decompressor (MS-RDPBCGR 3.1.8, RDP 4/8K and RDP 5/64K) for server→client
-/// compressed PDUs. Ported from FreeRDP's <c>mppc.c</c>. The history buffer persists across
+/// compressed PDUs. Code adapted from FreeRDP <c>mppc.c</c> (Apache-2.0; see THIRD-PARTY-NOTICES.txt). The history buffer persists across
 /// PDUs — matches reference earlier output — so a single instance decompresses the whole
 /// server output stream. Decompression writes into the history and returns a view of the new
 /// bytes. Compression itself is never needed (the client does not compress its small input).

@@ -41,7 +41,7 @@ internal static class CredSsp
 
         // Negotiation loop: exchange security-package tokens (one round for NTLM, possibly more for SPNEGO)
         // until the context is established; only then is pubKeyAuth attached. The 32-byte clientNonce rides on
-        // every client TSRequest (v5+), as FreeRDP and mstsc send it.
+        // every client TSRequest (v5+, MS-CSSP TSRequest.clientNonce), as mstsc sends it.
         byte[] outToken = auth.Step([]);
         string authInfo = DescribeAuth(auth, outToken);
         bool canRetryWithoutNla = !auth.IsComplete && IsNtlmNegotiate(outToken);

@@ -12,7 +12,16 @@ The C# ClearCodec/NSCodec and AVC444 colour reconstruction implementations adapt
 libfreerdp/codec/clear.c, libfreerdp/codec/nsc.c and
 libfreerdp/primitives/prim_YUV.c. They have been modified for managed memory,
 bounded parsing, independent alpha, surface state and the managed H.264 decoder.
-The RemoteFX test fixture derives from libfreerdp/codec/test/TestFreeRDPCodecRemoteFX.c.
+The C# planar (Graphics/Planar.cs), interleaved RLE (Graphics/InterleavedRle.cs),
+MPPC (Graphics/Mppc.cs), drawing-order/bitmap-cache (Graphics/Orders.cs) and
+pointer-mask (Graphics/PointerDecoder.cs) code adapts libfreerdp/codec/planar.c,
+libfreerdp/primitives/prim_YCoCg.c, libfreerdp/codec/interleaved.c,
+include/freerdp/codec/bitmap.h, libfreerdp/codec/mppc.c, libfreerdp/core/orders.c,
+libfreerdp/cache/bitmap.c, libfreerdp/gdi and libfreerdp/codec/color.c, modified for
+managed memory, bounded parsing and top-down output. The Microsoft protocol
+specifications (MS-RDPBCGR, MS-RDPEGDI, MS-RDPEGFX, MS-RDPNSC) define behaviour.
+The RemoteFX test fixture derives from libfreerdp/codec/test/TestFreeRDPCodecRemoteFX.c;
+the planar test vectors derive from FreeRDP 3.32.2 libfreerdp/codec/test/planar.
 FreeRDP's zgfx.c was also consulted when implementing the normative MS-RDPEGFX
 ZGFX token table; no FreeRDP library or binary is bundled.
 

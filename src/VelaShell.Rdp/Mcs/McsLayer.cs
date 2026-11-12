@@ -8,7 +8,7 @@ internal readonly record struct McsData(ushort ChannelId, byte[] Payload);
 /// <summary>
 /// T.125 MCS over the RDP connection: Connect-Initial/Response (BER envelope around the
 /// GCC data), Erect Domain, Attach User and Channel Join, then Send Data Request/Indication
-/// framing. Follows FreeRDP's mcs.c value-for-value so it interoperates with real servers.
+/// framing. Values follow ITU-T T.125 and the MS-RDPBCGR connection sequence.
 /// </summary>
 internal sealed class McsLayer(RdpTransport transport)
 {

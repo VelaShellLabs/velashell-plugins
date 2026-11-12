@@ -2,7 +2,7 @@ namespace VelaShell.Rdp.Wire;
 
 /// <summary>
 /// ASN.1 Packed Encoding Rules (ALIGNED variant) for the subset MCS and GCC use.
-/// Mirrors FreeRDP's <c>per.c</c>, which is the proven-interoperable encoding; the
+/// Follows ITU-T X.691 as profiled by T.125 / T.124 and MS-RDPBCGR; the
 /// routines are intentionally minimal and big-endian as PER requires.
 /// </summary>
 internal static class Per

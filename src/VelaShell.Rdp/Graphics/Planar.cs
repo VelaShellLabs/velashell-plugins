@@ -5,10 +5,9 @@ namespace VelaShell.Rdp.Graphics;
 /// <summary>
 /// RDP 6.0 planar bitmap decompressor (MS-RDPEGDI 2.2.2.5.1 RDP6_BITMAP_STREAM, 3.1.9 "RDP 6.0
 /// Bitmap Compression"), the codec Windows servers use for 32 bpp compressed bitmap updates.
-/// Ported value-for-value from FreeRDP's <c>libfreerdp/codec/planar.c</c>
-/// (<c>freerdp_bitmap_decompress_planar</c>, <c>planar_decompress_plane_rle</c>,
-/// <c>planar_subsample_expand</c>) and <c>libfreerdp/primitives/prim_YCoCg.c</c>
-/// (<c>general_YCoCgToRGB_8u_AC4R</c>) (Apache-2.0).
+/// Code adapted from FreeRDP <c>libfreerdp/codec/planar.c</c> and
+/// <c>libfreerdp/primitives/prim_YCoCg.c</c> (Apache-2.0; see THIRD-PARTY-NOTICES.txt); MS-RDPEGDI, not that source,
+/// defines behaviour.
 /// <para>
 /// Supported: raw and RLE planes (the RLE variant is delta-coded against the previous plane
 /// scanline), an optional alpha plane (absent when the NoAlpha flag 0x20 is set, in which case
@@ -17,13 +16,13 @@ namespace VelaShell.Rdp.Graphics;
 /// </para>
 /// <para>
 /// Orientation: in a bitmap update the planes are stored bottom-up, like every TS_BITMAP_DATA
-/// payload — the first plane scanline is the bottom image row. FreeRDP's GDI path therefore calls
-/// the decoder with <c>vFlip = TRUE</c> for bitmap updates; this entry point defaults to that and writes a
+/// payload — the first plane scanline is the bottom image row. Bitmap updates therefore need a
+/// vertical flip; this entry point flips by default and writes a
 /// <b>top-down</b> image, so callers must not flip the result again. The RDPGFX planar codec
 /// stores top-down planes and passes <c>bottomUp = false</c>.
 /// </para>
 /// <para>
-/// Not ported: FreeRDP's <c>freerdp_planar_switch_bgr</c> heuristic, which swaps red and blue for
+/// Not implemented: a red/blue swap heuristic for
 /// streams that carry an alpha plane when dynamic color fidelity was negotiated (a workaround for
 /// servers that are inconsistent about R/B order with YCoCg). Like the interleaved decoder this is
 /// written without closures and decodes from the wire span into a caller-provided destination;
@@ -78,7 +77,7 @@ internal static class Planar
 
         if (chromaSubsampling && colorLossLevel == 0)
         {
-            // FreeRDP: "Chroma subsampling requires YCoCg and does not work with RGB data".
+            // Chroma subsampling only applies to YCoCg planes; with RGB (CLL 0) the stream is malformed.
             throw new RdpProtocolException("Planar chroma subsampling requires YCoCg (a non-zero color loss level).");
         }
 
@@ -171,7 +170,7 @@ internal static class Planar
     }
 
     /// <summary>
-    /// Decodes one RLE plane (FreeRDP <c>planar_decompress_plane_rle_only</c>) of
+    /// Decodes one RLE plane (MS-RDPEGDI RDP6_RLE_SEGMENTS) of
     /// <paramref name="width"/> × <paramref name="height"/> bytes starting at
     /// <paramref name="pos"/>, in stream scanline order. Returns the number of bytes consumed.
     /// </summary>
@@ -279,8 +278,8 @@ internal static class Planar
     }
 
     /// <summary>
-    /// Converts AYCoCg planes to top-down BGRA (FreeRDP <c>general_YCoCgToRGB_8u_AC4R</c>), expanding
-    /// subsampled chroma the way <c>planar_subsample_expand</c> does: each chroma sample covers a
+    /// Converts AYCoCg planes to top-down BGRA (MS-RDPEGDI YCoCg-to-RGB conversion), expanding
+    /// subsampled chroma: each chroma sample covers a
     /// 2 × 2 block anchored at the first plane scanline (the bottom image row).
     /// </summary>
     private static void ComposeAYCoCg(ReadOnlySpan<byte> luma, ReadOnlySpan<byte> orangeChroma, ReadOnlySpan<byte> greenChroma,

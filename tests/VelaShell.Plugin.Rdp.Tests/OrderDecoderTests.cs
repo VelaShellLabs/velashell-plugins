@@ -5,7 +5,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 
 /// <summary>
 /// The drawing-order parser and bitmap cache (<see cref="OrderDecoder"/>), driven with wire bytes built by hand
-/// from the MS-RDPEGDI 2.2.2 / FreeRDP <c>orders.c</c> layouts. A recording <see cref="IOrderTarget"/> captures
+/// from the MS-RDPEGDI 2.2.2 layouts. A recording <see cref="IOrderTarget"/> captures
 /// what the decoder asks the surface to do.
 /// </summary>
 [TestClass]
@@ -72,7 +72,7 @@ public sealed class OrderDecoderTests
         0x0E,                       // bitmapLength = 14 (8-byte header + 6)
         0x01,                       // cacheIndex = 1
         0x00, 0x00,                 // cbCompFirstRowSize = 0
-        0x06, 0x00,                 // cbCompMainBodySize = 6 (the data length FreeRDP uses)
+        0x06, 0x00,                 // cbCompMainBodySize = 6 (the data length)
         0x08, 0x00,                 // cbScanWidth = 8
         0x10, 0x00,                 // cbUncompressedSize = 16
         0x64, 0xE0, 0x07,           // 4 × green (bottom row)
@@ -157,7 +157,7 @@ public sealed class OrderDecoderTests
         0x03, 0x05,                 // BrushOrgX = 3, BrushOrgY = 5
         0x03,                       // BrushStyle = BS_PATTERN
         0xAA,                       // BrushHatch = pattern row 0 (top)
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, // BrushExtra[0..6] = rows 7..1 (FreeRDP brush->data[7..1])
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, // BrushExtra[0..6] = rows 7..1
     ];
 
     /// <summary>SCRBLT with every field, then a delta-coordinate SCRBLT changing left and the source.</summary>
@@ -322,7 +322,7 @@ public sealed class OrderDecoderTests
         decoder.Process(fewer, 1);
         AssertCalls(target, "Fill 10,20 30x5 FFAABBCC", "Fill 10,30 30x7 FFAABBCC");
 
-        byte[] more = [0x41, 0x80, 0x03];   // 3 rectangles without a list after shrinking to 2: FreeRDP rejects it
+        byte[] more = [0x41, 0x80, 0x03];   // 3 rectangles without a list after shrinking to 2: rejected
         _ = Assert.ThrowsExactly<RdpProtocolException>(() => decoder.Process(more, 1));
     }
 
@@ -356,7 +356,7 @@ public sealed class OrderDecoderTests
     [DataRow(0x02, 0x06, DisplayName = "hatch index past HS_DIAGCROSS")]
     public void PatBltRejectsBrushesItCannotRealise(int style, int hatch)
     {
-        // A fresh decoder starts with PATBLT as the last order type (FreeRDP update_reset_state).
+        // A fresh decoder starts with PATBLT as the last order type.
         (OrderDecoder decoder, _) = Create();
         byte[] stream = hatch < 0
             ? [0x01, 0x00, 0x02, (byte)style]                       // field 10: BrushStyle
@@ -694,8 +694,8 @@ public sealed class OrderDecoderTests
     [TestMethod]
     public void CacheBitmapFieldsAreParsedInsideTheOrderLength()
     {
-        // bitmapLength 127 points past the 7-byte body even though the outer buffer has plenty left: FreeRDP's
-        // "read too much" check fails the order.
+        // bitmapLength 127 points past the 7-byte body even though the outer buffer has plenty left: the
+        // orderLength bound fails the order.
         (OrderDecoder decoder, _) = Create(16);
         byte[] stream =
         [
@@ -713,7 +713,7 @@ public sealed class OrderDecoderTests
     [TestMethod]
     [DataRow(0, 3, false, DisplayName = "index past the cell")]
     [DataRow(0, 2, true, DisplayName = "index equal to the cell size: the waiting-list slot")]
-    [DataRow(2, 0, true, DisplayName = "cacheId one past the cells: FreeRDP's extra cell, dropped")]
+    [DataRow(2, 0, true, DisplayName = "cacheId one past the cells: tolerated extra cell, dropped")]
     [DataRow(2, 1, false, DisplayName = "cacheId one past the cells with a non-zero index")]
     [DataRow(3, 0, false, DisplayName = "cacheId beyond the cells")]
     public void CacheStoresAreConfinedToTheNegotiatedCells(int cacheId, int cacheIndex, bool accepted)

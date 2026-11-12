@@ -1,6 +1,6 @@
 # VelaShell.Rdp
 
-A **managed .NET RDP (Remote Desktop Protocol) client** — no FreeRDP or bundled native binaries.
+A **managed .NET RDP (Remote Desktop Protocol) client** — no native RDP library or bundled native binaries.
 Optional audio playback uses the system's WinMM, AudioToolbox or ALSA libraries. It is the engine behind the VelaShell RDP plugin, extracted
 into a standalone, UI-agnostic library so it can be reused on its own.
 

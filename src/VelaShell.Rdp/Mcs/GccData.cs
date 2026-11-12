@@ -153,7 +153,7 @@ internal static class GccData
         _ => 0x0010
     };
 
-    /// <summary>Wraps the client data blocks in the GCC Conference Create Request (PER). Mirrors FreeRDP gcc_write_*.</summary>
+    /// <summary>Wraps the client data blocks in the GCC Conference Create Request (PER; ITU-T T.124, MS-RDPBCGR).</summary>
     private static byte[] WrapConferenceCreateRequest(ReadOnlySpan<byte> userData)
     {
         var w = new ByteWriter(userData.Length + 32);
