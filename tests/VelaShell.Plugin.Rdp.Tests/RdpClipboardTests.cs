@@ -830,8 +830,12 @@ public sealed class RdpClipboardTests
         var transport = new ClipboardTransport { SupportsClipboardLock = outcome != "sourceChanged", RemoteFiles = [new("data", false, 4)] };
         var clipboard = new VirtualClipboard();
         transport.FileRequestHook = (stream, _, _, _) => { if (outcome == "rejected") { transport.Emit(7, stream, 0); } };
+        // Only "exhausted" needs retries to run. The other conditions are applied during the retry wait; a long wait
+        // keeps a slow runner from issuing the second request before the test acts. Cancelling and disconnecting end
+        // the wait at once; a source change is noticed when the wait ends, before any further request.
+        TimeSpan retryDelay = TimeSpan.FromMilliseconds(outcome switch { "exhausted" => 80, "sourceChanged" => 2_000, _ => 10_000 });
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard,
-            TimeSpan.FromMilliseconds(40), TimeSpan.FromMilliseconds(80));
+            TimeSpan.FromMilliseconds(40), retryDelay);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));
