@@ -75,6 +75,12 @@ internal sealed class RdpGatewayStream : Stream
             stream._keepAlive = stream.KeepAliveAsync();
             return stream;
         }
+        catch (GatewayPolicyException)
+        {
+            // Already a specific, actionable reason; the generic "gateway must support …" hint would hide it.
+            stream.Dispose();
+            throw;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             stream.Dispose();
@@ -143,10 +149,9 @@ internal sealed class RdpGatewayStream : Stream
         {
             Require(auth, position, 4);
             uint restrictions = BinaryPrimitives.ReadUInt32LittleEndian(auth.AsSpan(position));
-            if ((restrictions & requestedRedirections & 0x1F) != 0
-                || ((restrictions & 0x40000000) != 0 && requestedRedirections != 0))
+            if (IsRedirectionForbidden(restrictions, requestedRedirections))
             {
-                throw new IOException("RD Gateway policy forbids a requested redirection. Disable clipboard/device redirection in the connection settings.");
+                throw new GatewayPolicyException("RD Gateway policy forbids a requested redirection. Disable clipboard/device redirection in the connection settings.");
             }
             position += 4;
         }
@@ -361,4 +366,23 @@ internal sealed class RdpGatewayStream : Stream
     public override Task FlushAsync(CancellationToken ct) => Task.CompletedTask;
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
+
+    /// <summary>
+    /// The tunnel's redirFlags (MS-TSGU HTTP_TUNNEL_AUTH_RESPONSE): HTTP_TUNNEL_REDIR_ENABLE_ALL (0x80000000) allows
+    /// everything and the other bits are then ignored; DISABLE_ALL (0x40000000) forbids every redirection; otherwise
+    /// DISABLE_DRIVE/PRINTER/PORT/CLIPBOARD/PNP (0x01–0x10) forbid one kind each.
+    /// </summary>
+    internal static bool IsRedirectionForbidden(uint restrictions, uint requestedRedirections)
+    {
+        if ((restrictions & 0x80000000) != 0)
+        {
+            return false;
+        }
+
+        return (restrictions & requestedRedirections & 0x1F) != 0
+            || ((restrictions & 0x40000000) != 0 && requestedRedirections != 0);
+    }
+
+    /// <summary>The gateway's policy refuses a redirection this connection requested.</summary>
+    private sealed class GatewayPolicyException(string message) : IOException(message);
 }

@@ -318,8 +318,21 @@ internal sealed class RdpWorkspaceDocument : IWorkspaceDocument
             // the current (disconnected) view in place — its in-view Reconnect button stays usable
             // instead of the workspace going blank.
             IRdpSession session = await _factory(_request!, _settings, _loc, linked.Token).ConfigureAwait(false);
-            await CloseConnectionAsync().ConfigureAwait(false);
+            try { await CloseConnectionAsync().ConfigureAwait(false); }
+            catch
+            {
+                // The new session would otherwise be neither attached nor disposed (and the old view already gone).
+                await session.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+
             AttachSession(session);
+            if (expected is null)
+            {
+                // A reconnect the user asked for starts a fresh automatic-reconnect series: a drop soon after it must
+                // not count the attempts of a series that had already given up.
+                _ = Interlocked.Exchange(ref _autoAttempt, 0);
+            }
             if (_root is not null)
             {
                 await Dispatcher.UIThread.InvokeAsync(BindView);

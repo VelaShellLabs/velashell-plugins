@@ -95,10 +95,23 @@ public sealed class RdpGatewayTests
         BinaryPrimitives.WriteUInt32LittleEndian(replies[2].AsSpan(16), restrictions);
         var socket = new ScriptedSocket(replies);
         var options = new RdpClientOptions { Host = "server", Clipboard = requested == 8, SmartCardRedirection = requested == 0x20 };
-        await Assert.ThrowsExactlyAsync<IOException>(() => RdpGatewayStream.CreateForTestAsync(socket, "server", 3389,
+        IOException refused = await Assert.ThrowsAsync<IOException>(() => RdpGatewayStream.CreateForTestAsync(socket, "server", 3389,
             RdpManagedSession.GatewayRedirections(options), CancellationToken.None));
+        Assert.Contains("policy forbids a requested redirection", refused.Message);
         Assert.HasCount(3, socket.Sent);
         Assert.IsTrue(socket.Disposed);
+    }
+
+    [TestMethod]
+    public void EnableAllOverridesTheIndividualRedirectionFlags()
+    {
+        // HTTP_TUNNEL_REDIR_ENABLE_ALL (MS-TSGU): everything allowed, other bits ignored.
+        Assert.IsFalse(RdpGatewayStream.IsRedirectionForbidden(0x80000000u | 0x08u, 0x08u));
+        Assert.IsFalse(RdpGatewayStream.IsRedirectionForbidden(0x80000000u | 0x40000000u, 0x08u));
+        Assert.IsTrue(RdpGatewayStream.IsRedirectionForbidden(0x08u, 0x08u));
+        Assert.IsTrue(RdpGatewayStream.IsRedirectionForbidden(0x40000000u, 0x20u));
+        Assert.IsFalse(RdpGatewayStream.IsRedirectionForbidden(0x40000000u, 0u), "Nothing requested, nothing forbidden.");
+        Assert.IsFalse(RdpGatewayStream.IsRedirectionForbidden(0x01u, 0x08u), "Drives forbidden, clipboard requested.");
     }
 
     [TestMethod]

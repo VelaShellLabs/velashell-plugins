@@ -22,6 +22,21 @@ internal sealed class RemoteAppWindowDecoder
         }
     }
     internal bool Contains(uint id) { lock (_gate) { return _windows.ContainsKey(id); } }
+
+    /// <summary>Applies a server TS_RAIL_ORDER_CLOAK; a window that does not exist is ignored (MS-RDPERP 3.2.5.2.12).</summary>
+    internal void SetCloaked(uint id, bool cloaked)
+    {
+        lock (_gate)
+        {
+            if (!_windows.TryGetValue(id, out RemoteAppWindow? window) || window.IsCloaked == cloaked)
+            {
+                return;
+            }
+
+            _windows[id] = window with { IsCloaked = cloaked };
+        }
+        Changed?.Invoke();
+    }
     internal void Clear()
     {
         lock (_gate) { _windows.Clear(); _zOrder.Clear(); _synchronizing = null; ActiveWindow = 0; }
@@ -97,7 +112,8 @@ internal sealed class RemoteAppWindowDecoder
         if (Has(0x200)) { window = window with { VisibilityRects = ReadRects(ref r) }; }
         if (Has(0x400000)) { _ = ReadString(ref r); }
         if (Has(0x800000)) { _ = r.U8(); }
-        if (Has(0x80000)) { window = window with { IsCloaked = r.U8() != 0 }; }
+        // 0x00080000 is WINDOW_ORDER_FIELD_ENFORCE_SERVER_ZORDER; cloaking arrives as TS_RAIL_ORDER_CLOAK on the RAIL channel.
+        if (Has(0x80000)) { window = window with { EnforceServerZOrder = r.U8() != 0 }; }
         if (Has(0x40)) { _ = r.U8(); }
         if (Has(1)) { _ = r.U8(); }
         if ((long)Math.Max(1, window.WindowRects.Count) * window.VisibilityRects.Count > 4096 ||
