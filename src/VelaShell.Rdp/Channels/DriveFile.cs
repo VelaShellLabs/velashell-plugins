@@ -508,7 +508,7 @@ internal sealed class DriveFile
         FileSystemInfo info = name is "." or ".." || Directory.Exists(path) ? new DirectoryInfo(name is "." or ".." ? FullPath : path) : new FileInfo(path);
         long size = info is FileInfo f ? f.Length : 0;
         uint attributes = info.Exists ? (uint)info.Attributes : 0x10; // treat missing as dir-ish
-        byte[] nameBytes = Encoding.Unicode.GetBytes(name);
+        byte[] nameBytes = Encoding.Unicode.GetBytes(WireName(name));
 
         switch (infoClass)
         {
@@ -567,6 +567,16 @@ internal sealed class DriveFile
         }
         return true;
     }
+
+    /// <summary>
+    /// The name a directory entry carries to the server. macOS file systems commonly store names decomposed (NFD:
+    /// "e" + combining accent); Windows expects and shows composed names (NFC), so a decomposed name looked different
+    /// from, and did not match, the same name typed on the remote. APFS and HFS+ look names up regardless of
+    /// normalization, so the server's later open with the NFC form still finds the file. Linux file names are plain
+    /// byte strings — a renormalized name would not open — so they are sent as stored.
+    /// </summary>
+    internal static string WireName(string name) =>
+        OperatingSystem.IsMacOS() && !name.IsNormalized(NormalizationForm.FormC) ? name.Normalize(NormalizationForm.FormC) : name;
 
     private static void WriteTime(ByteWriter w, DateTime utc)
     {

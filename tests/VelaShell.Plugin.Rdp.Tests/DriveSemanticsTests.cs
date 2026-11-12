@@ -339,4 +339,35 @@ public sealed class DriveSemanticsTests
         }
         finally { Directory.Delete(share, recursive: true); }
     }
+
+    [TestMethod]
+    public void MacOsDecomposedNamesReachTheServerComposedAndStillOpen()
+    {
+        const string decomposed = "été.txt";   // "été.txt" as macOS commonly stores it (NFD)
+        const string composed = "été.txt";        // the same name as Windows expects it (NFC)
+        string share = NewShare();
+        try
+        {
+            File.WriteAllText(Path.Combine(share, decomposed), "x");
+            DriveFile root = DriveFile.Create(share, "\\", GenericRead, FileOpen, FileDirectoryFile, 0);
+            Assert.IsTrue(root.BeginEnumeration("\\*"));
+            string listed = Names(root).Single(name => name is not ("." or ".."));
+            root.Close();
+
+            if (OperatingSystem.IsMacOS())
+            {
+                Assert.AreEqual(composed, listed, "macOS sends the composed form.");
+                // The server opens what it was shown; APFS/HFS+ resolve the composed name to the stored file.
+                DriveFile opened = DriveFile.Create(share, "\\" + composed, GenericRead, FileOpen, 0, 0);
+                CollectionAssert.AreEqual("x"u8.ToArray(), opened.Read(0, 8));
+                opened.Close();
+            }
+            else
+            {
+                // Windows file names and Linux byte-string names are sent exactly as stored.
+                Assert.AreEqual(Path.GetFileName(Directory.GetFiles(share).Single()), listed);
+            }
+        }
+        finally { Directory.Delete(share, recursive: true); }
+    }
 }
