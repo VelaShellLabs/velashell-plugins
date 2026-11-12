@@ -27,7 +27,8 @@ public sealed class RdpBackgroundSessionTests
         using (server)
         {
             RdpConnection.ConfigureKeepAlive(client.Client, TimeSpan.FromSeconds(30));
-            Assert.AreEqual(1, (int)client.Client.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)!);
+            // A boolean option: Windows and Linux read back 1, macOS the SO_KEEPALIVE flag value (8).
+            Assert.AreNotEqual(0, (int)client.Client.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)!);
             Assert.AreEqual(30, (int)client.Client.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime)!);
             Assert.AreEqual(10, (int)client.Client.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval)!);
             Assert.AreEqual(RdpConnection.KeepAliveProbes, (int)client.Client.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount)!);

@@ -91,6 +91,55 @@ internal static partial class UnixClipboardFile
         }
     }
 
+    /// <summary>
+    /// Reads at <paramref name="offset" /> with <c>pread</c>. The descriptor was opened O_NONBLOCK (so a FIFO could not
+    /// block the open); on such a handle .NET's RandomAccess falls back to sequential read() and ignores the offset,
+    /// which served a range request from the start of the file. pread on a regular file is unaffected by O_NONBLOCK.
+    /// Returns the bytes read; fewer than requested only at end of file.
+    /// </summary>
+    internal static unsafe int ReadAt(Microsoft.Win32.SafeHandles.SafeFileHandle handle, Span<byte> buffer, long offset)
+    {
+        bool added = false;
+        try
+        {
+            handle.DangerousAddRef(ref added);
+            int fd = (int)handle.DangerousGetHandle();
+            int total = 0;
+            fixed (byte* start = buffer)
+            {
+                while (total < buffer.Length)
+                {
+                    nint read = PRead(fd, start + total, buffer.Length - total, offset + total);
+                    if (read < 0)
+                    {
+                        int errno = Marshal.GetLastPInvokeError();
+                        if (errno == EIntr) { continue; }
+                        throw new IOException($"Reading the clipboard file failed (errno {errno}).");
+                    }
+                    if (read == 0) { break; }
+                    total += (int)read;
+                }
+            }
+            return total;
+        }
+        finally
+        {
+            if (added) { handle.DangerousRelease(); }
+        }
+    }
+
+    private const int EIntr = 4;
+
+    // off_t is 64-bit on 64-bit Linux and on macOS; 32-bit Linux needs the explicit 64-bit-offset entry point.
+    private static unsafe nint PRead(int fd, byte* buffer, nint count, long offset) =>
+        !OperatingSystem.IsMacOS() && IntPtr.Size == 4 ? pread64(fd, buffer, count, offset) : pread(fd, buffer, count, offset);
+
+    [LibraryImport("libc", EntryPoint = "pread", SetLastError = true)]
+    private static unsafe partial nint pread(int fd, byte* buffer, nint count, long offset);
+
+    [LibraryImport("libc", EntryPoint = "pread64", SetLastError = true)]
+    private static unsafe partial nint pread64(int fd, byte* buffer, nint count, long offset);
+
     [LibraryImport("libc", EntryPoint = "open", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     private static partial int open(string path, int flags);
 
