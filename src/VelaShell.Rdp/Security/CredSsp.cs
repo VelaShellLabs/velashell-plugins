@@ -127,6 +127,27 @@ internal static class CredSsp
 
     private static byte[]? Nz(byte[] token) => token.Length == 0 ? null : token;
 
+    internal const string ClosedDuringNla = "The server closed the connection during NLA.";
+
+    /// <summary>
+    /// The connection was lost during NLA without a server verdict: a TLS-layer failure (alert, record that does not
+    /// decrypt), an end of stream, the server closing, or a reset. Under TLS 1.3 any of these can be the TLS 1.3 path
+    /// failing rather than the server refusing, and how it surfaces differs per TLS stack (OpenSSL may report a bare
+    /// end of stream), so all of them qualify for the one-time TLS 1.2 retry.
+    /// </summary>
+    internal static bool IsConnectionLossDuringNla(Exception? ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is IOException or System.Security.Authentication.AuthenticationException
+                || current is RdpProtocolException { Message: ClosedDuringNla })
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>
     /// The TLS stack itself failed: a fatal alert from the peer or a record that would not decrypt or verify.
     /// <see cref="SslStream" /> reports these as an <see cref="IOException" /> wrapping the platform's error
@@ -488,7 +509,7 @@ internal static class CredSsp
             int next = await tls.ReadAsync(buffer.AsMemory(read), ct).ConfigureAwait(false);
             if (next == 0)
             {
-                throw new RdpProtocolException("The server closed the connection during NLA.");
+                throw new RdpProtocolException(ClosedDuringNla);
             }
 
             read += next;

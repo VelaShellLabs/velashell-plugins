@@ -42,8 +42,14 @@ public sealed class RdpTlsPlatformTests
         Assert.IsTrue(CredSsp.IsTlsLayerFailure(new AuthenticationException("handshake")));
         Assert.IsFalse(CredSsp.IsTlsLayerFailure(SocketFailure()), "A reset is a transport failure.");
         Assert.IsFalse(CredSsp.IsTlsLayerFailure(new IOException("Received an unexpected EOF or 0 bytes from the transport stream.")));
-        Assert.IsFalse(CredSsp.IsTlsLayerFailure(new RdpProtocolException("The server closed the connection during NLA.")));
+        Assert.IsFalse(CredSsp.IsTlsLayerFailure(new RdpProtocolException(CredSsp.ClosedDuringNla)));
 
+        // Every way of losing the connection during NLA counts for the TLS 1.3 retry; a protocol verdict does not.
+        Assert.IsTrue(CredSsp.IsConnectionLossDuringNla(TlsFailure()));
+        Assert.IsTrue(CredSsp.IsConnectionLossDuringNla(SocketFailure()));
+        Assert.IsTrue(CredSsp.IsConnectionLossDuringNla(new IOException("Received an unexpected EOF or 0 bytes from the transport stream.")));
+        Assert.IsTrue(CredSsp.IsConnectionLossDuringNla(new RdpProtocolException(CredSsp.ClosedDuringNla)));
+        Assert.IsFalse(CredSsp.IsConnectionLossDuringNla(new RdpProtocolException("The server speaks CredSSP v3, which predates the CVE-2018-0886 fix.")));
     }
 
     [TestMethod]
@@ -52,8 +58,12 @@ public sealed class RdpTlsPlatformTests
         Assert.IsTrue(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Nla, TlsFailure(), SslProtocols.Tls13)));
         Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Nla, TlsFailure(), SslProtocols.Tls12)),
             "TLS 1.2 has nothing to fall back to.");
-        Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Nla, SocketFailure(), SslProtocols.Tls13)),
-            "A dropped connection is not a TLS 1.3 problem.");
+        Assert.IsTrue(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Nla, SocketFailure(), SslProtocols.Tls13)),
+            "Some TLS stacks report a TLS 1.3 abort as a reset or a bare end of stream.");
+        Assert.IsTrue(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Nla,
+            new RdpProtocolException(CredSsp.ClosedDuringNla), SslProtocols.Tls13)));
+        Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Nla,
+            new RdpProtocolException("NLA public-key echo missing."), SslProtocols.Tls13)), "A protocol verdict is not retried.");
         Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpConnectionException(RdpConnectStage.Mcs, TlsFailure(), SslProtocols.Tls13)),
             "After NLA the credentials are in use; no silent retry.");
 
@@ -62,7 +72,7 @@ public sealed class RdpTlsPlatformTests
         Assert.IsTrue(RdpManagedSession.IsTls13FailureDuringNla(new RdpNlaRefusedException(null, TlsFailure()).WithTls(null, SslProtocols.Tls13)));
         Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpNlaRefusedException(null, TlsFailure()).WithTls(null, SslProtocols.Tls12)));
         Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpNlaRefusedException(0x80090302, null).WithTls(null, SslProtocols.Tls13)));
-        Assert.IsFalse(RdpManagedSession.IsTls13FailureDuringNla(new RdpNlaRefusedException(null, SocketFailure()).WithTls(null, SslProtocols.Tls13)));
+        Assert.IsTrue(RdpManagedSession.IsTls13FailureDuringNla(new RdpNlaRefusedException(null, SocketFailure()).WithTls(null, SslProtocols.Tls13)));
     }
 
     [TestMethod]

@@ -392,6 +392,14 @@ public sealed class DriveSemanticsTests
             DriveFile upper = DriveFile.Create(share, "\\A.txt", GenericRead, FileOpen, 0, 0);
             CollectionAssert.AreEqual("upper"u8.ToArray(), upper.Read(0, 8));
             upper.Close();
+            // A rename onto a name that exists only in another case collides instead of creating a third spelling.
+            File.WriteAllText(Path.Combine(share, "other.txt"), "o");
+            DriveFile other = DriveFile.Create(share, "\\other.txt", GenericWrite, FileOpen, 0, 0);
+            File.Delete(Path.Combine(share, "a.txt"));
+            DriveStatusException renamed = Assert.Throws<DriveStatusException>(() => other.Rename("\\a.TXT", replaceIfExists: false));
+            Assert.AreEqual(NtStatus.ObjectNameCollision, renamed.Status);
+            other.Close();
+            File.WriteAllText(Path.Combine(share, "a.txt"), "lower");
             // ... but a third spelling matches both and is not resolved to either.
             DriveStatusException missing = Assert.Throws<DriveStatusException>(() => DriveFile.Create(share, "\\a.TXT", GenericRead, FileOpen, 0, 0));
             Assert.AreEqual(NtStatus.NoSuchFile, missing.Status);

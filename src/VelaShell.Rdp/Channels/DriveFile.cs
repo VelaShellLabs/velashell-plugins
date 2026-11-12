@@ -288,6 +288,16 @@ internal sealed class DriveFile
             return;
         }
 
+        // On a case-sensitive file system the target may exist under another case ("Readme.txt" for "README.txt"):
+        // that is the same name to the server, so it collides (or is replaced) instead of creating a second entry.
+        if (!File.Exists(target) && !Directory.Exists(target) && Path.GetDirectoryName(target) is { } targetParent
+            && Directory.Exists(targetParent) && Path.GetFileName(target).IndexOfAny(['*', '?']) < 0
+            && SingleCaseInsensitiveMatch(targetParent, Path.GetFileName(target)) is { } other
+            && !other.Equals(FullPath, StringComparison.Ordinal))
+        {
+            target = other;
+        }
+
         bool targetIsDirectory = Directory.Exists(target);
         bool targetExists = (targetIsDirectory || File.Exists(target)) && !IsSameEntryWithOtherCase(FullPath, target);
         if (targetExists)

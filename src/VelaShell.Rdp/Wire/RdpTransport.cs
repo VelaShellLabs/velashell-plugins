@@ -229,6 +229,13 @@ internal sealed class RdpTransport(Stream stream)
         w.U32LE((uint)requested);
 
         int variable = w.Length;
+        // The X.224 Connection Request length indicator is one byte (at most 254), so cookie/routing token plus
+        // RDP_NEG_REQ must fit in 248 bytes; a longer routing token would silently corrupt the TPDU.
+        if (6 + variable > 254)
+        {
+            throw new RdpProtocolException("The server's load-balance info is too long for an X.224 connection request.");
+        }
+
         var tpdu = new ByteWriter(variable + 8);
         tpdu.U8((byte)(6 + variable)); // LI
         tpdu.U8(0xE0);                 // CR CDT

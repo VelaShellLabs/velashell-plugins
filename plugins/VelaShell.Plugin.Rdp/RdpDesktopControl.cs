@@ -567,7 +567,17 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (!string.IsNullOrEmpty(e.Text))
         {
             string text = e.Text;
-            Queue(() => _session.UnicodeAsync(text));
+            // A character typed with Option (macOS) or AltGr (Windows, reported as Ctrl+Alt) arrives while the remote
+            // still holds Alt/Ctrl from that modifier's own key-down; Windows would then take the Unicode key as an Alt
+            // mnemonic or Ctrl shortcut instead of inserting it. Lift those modifiers around the text and press them
+            // again, so a following shortcut still sees them held.
+            uint[] held = [.. _keys.Where(RdpInput.IsCharacterModifierScanCode)];
+            Queue(async () =>
+            {
+                foreach (uint code in held) { await _session.KeyAsync(code, false); }
+                await _session.UnicodeAsync(text);
+                foreach (uint code in held) { await _session.KeyAsync(code, true); }
+            });
             _preedit = null;
             InvalidateVisual();
             e.Handled = true;
