@@ -11,16 +11,16 @@ public sealed class LocalWpdDevicesTests
     public void SettingsKeepSelectionExplicitAndEnableDvcWithoutDesktopResize()
     {
         var device = new RdpWpdDevice("fake-local-interface", "Portable device");
-        ProtocolSettingField field = RdpSettings.Declare(new("en"), [], wpdDevices: [device]).Single(f => f.Key == LocalWpdDevices.Key(device));
+        ProtocolSettingField field = RdpSettings.Declare(new("en"), [], wpdDevices: [device], windowsDevices: true).Single(f => f.Key == LocalWpdDevices.Key(device));
         Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
         Assert.AreEqual("false", field.DefaultValue);
-        var settings = RdpSettings.From(RdpSettingsTests.Request((field.Key, "true")), new("en"), [], enumerateWpdDevices: () => [device]);
+        var settings = RdpSettings.From(RdpSettingsTests.Request((field.Key, "true")), new("en"), [], enumerateWpdDevices: () => [device], windowsDevices: true);
         Assert.AreSequenceEqual(new[] { device.Id }, settings.WpdDevices);
         var options = new VelaShell.Rdp.RdpClientOptions { Host = "example", DynamicResolution = false, WpdDevices = settings.WpdDevices };
         Assert.Contains("drdynvc", [.. VelaShell.Rdp.RdpManagedSession.BuildChannels(options).Select(c => c.Name)]);
         Assert.IsEmpty(VelaShell.Rdp.RdpManagedSession.BuildChannels(options with { WpdDevices = [] }));
         Assert.IsEmpty(RdpSettings.From(RdpSettingsTests.Request(), new("en"), [],
-            enumerateWpdDevices: () => throw new AssertFailedException("Disabled WPD must not enumerate.")).WpdDevices);
+            enumerateWpdDevices: () => throw new AssertFailedException("Disabled WPD must not enumerate."), windowsDevices: true).WpdDevices);
     }
 
     [TestMethod]

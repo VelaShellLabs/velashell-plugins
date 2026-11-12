@@ -76,4 +76,50 @@ public sealed class RdpInputTests
             .ToArray();
         Assert.IsEmpty(unmapped, "Unmapped: " + string.Join(", ", unmapped));
     }
+
+    private const RdpInput.KeyboardPlatform Mac = RdpInput.KeyboardPlatform.MacOS;
+    private const RdpInput.KeyboardPlatform Win = RdpInput.KeyboardPlatform.Windows;
+    private const RdpInput.KeyboardPlatform Linux = RdpInput.KeyboardPlatform.Other;
+
+    [TestMethod]
+    public void MacCommandIsSentAsControlAndOtherPlatformsKeepTheWindowsKey()
+    {
+        Assert.AreEqual(0x1du, RdpInput.ScanCode(PhysicalKey.MetaLeft, Mac));
+        Assert.AreEqual(0x11du, RdpInput.ScanCode(PhysicalKey.MetaRight, Mac));
+        Assert.AreEqual(0x1du, RdpInput.ScanCode(PhysicalKey.ControlLeft, Mac));
+        Assert.AreEqual(0x15bu, RdpInput.ScanCode(PhysicalKey.MetaLeft, Win));
+        Assert.AreEqual(0x15bu, RdpInput.ScanCode(PhysicalKey.MetaLeft, Linux));
+
+        Assert.IsTrue(RdpInput.IsPaste(PhysicalKey.V, KeyModifiers.Meta, Mac), "Cmd+V pastes on a Mac.");
+        Assert.IsTrue(RdpInput.IsPaste(PhysicalKey.V, KeyModifiers.Control, Mac));
+        Assert.IsTrue(RdpInput.IsPaste(PhysicalKey.V, KeyModifiers.Control, Win));
+        Assert.IsFalse(RdpInput.IsPaste(PhysicalKey.V, KeyModifiers.Meta, Win), "Win+V is the clipboard history, not paste.");
+        Assert.IsFalse(RdpInput.IsPaste(PhysicalKey.V, KeyModifiers.Control | KeyModifiers.Alt, Win));
+    }
+
+    [TestMethod]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.MacOS), KeyModifiers.Alt, "@", false, DisplayName = "Option+L on a German Mac types @")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.MacOS), KeyModifiers.Alt, null, true, DisplayName = "Option+F4 is Alt+F4")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.MacOS), KeyModifiers.Alt, "	", true, DisplayName = "Option+Tab is Alt+Tab")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.MacOS), KeyModifiers.Meta, "c", true, DisplayName = "Cmd+C is a shortcut")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.MacOS), KeyModifiers.Alt | KeyModifiers.Meta, "@", true, DisplayName = "Cmd+Option is a shortcut")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.Windows), KeyModifiers.Control | KeyModifiers.Alt, "@", false, DisplayName = "AltGr+Q on a German PC types @")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.Windows), KeyModifiers.Control | KeyModifiers.Alt, null, true, DisplayName = "Ctrl+Alt+End stays a shortcut")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.Windows), KeyModifiers.Alt, "a", true, DisplayName = "Alt+A is a menu shortcut on Windows")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.Other), KeyModifiers.Control | KeyModifiers.Alt, "t", true, DisplayName = "Ctrl+Alt+T stays a shortcut on Linux")]
+    [DataRow(nameof(RdpInput.KeyboardPlatform.Other), KeyModifiers.Shift, "A", false, DisplayName = "Shift alone is typing")]
+    public void OnlyModifierChordsThatDoNotTypeAreShortcuts(string platform, KeyModifiers modifiers, string? symbol, bool shortcut)
+    {
+        Assert.AreEqual(shortcut, RdpInput.IsShortcut(modifiers, symbol, Enum.Parse<RdpInput.KeyboardPlatform>(platform)));
+    }
+
+    [TestMethod]
+    public void ReleasingCommandOnlyLetsGoOfOrdinaryKeys()
+    {
+        Assert.IsTrue(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.ShiftLeft, Mac)));
+        Assert.IsTrue(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.MetaLeft, Mac)));
+        Assert.IsTrue(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.CapsLock, Mac)));
+        Assert.IsFalse(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.C, Mac)));
+        Assert.IsFalse(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.ArrowLeft, Mac)));
+    }
 }

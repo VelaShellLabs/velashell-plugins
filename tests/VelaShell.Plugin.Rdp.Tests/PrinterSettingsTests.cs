@@ -19,12 +19,12 @@ public sealed class PrinterSettingsTests
     public void FormAndOptionsPreserveExplicitSelection()
     {
         var printer = new PrinterMapping("Office", "Driver", true);
-        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(new("en"), [], [printer]);
+        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(new("en"), [], [printer], windowsDevices: true);
         ProtocolSettingField field = fields.Single(f => f.Key == LocalPrinters.Key(printer));
         Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
         Assert.AreEqual("false", field.DefaultValue);
         Assert.AreEqual(RdpSettings.DrivesPage, field.Page);
-        var settings = RdpSettings.From(RdpSettingsTests.Request((field.Key, "true")), new("en"), [], () => [printer]);
+        var settings = RdpSettings.From(RdpSettingsTests.Request((field.Key, "true")), new("en"), [], () => [printer], windowsDevices: true);
         var options = new RdpClientOptions { Host = "example", Printers = settings.Printers };
         Assert.AreSame(printer, options.Printers.Single());
         Assert.IsEmpty(new RdpClientOptions { Host = "example" }.Printers);

@@ -21,10 +21,10 @@ public sealed class CameraSettingsTests
     public void SingleChoiceResolvesExactDeviceAndEnablesDvcWithFixedDesktop()
     {
         var camera = new RdpCameraDevice("camera-one", "Camera");
-        ProtocolSettingField field = RdpSettings.Declare(new("en"), [], cameras: [camera]).Single(f => f.Key == "camera");
+        ProtocolSettingField field = RdpSettings.Declare(new("en"), [], cameras: [camera], windowsDevices: true).Single(f => f.Key == "camera");
         Assert.AreEqual(ProtocolSettingKind.Choice, field.Kind);
         Assert.AreEqual("", field.DefaultValue);
-        var settings = RdpSettings.From(RdpSettingsTests.Request(("camera", LocalCameras.Key(camera))), new("en"), [], enumerateCameras: () => [camera]);
+        var settings = RdpSettings.From(RdpSettingsTests.Request(("camera", LocalCameras.Key(camera))), new("en"), [], enumerateCameras: () => [camera], windowsDevices: true);
         Assert.AreSame(camera, settings.Camera);
         var options = new RdpClientOptions { Host = "example", DynamicResolution = false, Camera = settings.Camera };
         Assert.Contains("drdynvc", [.. RdpManagedSession.BuildChannels(options).Select(c => c.Name)]);

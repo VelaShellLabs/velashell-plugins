@@ -255,7 +255,7 @@ public sealed class RdpSettingsTests
         var printer = new PrinterMapping("Office", "Driver");
         var wpd = new RdpWpdDevice("portable-device", "Phone");
         var camera = new RdpCameraDevice("camera-one", "Camera");
-        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(loc, disks, [printer], [camera], [wpd]);
+        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(loc, disks, [printer], [camera], [wpd], windowsDevices: true);
         (string Key, string Group, string Label)[] expected =
         [
             ("drive:C", "drives", loc["DriveGroup"]),
@@ -289,11 +289,39 @@ public sealed class RdpSettingsTests
         }
 
         var settings = RdpSettings.From(Request(expected.Select(field => (field.Key, "false")).ToArray()), loc, disks,
-            () => [printer], () => [camera], () => [wpd]);
+            () => [printer], () => [camera], () => [wpd], windowsDevices: true);
         Assert.IsEmpty(settings.Drives);
         Assert.IsEmpty(settings.Printers);
         Assert.IsEmpty(settings.WpdDevices);
         Assert.IsNull(settings.Camera);
+    }
+
+    [TestMethod]
+    public void WindowsOnlyDevicesAreNotOfferedOrUsedElsewhere()
+    {
+        var loc = new Loc("en");
+        var printer = new PrinterMapping("Office", "Driver");
+        var wpd = new RdpWpdDevice("portable-device", "Phone");
+        var camera = new RdpCameraDevice("camera-one", "Camera");
+        IReadOnlyList<ProtocolSettingField> fields = RdpSettings.Declare(loc, [], [printer], [camera], [wpd], windowsDevices: false);
+        string[] keys = [.. fields.Select(field => field.Key)];
+        CollectionAssert.DoesNotContain(keys, RdpSettings.PortsKey);
+        CollectionAssert.DoesNotContain(keys, LocalCameras.SettingKey);
+        CollectionAssert.DoesNotContain(keys, LocalPrinters.Key(printer));
+        CollectionAssert.DoesNotContain(keys, LocalWpdDevices.Key(wpd));
+        CollectionAssert.Contains(keys, RdpSettings.SmartCardKey, "Smart cards work on every platform.");
+
+        // Settings saved on Windows (e.g. synced to a Mac) are ignored, not a connection failure.
+        Func<IReadOnlyList<PrinterMapping>> printers = () => throw new AssertFailedException("Printers must not be enumerated.");
+        Func<IReadOnlyList<RdpCameraDevice>> cameras = () => throw new AssertFailedException("Cameras must not be enumerated.");
+        Func<IReadOnlyList<RdpWpdDevice>> devices = () => throw new AssertFailedException("WPD must not be enumerated.");
+        var settings = RdpSettings.From(Request((RdpSettings.PortsKey, "COM3"), (LocalPrinters.Key(printer), "true"),
+            (LocalCameras.SettingKey, LocalCameras.Key(camera)), (LocalWpdDevices.Key(wpd), "true")), loc, [],
+            printers, cameras, devices, windowsDevices: false);
+        Assert.IsEmpty(settings.Ports);
+        Assert.IsEmpty(settings.Printers);
+        Assert.IsNull(settings.Camera);
+        Assert.IsEmpty(settings.WpdDevices);
     }
 
     [TestMethod]

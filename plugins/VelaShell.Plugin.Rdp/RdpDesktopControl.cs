@@ -518,8 +518,9 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
             return;
         }
 
-        uint code = RdpInput.ScanCode(e.PhysicalKey);
-        bool shortcut = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0;
+        RdpInput.KeyboardPlatform platform = RdpInput.CurrentPlatform;
+        uint code = RdpInput.ScanCode(e.PhysicalKey, platform);
+        bool shortcut = RdpInput.IsShortcut(e.KeyModifiers, e.KeySymbol, platform);
         // IME-owned keys can arrive before preedit, including candidate-selection shortcuts.
         // Printable local text and IME commits use Unicode; navigation and shortcuts use physical scan codes.
         if (e.Key is Key.ImeProcessed or Key.DeadCharProcessed
@@ -527,8 +528,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         { base.OnKeyDown(e); return; }
         if (code == 0) { base.OnKeyDown(e); return; }
         _ = _keys.Add(code);
-        bool paste = e.PhysicalKey == PhysicalKey.V && e.KeyModifiers.HasFlag(KeyModifiers.Control)
-            && (e.KeyModifiers & (KeyModifiers.Alt | KeyModifiers.Meta)) == 0;
+        bool paste = RdpInput.IsPaste(e.PhysicalKey, e.KeyModifiers, platform);
         Queue(async () =>
         {
             if (paste && PublishClipboard is { } publish)
@@ -542,9 +542,21 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     }
     protected override void OnKeyUp(KeyEventArgs e)
     {
-        uint code = RdpInput.ScanCode(e.PhysicalKey);
-        if (_keys.Remove(code)) { Queue(() => _session.KeyAsync(code, false)); e.Handled = true; }
-        else
+        RdpInput.KeyboardPlatform platform = RdpInput.CurrentPlatform;
+        uint code = RdpInput.ScanCode(e.PhysicalKey, platform);
+        bool released = _keys.Remove(code);
+        if (released) { Queue(() => _session.KeyAsync(code, false)); e.Handled = true; }
+        if (platform == RdpInput.KeyboardPlatform.MacOS && e.PhysicalKey is PhysicalKey.MetaLeft or PhysicalKey.MetaRight)
+        {
+            // AppKit delivers no key-up for keys released while Command is held, so a Cmd+C would leave C down on the
+            // remote. Let go of every ordinary key still down when Command is released.
+            foreach (uint held in _keys.Where(key => !RdpInput.IsModifierScanCode(key)).ToArray())
+            {
+                _ = _keys.Remove(held);
+                Queue(() => _session.KeyAsync(held, false));
+            }
+        }
+        if (!released)
         {
             base.OnKeyUp(e);
         }

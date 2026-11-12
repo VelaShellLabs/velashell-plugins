@@ -73,7 +73,65 @@ internal static class RdpInput
             or Key.Oem2 or Key.Oem3 or Key.Oem4 or Key.Oem5 or Key.Oem6 or Key.Oem7 or Key.Oem8 or Key.Oem102;
     }
 
-    internal static uint ScanCode(PhysicalKey key) => Codes.GetValueOrDefault(key);
+    /// <summary>The local keyboard conventions that change how keys map onto a remote Windows desktop.</summary>
+    internal enum KeyboardPlatform { Windows, MacOS, Other }
+
+    internal static KeyboardPlatform CurrentPlatform =>
+        OperatingSystem.IsWindows() ? KeyboardPlatform.Windows : OperatingSystem.IsMacOS() ? KeyboardPlatform.MacOS : KeyboardPlatform.Other;
+
+    internal static uint ScanCode(PhysicalKey key) => ScanCode(key, CurrentPlatform);
+
+    /// <summary>
+    /// The scan code sent for <paramref name="key" />. On macOS, Command is sent as Control: Mac users press
+    /// Cmd+C/V/Z/A for what Windows does with Ctrl, so the remote desktop receives the shortcut they meant. The Windows
+    /// key remains reachable through the remote-keys ball.
+    /// </summary>
+    internal static uint ScanCode(PhysicalKey key, KeyboardPlatform platform) => (platform, key) switch
+    {
+        (KeyboardPlatform.MacOS, PhysicalKey.MetaLeft) => Codes[PhysicalKey.ControlLeft],
+        (KeyboardPlatform.MacOS, PhysicalKey.MetaRight) => Codes[PhysicalKey.ControlRight],
+        _ => Codes.GetValueOrDefault(key)
+    };
+
+    /// <summary>The modifiers as the remote desktop sees them: on macOS Command counts as Control.</summary>
+    internal static KeyModifiers RemoteModifiers(KeyModifiers modifiers, KeyboardPlatform platform) =>
+        platform == KeyboardPlatform.MacOS && modifiers.HasFlag(KeyModifiers.Meta)
+            ? (modifiers & ~KeyModifiers.Meta) | KeyModifiers.Control
+            : modifiers;
+
+    /// <summary>
+    /// Whether a key press goes to the remote as a shortcut (paired physical scan codes) rather than as typed text.
+    /// A modifier chord that types a printable character on the local layout is text: Option on macOS (Option+L is
+    /// "@" on a German Mac) and AltGr on Windows, which Windows reports as Ctrl+Alt. Sent as scan codes those would
+    /// reach the remote as Alt+L or Ctrl+Alt+Q unless both ends used the same layout. Elsewhere (Linux) AltGr is its
+    /// own modifier, so Ctrl+Alt stays a shortcut.
+    /// </summary>
+    internal static bool IsShortcut(KeyModifiers modifiers, string? keySymbol, KeyboardPlatform platform)
+    {
+        KeyModifiers chord = modifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta);
+        if (chord == KeyModifiers.None)
+        {
+            return false;
+        }
+
+        bool printable = !string.IsNullOrEmpty(keySymbol) && !keySymbol.Any(char.IsControl);
+        return !printable || platform switch
+        {
+            KeyboardPlatform.MacOS => chord != KeyModifiers.Alt,
+            KeyboardPlatform.Windows => chord != (KeyModifiers.Control | KeyModifiers.Alt),
+            _ => true
+        };
+    }
+
+    /// <summary>Ctrl+V on the remote (Cmd+V on macOS): the local clipboard is published before the key is sent.</summary>
+    internal static bool IsPaste(PhysicalKey key, KeyModifiers modifiers, KeyboardPlatform platform)
+    {
+        KeyModifiers remote = RemoteModifiers(modifiers, platform);
+        return key == PhysicalKey.V && remote.HasFlag(KeyModifiers.Control) && (remote & (KeyModifiers.Alt | KeyModifiers.Meta)) == 0;
+    }
+
+    /// <summary>Scan codes of modifier and lock keys, which a release of Command on macOS must not let go of.</summary>
+    internal static bool IsModifierScanCode(uint code) => code is 0x1d or 0x11d or 0x2a or 0x36 or 0x38 or 0x138 or 0x15b or 0x15c or 0x3a or 0x45 or 0x46;
     internal static uint Wheel(double delta, bool horizontal)
     {
         int rotation = Math.Clamp((int)Math.Round(delta * 120), -255, 255);
