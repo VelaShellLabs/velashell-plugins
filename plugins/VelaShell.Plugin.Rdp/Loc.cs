@@ -232,6 +232,7 @@ internal sealed class Loc(string locale)
         ["ReconnectButton"] = ["Reconnect", "重新连接", "重新連線", "再接続", "다시 연결"],
         ["Reconnecting"] = ["Reconnecting…", "正在重新连接…", "正在重新連線…", "再接続しています…", "다시 연결 중…"],
         ["ReconnectFailed"] = ["Reconnect failed. Try again.", "重新连接失败，请重试。", "重新連線失敗，請重試。", "再接続に失敗しました。もう一度お試しください。", "다시 연결에 실패했습니다. 다시 시도하세요."],
+        ["Redirecting"] = ["The server redirected this session to {0}; connecting…", "服务器已将此会话重定向到 {0}，正在连接…", "伺服器已將此工作階段重新導向到 {0}，正在連線…", "サーバーがこのセッションを {0} にリダイレクトしました。接続しています…", "서버가 이 세션을 {0}(으)로 리디렉션했습니다. 연결하는 중…"],
         ["AutoReconnecting"] = [
             "The network connection was lost. Reconnecting automatically (attempt {0} of {1})…",
             "网络连接已中断，正在自动重新连接（第 {0}/{1} 次）…",
@@ -266,6 +267,7 @@ internal sealed class Loc(string locale)
         ["NlaAccountDisabled"] = ["the account is disabled or has expired", "账号已停用或已过期", "帳戶已停用或已過期", "アカウントが無効か、有効期限が切れています", "계정이 비활성화되었거나 만료되었습니다"],
         ["NlaNotAllowed"] = ["this account may not sign in remotely (check the Remote Desktop Users group, logon hours and workstation restrictions)", "该账号不允许远程登录(请检查是否在「远程桌面用户」组中,以及登录时段、工作站限制)", "此帳戶不允許遠端登入(請檢查是否在「遠端桌面使用者」群組中,以及登入時段、工作站限制)", "このアカウントはリモート サインインを許可されていません(Remote Desktop Users グループ、ログオン時間、ワークステーション制限を確認してください)", "이 계정은 원격 로그인이 허용되지 않습니다(Remote Desktop Users 그룹, 로그온 시간, 워크스테이션 제한을 확인하세요)"],
         ["Certificate"] = ["The RDP server certificate requires host approval.", "RDP 服务器证书需要宿主确认。", "RDP 伺服器憑證需要宿主確認。", "RDP サーバー証明書にはホストの承認が必要です。", "RDP 서버 인증서에 호스트 승인이 필요합니다."],
+        ["CertificateRevocationUnknown"] = ["The revocation status of the RDP server certificate could not be checked (its revocation list or OCSP responder is unreachable). Trust it only if you know this server.", "无法检查 RDP 服务器证书的吊销状态（吊销列表或 OCSP 响应方无法访问）。只有在确认是这台服务器时才信任它。", "無法檢查 RDP 伺服器憑證的撤銷狀態（撤銷清單或 OCSP 回應程式無法存取）。只有在確認是這台伺服器時才信任它。", "RDP サーバー証明書の失効状態を確認できませんでした（失効リストまたは OCSP レスポンダーにアクセスできません）。このサーバーであると確認できる場合にのみ信頼してください。", "RDP 서버 인증서의 해지 상태를 확인할 수 없습니다(해지 목록 또는 OCSP 응답자에 연결할 수 없음). 이 서버임을 확인한 경우에만 신뢰하세요."],
         ["CertificateChanged"] = ["The RDP server certificate is different from the one you approved before. Confirm the new certificate only if you expected the change (for example, the server renewed its self-signed certificate).", "RDP 服务器证书与之前信任的证书不同。只有在预期会变更时(例如服务器续期了自签名证书)才信任新证书。", "RDP 伺服器憑證與先前信任的憑證不同。僅在預期會變更時(例如伺服器續期了自我簽署憑證)才信任新憑證。", "RDP サーバー証明書が以前に承認したものと異なります。変更が想定どおりの場合(サーバーが自己署名証明書を更新した場合など)にのみ、新しい証明書を信頼してください。", "RDP 서버 인증서가 이전에 승인한 인증서와 다릅니다. 변경이 예상된 경우(예: 서버가 자체 서명 인증서를 갱신한 경우)에만 새 인증서를 신뢰하세요."],
         ["Reconnect"] = ["Reopen this session through the host to renew credentials and certificate approval.", "请通过宿主重新打开会话，以更新凭据与证书信任。", "請透過宿主重新開啟工作階段，以更新認證資訊與憑證信任。", "資格情報と証明書の承認を更新するため、ホストからセッションを開き直してください。", "자격 증명과 인증서 승인을 갱신하려면 호스트에서 세션을 다시 여세요."],
         ["InputFailed"] = ["Remote input or clipboard operation failed.", "远程输入或剪贴板操作失败。", "遠端輸入或剪貼簿操作失敗。", "リモート入力またはクリップボード操作に失敗しました。", "원격 입력 또는 클립보드 작업에 실패했습니다."]

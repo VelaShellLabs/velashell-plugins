@@ -31,6 +31,25 @@ internal sealed class SmartCardDevice : IRdpdrDevice
     }
 
     internal SmartCardDevice(ISmartCardBackend backend) => _backend = backend;
+
+    /// <summary>
+    /// The device over the local PC/SC service, or <see langword="null" /> with the reason when no service is available
+    /// (no Smart Card service, pcscd or PCSC framework running, or no PC/SC library). The connection then goes ahead
+    /// without smart-card redirection, as mstsc does, instead of failing.
+    /// </summary>
+    internal static SmartCardDevice? TryCreate(out string? unavailable)
+    {
+        try
+        {
+            unavailable = null;
+            return new SmartCardDevice();
+        }
+        catch (InvalidOperationException ex)
+        {
+            unavailable = ex.InnerException is { } cause ? $"{ex.Message} ({cause.Message})" : ex.Message;
+            return null;
+        }
+    }
     public uint DeviceType => 0x20;
     public string Name => "SCARD";
     public ushort CapabilityType => 5;

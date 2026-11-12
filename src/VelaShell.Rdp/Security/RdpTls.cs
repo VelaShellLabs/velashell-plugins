@@ -42,6 +42,7 @@ internal static class RdpTls
         // Set only when this callback refuses the certificate, so that a later failure of an accepted handshake
         // (a timeout, a reset) is never reported as a trust problem.
         byte[]? rejectedPem = null;
+        bool revocationUnknown = false, revoked = false;
 
         bool Validate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
         {
@@ -52,6 +53,19 @@ internal static class RdpTls
 
             using X509Certificate2 leaf = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
             bool accepted = pin is not null ? MatchesPin(leaf, pin) : IsTrusted(leaf, errors);
+            if (!accepted && pin is null)
+            {
+                switch (ClassifyRevocation(errors, chain))
+                {
+                    case RevocationProblem.Revoked:
+                        revoked = true;   // not offered for approval at all
+                        return false;
+                    case RevocationProblem.Unknown:
+                        revocationUnknown = true;
+                        break;
+                }
+            }
+
             if (!accepted)
             {
                 rejectedPem = System.Text.Encoding.UTF8.GetBytes(leaf.ExportCertificatePem());
@@ -66,12 +80,22 @@ internal static class RdpTls
         {
             await ssl.AuthenticateAsClientAsync(options, ct).ConfigureAwait(false);
         }
+        catch (Exception ex) when (revoked)
+        {
+            await ssl.DisposeAsync().ConfigureAwait(false);
+            // Like mstsc: a revoked certificate is refused outright, with no option to trust it anyway.
+            throw new RdpProtocolException("The RDP server's certificate has been revoked by its issuer; the connection is refused.", ex);
+        }
         catch (Exception ex) when (rejectedPem is not null)
         {
             await ssl.DisposeAsync().ConfigureAwait(false);
             // A pinned certificate that no longer matches (e.g. a self-signed RDP certificate that Windows renewed)
-            // goes back to the caller for re-approval, flagged so it can say the certificate changed.
-            throw new RdpCertificateRejectedException(rejectedPem, ex, pinMismatch: pin is not null);
+            // goes back to the caller for re-approval, flagged so it can say the certificate changed. A certificate
+            // whose only problem is that revocation could not be checked is offered for approval too, flagged.
+            throw new RdpCertificateRejectedException(rejectedPem, ex, pinMismatch: pin is not null)
+            {
+                RevocationUnknown = revocationUnknown
+            };
         }
         catch
         {
@@ -79,6 +103,49 @@ internal static class RdpTls
             throw;
         }
         return ssl;
+    }
+
+    internal enum RevocationProblem { None, Unknown, Revoked }
+
+    /// <summary>
+    /// The revocation side of a chain failure, decided the same way on every OS (as mstsc does): a certificate in the
+    /// chain is revoked → refused outright; the only problem is that revocation status could not be determined
+    /// (no reachable CRL/OCSP, e.g. an LDAP-only distribution point) → the user is asked, told why; anything else is
+    /// an ordinary trust failure.
+    /// </summary>
+    internal static RevocationProblem ClassifyRevocation(SslPolicyErrors errors, X509Chain? chain)
+    {
+        if (chain is null)
+        {
+            return RevocationProblem.None;
+        }
+
+        X509ChainStatusFlags flags = X509ChainStatusFlags.NoError;
+        foreach (X509ChainStatus status in chain.ChainStatus) { flags |= status.Status; }
+        foreach (X509ChainElement element in chain.ChainElements)
+        {
+            foreach (X509ChainStatus status in element.ChainElementStatus) { flags |= status.Status; }
+        }
+
+        return ClassifyRevocation(errors, flags);
+    }
+
+    internal static RevocationProblem ClassifyRevocation(SslPolicyErrors errors, X509ChainStatusFlags flags)
+    {
+        if ((errors & SslPolicyErrors.RemoteCertificateChainErrors) == 0)
+        {
+            return RevocationProblem.None;
+        }
+
+        if ((flags & X509ChainStatusFlags.Revoked) != 0)
+        {
+            return RevocationProblem.Revoked;
+        }
+
+        const X509ChainStatusFlags unknown = X509ChainStatusFlags.RevocationStatusUnknown | X509ChainStatusFlags.OfflineRevocation;
+        return errors == SslPolicyErrors.RemoteCertificateChainErrors && (flags & unknown) != 0 && (flags & ~unknown) == 0
+            ? RevocationProblem.Unknown
+            : RevocationProblem.None;
     }
 
     private static bool MatchesPin(X509Certificate2 leaf, byte[] pin)
