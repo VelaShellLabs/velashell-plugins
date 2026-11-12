@@ -99,6 +99,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     internal AutoReconnectCookie? AutoReconnectCookie => _autoReconnectCookie;
 
     private TlsRecordTap? _tlsTap;
+    private SslStream? _ssl;
     private TlsCipherSuite? _tlsCipher;
 
     /// <summary>
@@ -228,6 +229,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         SslStream ssl = await RdpTls.AuthenticateAsync(_tlsTap, _options.CertificateHost, _options.CertificatePin, ct, _options.TlsProtocols).ConfigureAwait(false);
         _certificateDigest = SHA256.HashData(ssl.RemoteCertificate!.GetRawCertData());
         _tlsTap.MarkHandshakeComplete();
+        _ssl = ssl;
         TlsProtocol = ssl.SslProtocol;
         _tlsCipher = ssl.NegotiatedCipherSuite;
         _transport.UpgradeStream(ssl);
@@ -917,6 +919,14 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         if (_gateway is { } gateway) { await gateway.DisposeAsync().ConfigureAwait(false); }
         await Task.WhenAll(_tunnelAttempts.Values).ConfigureAwait(false);
         foreach (RdpMultitransport tunnel in _tunnels.Values) { await tunnel.DisposeAsync().ConfigureAwait(false); }
-        _writeGate.Dispose();
+        // Release the TLS context (SChannel / OpenSSL / Apple) now rather than at finalization.
+        if (_ssl is { } ssl)
+        {
+            try { await ssl.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException) { /* the transport is already closed */ }
+        }
+        // _writeGate and _sendStop are deliberately not disposed: neither holds an unmanaged resource here, and a
+        // send still finishing on another thread would otherwise hit ObjectDisposedException in Release() or in a
+        // linked token source created from _sendStop.
     }
 }
