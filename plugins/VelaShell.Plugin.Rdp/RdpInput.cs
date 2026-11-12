@@ -132,10 +132,52 @@ internal static class RdpInput
 
     /// <summary>Scan codes of modifier and lock keys, which a release of Command on macOS must not let go of.</summary>
     internal static bool IsModifierScanCode(uint code) => code is 0x1d or 0x11d or 0x2a or 0x36 or 0x38 or 0x138 or 0x15b or 0x15c or 0x3a or 0x45 or 0x46;
-    internal static uint Wheel(double delta, bool horizontal)
+    internal static uint Wheel(double delta, bool horizontal) =>
+        WheelFlags(Math.Clamp((int)Math.Round(delta * 120), -MaxWheelRotation, MaxWheelRotation), horizontal);
+
+    /// <summary>Largest rotation one fast-path wheel event carries (a 9-bit two's-complement field, MS-RDPBCGR 2.2.8.1.2.2.3).</summary>
+    internal const int MaxWheelRotation = 255;
+
+    /// <summary>PTRFLAGS_WHEEL or PTRFLAGS_HWHEEL with the rotation (in 1/120 notches) as WheelRotationMask plus the negative flag.</summary>
+    internal static uint WheelFlags(int rotation, bool horizontal) =>
+        (horizontal ? 0x0400u : 0x0200u) | (rotation < 0 ? 0x0100u : 0u) | ((uint)rotation & 0xff);
+
+    /// <summary>
+    /// Turns wheel deltas (in notches, fractional on precise devices) into whole wheel events. Each event used to be
+    /// rounded on its own: a macOS trackpad or Linux smooth-scroll device sends many deltas below half a 1/120 step,
+    /// which all rounded to zero (slow scrolling and momentum tails were lost), and a fast fling above ~2 notches was
+    /// clamped to 255. The fraction now carries over to the next delta, and large rotations are split into several
+    /// events. A change of direction drops the carried fraction so reversing responds at once.
+    /// </summary>
+    internal sealed class WheelAccumulator
     {
-        int rotation = Math.Clamp((int)Math.Round(delta * 120), -255, 255);
-        return (horizontal ? 0x0400u : 0x0200u) | (rotation < 0 ? 0x0100u : 0u) | ((uint)rotation & 0xff);
+        private double _carry;
+
+        internal List<int> Add(double notches)
+        {
+            if (double.IsNaN(notches) || double.IsInfinity(notches))
+            {
+                return [];
+            }
+
+            if (_carry != 0 && Math.Sign(_carry) != Math.Sign(notches))
+            {
+                _carry = 0;
+            }
+
+            double total = _carry + notches * 120;
+            // Bound one burst (100 notches) so a bogus delta cannot queue thousands of events.
+            int whole = (int)Math.Clamp(Math.Truncate(total), -12000, 12000);
+            _carry = Math.Abs(whole) == 12000 ? 0 : total - whole;
+            var rotations = new List<int>();
+            while (whole != 0)
+            {
+                int step = Math.Clamp(whole, -MaxWheelRotation, MaxWheelRotation);
+                rotations.Add(step);
+                whole -= step;
+            }
+            return rotations;
+        }
     }
     // Keyed by the enum, not its name, so a misspelt key fails to compile instead of silently mapping to 0.
     // Values are PC/AT set-1 scan codes; 0x1xx carries the KBDFLAGS_EXTENDED prefix (E0).

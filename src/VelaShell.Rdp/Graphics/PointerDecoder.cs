@@ -102,7 +102,7 @@ internal sealed class PointerDecoder(int cacheSize)
                 uint argb = xorBpp switch
                 {
                     1 => Monochrome(and, (xorRow[x >> 3] & (0x80 >> (x & 7))) != 0, x, y),
-                    16 => Masked(and, Rgb555(xorRow[x * 2] | (xorRow[x * 2 + 1] << 8)), x, y),
+                    16 => Masked(and, Rgb565(xorRow[x * 2] | (xorRow[x * 2 + 1] << 8)), x, y),
                     24 => Masked(and, Rgb24(xorRow, x, and), x, y),
                     _ => Masked(and, Bgra32(xorRow, x), x, y)
                 };
@@ -131,10 +131,14 @@ internal sealed class PointerDecoder(int cacheSize)
     private static uint Masked(bool and, uint argb, int x, int y) =>
         !and ? argb : argb == 0xFF000000u ? 0u : argb == 0xFFFFFFFFu ? Inverted(x, y) : argb;
 
-    private static uint Rgb555(int p)
+    /// <summary>
+    /// A 16 bpp pointer pixel is RGB 5-6-5, the same 16-bit format as 16 bpp bitmaps (MS-RDPBCGR lists no 15 bpp
+    /// pointer depth). Decoding it as 5-5-5 shifted green into red.
+    /// </summary>
+    internal static uint Rgb565(int p)
     {
-        int r = (p >> 10) & 0x1F, g = (p >> 5) & 0x1F, b = p & 0x1F;
-        return 0xFF000000u | (uint)(((r << 3) | (r >> 2)) << 16) | (uint)(((g << 3) | (g >> 2)) << 8) | (uint)((b << 3) | (b >> 2));
+        int r = (p >> 11) & 0x1F, g = (p >> 5) & 0x3F, b = p & 0x1F;
+        return 0xFF000000u | (uint)(((r << 3) | (r >> 2)) << 16) | (uint)(((g << 2) | (g >> 4)) << 8) | (uint)((b << 3) | (b >> 2));
     }
 
     private static uint Rgb24(ReadOnlySpan<byte> row, int x, bool and)

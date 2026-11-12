@@ -129,4 +129,18 @@ public sealed class RdpPointerAndInputTests
         Assert.AreEqual(0x81, pdus[0][5]);
         Assert.AreEqual((byte)'a', pdus[0][6]);
     }
+
+    [TestMethod]
+    [DataRow(0xF800, 0xFFFF0000u, DisplayName = "red")]
+    [DataRow(0x07E0, 0xFF00FF00u, DisplayName = "green (6 bits)")]
+    [DataRow(0x001F, 0xFF0000FFu, DisplayName = "blue")]
+    [DataRow(0xFFFF, 0xFFFFFFFFu, DisplayName = "white")]
+    public void SixteenBitPointersAreRgb565(int pixel, uint argb)
+    {
+        Assert.AreEqual(argb, PointerDecoder.Rgb565(pixel));
+        // 1x1, 16 bpp, rows padded to an even byte count; no AND mask.
+        RdpPointer? pointer = PointerDecoder.Decode(1, 1, 0, 0, 16, [(byte)pixel, (byte)(pixel >> 8)], andMask: []);
+        Assert.IsNotNull(pointer);
+        CollectionAssert.AreEqual(new[] { (byte)argb, (byte)(argb >> 8), (byte)(argb >> 16), (byte)(argb >> 24) }, pointer.Bgra);
+    }
 }

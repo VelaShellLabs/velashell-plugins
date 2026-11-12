@@ -22,6 +22,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     private Task? _overflowShutdown;
     private Task? _focusPublication;
     private readonly HashSet<uint> _keys = [];
+    private readonly RdpInput.WheelAccumulator _wheelY = new(), _wheelX = new();
     private readonly HashSet<uint> _buttons = [];
     private WriteableBitmap? _bitmap;
     private IPointer? _pointer;
@@ -634,12 +635,18 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
 
         if (e.Delta.Y != 0)
         {
-            SendMouse(RdpInput.Wheel(e.Delta.Y, false));
+            foreach (int rotation in _wheelY.Add(e.Delta.Y))
+            {
+                SendMouse(RdpInput.WheelFlags(rotation, false));
+            }
         }
 
         if (e.Delta.X != 0)
         {
-            SendMouse(RdpInput.Wheel(e.Delta.X, true));
+            foreach (int rotation in _wheelX.Add(e.Delta.X))
+            {
+                SendMouse(RdpInput.WheelFlags(rotation, true));
+            }
         }
 
         e.Handled = true;

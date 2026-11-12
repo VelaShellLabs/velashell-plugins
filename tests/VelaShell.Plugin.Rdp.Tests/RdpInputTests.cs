@@ -122,4 +122,36 @@ public sealed class RdpInputTests
         Assert.IsFalse(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.C, Mac)));
         Assert.IsFalse(RdpInput.IsModifierScanCode(RdpInput.ScanCode(PhysicalKey.ArrowLeft, Mac)));
     }
+
+    [TestMethod]
+    public void PreciseWheelDeltasAccumulateInsteadOfRoundingToNothing()
+    {
+        var wheel = new RdpInput.WheelAccumulator();
+        int sent = 0;
+        for (int i = 0; i < 100; i++)
+        {
+            // A trackpad's slow scroll: 1/300 of a notch per event, each below half a 1/120 step.
+            sent += wheel.Add(1.0 / 300).Sum();
+        }
+        Assert.AreEqual(40, sent, "100 × 0.4 steps is 40 steps, not 0.");
+    }
+
+    [TestMethod]
+    public void AFastFlingIsSplitIntoEventsTheFieldCanCarry()
+    {
+        var wheel = new RdpInput.WheelAccumulator();
+        List<int> rotations = wheel.Add(-5);   // 600 steps
+        CollectionAssert.AreEqual(new[] { -255, -255, -90 }, rotations);
+        Assert.AreEqual(0x0200u | 0x0100u | 0x01u, RdpInput.WheelFlags(-255, false));
+        Assert.AreEqual(0x0400u | 0x78u, RdpInput.WheelFlags(120, true));
+    }
+
+    [TestMethod]
+    public void ReversingTheWheelDropsTheCarriedFraction()
+    {
+        var wheel = new RdpInput.WheelAccumulator();
+        Assert.IsEmpty(wheel.Add(0.004));                 // 0.48 of a step carried
+        CollectionAssert.AreEqual(new[] { -1 }, wheel.Add(-0.01));   // -1.2 steps, not -0.72
+        Assert.IsEmpty(wheel.Add(double.NaN));
+    }
 }
