@@ -98,6 +98,36 @@ public sealed class RdpClipboardTests
     }
 
     [TestMethod]
+    public void ASelectionReachedThroughALinkedFolderIsAllowedButLinksInsideItAreNot()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "vela-rdp-links-" + Guid.NewGuid().ToString("N"));
+        string real = Path.Combine(root, "real");
+        string picked = Path.Combine(real, "picked");
+        _ = Directory.CreateDirectory(picked);
+        File.WriteAllText(Path.Combine(picked, "a.txt"), "a");
+        try
+        {
+            string linkedFolder = Path.Combine(root, "linked");
+            try { _ = Directory.CreateSymbolicLink(linkedFolder, real); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Assert.Inconclusive("Cannot create symbolic links here: " + ex.Message);
+            }
+
+            // Like /tmp or /var on macOS: the folder the user picked from is reached through a link.
+            using (var snapshot = RdpClipboardFiles.Open([Path.Combine(linkedFolder, "picked")], default))
+            {
+                CollectionAssert.AreEqual(new[] { "picked", "picked\\a.txt" }, snapshot.Entries.Select(e => e.Name).ToArray());
+            }
+
+            _ = File.CreateSymbolicLink(Path.Combine(picked, "escape.txt"), Path.Combine(root, "outside.txt"));
+            _ = Assert.Throws<InvalidDataException>(() => RdpClipboardFiles.Open([picked], default));
+            _ = Assert.Throws<InvalidDataException>(() => RdpClipboardFiles.Open([Path.Combine(picked, "escape.txt")], default));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
     public async Task LocalSnapshotUsesChunksAndRejectsInvalidRanges()
     {
         string root = Path.Combine(Path.GetTempPath(), "vela-rdp-test-" + Guid.NewGuid().ToString("N"));
@@ -108,6 +138,9 @@ public sealed class RdpClipboardTests
             await File.WriteAllBytesAsync(Path.Combine(root, "child", "data.bin"), bytes);
             using var snapshot = RdpClipboardFiles.Open([root], default);
             int index = snapshot.Entries.FindIndex(e => !e.IsDirectory);
+            // A range before any sequential read: the server asks for chunks by offset, in any order.
+            byte[] middle = await snapshot.ReadAsync((uint)index, 1000, 3, default);
+            Assert.AreSequenceEqual(bytes[1000..1003], middle);
             byte[] first = await snapshot.ReadAsync((uint)index, 0, RdpClipboardFiles.ChunkSize, default);
             byte[] last = await snapshot.ReadAsync((uint)index, (ulong)first.Length, 100, default);
             Assert.AreSequenceEqual(bytes, [.. first, .. last]);
@@ -797,8 +830,12 @@ public sealed class RdpClipboardTests
         var transport = new ClipboardTransport { SupportsClipboardLock = outcome != "sourceChanged", RemoteFiles = [new("data", false, 4)] };
         var clipboard = new VirtualClipboard();
         transport.FileRequestHook = (stream, _, _, _) => { if (outcome == "rejected") { transport.Emit(7, stream, 0); } };
+        // Only "exhausted" needs retries to run. The other conditions are applied during the retry wait; a long wait
+        // keeps a slow runner from issuing the second request before the test acts. Cancelling and disconnecting end
+        // the wait at once; a source change is noticed when the wait ends, before any further request.
+        TimeSpan retryDelay = TimeSpan.FromMilliseconds(outcome switch { "exhausted" => 80, "sourceChanged" => 2_000, _ => 10_000 });
         await using var bridge = new RdpClipboardBridge(transport, context, (Control)window.Content, true, () => clipboard,
-            TimeSpan.FromMilliseconds(40), TimeSpan.FromMilliseconds(80));
+            TimeSpan.FromMilliseconds(40), retryDelay);
         transport.Emit(2);
         await Until(() => transport.Offers.Count > 0);
         transport.Emit(3, data: Encoding.UTF8.GetBytes("49160\tFileGroupDescriptorW\n"));

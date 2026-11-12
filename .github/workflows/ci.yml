@@ -16,8 +16,10 @@ jobs:
   rdp-unix-authentication:
     strategy:
       matrix:
-        # ubuntu-24.04-arm covers the arm64 Linux ABI (open flags, statx); macos-latest is arm64.
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        # Every CPU/OS pair the plugin ships for: x64 and arm64 Linux (open flags, statx), arm64 macOS
+        # (macos-latest) and x64 macOS (fstat$INODE64).
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -25,9 +27,11 @@ jobs:
         with:
           dotnet-quality: preview
           dotnet-version: 11.0.x
+      # The whole RDP test project, as on Windows: platform-specific tests gate themselves (Inconclusive), so a
+      # filter here would only hide Unix regressions in code nobody thought of as platform-specific.
       # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
-      - name: Test portable RDP authentication, licensing and audio
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName~ManagedNtlmTests|FullyQualifiedName~CredSsp|FullyQualifiedName~RdpSecurityTests|FullyQualifiedName~RdpTlsPlatformTests|FullyQualifiedName~Licensing|FullyQualifiedName~RdpsndChannelTests|FullyQualifiedName~AudioOutputTests|FullyQualifiedName~UnixAbiTests|FullyQualifiedName~DriveSemanticsTests"
+      - name: Test the RDP plugin and library
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo
 
       - name: Test Kerberos CredSSP against an isolated Linux KDC
         if: runner.os == 'Linux'
@@ -37,9 +41,6 @@ jobs:
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq krb5-kdc krb5-admin-server
           export PATH="/usr/sbin:$PATH"
           bash scripts/Test-RdpKerberos.sh
-
-      - name: Test managed GFX codecs and protocol on Unix
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --no-build --no-restore --nologo --filter "FullyQualifiedName~Gfx|FullyQualifiedName~Zgfx|FullyQualifiedName~PlanarTests"
 
       - name: Exercise Linux ALSA output with a process-local null device
         if: runner.os == 'Linux'
@@ -208,7 +209,8 @@ jobs:
         run: |
           $engines = @(Get-ChildItem artifacts/plugins-bundle -Recurse -Filter 'VelaShell.Rdp.dll')
           if ($engines.Count -ne 1) { throw 'Expected one RDP engine in the plugin bundle.' }
-          foreach ($name in @('ManagedCodecs.H264.dll', 'ManagedCodecs.Core.dll', 'VelaShell.Rdp.THIRD-PARTY-NOTICES.txt')) {
+          # BouncyCastle carries DTLS for the lossy UDP transport (MS-RDPEMT); without it UDP-L fails at runtime.
+          foreach ($name in @('ManagedCodecs.H264.dll', 'ManagedCodecs.Core.dll', 'BouncyCastle.Cryptography.dll', 'VelaShell.Rdp.THIRD-PARTY-NOTICES.txt')) {
             if (-not (Test-Path (Join-Path $engines[0].DirectoryName $name))) {
               throw "Missing managed GFX distribution asset: $name"
             }
