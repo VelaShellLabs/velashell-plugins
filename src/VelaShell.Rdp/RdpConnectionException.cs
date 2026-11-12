@@ -139,9 +139,14 @@ public sealed class RdpNlaRefusedException : Exception
     /// <summary>The cipher suite and the TLS records the server sent after the handshake, when known.</summary>
     public string? TlsTrace { get; }
 
-    internal RdpNlaRefusedException WithTlsTrace(string? tlsTrace) => new(Status, InnerException, tlsTrace, ServerRequiresNla, Auth);
+    /// <summary>The TLS version of the refused attempt, when the handshake had completed.</summary>
+    internal SslProtocols? TlsProtocol { get; private init; }
 
-    internal RdpNlaRefusedException RequiredByServer() => new(Status, InnerException, TlsTrace, serverRequiresNla: true, Auth);
+    internal RdpNlaRefusedException WithTls(string? tlsTrace, SslProtocols? tlsProtocol) =>
+        new(Status, InnerException, tlsTrace, ServerRequiresNla, Auth) { TlsProtocol = tlsProtocol };
+
+    internal RdpNlaRefusedException RequiredByServer() =>
+        new(Status, InnerException, TlsTrace, serverRequiresNla: true, Auth) { TlsProtocol = TlsProtocol };
 
     private static string Compose(uint? status, Exception? inner, string? tlsTrace, bool serverRequiresNla, string? auth)
     {

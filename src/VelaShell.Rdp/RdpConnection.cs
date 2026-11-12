@@ -18,7 +18,8 @@ internal sealed record RdpConnectOptions(
     bool AudioPlayback = false, int ScaleFactor = 100, bool DrawingOrders = true, TimeSpan KeepAlive = default,
     RdpTransportMode Transport = RdpTransportMode.Tcp, bool AdaptiveNetwork = false, bool TcpTunnel = false,
     bool GraphicsPipeline = false, RemoteAppOptions? RemoteApp = null,
-    RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0, AutoReconnectCookie? ReconnectCookie = null)
+    RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0, AutoReconnectCookie? ReconnectCookie = null,
+    System.Security.Authentication.SslProtocols TlsProtocols = RdpTls.DefaultProtocols)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -224,7 +225,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     {
         Stage = RdpConnectStage.Tls;
         _tlsTap = new TlsRecordTap(_transport.Stream);
-        SslStream ssl = await RdpTls.AuthenticateAsync(_tlsTap, _options.CertificateHost, _options.CertificatePin, ct).ConfigureAwait(false);
+        SslStream ssl = await RdpTls.AuthenticateAsync(_tlsTap, _options.CertificateHost, _options.CertificatePin, ct, _options.TlsProtocols).ConfigureAwait(false);
         _certificateDigest = SHA256.HashData(ssl.RemoteCertificate!.GetRawCertData());
         _tlsTap.MarkHandshakeComplete();
         TlsProtocol = ssl.SslProtocol;

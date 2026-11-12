@@ -41,6 +41,45 @@ internal static class NlaSecurityContext
 }
 
 /// <summary>
+/// One classification of a <b>local</b> NLA token failure for both providers, so the same cause gives the same
+/// exception on every OS: a credential problem is an <see cref="RdpAuthenticationException" /> carrying a status the
+/// caller can explain (and ask for the password again); anything else — no SPN, no KDC, no GSSAPI library,
+/// unsupported mechanism — is an <see cref="RdpProtocolException" /> naming the configuration to check.
+/// </summary>
+internal static class NlaFailure
+{
+    internal const uint SecELogonDenied = 0x8009030C;
+    internal const uint SecEUnknownCredentials = 0x8009030D;
+    internal const uint StatusLogonFailure = 0xC000006D;
+    internal const uint StatusPasswordExpired = 0xC0000071;
+    internal const uint StatusPasswordMustChange = 0xC0000224;
+    internal const uint StatusAccountLocked = 0xC0000234;
+    internal const uint StatusAccountDisabled = 0xC0000072;
+
+    private const string ConfigurationHint =
+        "For Kerberos, check the server DNS name, TERMSRV SPN, user realm, system GSSAPI/SSPI configuration and KDC connectivity.";
+
+    /// <summary>Codes an SSPI package returns that mean "these credentials cannot log on".</summary>
+    internal static bool IsCredentialStatus(uint status) => status is SecELogonDenied or SecEUnknownCredentials
+        or StatusLogonFailure or StatusPasswordExpired or StatusPasswordMustChange or StatusAccountLocked or StatusAccountDisabled;
+
+    /// <summary>Windows SSPI: InitializeSecurityContext returned <paramref name="status" />.</summary>
+    internal static Exception FromSspi(uint status) => IsCredentialStatus(status)
+        ? new RdpAuthenticationException($"NLA rejected the credentials locally (0x{status:X8}).", status)
+        : new RdpProtocolException($"NLA InitializeSecurityContext failed (0x{status:X8}). {ConfigurationHint}");
+
+    /// <summary>Unix .NET Negotiate: mapped onto the status SSPI reports for the same cause.</summary>
+    internal static Exception FromNegotiate(NegotiateAuthenticationStatusCode status) => status switch
+    {
+        NegotiateAuthenticationStatusCode.InvalidCredentials or NegotiateAuthenticationStatusCode.UnknownCredentials =>
+            new RdpAuthenticationException($"NLA rejected the credentials locally ({status}).", SecELogonDenied),
+        NegotiateAuthenticationStatusCode.CredentialsExpired =>
+            new RdpAuthenticationException($"NLA rejected the credentials locally ({status}).", StatusPasswordExpired),
+        _ => new RdpProtocolException($"NLA negotiation failed ({status}). {ConfigurationHint}")
+    };
+}
+
+/// <summary>
 /// .NET SPNEGO uses system GSSAPI for Kerberos and managed NTLM when Kerberos is unavailable.
 /// The explicit NTLM package is retained for compatibility tests.
 /// </summary>
@@ -82,7 +121,7 @@ internal sealed class NegotiateSecurityContext : INlaSecurityContext
         }
         else if (status != NegotiateAuthenticationStatusCode.ContinueNeeded)
         {
-            throw new RdpAuthenticationException($"NLA negotiation failed ({status}). For Kerberos, check the server DNS name, TERMSRV SPN, user realm, system GSSAPI configuration and KDC connectivity.");
+            throw NlaFailure.FromNegotiate(status);
         }
 
         return token ?? [];

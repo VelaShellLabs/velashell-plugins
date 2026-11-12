@@ -1,8 +1,10 @@
+using System.Security.Authentication;
 using System.Threading.Channels;
 using VelaShell.Rdp.Channels;
 using VelaShell.Rdp.Graphics;
 using VelaShell.Rdp.Mcs;
 using VelaShell.Rdp.Pdu;
+using VelaShell.Rdp.Security;
 
 namespace VelaShell.Rdp;
 
@@ -178,12 +180,12 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         }
         if (options.Security != RdpSecurity.Auto)
         {
-            return await ConnectOnceAsync(options, options.Security, cookie, ct).ConfigureAwait(false);
+            return await ConnectWithTlsFallbackAsync(options, options.Security, cookie, ct).ConfigureAwait(false);
         }
 
         try
         {
-            return await ConnectOnceAsync(options, RdpSecurity.Auto, cookie, ct).ConfigureAwait(false);
+            return await ConnectWithTlsFallbackAsync(options, RdpSecurity.Auto, cookie, ct).ConfigureAwait(false);
         }
         catch (RdpNlaRefusedException refused)
         {
@@ -191,7 +193,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             // "require NLA" setting is off can still log the user on itself.
             try
             {
-                RdpManagedSession session = await ConnectOnceAsync(options, RdpSecurity.Tls, cookie, ct).ConfigureAwait(false);
+                RdpManagedSession session = await ConnectWithTlsFallbackAsync(options, RdpSecurity.Tls, cookie, ct).ConfigureAwait(false);
                 session.NlaRefusal = refused;
                 return session;
             }
@@ -201,6 +203,79 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
             }
         }
     }
+
+    /// <summary>
+    /// Endpoints (certificate host and port) whose TLS 1.3 failed during NLA in this process; later connections
+    /// to them start with TLS 1.2 instead of paying for a failed attempt each time.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> Tls13FailedDuringNla = new(StringComparer.OrdinalIgnoreCase);
+
+    internal static void ForgetTlsFallbacksForTest() => Tls13FailedDuringNla.Clear();
+
+    private static string TlsEndpoint(RdpClientOptions options) =>
+        $"{(string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost)}:{options.Port}";
+
+    /// <summary>
+    /// Some servers negotiate TLS 1.3 and then abort it during the CredSSP exchange (a fatal alert such as
+    /// internal_error, or records that no longer decrypt). Under TLS 1.3 that looks the same as a server refusing
+    /// NTLM (which also aborts with an alert), so before reporting either the connection is retried once, on a new
+    /// TCP connection, with TLS 1.2 only; whatever that attempt yields — success, a refusal that then leads to the
+    /// TLS-only fallback, an authentication verdict — is the result. The rule is the same on every OS. The
+    /// certificate is validated again on the retry, so credentials only ever go to the same verified server.
+    /// The endpoint is remembered for TLS 1.2 only when the retry succeeds, i.e. when TLS 1.3 was the problem.
+    /// </summary>
+    private static async Task<RdpManagedSession> ConnectWithTlsFallbackAsync(RdpClientOptions options, RdpSecurity security,
+        AutoReconnectCookie? cookie, CancellationToken ct)
+    {
+        string endpoint = TlsEndpoint(options);
+        if (Tls13FailedDuringNla.ContainsKey(endpoint))
+        {
+            RdpManagedSession remembered = await ConnectOnceAsync(options, security, cookie, SslProtocols.Tls12, ct).ConfigureAwait(false);
+            remembered.TlsDowngraded = true;
+            return remembered;
+        }
+
+        Exception first;
+        try
+        {
+            return await ConnectOnceAsync(options, security, cookie, RdpTls.DefaultProtocols, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsTls13FailureDuringNla(ex))
+        {
+            first = ex;
+        }
+
+        RdpManagedSession session = await ConnectOnceAsync(options, security, cookie, SslProtocols.Tls12, ct).ConfigureAwait(false);
+        _ = Tls13FailedDuringNla.TryAdd(endpoint, 0);
+        session.TlsDowngraded = true;
+        session.TlsFallbackCause = first;
+        return session;
+    }
+
+    /// <summary>
+    /// The attempt negotiated TLS 1.3 and the TLS layer itself failed during NLA: either reported as a connection
+    /// failure at the NLA stage, or as a refusal whose cause was a TLS abort rather than a server error code.
+    /// </summary>
+    internal static bool IsTls13FailureDuringNla(Exception failure) => failure switch
+    {
+        RdpConnectionException failed => failed.Stage == RdpConnectStage.Nla && failed.TlsProtocol == SslProtocols.Tls13
+            && CredSsp.IsTlsLayerFailure(failed.InnerException),
+        RdpNlaRefusedException refused => refused.Status is null && refused.TlsProtocol == SslProtocols.Tls13
+            && CredSsp.IsTlsLayerFailure(refused.InnerException),
+        _ => false
+    };
+
+    /// <summary>
+    /// <see langword="true" /> when this session uses TLS 1.2 because TLS 1.3 to the same endpoint failed during NLA
+    /// (on this attempt or an earlier one in this process).
+    /// </summary>
+    public bool TlsDowngraded { get; private set; }
+
+    /// <summary>
+    /// The TLS 1.3 failure (an <see cref="RdpConnectionException" /> or an <see cref="RdpNlaRefusedException" />) that
+    /// caused <see cref="TlsDowngraded" /> on this attempt, for logging; otherwise <see langword="null" />.
+    /// </summary>
+    public Exception? TlsFallbackCause { get; private set; }
 
     /// <summary>The security layer in use: <see cref="RdpSecurity.Nla"/> or <see cref="RdpSecurity.Tls"/>.</summary>
     public RdpSecurity Security => Connection.Security;
@@ -260,7 +335,8 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
         return flags;
     }
 
-    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, AutoReconnectCookie? cookie, CancellationToken ct)
+    private static async Task<RdpManagedSession> ConnectOnceAsync(RdpClientOptions options, RdpSecurity security, AutoReconnectCookie? cookie,
+        SslProtocols tlsProtocols, CancellationToken ct)
     {
         if (options.RemoteApp is not null && options.MonitorLayout is not null)
         {
@@ -280,7 +356,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
                 string.IsNullOrEmpty(options.CertificateHost) ? options.Host : options.CertificateHost, channels, security,
                 options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
                 options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null,
-                options.RemoteApp, options.Gateway, GatewayRedirections(options), cookie);
+                options.RemoteApp, options.Gateway, GatewayRedirections(options), cookie, tlsProtocols);
             session = new RdpManagedSession(new RdpConnection(connectOptions))
             {
                 _driveLog = options.DriveRedirectionLog,
@@ -337,7 +413,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
 
             if (ex is RdpNlaRefusedException refused)
             {
-                throw refused.WithTlsTrace(tlsTrace);
+                throw refused.WithTls(tlsTrace, tls);
             }
 
             throw new RdpConnectionException(stage, ex, tls, tlsTrace);

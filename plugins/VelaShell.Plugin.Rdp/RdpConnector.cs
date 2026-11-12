@@ -161,7 +161,10 @@ internal static class RdpConnector
     private static ProtocolCertificateTrustException CertificateTrust(RdpCertificateRejectedException ex, Loc loc)
     {
         using var certificate = X509Certificate2.CreateFromPem(Encoding.UTF8.GetString(ex.Pem));
-        return new ProtocolCertificateTrustException(loc["Certificate"], certificate.Subject, certificate.Issuer,
-            certificate.NotAfter, certificate.GetCertHashString(HashAlgorithmName.SHA256), loc["Certificate"]);
+        // A pinned certificate that no longer matches is offered again, but says so: Windows renews self-signed RDP
+        // certificates, and the user must be able to tell that from a first-time approval before trusting it.
+        string reason = ex.PinMismatch ? loc["CertificateChanged"] : loc["Certificate"];
+        return new ProtocolCertificateTrustException(reason, certificate.Subject, certificate.Issuer,
+            certificate.NotAfter, certificate.GetCertHashString(HashAlgorithmName.SHA256), reason);
     }
 }

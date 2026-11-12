@@ -61,6 +61,9 @@ internal static class CredSsp
             }
             catch (Exception ex) when (canRetryWithoutNla && !sawReply && ex is IOException or RdpProtocolException)
             {
+                // A server that restricts incoming NTLM aborts here — closing the connection or sending a fatal TLS
+                // alert (SChannel's internal_error). Under TLS 1.3 the same alert is also what a broken TLS 1.3 path
+                // produces, so RdpManagedSession retries with TLS 1.2 before treating it as a policy refusal.
                 throw new RdpNlaRefusedException(null, ex, auth: authInfo);
             }
 
@@ -123,6 +126,34 @@ internal static class CredSsp
     }
 
     private static byte[]? Nz(byte[] token) => token.Length == 0 ? null : token;
+
+    /// <summary>
+    /// The TLS stack itself failed: a fatal alert from the peer or a record that would not decrypt or verify.
+    /// <see cref="SslStream" /> reports these as an <see cref="IOException" /> wrapping the platform's error
+    /// (SChannel <see cref="System.ComponentModel.Win32Exception" />, OpenSSL or Apple security exceptions), whereas
+    /// a transport failure wraps a <see cref="System.Net.Sockets.SocketException" /> and an unexpected end of
+    /// stream wraps nothing. The test is on that shape, not on platform-specific exception types, so it classifies
+    /// the same way on every OS.
+    /// </summary>
+    internal static bool IsTlsLayerFailure(Exception? ex)
+    {
+        bool tls = false;
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            switch (current)
+            {
+                case System.Net.Sockets.SocketException:
+                    return false;
+                case System.Security.Authentication.AuthenticationException:
+                    tls = true;
+                    break;
+                case IOException { InnerException: { } inner } when inner is not IOException:
+                    tls = true;
+                    break;
+            }
+        }
+        return tls;
+    }
 
     // Fail closed: only recognize a bare Type 1, or a SPNEGO offer containing NTLM alone.
     internal static bool IsNtlmNegotiate(byte[] token)
@@ -213,9 +244,16 @@ internal static class CredSsp
     {
         X509Certificate remote = tls.RemoteCertificate ?? throw new RdpProtocolException("No server certificate for NLA.");
         using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(remote.GetRawCertData());
-        using RSA? rsa = cert.GetRSAPublicKey() ?? throw new RdpProtocolException("NLA requires an RSA server certificate.");
-        return rsa.ExportRSAPublicKey();   // matches OpenSSL i2d_PublicKey (PKCS#1 RSAPublicKey)
+        return ServerPublicKey(cert);
     }
+
+    /// <summary>
+    /// The key bound by pubKeyAuth (MS-CSSP 3.1.5): the contents of the certificate's SubjectPublicKeyInfo
+    /// subjectPublicKey BIT STRING, taken verbatim. For RSA that is the PKCS#1 RSAPublicKey; for EC the encoded
+    /// point. Using the certificate's own bytes rather than re-encoding the key supports every key type and
+    /// cannot differ from what the server hashes.
+    /// </summary>
+    internal static byte[] ServerPublicKey(X509Certificate2 cert) => cert.PublicKey.EncodedKeyValue.RawData;
 
     // ---- Offline test hooks (NLA needs a live Windows server; these validate the ASN.1) ----
     internal static (uint Version, byte[]? Nego, byte[]? PubKeyAuth, uint? Error) RoundTripForTest(

@@ -1,6 +1,8 @@
 using System.Formats.Asn1;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using VelaShell.Rdp;
 using VelaShell.Rdp.Security;
 
@@ -66,6 +68,88 @@ public sealed class CredSspNegotiationTests
         Assert.IsFalse(CredSsp.IsNtlmNegotiate([]));
     }
 
+    [TestMethod]
+    public async Task AClosedConnectionAfterTheNtlmNegotiateIsAnNlaRefusal()
+    {
+        using var ntlm = new NegotiateSecurityContext("Domain", "User", "password", "127.0.0.1", "NTLM");
+        RdpNlaRefusedException refused = await Assert.ThrowsAsync<RdpNlaRefusedException>(() => RunAsync(async ssl =>
+        {
+            _ = await FakeRdpConnection.ReadDerAsync(ssl);
+            await ssl.ShutdownAsync();
+        }, ntlm));
+        Assert.IsNull(refused.Status);
+    }
+
+    [TestMethod]
+    public async Task ATlsAbortAfterTheNtlmNegotiateIsARefusalThatKeepsItsTlsCause()
+    {
+        // Servers that restrict NTLM abort TLS here; the refusal keeps the TLS-layer cause, which is what lets the
+        // session retry with TLS 1.2 first when TLS 1.3 was in use.
+        using var ntlm = new NegotiateSecurityContext("Domain", "User", "password", "127.0.0.1", "NTLM");
+        RdpNlaRefusedException refused = await Assert.ThrowsAsync<RdpNlaRefusedException>(
+            () => RunAsync(_ => Task.CompletedTask, ntlm, corruptAfterFirstMessage: true));
+        Assert.IsNull(refused.Status);
+        Assert.IsTrue(CredSsp.IsTlsLayerFailure(refused.InnerException), refused.ToString());
+    }
+
+    [TestMethod]
+    public void PublicKeyBindingUsesTheCertificatesSubjectPublicKeyForRsaAndEc()
+    {
+        using RSA rsa = RSA.Create(2048);
+        using X509Certificate2 rsaCert = new CertificateRequest("CN=rsa", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+            .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        byte[] rsaKey = CredSsp.ServerPublicKey(rsaCert);
+        byte[] pkcs1 = rsa.ExportRSAPublicKey();
+        Assert.IsTrue(rsaKey.AsSpan().SequenceEqual(pkcs1), "RSA binds the PKCS#1 RSAPublicKey, as before.");
+
+        using ECDsa ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using X509Certificate2 ecCert = new CertificateRequest("CN=ec", ec, HashAlgorithmName.SHA256)
+            .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        byte[] ecKey = CredSsp.ServerPublicKey(ecCert);
+        Assert.HasCount(65, ecKey, "An uncompressed P-256 point.");
+        Assert.AreEqual((byte)0x04, ecKey[0]);
+    }
+
+    [TestMethod]
+    [DataRow(NegotiateAuthenticationStatusCode.InvalidCredentials, 0x8009030Cu)]
+    [DataRow(NegotiateAuthenticationStatusCode.UnknownCredentials, 0x8009030Cu)]
+    [DataRow(NegotiateAuthenticationStatusCode.CredentialsExpired, 0xC0000071u)]
+    public void UnixCredentialFailuresMapToTheStatusWindowsReports(NegotiateAuthenticationStatusCode status, uint expected)
+    {
+        Exception mapped = NlaFailure.FromNegotiate(status);
+        Assert.IsInstanceOfType<RdpAuthenticationException>(mapped);
+        Assert.AreEqual(expected, ((RdpAuthenticationException)mapped).Status);
+    }
+
+    [TestMethod]
+    [DataRow(NegotiateAuthenticationStatusCode.TargetUnknown)]
+    [DataRow(NegotiateAuthenticationStatusCode.GenericFailure)]
+    [DataRow(NegotiateAuthenticationStatusCode.Unsupported)]
+    public void UnixConfigurationFailuresAreNotCredentialFailures(NegotiateAuthenticationStatusCode status)
+    {
+        Assert.IsInstanceOfType<RdpProtocolException>(NlaFailure.FromNegotiate(status));
+    }
+
+    [TestMethod]
+    [DataRow(0x8009030Cu, true, DisplayName = "SEC_E_LOGON_DENIED")]
+    [DataRow(0x8009030Du, true, DisplayName = "SEC_E_UNKNOWN_CREDENTIALS")]
+    [DataRow(0xC0000234u, true, DisplayName = "STATUS_ACCOUNT_LOCKED_OUT")]
+    [DataRow(0x80090311u, false, DisplayName = "SEC_E_NO_AUTHENTICATING_AUTHORITY")]
+    [DataRow(0x80090303u, false, DisplayName = "SEC_E_TARGET_UNKNOWN")]
+    public void SspiFailuresUseTheSameClassification(uint status, bool credential)
+    {
+        Exception mapped = NlaFailure.FromSspi(status);
+        if (credential)
+        {
+            Assert.IsInstanceOfType<RdpAuthenticationException>(mapped);
+            Assert.AreEqual(status, ((RdpAuthenticationException)mapped).Status);
+        }
+        else
+        {
+            Assert.IsInstanceOfType<RdpProtocolException>(mapped);
+        }
+    }
+
     private static byte[] SpnegoInitial(string mechanism, byte[] token)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
@@ -86,13 +170,23 @@ public sealed class CredSspNegotiationTests
     }
 
     internal static async Task RunAsync(Func<SslStream, Task> script, INlaSecurityContext auth,
-        string domain = "Domain", string username = "User", string password = "password")
+        string domain = "Domain", string username = "User", string password = "password", bool corruptAfterFirstMessage = false)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         await using var server = new FakeRdpServer(async connection =>
         {
             await connection.SelectAsync(FakeRdpConnection.Hybrid);
             using SslStream ssl = await connection.StartTlsAsync();
+            if (corruptAfterFirstMessage)
+            {
+                // An application-data record that cannot decrypt, in place of the server's reply: the client's TLS
+                // layer fails exactly as when a server aborts TLS during CredSSP.
+                _ = await FakeRdpConnection.ReadDerAsync(ssl);
+                byte[] bogus = [0x17, 0x03, 0x03, 0x00, 0x30, .. RandomNumberGenerator.GetBytes(0x30)];
+                await connection.Net.WriteAsync(bogus);
+                await Task.Delay(500);
+                return;
+            }
             await script(ssl);
         });
         using var tcp = new TcpClient();

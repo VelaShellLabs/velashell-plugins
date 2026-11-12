@@ -105,7 +105,7 @@ internal sealed partial class SspiNegotiate : INlaSecurityContext
             }
             else if (rc is not (SEC_I_CONTINUE_NEEDED or SEC_I_COMPLETE_AND_CONTINUE or SEC_I_COMPLETE_NEEDED))
             {
-                throw new RdpProtocolException($"NLA InitializeSecurityContext failed (0x{rc:X8}).");
+                throw NlaFailure.FromSspi(rc);
             }
 
             return outBuf.cbBuffer == 0 ? [] : outBytes.AsSpan(0, outBuf.cbBuffer).ToArray();
