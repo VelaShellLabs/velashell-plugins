@@ -23,9 +23,30 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(6) };
     private string? _notice;
     private string? _armedTyping;
+    // The disconnected card mirrors the host's SSH card (TerminalTabView dcOverlay, DESIGN.md §5.2b): scrim, 340/560
+    // card, error-tinted wifi-off badge, title, muted mono reason, accent Reconnect and outlined Dismiss.
+    private static readonly Geometry WifiOffIcon = Geometry.Parse(
+        "M12 20h.01 M8.5 16.429a5 5 0 0 1 7 0 M5 12.859a10 10 0 0 1 5.17-2.69 M19 12.859a10 10 0 0 0-2.007-1.523 " +
+        "M2 8.82a15 15 0 0 1 4.177-2.643 M22 8.82a15 15 0 0 0-11.288-3.764 M2 2l20 20");   // Lucide "wifi-off"
+    private static readonly Geometry RefreshIcon = Geometry.Parse(
+        "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5");   // Lucide "refresh-cw"
+    private static readonly Geometry CopyIcon = Geometry.Parse(
+        "M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2");   // Lucide "copy"
     private readonly Button _reconnect = new();
+    private readonly TextBlock _reconnectLabel = new() { VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeight.SemiBold };
+    private readonly Button _dismiss = new();
+    private readonly TextBlock _dismissLabel = new() { VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeight.Medium };
+    private readonly Button _copy = new();
+    private readonly TextBlock _copyLabel = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Border _overlay;
-    private readonly TextBlock _overlayText = new() { HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center };
+    private readonly Border _card = new();
+    private readonly Border _badge = new() { Width = 48, Height = 48, CornerRadius = new CornerRadius(24), HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly RdpGlyph _badgeIcon = new() { Width = 22, Height = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _overlayTitle = new() { HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
+    private readonly Border _detailBox = new();
+    private readonly SelectableTextBlock _overlayDetail = new() { TextWrapping = TextWrapping.Wrap };
+    private bool _overlayError;
+    private bool _errorCopied;
     private Loc _loc;
     private bool _connected = true;
     private bool _failed;
@@ -439,30 +460,167 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         }
     }
 
+    private static void Token(AvaloniaObject target, AvaloniaProperty property, string token) =>
+        target[!property] = new DynamicResourceExtension(token);
+
     private Border BuildOverlay()
     {
-        _overlayText[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("VelaTextPrimary");
-        _overlayText[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
-        _overlayText[!TextBlock.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize14");
-        _reconnect.Height = 28;
-        _reconnect.Padding = new Thickness(16, 0);
-        _reconnect.HorizontalAlignment = HorizontalAlignment.Center;
-        _reconnect[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("VelaTextPrimary");
-        _reconnect[!Avalonia.Controls.Primitives.TemplatedControl.FontFamilyProperty] = new DynamicResourceExtension("VelaUiFont");
-        _reconnect[!Avalonia.Controls.Primitives.TemplatedControl.FontSizeProperty] = new DynamicResourceExtension("VelaFontSize12");
-        _reconnect.Click += OnReconnectClick;
-        var card = new Border
+        // Badge: 48px circle, error surface, 22px wifi-off in the error colour.
+        _badgeIcon.RestToken = "VelaError";
+        _badgeIcon.Data = WifiOffIcon;
+        _badge.Child = _badgeIcon;
+        Token(_badge, Border.BackgroundProperty, "VelaErrorSurface");
+
+        Token(_overlayTitle, TextBlock.ForegroundProperty, "VelaTextPrimary");
+        Token(_overlayTitle, TextBlock.FontFamilyProperty, "VelaUiFont");
+        Token(_overlayTitle, TextBlock.FontSizeProperty, "VelaFontSize16");
+
+        // Reason: muted mono text; a scroll area keeps a long failure from pushing the buttons off screen.
+        Token(_overlayDetail, TextBlock.ForegroundProperty, "VelaTextMuted");
+        Token(_overlayDetail, TextBlock.FontFamilyProperty, "VelaUiMonoFont");
+        Token(_overlayDetail, TextBlock.FontSizeProperty, "VelaFontSize11");
+        _detailBox.Child = new ScrollViewer
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(28, 20),
-            BorderThickness = new Thickness(1),
-            Child = new StackPanel { Spacing = 14, Children = { _overlayText, _reconnect } }
+            MaxHeight = 200,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            Content = _overlayDetail
         };
-        card[!Border.BackgroundProperty] = new DynamicResourceExtension("VelaBgSurface");
-        card[!Border.BorderBrushProperty] = new DynamicResourceExtension("VelaBorderPrimary");
-        return new Border { IsVisible = false, Background = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)), Child = card };
+
+        // Copy (failures only): outlined, 24px high.
+        _copy.HorizontalAlignment = HorizontalAlignment.Center;
+        _copy.Background = Brushes.Transparent;
+        _copy.BorderThickness = new Thickness(1);
+        _copy.Height = 24;
+        _copy.Padding = new Thickness(8, 0);
+        _copy.CornerRadius = new CornerRadius(4);
+        _copy.Cursor = new Cursor(StandardCursorType.Hand);
+        Token(_copy, Avalonia.Controls.Primitives.TemplatedControl.BorderBrushProperty, "VelaBorderPrimary");
+        Token(_copyLabel, TextBlock.ForegroundProperty, "VelaTextSecondary");
+        Token(_copyLabel, TextBlock.FontSizeProperty, "VelaFontSize10");
+        _copy.Content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5,
+            Children = { new RdpGlyph { Data = CopyIcon, Width = 11, Height = 11, RestToken = "VelaTextSecondary", VerticalAlignment = VerticalAlignment.Center }, _copyLabel }
+        };
+        _copy.Click += OnCopyClick;
+
+        // Reconnect: accent fill, refresh icon, 12 SemiBold; Dismiss: transparent with a secondary border.
+        _reconnect.CornerRadius = new CornerRadius(4);
+        _reconnect.Padding = new Thickness(16, 8);
+        _reconnect.BorderThickness = new Thickness(0);
+        Token(_reconnect, Avalonia.Controls.Primitives.TemplatedControl.BackgroundProperty, "VelaAccent");
+        Token(_reconnectLabel, TextBlock.ForegroundProperty, "VelaAccentForeground");
+        Token(_reconnectLabel, TextBlock.FontSizeProperty, "VelaFontSize12");
+        _reconnect.Content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { new RdpGlyph { Data = RefreshIcon, Width = 13, Height = 13, RestToken = "VelaAccentForeground", VerticalAlignment = VerticalAlignment.Center }, _reconnectLabel }
+        };
+        _reconnect.Click += OnReconnectClick;
+
+        _dismiss.Background = Brushes.Transparent;
+        _dismiss.BorderThickness = new Thickness(1);
+        _dismiss.CornerRadius = new CornerRadius(4);
+        _dismiss.Padding = new Thickness(16, 8);
+        Token(_dismiss, Avalonia.Controls.Primitives.TemplatedControl.BorderBrushProperty, "VelaBorderSecondary");
+        Token(_dismissLabel, TextBlock.ForegroundProperty, "VelaTextSecondary");
+        Token(_dismissLabel, TextBlock.FontSizeProperty, "VelaFontSize12");
+        _dismiss.Content = _dismissLabel;
+        _dismiss.Click += (_, _) => _overlay.IsVisible = false;
+
+        _card.HorizontalAlignment = HorizontalAlignment.Center;
+        _card.VerticalAlignment = VerticalAlignment.Center;
+        _card.CornerRadius = new CornerRadius(8);
+        _card.Padding = new Thickness(32, 24);
+        _card.BorderThickness = new Thickness(1);
+        Token(_card, Border.BackgroundProperty, "VelaBgSurface");
+        Token(_card, Border.BorderBrushProperty, "VelaBorderSecondary");
+        Token(_card, Border.BoxShadowProperty, "VelaShadowWindow");
+        _card.Child = new StackPanel
+        {
+            Spacing = 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Children =
+            {
+                _badge, _overlayTitle, _detailBox, _copy,
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center, Children = { _reconnect, _dismiss } }
+            }
+        };
+        ApplyOverlayStyle(error: false);
+
+        var scrim = new Border { IsVisible = false, Child = _card };
+        Token(scrim, Border.BackgroundProperty, "VelaScrim");
+        return scrim;
+    }
+
+    /// <summary>
+    /// The two looks of the host's card: a closed connection is one centred sentence in a 340px card; a failure is
+    /// raw technical text, left-aligned in an input-style box in a 560px card, with a Copy button.
+    /// </summary>
+    private void ApplyOverlayStyle(bool error)
+    {
+        _overlayError = error;
+        _card.Width = error ? 560 : 340;
+        _overlayDetail.TextAlignment = error ? TextAlignment.Left : TextAlignment.Center;
+        _overlayDetail.MaxWidth = error ? double.PositiveInfinity : 280;
+        _overlayDetail.LineHeight = error ? 18 : double.NaN;
+        _detailBox.Padding = error ? new Thickness(14, 12) : new Thickness(0);
+        _detailBox.BorderThickness = new Thickness(error ? 1 : 0);
+        _detailBox.CornerRadius = new CornerRadius(error ? 4 : 0);
+        if (error)
+        {
+            Token(_detailBox, Border.BackgroundProperty, "VelaBgInput");
+            Token(_detailBox, Border.BorderBrushProperty, "VelaBorderPrimary");
+        }
+        else
+        {
+            _detailBox.Background = Brushes.Transparent;
+        }
+        _copy.IsVisible = error;
+        _errorCopied = false;
+        UpdateOverlayLabels();
+    }
+
+    private void ShowOverlayMessage(string detail, bool error)
+    {
+        ApplyOverlayStyle(error);
+        _overlayDetail.Text = detail;
+        _detailBox.IsVisible = detail.Length > 0;
+    }
+
+    private void UpdateOverlayLabels()
+    {
+        _overlayTitle.Text = _reconnecting ? _loc["Reconnecting"] : _loc[_overlayError ? "OverlayFailedTitle" : "OverlayClosedTitle"];
+        // While reconnecting the badge takes the host's connecting look (accent-dim circle) instead of the error one.
+        Token(_badge, Border.BackgroundProperty, _reconnecting ? "VelaAccentDim" : "VelaErrorSurface");
+        _badgeIcon.RestToken = _reconnecting ? "VelaAccent" : "VelaError";
+        _badgeIcon.Data = _reconnecting ? RefreshIcon : WifiOffIcon;
+        _reconnectLabel.Text = _loc["ReconnectButton"];
+        _dismissLabel.Text = _loc["DismissOverlay"];
+        _copyLabel.Text = _loc[_errorCopied ? "ErrorCopied" : "CopyError"];
+        ToolTip.SetTip(_copy, _loc["CopyErrorTip"]);
+    }
+
+    private async void OnCopyClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_overlayDetail.Text is not { Length: > 0 } text)
+        {
+            return;
+        }
+        try
+        {
+            await _context.Clipboard.SetTextAsync(text, CancellationToken.None);
+            _errorCopied = true;
+            UpdateOverlayLabels();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _context.Log.Warn("Could not copy the RDP error message.", ex);
+        }
     }
 
     /// <summary>
@@ -488,22 +646,30 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
 
         _reconnecting = true;
         _reconnect.IsEnabled = false;
-        _overlayText.Text = _loc["Reconnecting"];
+        _dismiss.IsEnabled = false;
+        ShowOverlayMessage("", error: false);
         try { await reconnect(default); }
         catch (Exception ex)
         {
-            // The owning document keeps this (disconnected) view alive on failure, so re-arm the button.
-            _overlayText.Text = ReconnectFailure(ex, _loc);
+            // The owning document keeps this (disconnected) view alive on failure, so re-arm the buttons and show
+            // the reason the way the host shows a failed connection.
+            _reconnecting = false;
+            ShowOverlayMessage(ReconnectFailure(ex, _loc), error: true);
             _reconnect.IsEnabled = true;
         }
-        finally { _reconnecting = false; }
+        finally
+        {
+            _reconnecting = false;
+            _dismiss.IsEnabled = true;
+            UpdateOverlayLabels();
+        }
     }
 
     internal void ApplyLocale(Loc loc)
     {
         _loc = loc;
         QuickBall.ApplyLocale(loc);
-        _reconnect.Content = loc["ReconnectButton"];
+        UpdateOverlayLabels();
         UpdateTransfers();
         SetAudioError(_audioError);
     }
@@ -519,10 +685,11 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         if (!connected && !_reconnecting)
         {
             // Show the server's reason (signed out, taken over, no licence …) when known, so an
-            // immediate disconnect is not a blank "disconnected".
-            _overlayText.Text = detail ?? _loc["Disconnected"];
+            // immediate disconnect is not a blank "disconnected". A server-ended session is not an error: narrow card.
+            ShowOverlayMessage(detail ?? _loc["Disconnected"], error: false);
             _reconnect.IsEnabled = Reconnect is not null;
             _reconnect.IsVisible = Reconnect is not null;
+            _dismiss.IsEnabled = true;
         }
         UpdateStatus();
     }

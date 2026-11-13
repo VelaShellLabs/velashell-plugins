@@ -256,6 +256,15 @@ internal sealed class GfxCodecDispatcher : IDisposable
         _ = _avc.Remove(surfaceId);
     }
 
+    /// <summary>StartFrame: per-frame codec state (RemoteFX Progressive region rectangles) starts afresh.</summary>
+    internal void BeginFrame()
+    {
+        foreach (GfxProgressiveSurfaceState surface in _progressiveSurfaces.Values)
+        {
+            surface.BeginFrame();
+        }
+    }
+
     internal void DeleteContext(ushort surfaceId, uint contextId)
     {
         _ = _remoteFx.Remove((surfaceId, contextId));

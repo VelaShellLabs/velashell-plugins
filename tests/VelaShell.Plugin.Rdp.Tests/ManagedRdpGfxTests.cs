@@ -43,6 +43,65 @@ public sealed class ManagedRdpGfxTests
         Assert.AreEqual((byte)3, frame.Pixels[0]);
     }
 
+    /// <summary>
+    /// What a Windows 11 server did in a captured session: clear a 64×64 block of an ARGB surface to transparent black
+    /// (SolidFill 0x00000000), cache it and tile it as background, then paint colour over it. The colours are right, but
+    /// the surface keeps alpha 0; the desktop output must still be opaque, or the view (an AlphaFormat.Opaque bitmap)
+    /// shows dark translucent blocks.
+    /// </summary>
+    [TestMethod]
+    public void ArgbSurfaceClearedToTransparentBlackStillComposesAnOpaqueDesktop()
+    {
+        using ManagedRdpGfx gfx = Ready(4, 2);
+        byte[] argbSurface = Command(9, w => { w.Write((ushort)1); w.Write((ushort)4); w.Write((ushort)2); w.Write((byte)0x21); });
+        byte[] toCache = Command(6, w => { w.Write((ushort)1); w.Write(1UL); w.Write((ushort)2); Rect(w, 0, 0, 2, 2); });
+        byte[] fromCache = Command(7, w => { w.Write((ushort)2); w.Write((ushort)1); w.Write((ushort)1); w.Write((short)2); w.Write((short)0); });
+        gfx.Feed(Packet(argbSurface, Map(1), Start(1), Fill(1, 0x00000000, 0, 0, 2, 2), toCache, fromCache,
+            Raw(1, 1, 1, [0x40]), End(1)));
+        Assert.IsTrue(gfx.TryGetFrame(out RdpGfxFrame frame));
+        for (int i = 0; i < 4 * 2; i++)
+        {
+            Assert.AreEqual((byte)255, frame.Pixels[i * 4 + 3], $"Output pixel {i} must be opaque.");
+        }
+        Assert.AreEqual((byte)0x40, frame.Pixels[0], "Colour painted over the transparent clear is kept.");
+        Drain(gfx);
+    }
+
+    /// <summary>A session recorded with VELASHELL_RDP_GFX_CAPTURE replays offline into the same picture, with a trace.</summary>
+    [TestMethod]
+    public void ACapturedSessionReplaysWithTraceAndLastWriterGrid()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vela-gfx-capture-" + Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable(ManagedRdpGfx.CaptureVariable, directory);
+        try
+        {
+            using (ManagedRdpGfx gfx = Ready(32, 32))
+            {
+                gfx.Feed(Packet(Create(1, 32, 32), Map(1), Start(1), Fill(1, 0x00112233, 16, 16, 32, 32), End(1)));
+                Assert.IsTrue(gfx.TryGetFrame(out _));
+                Drain(gfx);
+            }
+            Environment.SetEnvironmentVariable(ManagedRdpGfx.CaptureVariable, null);
+            string capture = Directory.GetFiles(directory, "*.vgfx").Single();
+            Environment.SetEnvironmentVariable("VELASHELL_RDP_GFX_REPLAY", capture);
+            new GfxCaptureReplayTests().ReplayCapture();
+
+            string replay = capture + ".replay";
+            Assert.IsTrue(File.Exists(Path.Combine(replay, "final.png")));
+            string trace = File.ReadAllText(Path.Combine(replay, "trace.txt"));
+            StringAssert.Contains(trace, "SolidFill surface=1 color=0x00112233 rects=16,16-32,32");
+            string[] grid = File.ReadAllLines(Path.Combine(replay, "last-writer.txt"));
+            int fillLine = Array.FindIndex(File.ReadAllLines(Path.Combine(replay, "trace.txt")), l => l.Contains("SolidFill")) + 1;
+            Assert.AreEqual($"001: 0 {fillLine}", grid[2], "Cell (1,1) was painted by the fill, (0,1) never.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ManagedRdpGfx.CaptureVariable, null);
+            Environment.SetEnvironmentVariable("VELASHELL_RDP_GFX_REPLAY", null);
+            try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
+        }
+    }
+
     [TestMethod]
     public void MultipleFramesShareOutputButMustBeCopiedBeforeAcknowledgement()
     {

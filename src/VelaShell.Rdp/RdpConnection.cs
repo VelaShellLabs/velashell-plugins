@@ -41,6 +41,9 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     private RdpGatewayStream? _gateway;
     private RdpTransport _transport = null!;
     private McsLayer _mcs = null!;
+
+    /// <summary>The server sent its Disconnect Provider Ultimatum: there is nobody left to say goodbye to.</summary>
+    private volatile bool _serverDisconnected;
     private ushort _ioChannel;
     private uint _shareId;
     private int _width;
@@ -245,17 +248,27 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             byte[] payload = await ReadIoPayloadAsync(ct).ConfigureAwait(false);
             if (LooksLikeShareControl(payload))
             {
-                if (payload.Length >= 4 && (payload[2] | (payload[3] << 8)) is var controlType
-                    && (controlType & 0x0F) == (int)ShareControlType.ServerRedirect)
+                switch ((ShareControlType)(payload[2] & 0x0F))
                 {
-                    ThrowServerRedirection(payload);
+                    case ShareControlType.ServerRedirect:
+                        ThrowServerRedirection(payload);
+                        break;
+                    case ShareControlType.DemandActive:
+                        if (!licensing.CanActivate)
+                        {
+                            throw new RdpProtocolException("The server activated the session before completing RDP licensing.");
+                        }
+                        return payload;
+                    case ShareControlType.Data:
+                        // Share Data PDUs may precede the Demand Active (e.g. Set Error Info, MS-RDPBCGR 2.2.5.1.1, while
+                        // the server is still taking the session over from a previous connection): note, keep waiting.
+                        ProcessEarlyDataPdu(payload);
+                        continue;
+                    case ShareControlType.Deactivate:
+                        continue;   // Deactivate All before activation: the Demand Active follows (MS-RDPBCGR 1.3.1.3).
+                    default:
+                        throw new RdpProtocolException($"Unexpected {DescribePdu(payload)} before the Demand Active PDU.");
                 }
-
-                if (!licensing.CanActivate)
-                {
-                    throw new RdpProtocolException("The server activated the session before completing RDP licensing.");
-                }
-                return payload;
             }
 
             if (licensing.Process(payload) is { } response)
@@ -269,16 +282,56 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>The non-zero error info a Set Error Info PDU reported before activation, if any.</summary>
+    internal uint EarlyErrorInfo { get; private set; }
+
+    private void ProcessEarlyDataPdu(byte[] payload)
+    {
+        var r = new ByteReader(payload);
+        _ = ShareControl.ReadControlHeader(ref r);
+        ShareControl.DataHeader dh = ShareControl.ReadDataHeader(ref r);
+        if (dh.Type != ShareDataType.SetErrorInfo)
+        {
+            return;   // e.g. a Monitor Layout PDU: nothing to act on before activation
+        }
+        var body = new ByteReader(Decompress(r.Rest(), dh.CompressedType));
+        uint errorInfo = body.U32LE();
+        if (errorInfo != 0)
+        {
+            EarlyErrorInfo = errorInfo;
+            ErrorInfoReceived?.Invoke(errorInfo);
+        }
+    }
+
+    /// <summary>
+    /// Names a connection-phase PDU for an error message: its share control type, length and first bytes (the share
+    /// control header and the start of the body — never credentials, which the client sends and the server does not
+    /// echo in these PDUs).
+    /// </summary>
+    internal static string DescribePdu(ReadOnlySpan<byte> payload)
+    {
+        string type = payload.Length >= 4 ? $"PDU type 0x{payload[2] | (payload[3] << 8):X4}" : "PDU";
+        return $"{type} ({payload.Length} B: {Convert.ToHexString(payload[..Math.Min(16, payload.Length)])})";
+    }
+
     private async Task HandleDemandActiveAsync(byte[] payload, CancellationToken ct)
     {
         var r = new ByteReader(payload);
         ShareControl.ControlHeader header = ShareControl.ReadControlHeader(ref r);
         if (header.Type != ShareControlType.DemandActive)
         {
-            throw new RdpProtocolException("Expected Demand Active PDU.");
+            throw new RdpProtocolException($"Expected Demand Active PDU, got {DescribePdu(payload)}.");
         }
 
-        Capabilities.DemandActive active = Capabilities.ReadDemandActive(ref r);
+        Capabilities.DemandActive active;
+        try
+        {
+            active = Capabilities.ReadDemandActive(ref r);
+        }
+        catch (RdpProtocolException ex)
+        {
+            throw new RdpProtocolException($"Malformed Demand Active PDU: {ex.Message} {DescribePdu(payload)}", ex);
+        }
         if (_options.RemoteApp is not null && ((active.RailSupport & 1) == 0 || active.WindowSupport == 0))
         {
             throw new RdpProtocolException("The server does not support RemoteApp/RAIL window negotiation.");
@@ -326,6 +379,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         McsData? data = McsLayer.ParseSendDataIndication(pdu.Data);
         if (data is not { } indication)
         {
+            _serverDisconnected = true;
             return false;     // disconnect ultimatum
         }
 
@@ -378,7 +432,17 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             throw new RdpProtocolException("Expected a Server Redirection PDU.");
         }
 
-        throw new RdpServerRedirectionException(ServerRedirectionParser.Parse(ref reader));
+        ServerRedirection redirection;
+        try
+        {
+            redirection = ServerRedirectionParser.Parse(ref reader);
+        }
+        catch (RdpProtocolException ex)
+        {
+            // The first 16 bytes stop at the SessionID: no load-balance info, user name or password cookie.
+            throw new RdpProtocolException($"{ex.Message} {DescribePdu(payload)}", ex);
+        }
+        throw new RdpServerRedirectionException(redirection);
     }
 
     internal void ProcessDataPdu(ShareDataType type, ref ByteReader r)
@@ -889,7 +953,9 @@ internal sealed partial class RdpConnection : IAsyncDisposable
             McsData? data = McsLayer.ParseSendDataIndication(pdu.Data);
             if (data is not { } indication)
             {
-                throw new RdpProtocolException("Server disconnected during connection.");
+                throw new RdpProtocolException(EarlyErrorInfo != 0
+                    ? $"Server disconnected during connection (error info 0x{EarlyErrorInfo:X8})."
+                    : "Server disconnected during connection.");
             }
 
             if (indication.ChannelId == _ioChannel)
@@ -912,8 +978,38 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>How long closing waits to hand the server the Disconnect Provider Ultimatum before dropping TCP.</summary>
+    internal static readonly TimeSpan GoodbyeTimeout = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Best effort: tell the server this is a user-initiated disconnect (MS-RDPBCGR 1.3.1.4.1) so it disconnects the
+    /// session now. Without it the server only notices the closed socket later, and a reconnect made in the meantime
+    /// races the server's teardown of the previous connection — the session is taken over
+    /// (DISCONNECTED_BY_OTHERCONNECTION) and the new connection can receive unexpected PDUs before Demand Active.
+    /// </summary>
+    private async Task SayGoodbyeAsync()
+    {
+        if (_mcs is null || _serverDisconnected || _sendStop.IsCancellationRequested || _tcp is not { Connected: true })
+        {
+            return;
+        }
+        using var timeout = new CancellationTokenSource(GoodbyeTimeout);
+        try
+        {
+            await _writeGate.WaitAsync(timeout.Token).ConfigureAwait(false);
+            try { await _mcs.SendDisconnectUltimatumAsync(timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false); }
+            finally { _ = _writeGate.Release(); }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException
+            or System.Net.Sockets.SocketException or InvalidOperationException or NotSupportedException)
+        {
+            // The connection is already gone or stuck; closing it below is all that is left to do.
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        await SayGoodbyeAsync().ConfigureAwait(false);
         _sendStop.Cancel();
         try { _tcp?.Close(); } catch { /* ignore */ }
         _tcp?.Dispose();

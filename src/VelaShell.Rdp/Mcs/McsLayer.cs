@@ -211,6 +211,23 @@ internal sealed class McsLayer(RdpTransport transport)
 
     private Task SendMcsAsync(byte[] mcs, CancellationToken ct) => _transport.SendDataAsync(mcs, ct);
 
+    /// <summary>T.125 Reason rn-user-requested.</summary>
+    private const byte ReasonUserRequested = 3;
+
+    /// <summary>
+    /// Sends the MCS Disconnect Provider Ultimatum with reason rn-user-requested: the client's half of a
+    /// user-initiated disconnect (MS-RDPBCGR 1.3.1.4.1, 2.2.2.3). The server then puts the session into the
+    /// disconnected state at once instead of discovering a dead TCP connection later.
+    /// </summary>
+    internal Task SendDisconnectUltimatumAsync(CancellationToken ct) => SendMcsAsync(BuildDisconnectUltimatum(), ct);
+
+    /// <summary>
+    /// DomainMCSPDU (6-bit choice 8) followed by the 3-bit Reason enumeration, PER-aligned: 0x21 0x80 for
+    /// rn-user-requested.
+    /// </summary>
+    internal static byte[] BuildDisconnectUltimatum() =>
+        [(byte)((DisconnectUltimatum << 2) | (ReasonUserRequested >> 1)), (byte)((ReasonUserRequested & 1) << 7)];
+
     private static ReadOnlySpan<byte> StripX224Data(RdpFramePdu pdu)
     {
         if (pdu.FastPath)

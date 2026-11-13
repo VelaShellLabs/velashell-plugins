@@ -119,6 +119,50 @@ public sealed class RdpHeadlessTests
         window.Close();
     });
 
+    /// <summary>
+    /// The disconnected card matches the host's SSH card: a closed session is the narrow 340px card with the server's
+    /// reason; a failed reconnect turns it into the 560px "Connection Failed" card with Copy; Dismiss only hides it.
+    /// </summary>
+    [TestMethod]
+    public void DisconnectedCardFollowsTheHostCardForClosedAndFailedStates() => Run(async () =>
+    {
+        using var context = new TestPluginContext();
+        var settings = RdpSettings.From(RdpSettingsTests.Request(), new("en"));
+        await using var view = new RdpWorkspaceView(new FakeRdpSession(), context, settings, new("en"))
+        {
+            Reconnect = _ => Task.FromException(new PluginSdk.Protocols.ProtocolConnectionException("Server refused the connection."))
+        };
+        var window = new Window { Width = 900, Height = 700, Content = view };
+        window.Show();
+
+        view.SetConnected(false, "Another connection took over the session.");
+        window.UpdateLayout();
+        var overlay = (Border)view.Children[2];
+        Assert.IsTrue(overlay.IsVisible);
+        Border card = overlay.GetVisualDescendants().OfType<Border>().First(b => b.Width is 340 or 560);
+        List<string?> texts() => [.. card.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text)];
+        Assert.AreEqual(340d, card.Width);
+        CollectionAssert.Contains(texts(), "Connection Lost");
+        CollectionAssert.Contains(texts(), "Another connection took over the session.");
+        CollectionAssert.DoesNotContain(texts(), "Copy");
+
+        List<Button> buttons = [.. card.GetVisualDescendants().OfType<Button>()];
+        Button reconnect = buttons.Single(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "Reconnect"));
+        Button dismiss = buttons.Single(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "Dismiss Notice"));
+        reconnect.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        for (int i = 0; i < 20 && card.Width != 560; i++) { await Task.Delay(10); Dispatcher.UIThread.RunJobs(); }
+        window.UpdateLayout();
+        Assert.AreEqual(560d, card.Width);
+        CollectionAssert.Contains(texts(), "Connection Failed");
+        CollectionAssert.Contains(texts(), "Server refused the connection.");
+        CollectionAssert.Contains(texts(), "Copy");
+        Assert.IsTrue(reconnect.IsEnabled);
+
+        dismiss.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.IsFalse(overlay.IsVisible);
+        window.Close();
+    });
+
     [TestMethod]
     public void TransferStatusPrioritizesMetricsOverTheFileName() => Run(async () =>
     {
