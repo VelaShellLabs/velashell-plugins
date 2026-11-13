@@ -59,14 +59,24 @@ internal static class NlaSecurityContext
 
         // Same rule as .NET SPNEGO's own Kerberos attempt: fall back to NTLM only when Kerberos is unavailable or
         // has no credentials; any other failure (wrong password, expired, no KDC answer) is reported as it is.
-        using var kerberos = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
+        // Without the runtime's GSSAPI shim (or the system GSSAPI library behind it) SPNEGO skips Kerberos
+        // altogether; here that surfaces as a load failure, which likewise means NTLM.
+        NegotiateAuthenticationStatusCode status;
+        try
         {
-            Package = "Kerberos",
-            Credential = new NetworkCredential(username, password, domain),
-            TargetName = target,
-            RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
-        });
-        _ = kerberos.GetOutgoingBlob(ReadOnlySpan<byte>.Empty, out NegotiateAuthenticationStatusCode status);
+            using var kerberos = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
+            {
+                Package = "Kerberos",
+                Credential = new NetworkCredential(username, password, domain),
+                TargetName = target,
+                RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
+            });
+            _ = kerberos.GetOutgoingBlob(ReadOnlySpan<byte>.Empty, out status);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException)
+        {
+            return "NTLM";
+        }
         return status switch
         {
             NegotiateAuthenticationStatusCode.ContinueNeeded or NegotiateAuthenticationStatusCode.Completed => "Negotiate",

@@ -25,13 +25,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-quality: preview
+          # dotnet-quality: preview
           dotnet-version: 11.0.x
-      # All offline RDP coverage, as on Windows; platform-specific tests gate themselves (Inconclusive).
-      # Live Windows NLA tests and credentials belong only to the manual rdp-macos-nla.yml workflow.
+      # The whole RDP test project, as on Windows: platform-specific tests gate themselves (Inconclusive), so a
+      # filter here would only hide Unix regressions in code nobody thought of as platform-specific.
       # No gss-ntlmssp installation and no test runtime switch: exercise the plugin's Unix default.
       - name: Test the RDP plugin and library
-        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo --filter "FullyQualifiedName!~RdpNlaInteropTests"
+        run: dotnet test tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo
 
       - name: Test Kerberos CredSSP against an isolated Linux KDC
         if: runner.os == 'Linux'
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-quality: preview
+          # dotnet-quality: preview
           dotnet-version: |
             11.0.x
       # 不钉 SDK(仓库没有 global.json),用 runner 上装到的最新 11.0 预览版;把实际版本记进日志备查。
@@ -140,7 +140,7 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
-          dotnet test VelaShell.Plugins.slnx -c Debug --nologo --filter "FullyQualifiedName!~RdpNlaInteropTests"
+          dotnet test VelaShell.Plugins.slnx -c Debug --nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # 插件分发包:布局就是安装包 plugins/ 那一层,主仓库按它解包。
