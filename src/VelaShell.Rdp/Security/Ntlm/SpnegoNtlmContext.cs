@@ -58,7 +58,7 @@ internal sealed class SpnegoNtlmContext : INlaSecurityContext
         {
             throw new RdpProtocolException($"SPNEGO: unexpected negState {reply.State} before the CHALLENGE.");
         }
-        if (reply.SupportedMech is not null && reply.SupportedMech != NtlmOid)
+        if (reply.SupportedMech is not null and not NtlmOid)
         {
             throw new RdpProtocolException($"SPNEGO: the server selected {reply.SupportedMech}, but only NTLM was offered.");
         }
@@ -88,8 +88,7 @@ internal sealed class SpnegoNtlmContext : INlaSecurityContext
         {
             throw new RdpProtocolException("SPNEGO: NTLM has no token after AUTHENTICATE.");
         }
-        if (reply.MechListMic is { } mic
-            && !_ntlm.ServerSealing.WithRc4StatePreserved(sealing => sealing.Verify(_mechTypes, mic)))
+        if (reply.MechListMic is { } mic && !_ntlm.ServerSealing.WithRc4StatePreserved(sealing => sealing.Verify(_mechTypes, mic)))
         {
             throw new RdpProtocolException("SPNEGO: the server's mechListMIC did not verify.");
         }

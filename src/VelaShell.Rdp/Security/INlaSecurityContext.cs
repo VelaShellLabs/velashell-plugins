@@ -139,7 +139,7 @@ internal static class NlaSecurityContext
                 TargetName = target,
                 RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
             });
-            _ = kerberos.GetOutgoingBlob(ReadOnlySpan<byte>.Empty, out status);
+            _ = kerberos.GetOutgoingBlob([], out status);
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException)
         {
