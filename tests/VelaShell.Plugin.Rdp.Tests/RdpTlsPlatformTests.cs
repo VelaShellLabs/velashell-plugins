@@ -25,6 +25,94 @@ public sealed class RdpTlsPlatformTests
         Assert.AreEqual(SslProtocols.Tls12 | SslProtocols.Tls13, options.EnabledSslProtocols);
         Assert.IsNull(options.CipherSuitesPolicy, "No platform restricts cipher suites.");
         Assert.IsFalse(options.AllowRenegotiation);
+        Assert.IsFalse(options.AllowTlsResume, "Windows' CredSSP aborts NLA on a resumed TLS session.");
+    }
+
+    /// <summary>
+    /// A reconnect in the same process must not resume the previous TLS session: Windows' server-side CredSSP
+    /// answers the first TSRequest on a resumed session with a fatal internal_error alert (0x80090304), so only the
+    /// first connection after starting the app succeeded. A resumed TLS 1.2 handshake carries no server certificate,
+    /// which is what this measures.
+    /// </summary>
+    [TestMethod]
+    public async Task AReconnectToTheSameHostPerformsAFullTlsHandshake()
+    {
+        using X509Certificate2 certificate = SelfSigned("resume");
+        byte[] pin = SHA256.HashData(certificate.RawData);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var serve = Task.Run(async () =>
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                using TcpClient accepted = await listener.AcceptTcpClientAsync(cts.Token);
+                await using var ssl = new SslStream(accepted.GetStream());
+                await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+                {
+                    ServerCertificate = certificate,
+                    EnabledSslProtocols = SslProtocols.Tls12
+                }, cts.Token);
+                _ = await ssl.ReadAsync(new byte[1], cts.Token);
+            }
+        });
+
+        for (int i = 1; i <= 2; i++)
+        {
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPAddress.Loopback, port, cts.Token);
+            var counting = new CountingStream(client.GetStream());
+            await using SslStream ssl = await RdpTls.AuthenticateAsync(counting, "rdp-resume.test", pin, cts.Token);
+            long handshakeBytes = counting.BytesRead;
+            await ssl.WriteAsync(new byte[] { 1 }, cts.Token);
+            Assert.IsGreaterThan(certificate.RawData.Length, handshakeBytes,
+                $"Connection {i} must receive the server certificate (a full handshake), not resume the previous session.");
+        }
+        await serve.WaitAsync(cts.Token);
+    }
+
+    private sealed class CountingStream(Stream inner) : Stream
+    {
+        public long BytesRead { get; private set; }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int read = inner.Read(buffer, offset, count);
+            BytesRead += read;
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int read = await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            BytesRead += read;
+            return read;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inner.WriteAsync(buffer, cancellationToken);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            inner.WriteAsync(buffer, offset, count, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { inner.Dispose(); }
+            base.Dispose(disposing);
+        }
     }
 
     // ---- Classifying failures ----
