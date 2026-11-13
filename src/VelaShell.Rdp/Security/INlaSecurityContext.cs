@@ -8,7 +8,7 @@ namespace VelaShell.Rdp.Security;
 /// The security-package side of CredSSP/NLA: produces the authentication tokens carried in the TSRequest
 /// negoTokens and seals/unseals the public-key binding and the credentials. The CredSSP envelope, the leg
 /// sequence and the public-key binding live in <see cref="CredSsp" />; this abstracts only where the tokens
-/// come from: Windows uses SSPI, while Unix uses .NET SPNEGO with system Kerberos and managed NTLM.
+/// come from: Windows uses SSPI, while Unix uses .NET SPNEGO for system Kerberos and bare managed NTLM.
 /// </summary>
 internal interface INlaSecurityContext : IDisposable
 {
@@ -32,12 +32,48 @@ internal static class NlaSecurityContext
     internal static bool ForceManagedForTest;
 
     /// <summary>
-    /// Uses SSPI on Windows and .NET Negotiate on Unix; both can negotiate Kerberos or NTLM.
+    /// Uses SSPI on Windows. On Unix it uses .NET SPNEGO only when Kerberos is usable, and bare NTLM otherwise —
+    /// the same token the Windows Negotiate package sends to an IP literal (no SPN, so no Kerberos).
     /// </summary>
     internal static INlaSecurityContext Create(string domain, string username, string password, string targetHost) =>
         OperatingSystem.IsWindows() && !ForceManagedForTest
             ? new SspiNegotiate(domain, username, password, targetHost)
-            : new NegotiateSecurityContext(domain, username, password, targetHost, ForceManagedForTest ? "NTLM" : "Negotiate");
+            : new NegotiateSecurityContext(domain, username, password, targetHost,
+                ForceManagedForTest ? "NTLM" : UnixPackage(domain, username, password, targetHost));
+
+    /// <summary>
+    /// The .NET package for Unix CredSSP. .NET's managed SPNEGO cannot carry NTLM through CredSSP: MS-SPNG 3.2.5.1
+    /// requires the client's first sealed message to reuse the RC4 state from before the mechListMIC, but .NET only
+    /// restores it after verifying the server's mechListMIC. In CredSSP that MIC arrives together with the server's
+    /// public-key echo, i.e. after the client has already sealed pubKeyAuth with the advanced RC4 state. Windows
+    /// cannot decrypt it and aborts TLS (internal_error alert) instead of returning a TSRequest errorCode. Bare
+    /// NTLM has no mechListMIC, so the problem cannot occur. SPNEGO stays for Kerberos, which does not need it.
+    /// </summary>
+    internal static string UnixPackage(string domain, string username, string password, string targetHost)
+    {
+        string target = NegotiateSecurityContext.ServiceTarget(targetHost);
+        if (target.Length == 0)
+        {
+            return "NTLM";
+        }
+
+        // Same rule as .NET SPNEGO's own Kerberos attempt: fall back to NTLM only when Kerberos is unavailable or
+        // has no credentials; any other failure (wrong password, expired, no KDC answer) is reported as it is.
+        using var kerberos = new NegotiateAuthentication(new NegotiateAuthenticationClientOptions
+        {
+            Package = "Kerberos",
+            Credential = new NetworkCredential(username, password, domain),
+            TargetName = target,
+            RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
+        });
+        _ = kerberos.GetOutgoingBlob(ReadOnlySpan<byte>.Empty, out NegotiateAuthenticationStatusCode status);
+        return status switch
+        {
+            NegotiateAuthenticationStatusCode.ContinueNeeded or NegotiateAuthenticationStatusCode.Completed => "Negotiate",
+            NegotiateAuthenticationStatusCode.Unsupported or NegotiateAuthenticationStatusCode.UnknownCredentials => "NTLM",
+            _ => throw NlaFailure.FromNegotiate(status)
+        };
+    }
 }
 
 /// <summary>
@@ -80,8 +116,8 @@ internal static class NlaFailure
 }
 
 /// <summary>
-/// .NET SPNEGO uses system GSSAPI for Kerberos and managed NTLM when Kerberos is unavailable.
-/// The explicit NTLM package is retained for compatibility tests.
+/// .NET authentication on Unix: SPNEGO with system GSSAPI Kerberos, or bare managed NTLM
+/// (see <see cref="NlaSecurityContext.UnixPackage" /> for why NTLM is never sent inside SPNEGO).
 /// </summary>
 internal sealed class NegotiateSecurityContext : INlaSecurityContext
 {

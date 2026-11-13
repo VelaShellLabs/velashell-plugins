@@ -276,9 +276,14 @@ existing TLS fallback; this is distinct from an unauthenticated TLS-only negotia
 Servers speaking CredSSP below v5 (before the CVE-2018-0886 fix) are refused and never retried as
 TLS. On Windows, NLA authenticates through the OS's native SSPI Negotiate package, like mstsc:
 a DNS host name is targeted as `TERMSRV/<host>` so Kerberos works for domain servers; an IP address
-keeps the null target. Linux/macOS use .NET `NegotiateAuthentication` with `Package="Negotiate"`:
-SPNEGO tries system GSSAPI Kerberos and retains managed NTLM compatibility without `gss-ntlmssp`.
-`System.Net.Security.UseManagedNtlm=true` enables managed SPNEGO/NTLM while preserving Kerberos;
+keeps the null target. Linux/macOS use .NET `NegotiateAuthentication`: for a DNS host name whose
+`TERMSRV/<host>` Kerberos ticket can be obtained, `Package="Negotiate"` (SPNEGO with system GSSAPI
+Kerberos); otherwise, and always for an IP address, bare managed NTLM (`Package="NTLM"`), the same
+token Windows' Negotiate package sends to an IP. NTLM is never sent inside .NET SPNEGO: .NET seals the
+first message after its mechListMIC with the RC4 state the MIC consumed (MS-SPNG 3.2.5.1 requires the
+state from before it), and in CredSSP that first message is pubKeyAuth, so Windows cannot decrypt it and
+aborts TLS with an internal_error alert. No `gss-ntlmssp` is needed.
+`System.Net.Security.UseManagedNtlm=true` enables managed NTLM while preserving Kerberos;
 embedding hosts must set it at startup, before another caller initializes authentication.
 Kerberos requires system GSSAPI libraries, a configured realm/KDC, working DNS and synchronized clocks.
 Use a DNS host with the correct `TERMSRV/<FQDN>` SPN and `user@REALM` or username plus realm;
@@ -352,8 +357,8 @@ stack against a real server — connection, TLS and leaf-pin trust, desktop rend
 mouse input, text and image clipboard round-trips, and drive-redirection read and write. NLA is
 verified live against an NLA-enforcing test server (`VELA_RDP_TEST_NLA_TARGET`): logon, wrong
 password without fallback, TLS-only refused by an NLA-only server. The security-layer fallback is
-covered by in-process fake-server tests (`FakeRdpServer`). `ManagedNtlmTests` also verifies Unix
-SPNEGO/NTLM with mechanism-list MICs and multiple rounds. `CredSspNegotiationTests` verifies no TLS
+covered by in-process fake-server tests (`FakeRdpServer`). `ManagedNtlmTests` also verifies the Unix
+bare-NTLM sealing state and pins the .NET SPNEGO/NTLM mechListMIC behaviour that rules SPNEGO out for NTLM. `CredSspNegotiationTests` verifies no TLS
 fallback after the first Kerberos proof. `KerberosNlaTests` asserts the actual Kerberos mechanism and
 completes CredSSP binding and credential encryption against an isolated MIT KDC on Linux, for both
 UPN and username-plus-realm credentials. After building the tests, run `PATH="/usr/sbin:$PATH" bash scripts/Test-RdpKerberos.sh`
