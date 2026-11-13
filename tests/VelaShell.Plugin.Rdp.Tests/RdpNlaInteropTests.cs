@@ -13,7 +13,7 @@ namespace VelaShell.Plugin.Rdp.Tests;
 /// Live NLA (CredSSP over TLS, NTLM) checks against a server that requires it — xrdp has no NLA, so
 /// point these at an NLA-enforcing server (a Windows host, or another CredSSP-capable test server).
 /// Skipped unless VELA_RDP_TEST_NLA_TARGET is set (host:port); credentials come from
-/// VELA_RDP_TEST_USER / VELA_RDP_TEST_PASS. Runs in the manual RDP macOS NLA workflow, not ordinary CI.
+/// VELA_RDP_TEST_USER / VELA_RDP_TEST_PASS. Never runs in CI.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
