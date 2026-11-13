@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
@@ -12,11 +13,16 @@ namespace VelaShell.Plugin.Rdp.Tests;
 /// Live NLA (CredSSP over TLS, NTLM) checks against a server that requires it — xrdp has no NLA, so
 /// point these at an NLA-enforcing server (a Windows host, or another CredSSP-capable test server).
 /// Skipped unless VELA_RDP_TEST_NLA_TARGET is set (host:port); credentials come from
-/// VELA_RDP_TEST_USER / VELA_RDP_TEST_PASS. Never runs in CI.
+/// VELA_RDP_TEST_USER / VELA_RDP_TEST_PASS. Runs in the manual RDP macOS NLA workflow, not ordinary CI.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class RdpNlaInteropTests
 {
+    [TestInitialize]
+    public void DescribeRuntime() =>
+        Console.WriteLine($"NLA runtime: {RuntimeInformation.FrameworkDescription}; {RuntimeInformation.OSDescription}; {RuntimeInformation.ProcessArchitecture}");
+
     private static (string Host, int Port)? NlaTarget()
     {
         string? raw = Environment.GetEnvironmentVariable("VELA_RDP_TEST_NLA_TARGET");
@@ -32,14 +38,19 @@ public sealed class RdpNlaInteropTests
     /// <summary>Learns the leaf pin, offering NLA too — an NLA-only server refuses a plain-TLS request.</summary>
     private static async Task<byte[]> LearnPinAsync((string Host, int Port) target)
     {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        CancellationToken ct = timeout.Token;
         using var probe = new TcpClient();
-        await probe.ConnectAsync(target.Host, target.Port);
+        Console.WriteLine("NLA probe: connecting TCP, negotiating RDP and reading the TLS leaf certificate.");
+        await probe.ConnectAsync(target.Host, target.Port, ct);
         var transport = new RdpTransport(probe.GetStream());
-        await transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(RdpManagedInteropTests.User, SecurityProtocol.Ssl | SecurityProtocol.Hybrid), default);
-        _ = await transport.ReadConnectionConfirmAsync(default);
+        await transport.SendTpktAsync(RdpTransport.BuildConnectionRequest(RdpManagedInteropTests.User, SecurityProtocol.Ssl | SecurityProtocol.Hybrid), ct);
+        _ = await transport.ReadConnectionConfirmAsync(ct);
         try
         {
-            _ = await RdpTls.AuthenticateAsync(probe.GetStream(), target.Host, null, default);
+            await using var tls = await RdpTls.AuthenticateAsync(probe.GetStream(), target.Host, null, ct);
+            Assert.IsNotNull(tls.RemoteCertificate);
+            return SHA256.HashData(tls.RemoteCertificate.GetRawCertData());
         }
         catch (RdpCertificateRejectedException ex)
         {
@@ -47,7 +58,6 @@ public sealed class RdpNlaInteropTests
                 System.Text.Encoding.UTF8.GetString(ex.Pem));
             return SHA256.HashData(leaf.RawData);
         }
-        return [];
     }
 
     private static WorkspaceConnectRequest Request((string Host, int Port) target, byte[] pin, string password) =>
@@ -79,13 +89,15 @@ public sealed class RdpNlaInteropTests
         Assert.HasCount(32, pin, "Could not learn the server's leaf certificate.");
         WorkspaceConnectRequest request = Request(target, pin, RdpManagedInteropTests.Pass);
         var loc = new Loc("en");
-        var settings = RdpSettings.From(request, loc);
+        var settings = RdpSettings.From(request, loc) with { Security = RdpSecurity.Nla };
 
         IRdpSession session;
+        Console.WriteLine($"NLA login: package={(forceManaged ? "NTLM" : "Negotiate")}; backend={(OperatingSystem.IsWindows() ? "SSPI" : ".NET Unix authentication")}; security=NLA required.");
         NlaSecurityContext.ForceManagedForTest = forceManaged;
         try
         {
-            session = await RdpConnector.ConnectAsync(request, settings, loc, default);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            session = await RdpConnector.ConnectAsync(request, settings, loc, timeout.Token);
         }
         catch (Exception ex)
         {
@@ -128,7 +140,8 @@ public sealed class RdpNlaInteropTests
         Exception? failure = null;
         try
         {
-            IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, default);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            IRdpSession session = await RdpConnector.ConnectAsync(request, settings, loc, timeout.Token);
             await session.DisposeAsync();
         }
         catch (Exception ex)
@@ -158,7 +171,8 @@ public sealed class RdpNlaInteropTests
         RdpConnectionException? failure = null;
         try
         {
-            await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(options);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            await using RdpManagedSession session = await RdpManagedSession.ConnectAsync(options, timeout.Token);
         }
         catch (RdpConnectionException ex)
         {

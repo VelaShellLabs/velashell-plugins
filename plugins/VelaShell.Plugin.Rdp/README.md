@@ -379,3 +379,37 @@ terminal scrolled through 2000 lines are pixel-identical with orders on and off
 (`DrawingOrdersPaintTheSameDesktopAsBitmaps`, `AScrollingTerminalEndsTheSameWithDrawingOrders`; xrdp sent
 ~70 orders updates, 300–500 cached MemBlts). ScrBlt, fills and patterns are not sent by xrdp's Xorg
 backend, so they are covered by the unit tests only.
+
+### Manual macOS NLA CI
+
+The **RDP macOS NLA** workflow (`.github/workflows/rdp-macos-nla.yml`) connects to a real
+Windows server independently of releases. Ordinary CI excludes `RdpNlaInteropTests` and receives
+no live-server credentials. Add these repository Actions secrets:
+
+| Secret | Value |
+| --- | --- |
+| `VELA_RDP_TEST_NLA_TARGET` | DNS name or IPv4 address plus port, e.g. `rdp.example.com:3389`; no URI prefix or IPv6 literal |
+| `VELA_RDP_TEST_USER` | Dedicated Windows local test account allowed to use Remote Desktop |
+| `VELA_RDP_TEST_PASS` | Its actual password, not a Windows Hello PIN |
+
+Require NLA on the server and allow TCP access from the GitHub-hosted runner. Once the workflow
+exists on the default branch, open **Actions → RDP macOS NLA → Run workflow**, select a trusted
+branch, and choose `macos-latest` (ARM64) or `macos-15-intel` (x64). `authentication=both`
+runs default Negotiate and explicit NTLM in separate test processes, sequentially; either path
+can also be selected alone. Both still use system `SslStream` TLS and must reach a desktop frame
+with NLA required. A failure in the first test does not skip the second.
+
+Keep `include_negative_tests=false` for normal diagnosis. Enabling it adds TLS-only refusal and
+an intentionally wrong password, which can contribute to account lockout. Runs share one concurrency
+group; connections use bounded timeouts and the job has a 20-minute limit. Missing secrets, skipped
+tests and missing results fail the run. These tests sign in to the remote desktop and may disconnect
+another session for the same account; use a dedicated account.
+
+The job summary lists each result. The seven-day `rdp-nla-*` artifact contains OS/architecture,
+.NET SDK/runtime and commit details, per-test logs and TRX reports. The script redacts the configured
+target, host, username and password (including XML/URI-escaped forms) before saving test artifacts;
+review other server-provided details before sharing. It does not collect credentials, packet captures
+or memory dumps as separate diagnostics. The test learns the leaf certificate pin on a preliminary
+connection, including self-signed certificates: this is test-only first-use trust, not independent
+server-identity verification. This workflow enables macOS reproduction; adding it does not establish
+that the reported macOS NLA failure is fixed.
