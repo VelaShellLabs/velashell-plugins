@@ -23,6 +23,24 @@ internal interface INlaSecurityContext : IDisposable
 
     /// <summary>Unseals a blob the server sent (the public-key echo).</summary>
     byte[] Unseal(byte[] wrapped);
+
+    /// <summary>
+    /// A negotiation token the server sends after the context completed — the final SPNEGO negTokenResp, which in
+    /// CredSSP travels with the public-key echo. Processed before <see cref="Unseal" />. Providers that complete
+    /// the exchange themselves ignore it.
+    /// </summary>
+    void Finish(byte[] serverToken) { }
+}
+
+/// <summary>Which implementation produces NTLM tokens when NTLM is used outside Windows SSPI.</summary>
+internal enum NtlmProvider
+{
+    /// <summary>.NET <see cref="NegotiateAuthentication" /> with <c>Package="NTLM"</c> (the managed NTLM).</summary>
+    DotNet,
+    /// <summary><see cref="Ntlm.NtlmV2Client" /> sending bare NTLM tokens.</summary>
+    Own,
+    /// <summary><see cref="Ntlm.NtlmV2Client" /> inside <see cref="Ntlm.SpnegoNtlmContext" />.</summary>
+    OwnSpnego
 }
 
 /// <summary>Chooses the NLA security provider for the current platform.</summary>
@@ -32,14 +50,64 @@ internal static class NlaSecurityContext
     internal static bool ForceManagedForTest;
 
     /// <summary>
-    /// Uses SSPI on Windows. On Unix it uses .NET SPNEGO only when Kerberos is usable, and bare NTLM otherwise —
-    /// the same token the Windows Negotiate package sends to an IP literal (no SPN, so no Kerberos).
+    /// Selects the NTLM implementation for field comparison: <c>dotnet</c>, <c>own</c> or <c>own-spnego</c>. Unset
+    /// means <see cref="NtlmProvider.Own" /> outside Windows and SSPI on Windows; setting it on Windows replaces SSPI
+    /// (for every target), so the implementations can be compared against the same server from one machine.
     /// </summary>
-    internal static INlaSecurityContext Create(string domain, string username, string password, string targetHost) =>
-        OperatingSystem.IsWindows() && !ForceManagedForTest
-            ? new SspiNegotiate(domain, username, password, targetHost)
-            : new NegotiateSecurityContext(domain, username, password, targetHost,
-                ForceManagedForTest ? "NTLM" : UnixPackage(domain, username, password, targetHost));
+    internal const string ProviderVariable = "VELASHELL_RDP_NTLM";
+
+    /// <summary>Test seam overriding <see cref="ProviderVariable" />.</summary>
+    internal static NtlmProvider? ProviderOverrideForTest;
+
+    internal static NtlmProvider? ConfiguredProvider()
+    {
+        if (ProviderOverrideForTest is { } forced)
+        {
+            return forced;
+        }
+        return Environment.GetEnvironmentVariable(ProviderVariable)?.Trim().ToLowerInvariant() switch
+        {
+            "dotnet" => NtlmProvider.DotNet,
+            "own" => NtlmProvider.Own,
+            "own-spnego" => NtlmProvider.OwnSpnego,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Windows uses SSPI unless <see cref="ProviderVariable" /> selects an NTLM implementation. Elsewhere, .NET SPNEGO is used only when Kerberos is usable; otherwise NTLM is sent bare —
+    /// the same token the Windows Negotiate package sends with explicit credentials and no Kerberos — by
+    /// <see cref="Ntlm.NtlmV2Client" /> unless <see cref="ProviderVariable" /> says otherwise.
+    /// </summary>
+    internal static INlaSecurityContext Create(string domain, string username, string password, string targetHost)
+    {
+        NtlmProvider? configured = ConfiguredProvider();
+        if (OperatingSystem.IsWindows() && !ForceManagedForTest)
+        {
+            // An explicit choice is an opt-in to NTLM: it replaces SSPI Negotiate (and so Kerberos) for every target.
+            return configured is { } chosen
+                ? CreateNtlm(chosen, domain, username, password, targetHost)
+                : new SspiNegotiate(domain, username, password, targetHost);
+        }
+        if (ForceManagedForTest)
+        {
+            return new NegotiateSecurityContext(domain, username, password, targetHost, "NTLM");
+        }
+        return UnixPackage(domain, username, password, targetHost) == "Negotiate"
+            ? new NegotiateSecurityContext(domain, username, password, targetHost, "Negotiate")
+            : CreateNtlm(configured ?? NtlmProvider.Own, domain, username, password, targetHost);
+    }
+
+    private static INlaSecurityContext CreateNtlm(NtlmProvider provider, string domain, string username, string password, string targetHost)
+    {
+        string spn = NegotiateSecurityContext.ServiceTarget(targetHost);
+        return provider switch
+        {
+            NtlmProvider.Own => new Ntlm.NtlmV2Client(domain, username, password, spn),
+            NtlmProvider.OwnSpnego => new Ntlm.SpnegoNtlmContext(new Ntlm.NtlmV2Client(domain, username, password, spn)),
+            _ => new NegotiateSecurityContext(domain, username, password, targetHost, "NTLM")
+        };
+    }
 
     /// <summary>
     /// The .NET package for Unix CredSSP. .NET's managed SPNEGO cannot carry NTLM through CredSSP: MS-SPNG 3.2.5.1
