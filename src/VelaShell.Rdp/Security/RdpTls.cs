@@ -32,6 +32,12 @@ internal static class RdpTls
             TargetHost = targetHost,
             EnabledSslProtocols = protocols,
             AllowRenegotiation = false,
+            // Every RDP connection gets a full handshake. By default SslStream resumes the previous TLS session to
+            // the same host within the process (the abbreviated handshake carries no certificate), and Windows'
+            // server-side CredSSP aborts NLA on a resumed session: the first TSRequest is answered with a fatal
+            // internal_error alert (SEC_E_INTERNAL_ERROR 0x80090304). That is the "first connection works, every
+            // reconnect fails until the app restarts" failure. Resumption saves one round trip; NLA needs a fresh session.
+            AllowTlsResume = false,
             CertificateRevocationCheckMode = pinned ? X509RevocationMode.NoCheck : X509RevocationMode.Online
         };
     }

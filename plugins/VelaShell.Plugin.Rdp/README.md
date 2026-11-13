@@ -289,7 +289,7 @@ Kerberos requires system GSSAPI libraries, a configured realm/KDC, working DNS a
 Use a DNS host with the correct `TERMSRV/<FQDN>` SPN and `user@REALM` or username plus realm;
 a NetBIOS short domain, IP address or unregistered alias may not work. SSH tunnels retain the original
 server name for the SPN. Domains disabling NTLM need working Kerberos; NLA-only mode forbids TLS fallback.
-TLS 1.2/1.3 with renegotiation refused. Plaintext password copies (Client Info, TSCredentials) are wiped after sending, and the
+TLS 1.2/1.3 with renegotiation and session resumption refused (Windows' CredSSP aborts NLA on a resumed TLS session, so a reconnect in the same process would fail until restart). Plaintext password copies (Client Info, TSCredentials) are wiped after sending, and the
 options records never print the password. TLS uses OS
 trust/name/validity verification, or an explicitly approved
 exact SHA-256 leaf-certificate pin that replaces CA/name/expiry checks, identically in every mode.
