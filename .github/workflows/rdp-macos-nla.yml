@@ -1,0 +1,83 @@
+name: RDP macOS NLA
+run-name: RDP NLA - ${{ inputs.runner }} - ${{ inputs.authentication }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner
+        type: choice
+        options:
+          - macos-latest
+          - macos-15-intel
+        default: macos-latest
+      authentication:
+        description: Authentication paths to compare (run sequentially)
+        type: choice
+        options:
+          - both
+          - negotiate
+          - ntlm
+        default: both
+      include_negative_tests:
+        description: Also test a wrong password and rejection of TLS-only login (may affect account lockout)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Every run uses the same remote account, including runs from different branches.
+concurrency:
+  group: rdp-nla-live
+  cancel-in-progress: false
+
+jobs:
+  nla:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-quality: preview
+          dotnet-version: 11.0.x
+
+      - name: Record build and runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/rdp-nla | Out-Null
+          @(
+            "Commit: $(git rev-parse HEAD)"
+            "Runner: $env:RUNNER_OS / $env:RUNNER_ARCH"
+            "OS: $([System.Runtime.InteropServices.RuntimeInformation]::OSDescription)"
+            (dotnet --info | Out-String)
+            (sw_vers | Out-String)
+          ) | Tee-Object -FilePath artifacts/rdp-nla/environment.txt
+
+      - name: Build RDP tests
+        run: dotnet build tests/VelaShell.Plugin.Rdp.Tests/VelaShell.Plugin.Rdp.Tests.csproj --nologo
+
+      - name: Compare live NLA authentication paths
+        shell: pwsh
+        env:
+          VELA_RDP_TEST_NLA_TARGET: ${{ secrets.VELA_RDP_TEST_NLA_TARGET }}
+          VELA_RDP_TEST_USER: ${{ secrets.VELA_RDP_TEST_USER }}
+          VELA_RDP_TEST_PASS: ${{ secrets.VELA_RDP_TEST_PASS }}
+          NLA_AUTHENTICATION: ${{ inputs.authentication }}
+          NLA_INCLUDE_NEGATIVE_TESTS: ${{ inputs.include_negative_tests }}
+        run: |
+          ./scripts/Test-RdpNla.ps1 -Authentication $env:NLA_AUTHENTICATION `
+            -IncludeNegativeTests:($env:NLA_INCLUDE_NEGATIVE_TESTS -eq 'true')
+
+      - name: Upload diagnostic results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rdp-nla-${{ inputs.runner }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/rdp-nla/
+          if-no-files-found: warn
+          retention-days: 7
