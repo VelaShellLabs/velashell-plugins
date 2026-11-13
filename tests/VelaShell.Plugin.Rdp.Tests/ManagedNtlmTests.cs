@@ -125,16 +125,25 @@ public sealed class ManagedNtlmTests
     public void UnixIpTargetSendsBareNtlmAndSealsPubKeyAuthFromAFreshState(string host)
     {
         // What Windows' own Negotiate package sends to an IP literal, and what the server can decrypt: no
-        // mechListMIC, so pubKeyAuth uses sequence 0 and the untouched RC4 state.
-        using INlaSecurityContext created = NlaSecurityContext.Create("Domain", "User", "password", host);
-        var auth = (NegotiateSecurityContext)created;
-        byte[] sessionKey = Complete(auth);
-        AssertSealing(auth, sessionKey);
+        // mechListMIC, so pubKeyAuth uses sequence 0 and the untouched RC4 state. (The .NET provider is selected
+        // explicitly; OwnNtlmTests covers the default VelaShell implementation.)
+        NlaSecurityContext.ProviderOverrideForTest = NtlmProvider.DotNet;
+        try
+        {
+            using INlaSecurityContext created = NlaSecurityContext.Create("Domain", "User", "password", host);
+            var auth = (NegotiateSecurityContext)created;
+            byte[] sessionKey = Complete(auth);
+            AssertSealing(auth, sessionKey);
 
-        using INlaSecurityContext fresh = NlaSecurityContext.Create("Domain", "User", "password", host);
-        byte[] first = fresh.Step([]);
-        Assert.AreSequenceEqual("NTLMSSP\0"u8.ToArray(), first[..8]);
-        Assert.IsTrue(CredSsp.IsNtlmNegotiate(first));
+            using INlaSecurityContext fresh = NlaSecurityContext.Create("Domain", "User", "password", host);
+            byte[] first = fresh.Step([]);
+            Assert.AreSequenceEqual("NTLMSSP\0"u8.ToArray(), first[..8]);
+            Assert.IsTrue(CredSsp.IsNtlmNegotiate(first));
+        }
+        finally
+        {
+            NlaSecurityContext.ProviderOverrideForTest = null;
+        }
     }
 
     /// <summary>

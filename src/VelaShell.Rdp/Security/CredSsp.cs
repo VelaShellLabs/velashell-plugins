@@ -105,6 +105,21 @@ internal static class CredSsp
             throw new RdpAuthenticationException($"The server rejected NLA (0x{error:X8}).", error);
         }
 
+        // The server's last negotiation token (SPNEGO accept-completed and its mechListMIC) rides with the echo, or
+        // alone just before it. It must be consumed first: verifying the server's mechListMIC advances its sequence.
+        if (echo.NegoToken is { } finalToken)
+        {
+            auth.Finish(finalToken);
+            if (echo.PubKeyAuth is null)
+            {
+                echo = ParseTsRequest(await ReadDerAsync(tls, ct).ConfigureAwait(false));
+                if (echo.ErrorCode is { } late && late != 0)
+                {
+                    throw new RdpAuthenticationException($"The server rejected NLA (0x{late:X8}).", late);
+                }
+            }
+        }
+
         if (echo.Version < MinPeerVersion)
             throw new RdpProtocolException($"The server speaks CredSSP v{echo.Version}; v{MinPeerVersion}+ is required.");
 
@@ -215,7 +230,13 @@ internal static class CredSsp
     /// </summary>
     private static string DescribeAuth(INlaSecurityContext auth, byte[] token)
     {
-        string provider = auth is SspiNegotiate ? "native SSPI" : ".NET Negotiate";
+        string provider = auth switch
+        {
+            SspiNegotiate => "native SSPI",
+            Ntlm.NtlmV2Client => "VelaShell NTLMv2",
+            Ntlm.SpnegoNtlmContext => "VelaShell SPNEGO/NTLMv2",
+            _ => ".NET Negotiate"
+        };
         string shape = token.Length == 0 ? "empty"
             : token.Length >= 8 && token.AsSpan(0, 7).SequenceEqual("NTLMSSP"u8) ? "bare NTLM"
             : token[0] == 0x60 ? "SPNEGO"
