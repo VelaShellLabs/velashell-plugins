@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace VelaShell.Plugin.Rdp;
 
@@ -11,21 +12,95 @@ namespace VelaShell.Plugin.Rdp;
 /// instead blow the glyph's own bounds up to the full size and keep a fixed pen — visibly bigger and
 /// bolder than the host's icons.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Deliberately touches none of Avalonia's process-wide state: no <c>AvaloniaProperty.Register</c>, no
+/// <c>AddOwner</c>, no <c>AffectsRender</c> or class handler. Avalonia is shared with the host, and its global
+/// property registry keeps every such registration — and through the owner type the plugin's whole collectible
+/// load context — alive after the plugin is unloaded: each deactivation left the plugin's assemblies (and, on
+/// Windows, a cached PDB handle that blocks updating the plugin) in memory until VelaShell restarted.
+/// </para>
+/// <para>
+/// So the colour is not a styled property. The glyph is told two host tokens (<see cref="RestToken"/>,
+/// <see cref="HoverToken"/>), watches its own button's <c>:pointerover</c> pseudo-class through an instance event, and resolves
+/// the brush when it renders — which also follows theme and accent changes.
+/// </para>
+/// </remarks>
 internal sealed class RdpGlyph : Control
 {
     private const double ViewBox = 24;
+    private Button? _button;
 
-    public static readonly StyledProperty<Geometry?> DataProperty =
-        AvaloniaProperty.Register<RdpGlyph, Geometry?>(nameof(Data));
+    public RdpGlyph()
+    {
+        ResourcesChanged += (_, _) => InvalidateVisual();
+        ActualThemeVariantChanged += (_, _) => InvalidateVisual();
+    }
 
-    public static readonly StyledProperty<IBrush?> ForegroundProperty =
-        AvaloniaProperty.Register<RdpGlyph, IBrush?>(nameof(Foreground));
+    /// <summary>The 24×24 Lucide geometry to stroke.</summary>
+    public Geometry? Data
+    {
+        get;
+        set
+        {
+            if (!ReferenceEquals(field, value))
+            {
+                field = value;
+                InvalidateVisual();
+            }
+        }
+    }
 
-    static RdpGlyph() => AffectsRender<RdpGlyph>(DataProperty, ForegroundProperty);
+    /// <summary>Host brush token for the glyph at rest (e.g. <c>VelaTextPrimary</c>).</summary>
+    public string? RestToken
+    {
+        get;
+        set
+        {
+            field = value;
+            InvalidateVisual();
+        }
+    }
 
-    public Geometry? Data { get => GetValue(DataProperty); set => SetValue(DataProperty, value); }
+    /// <summary>Host brush token while the pointer is over the enclosing button; falls back to <see cref="RestToken"/>.</summary>
+    public string? HoverToken
+    {
+        get;
+        set
+        {
+            field = value;
+            InvalidateVisual();
+        }
+    }
 
-    public IBrush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
+    /// <summary>The brush the glyph draws with right now (null when no token resolves).</summary>
+    internal IBrush? Foreground
+    {
+        get
+        {
+            string? token = _button?.Classes.Contains(":pointerover") == true ? HoverToken ?? RestToken : RestToken;
+            return token is not null && this.TryFindResource(token, ActualThemeVariant, out object? value) && value is IBrush brush
+                ? brush
+                : null;
+        }
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _button = this.FindAncestorOfType<Button>();
+        _button?.Classes.CollectionChanged += OnButtonClassesChanged;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _button?.Classes.CollectionChanged -= OnButtonClassesChanged;
+        _button = null;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    /// <summary>The button's <c>:pointerover</c> pseudo-class — the same state the old hover style selected on.</summary>
+    private void OnButtonClassesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
     public override void Render(DrawingContext context)
     {
