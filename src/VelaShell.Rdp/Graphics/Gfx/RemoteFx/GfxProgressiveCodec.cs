@@ -24,6 +24,25 @@ internal sealed class GfxProgressiveSurfaceState(GfxProgressiveMemoryBudget? bud
     private readonly Dictionary<GfxProgressiveCodec, int> _contexts = [];
     internal Dictionary<int, GfxProgressiveTile> Tiles { get; private set; } = [];
 
+    /// <summary>Upper bound on region rectangles remembered for one logical frame.</summary>
+    private const int MaxFrameRects = 65536;
+
+    /// <summary>
+    /// Region rectangles received so far in the current logical frame (StartFrame … EndFrame). MS-RDPEGFX
+    /// 2.2.4.2.1.5: one frame can span several WIRE_TO_SURFACE_2 messages, and a rectangle of one message may be
+    /// covered by a tile that only arrives in a later message of the same frame.
+    /// </summary>
+    internal List<RfxRect> FrameRects { get; } = [];
+
+    /// <summary>A new logical frame begins: rectangles of earlier frames are final.</summary>
+    internal void BeginFrame() => FrameRects.Clear();
+
+    internal void AddFrameRects(List<RfxRect> rects)
+    {
+        RfxGuard.Require(FrameRects.Count + rects.Count <= MaxFrameRects, "Too many RemoteFX Progressive region rectangles in one frame.");
+        FrameRects.AddRange(rects);
+    }
+
     internal void Check(GfxProgressiveCodec codec, int tiles, int contextTiles)
     {
         _ = _contexts.TryGetValue(codec, out int previous);
@@ -66,6 +85,7 @@ internal sealed class GfxProgressiveSurfaceState(GfxProgressiveMemoryBudget? bud
         _budget.Replace(bytes, 0);
         _contexts.Clear();
         Tiles.Clear();
+        FrameRects.Clear();
     }
 }
 
@@ -93,6 +113,22 @@ internal sealed class GfxProgressiveCodec
     }
 
     internal void ClearContextState() => _states.Clear();
+
+    /// <summary>Paints the tiles under <paramref name="rect" /> (only those in <paramref name="only" />, when given).</summary>
+    private static void Paint(RfxRect rect, Dictionary<int, GfxProgressiveTile> tiles, HashSet<int>? only, Span<byte> destination, int stride)
+    {
+        for (int y = rect.Y / 64; y <= (rect.Y + rect.Height - 1) / 64; y++)
+        {
+            for (int x = rect.X / 64; x <= (rect.X + rect.Width - 1) / 64; x++)
+            {
+                int key = Key(x, y);
+                if ((only is null || only.Contains(key)) && tiles.TryGetValue(key, out GfxProgressiveTile? tile))
+                {
+                    RfxPrimitives.Copy(tile.Pixels, x, y, rect, destination, stride);
+                }
+            }
+        }
+    }
 
     internal void Decode(ReadOnlySpan<byte> source, int width, int height, Span<byte> destination, int stride)
     {
@@ -143,28 +179,29 @@ internal sealed class GfxProgressiveCodec
             }
             block.End();
         }
-        // A region may refer to a tile received in a preceding region or bitmap stream.
-        foreach (RfxRect rect in rectangles)
+        // MS-RDPEGFX 2.2.4.2.1.5: the rectangles of a logical frame are covered by the tiles of the whole frame,
+        // which can span several messages. So the new rectangles are painted from every tile known now, and the
+        // frame's earlier rectangles are repainted where this message brought a new or upgraded tile — otherwise
+        // they would keep the tile content painted before the update arrived. A tile not received yet is skipped:
+        // it may still come later in the frame.
+        HashSet<int> updated = [];
+        foreach ((int key, GfxProgressiveTile tile) in tiles)
         {
-            for (int y = rect.Y / 64; y <= (rect.Y + rect.Height - 1) / 64; y++)
+            if (!_surface.Tiles.TryGetValue(key, out GfxProgressiveTile? previous) || !ReferenceEquals(previous, tile))
             {
-                for (int x = rect.X / 64; x <= (rect.X + rect.Width - 1) / 64; x++)
-                {
-                    RfxGuard.Require(tiles.ContainsKey(Key(x, y)), "RemoteFX Progressive region has no tile data.");
-                }
+                _ = updated.Add(key);
             }
+        }
+        foreach (RfxRect rect in _surface.FrameRects)
+        {
+            Paint(rect, tiles, updated, destination, stride);
         }
         foreach (RfxRect rect in rectangles)
         {
-            for (int y = rect.Y / 64; y <= (rect.Y + rect.Height - 1) / 64; y++)
-            {
-                for (int x = rect.X / 64; x <= (rect.X + rect.Width - 1) / 64; x++)
-                {
-                    RfxPrimitives.Copy(tiles[Key(x, y)].Pixels, x, y, rect, destination, stride);
-                }
-            }
+            Paint(rect, tiles, null, destination, stride);
         }
 
+        _surface.AddFrameRects(rectangles);
         _surface.Commit(this, tiles, states.Count);
         _states = states;
     }

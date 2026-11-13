@@ -81,6 +81,44 @@ public sealed class GfxRemoteFxTests
         AssertPixel(pixels, (61 * 64 + 61) * 4, [77, 77, 77, 77]);
     }
 
+    /// <summary>
+    /// MS-RDPEGFX 2.2.4.2.1.5: a logical frame spanning two WIRE_TO_SURFACE_2 messages, where the first message's
+    /// rectangle is only covered by a tile of the second. The rectangle must end up painted from that tile (before,
+    /// the first message failed with "region has no tile data", or — with an older tile present — kept stale pixels).
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ProgressiveFrameSpanningMessagesPaintsEarlierRectanglesFromLaterTiles(bool reduced)
+    {
+        var surface = new GfxProgressiveSurfaceState();
+        var codec = new GfxProgressiveCodec(surface);
+        byte[] pixels = [.. Enumerable.Repeat((byte)77, 16384)];
+        surface.BeginFrame();
+        codec.Decode(Progressive([], reduced, rectangle: new RfxRect(0, 0, 64, 64)), 64, 64, pixels, 256);
+        AssertPixel(pixels, (40 * 64 + 40) * 4, [77, 77, 77, 77]);
+        codec.Decode(Progressive(Simple(reduced), reduced, rectangle: new RfxRect(0, 0, 1, 1)), 64, 64, pixels, 256);
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            AssertPixel(pixels, i, [123, 134, 196, 255]);
+        }
+    }
+
+    [TestMethod]
+    public void ProgressiveRectanglesOfAFinishedFrameAreNotRepainted()
+    {
+        var surface = new GfxProgressiveSurfaceState();
+        var codec = new GfxProgressiveCodec(surface);
+        byte[] pixels = new byte[16384];
+        surface.BeginFrame();
+        codec.Decode(Progressive(Simple(false), false), 64, 64, pixels, 256);
+        surface.BeginFrame();
+        Array.Fill(pixels, (byte)77);
+        codec.Decode(Progressive(Simple(false), false, rectangle: new RfxRect(0, 0, 1, 1)), 64, 64, pixels, 256);
+        AssertPixel(pixels, 0, [123, 134, 196, 255]);
+        AssertPixel(pixels, (40 * 64 + 40) * 4, [77, 77, 77, 77]);
+    }
+
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]

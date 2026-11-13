@@ -29,6 +29,67 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         ValidateDimensions(width, height);
         _width = width; _height = height;
         _output = AllocatePixels(width, height);
+        _capture = OpenCapture(width, height);
+    }
+
+    // ---- Diagnostics: capture and replay ----
+
+    /// <summary>
+    /// Directory that receives a raw capture of every RDPGFX message of each session (debugging rendering faults only:
+    /// the capture holds the remote screen content). Unset in normal use: nothing is written.
+    /// </summary>
+    internal const string CaptureVariable = "VELASHELL_RDP_GFX_CAPTURE";
+
+    /// <summary>Capture file magic, followed by width and height (u32 LE), then [u32 length][message] records.</summary>
+    internal static ReadOnlySpan<byte> CaptureMagic => "VGFX0001"u8;
+
+    private readonly FileStream? _capture;
+
+    /// <summary>Replay only: sees every decoded command (id and body) before it is applied.</summary>
+    internal Action<ushort, byte[]>? CommandObserver { get; set; }
+
+    /// <summary>Replay only: the current output buffer (BGRA, <see cref="OutputWidth" /> × <see cref="OutputHeight" />).</summary>
+    internal byte[] Output => _output;
+    internal int OutputWidth => _width;
+    internal int OutputHeight => _height;
+
+    private FileStream? OpenCapture(int width, int height)
+    {
+        if (Environment.GetEnvironmentVariable(CaptureVariable) is not { Length: > 0 } directory)
+        {
+            return null;
+        }
+        try
+        {
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, $"gfx-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{width}x{height}.vgfx");
+            var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            Span<byte> header = stackalloc byte[16];
+            CaptureMagic.CopyTo(header);
+            BinaryPrimitives.WriteUInt32LittleEndian(header[8..], (uint)width);
+            BinaryPrimitives.WriteUInt32LittleEndian(header[12..], (uint)height);
+            file.Write(header);
+            Log($"capturing graphics messages to {path}");
+            return file;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Log($"graphics capture disabled: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void CaptureMessage(byte[] message)
+    {
+        if (_capture is not { } capture)
+        {
+            return;
+        }
+        Span<byte> length = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(length, (uint)message.Length);
+        capture.Write(length);
+        capture.Write(message);
+        capture.Flush();
     }
 
     public void Open()
@@ -54,6 +115,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     {
         ThrowIfDisposed();
         if (!_opened || _position != _input.Length || _frameReady) { throw Error("Previous graphics message has not been consumed."); }
+        CaptureMessage(message);
         _input = _zgfx.Decode(message);
         _position = 0;
         ProcessUntilFrame();
@@ -100,6 +162,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
             if (length < 8 || length > remaining.Length) { throw Error("Invalid PDU length."); }
             var reader = new Reader(remaining[8..(int)length]);
             if (!_confirmed && command != 0x13) { throw Error("Graphics command precedes capability confirmation."); }
+            CommandObserver?.Invoke(command, remaining[8..(int)length].ToArray());
             Process(command, ref reader);
             reader.End();
             _position += (int)length;
@@ -147,6 +210,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
                     _ = reader.U32(); uint id = reader.U32(); reader.End();
                     if (_inFrame) { throw Error("Nested logical frame."); }
                     _frameId = id; _inFrame = true;
+                    _codecs.BeginFrame();
                     break;
                 }
             case 12: EndFrame(ref reader); break;
@@ -194,6 +258,15 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         _surfaceBytes += bytes;
     }
 
+    private readonly HashSet<ushort> _codecsSeen = [];
+
+    /// <summary>RDPGFX_CODECID names (MS-RDPEGFX 2.2.1.4.1).</summary>
+    private static string CodecName(ushort codec) => codec switch
+    {
+        0 => "uncompressed", 3 => "RemoteFX", 8 => "ClearCodec", 9 => "RemoteFX Progressive", 10 => "Planar",
+        11 => "AVC420", 12 => "Alpha", 14 => "AVC444", 15 => "AVC444v2", _ => "unknown"
+    };
+
     private void WireToSurface(ref Reader reader, bool progressive)
     {
         RequireFrame();
@@ -215,6 +288,11 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         }
         if (progressive && !_contexts.Contains((id, context)) && _contexts.Count >= 8192)
         { throw Error("Encoding context budget exceeded."); }
+        if (_codecsSeen.Add(codec))
+        {
+            // Field diagnostics: which codecs this server actually uses (stale-block reports depend on it).
+            Log($"codec 0x{codec:X4} ({CodecName(codec)}) first used on surface {id}");
+        }
         _codecs.Decode(new GfxDecodeRequest(id, context, codec, format, rectangle.Left, rectangle.Top,
             rectangle.Right, rectangle.Bottom, reader.Bytes((int)length).ToArray(), surface._pixels, surface._width, surface._height));
         if (progressive) { _ = _contexts.Add((id, context)); }
@@ -347,12 +425,18 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         int right = Math.Min(_width, mapping.X + (int)(((long)source.Right * mapping.Width + surface._width - 1) / surface._width));
         int bottom = Math.Min(_height, mapping.Y + (int)(((long)source.Bottom * mapping.Height + surface._height - 1) / surface._height));
         if (left >= right || top >= bottom) { return; }
+        // The desktop output is opaque: an ARGB surface's alpha only matters for RAIL window composition, which this
+        // desktop-only pipeline rejects. Servers do clear ARGB surfaces to transparent black (SolidFill 0x00000000,
+        // then cached and tiled as background) and colour codecs keep the surface's alpha, so without this the output
+        // carried alpha 0 under correct colours — and the view's AlphaFormat.Opaque bitmap, whose contract that
+        // breaks, showed those areas as dark translucent blocks over the window background.
         if (mapping.Width == surface._width && mapping.Height == surface._height)
         {
             for (int y = top; y < bottom; y++)
             {
-                surface._pixels.AsSpan(((y - mapping.Y) * surface._width + left - mapping.X) * 4, (right - left) * 4)
-                    .CopyTo(_output.AsSpan((y * _width + left) * 4));
+                Span<byte> row = _output.AsSpan((y * _width + left) * 4, (right - left) * 4);
+                surface._pixels.AsSpan(((y - mapping.Y) * surface._width + left - mapping.X) * 4, (right - left) * 4).CopyTo(row);
+                for (int i = 3; i < row.Length; i += 4) { row[i] = 0xFF; }
             }
         }
         else
@@ -363,7 +447,9 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
                 for (int x = left; x < right; x++)
                 {
                     int sx = (int)((long)(x - mapping.X) * surface._width / mapping.Width);
-                    surface._pixels.AsSpan((sy * surface._width + sx) * 4, 4).CopyTo(_output.AsSpan((y * _width + x) * 4, 4));
+                    Span<byte> pixel = _output.AsSpan((y * _width + x) * 4, 4);
+                    surface._pixels.AsSpan((sy * surface._width + sx) * 4, 4).CopyTo(pixel);
+                    pixel[3] = 0xFF;
                 }
             }
         }
@@ -437,6 +523,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     {
         if (_disposed) { return; }
         _disposed = true;
+        _capture?.Dispose();
         _codecs.Dispose(); _surfaces.Clear(); _cache.Clear(); _contexts.Clear(); _responses.Clear();
         _input = []; _output = []; _surfaceBytes = 0; _cacheBytes = 0;
     }
