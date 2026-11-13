@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-quality: preview
+          # dotnet-quality: preview
           dotnet-version: 11.0.x
       # The whole RDP test project, as on Windows: platform-specific tests gate themselves (Inconclusive), so a
       # filter here would only hide Unix regressions in code nobody thought of as platform-specific.
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-quality: preview
+          # dotnet-quality: preview
           dotnet-version: |
             11.0.x
       # 不钉 SDK(仓库没有 global.json),用 runner 上装到的最新 11.0 预览版;把实际版本记进日志备查。
