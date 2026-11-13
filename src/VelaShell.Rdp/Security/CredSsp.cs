@@ -10,7 +10,7 @@ namespace VelaShell.Rdp.Security;
 /// <summary>
 /// CredSSP / NLA (MS-CSSP) over the established TLS channel, for servers that select
 /// PROTOCOL_HYBRID (Windows with Network Level Authentication). The authentication tokens and message
-/// sealing come from an <see cref="INlaSecurityContext"/> (SSPI on Windows, .NET SPNEGO on Unix).
+/// sealing come from an <see cref="INlaSecurityContext"/> (SSPI on Windows; on Unix .NET SPNEGO for Kerberos, bare NTLM otherwise).
 /// The TSRequest envelope and nonce-bound SHA-256 public-key binding follow MS-CSSP.
 /// Credentials are sent only after the server's public-key echo verifies.
 /// </summary>

@@ -36,7 +36,7 @@ public sealed class ManagedNtlmTests
         AssertSealing(auth, sessionKey);
     }
 
-    private static void AssertSealing(INlaSecurityContext auth, byte[] sessionKey,
+    private static void AssertSealing(NegotiateSecurityContext auth, byte[] sessionKey,
         uint clientSequence = 0, uint serverSequence = 0, bool consumedMic = false)
     {
         byte[] clientSigningKey = Key(sessionKey, "client-to-server", "signing");
@@ -119,13 +119,38 @@ public sealed class ManagedNtlmTests
     }
 
     [TestMethod]
+    [DataRow("127.0.0.1")]
+    [DataRow("[2001:db8::1]")]
+    [OSCondition(ConditionMode.Exclude, OperatingSystems.Windows)]
+    public void UnixIpTargetSendsBareNtlmAndSealsPubKeyAuthFromAFreshState(string host)
+    {
+        // What Windows' own Negotiate package sends to an IP literal, and what the server can decrypt: no
+        // mechListMIC, so pubKeyAuth uses sequence 0 and the untouched RC4 state.
+        using INlaSecurityContext created = NlaSecurityContext.Create("Domain", "User", "password", host);
+        var auth = (NegotiateSecurityContext)created;
+        byte[] sessionKey = Complete(auth);
+        AssertSealing(auth, sessionKey);
+
+        using INlaSecurityContext fresh = NlaSecurityContext.Create("Domain", "User", "password", host);
+        byte[] first = fresh.Step([]);
+        Assert.AreSequenceEqual("NTLMSSP\0"u8.ToArray(), first[..8]);
+        Assert.IsTrue(CredSsp.IsNtlmNegotiate(first));
+    }
+
+    /// <summary>
+    /// Pins the .NET SPNEGO behaviour that makes it unusable for NTLM in CredSSP (hence bare NTLM on Unix): after
+    /// sending the mechListMIC it seals the next message with the RC4 state the MIC consumed, at sequence 1, unless
+    /// the server's mechListMIC was processed first. MS-SPNG 3.2.5.1 requires the pre-MIC RC4 state, and in
+    /// CredSSP the server's MIC only arrives with its public-key echo, after pubKeyAuth was sealed. If a runtime
+    /// update changes this, revisit <see cref="NlaSecurityContext.UnixPackage" />.
+    /// </summary>
+    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     [OSCondition(ConditionMode.Exclude, OperatingSystems.Windows)]
-    public void UnixDefaultNegotiatesSpnegoNtlmAndSeals(bool requestMic)
+    public void DotNetSpnegoNtlmSealsWithTheRc4StateItsMechListMicConsumed(bool requestMic)
     {
-        using INlaSecurityContext auth = NlaSecurityContext.Create("Domain", "User", "password", "127.0.0.1");
-        Assert.IsInstanceOfType<NegotiateSecurityContext>(auth);
+        using var auth = new NegotiateSecurityContext("Domain", "User", "password", "127.0.0.1", "Negotiate");
         byte[] first = auth.Step([]);
         Assert.AreEqual((byte)0x60, first[0]);
         Assert.IsTrue(CredSsp.IsNtlmNegotiate(first), "Without a usable realm the offer must still support NTLM.");
