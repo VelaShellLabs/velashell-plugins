@@ -283,7 +283,7 @@ token Windows' Negotiate package sends to an IP. NTLM is never sent inside .NET 
 first message after its mechListMIC with the RC4 state the MIC consumed (MS-SPNG 3.2.5.1 requires the
 state from before it), and in CredSSP that first message is pubKeyAuth, so Windows cannot decrypt it and
 aborts TLS with an internal_error alert. No `gss-ntlmssp` is needed.
-On this branch NTLM outside Windows SSPI is produced by VelaShell's own NTLMv2 (`Security/Ntlm/NtlmV2Client`,
+NTLM outside Windows SSPI is produced by VelaShell's own NTLMv2 (`Security/Ntlm/NtlmV2Client`,
 MS-NLMP: extended session security, key exchange, 128-bit keys, MIC; NTLMv1/LM never sent) and, optionally,
 SPNEGO around it (`SpnegoNtlmContext`, RFC 4178 + MS-SPNG 3.2.5.1: mechListMIC on a copy of the RC4 state).
 `VELASHELL_RDP_NTLM` selects `own` (default outside Windows), `own-spnego` or `dotnet`; on Windows it
