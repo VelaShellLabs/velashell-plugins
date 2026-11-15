@@ -21,6 +21,13 @@ public sealed record RdpClientOptions
     /// <summary>Set for SSH/proxy tunnels that forward TCP only. Prevents direct UDP connections.</summary>
     public bool TcpTunnel { get; init; }
 
+    /// <summary>
+    /// Opens the main TCP connection to (host, port) instead of a direct <see cref="System.Net.Sockets.TcpClient"/>, e.g. to go
+    /// through the embedding application's proxy. Called again with the new host when the server redirects the session.
+    /// Not used with <see cref="Gateway"/>. A tunneled result disables UDP like <see cref="TcpTunnel"/>.
+    /// </summary>
+    public Func<string, int, CancellationToken, Task<RdpDialedConnection>>? Dialer { get; init; }
+
     /// <summary>Optional RD Gateway. Target traffic stays inside this gateway; direct UDP is disabled.</summary>
     public RdpGatewayOptions? Gateway { get; init; }
 

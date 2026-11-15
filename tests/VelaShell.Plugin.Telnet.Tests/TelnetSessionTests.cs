@@ -139,6 +139,8 @@ public sealed class TelnetSessionTests
         Dictionary<string, string>? settings = null)
     {
         var context = new TestPluginContext { PluginId = "velashell.telnet" };
+        // 宿主的出站拨号在测试里就是一条真实的环回连接:会话行为照旧跑在真实 TCP 上。
+        context.FakeNetwork.Handler = static (host, port) => new TcpClient(host, port) { NoDelay = true }.GetStream();
         var terminal = new TelnetTerminal(context);
         var request = new ProtocolConnectRequest
         {

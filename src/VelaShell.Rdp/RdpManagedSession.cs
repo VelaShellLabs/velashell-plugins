@@ -443,7 +443,7 @@ public sealed partial class RdpManagedSession : IRdpSession, IRdpPointerSource, 
                 options.Performance, options.AudioPlayback, RdpScale.Clamp(options.DesktopScaleFactor), options.DrawingOrders,
                 options.KeepAliveInterval, options.Transport, options.AdaptiveNetwork, options.TcpTunnel, backend is not null,
                 options.RemoteApp, options.Gateway, GatewayRedirections(options), cookie, tlsProtocols,
-                options.RoutingToken, options.RedirectedSessionId);
+                options.RoutingToken, options.RedirectedSessionId, options.Dialer);
             session = new RdpManagedSession(new RdpConnection(connectOptions))
             {
                 _driveLog = options.DriveRedirectionLog,

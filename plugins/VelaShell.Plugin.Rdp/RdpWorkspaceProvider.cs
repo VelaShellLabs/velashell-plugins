@@ -163,7 +163,7 @@ internal sealed class RdpWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         finally { lock (_gate) { if (--_opens == 0 && _disposed) { _ = _drained.TrySetResult(); } } }
     }
     private Task<IRdpSession> DefaultFactory(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct) =>
-        RdpConnector.ConnectAsync(request, settings, loc, ct, message => _context.Log.Info(message));
+        RdpConnector.ConnectAsync(request, settings, loc, ct, message => _context.Log.Info(message), _context.Network);
 
     private void Closed(RdpWorkspaceDocument document)
     {

@@ -58,7 +58,7 @@ internal sealed partial class RdpConnection
         bool announced = false;
         try
         {
-            tunnel = await RdpMultitransport.ConnectAsync((IPEndPoint)_tcp!.Client.RemoteEndPoint!,
+            tunnel = await RdpMultitransport.ConnectAsync(_remoteEndPoint!,
                 _options.CertificateHost, _certificateDigest, type == 3, requestId, cookie, Network, _sendStop.Token).ConfigureAwait(false);
             _tunnels[type] = tunnel;
             await SendInitiateResponseAsync(requestId, true, _sendStop.Token).ConfigureAwait(false);
@@ -71,7 +71,7 @@ internal sealed partial class RdpConnection
             {
                 // Once S_OK has been sent the peer may have moved channels. Reconnect the session;
                 // silently replaying their bytes on TCP would corrupt ordering and device operations.
-                try { _tcp?.Close(); } catch (ObjectDisposedException) { }
+                CloseSocket();
             });
             Network.Transport(_tunnels.ContainsKey(1), _tunnels.ContainsKey(3), Network.Status.UdpFallback);
         }
@@ -80,11 +80,11 @@ internal sealed partial class RdpConnection
             _ = _tunnels.TryRemove(type, out _);
             if (tunnel is not null) { await tunnel.DisposeAsync().ConfigureAwait(false); }
             Network.Transport(_tunnels.ContainsKey(1), _tunnels.ContainsKey(3), true);
-            if (announced) { _tcp?.Close(); }
+            if (announced) { CloseSocket(); }
             else
             {
                 try { await SendInitiateResponseAsync(requestId, false, _sendStop.Token).ConfigureAwait(false); }
-                catch (Exception) { _tcp?.Close(); }
+                catch (Exception) { CloseSocket(); }
             }
         }
         catch (Exception) when (_sendStop.IsCancellationRequested)
