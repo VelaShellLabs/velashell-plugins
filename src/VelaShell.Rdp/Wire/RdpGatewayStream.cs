@@ -45,7 +45,8 @@ internal sealed class RdpGatewayStream : Stream
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
-            UseProxy = false,
+            // UseProxy stays at its default: HttpClient.DefaultProxy, which the host replaces with its own proxy
+            // setting (none / system / http / socks5), so the gateway follows the host instead of always going direct.
             UseCookies = false,
             Credentials = credentials,
             SslOptions = new SslClientAuthenticationOptions
