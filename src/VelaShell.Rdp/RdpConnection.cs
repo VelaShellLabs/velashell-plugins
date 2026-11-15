@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -20,7 +21,8 @@ internal sealed record RdpConnectOptions(
     bool GraphicsPipeline = false, RemoteAppOptions? RemoteApp = null,
     RdpGatewayOptions? Gateway = null, uint GatewayRedirections = 0, AutoReconnectCookie? ReconnectCookie = null,
     System.Security.Authentication.SslProtocols TlsProtocols = RdpTls.DefaultProtocols,
-    byte[]? RoutingToken = null, uint? RedirectedSessionId = null)
+    byte[]? RoutingToken = null, uint? RedirectedSessionId = null,
+    Func<string, int, CancellationToken, Task<RdpDialedConnection>>? Dialer = null)
 {
     /// <summary>Never prints the password (the compiler-generated record ToString would).</summary>
     public override string ToString() => $"{nameof(RdpConnectOptions)} {{ Host = {Host}, Port = {Port}, Username = {Username}, Security = {Security} }}";
@@ -38,6 +40,12 @@ internal sealed partial class RdpConnection : IAsyncDisposable
 {
     private readonly RdpConnectOptions _options;
     private TcpClient? _tcp;
+    /// <summary>The main connection when <see cref="RdpConnectOptions.Dialer"/> opened it (instead of <see cref="_tcp"/>).</summary>
+    private Stream? _dialed;
+    /// <summary>The server's address on a direct connection; null through a gateway, tunnel or proxy.</summary>
+    private IPEndPoint? _remoteEndPoint;
+    /// <summary>Only this TCP stream reaches the server (SSH tunnel, proxy, gateway): no UDP side channels.</summary>
+    private bool _tcpOnly;
     private RdpGatewayStream? _gateway;
     private RdpTransport _transport = null!;
     private McsLayer _mcs = null!;
@@ -122,11 +130,22 @@ internal sealed partial class RdpConnection : IAsyncDisposable
                 _options.Username, _options.Password, _options.Domain, _options.GatewayRedirections, ct).ConfigureAwait(false);
             _transport = new RdpTransport(_gateway);
         }
+        else if (_options.Dialer is { } dialer)
+        {
+            // The embedding application dials (e.g. through its proxy); keep-alive and Nagle are its business.
+            RdpDialedConnection dialed = await dialer(_options.Host, _options.Port, ct).ConfigureAwait(false);
+            _dialed = dialed.Stream;
+            _remoteEndPoint = dialed.Tunneled ? null : dialed.RemoteEndPoint;
+            _tcpOnly = _options.TcpTunnel || _remoteEndPoint is null;
+            _transport = new RdpTransport(_dialed);
+        }
         else
         {
             _tcp = new TcpClient { NoDelay = true };
             await _tcp.ConnectAsync(_options.Host, _options.Port, ct).ConfigureAwait(false);
             ConfigureKeepAlive(_tcp.Client, _options.KeepAlive);
+            _remoteEndPoint = _tcp.Client.RemoteEndPoint as IPEndPoint;
+            _tcpOnly = _options.TcpTunnel;
             _transport = new RdpTransport(_tcp.GetStream());
         }
 
@@ -163,7 +182,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         // MCS + GCC.
         Stage = RdpConnectStage.Mcs;
         bool extended = (negotiationFlags & 1) != 0;
-        _udpAdvertised = extended && _options.Transport == RdpTransportMode.Auto && !_options.TcpTunnel && _options.Gateway is null
+        _udpAdvertised = extended && _options.Transport == RdpTransportMode.Auto && !_tcpOnly && _options.Gateway is null
             && _options.Channels.Any(static c => c.Name == "drdynvc");
         byte[] gcc = GccData.BuildClientData(_options.Width, _options.Height, _options.Bpp,
             (uint)selected, "VelaShell", 0x409, _options.Channels, _options.ScaleFactor,
@@ -205,6 +224,16 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     /// idle + <see cref="KeepAliveProbes"/> × <see cref="KeepAliveProbeInterval"/> instead of only when the user returns.
     /// Best effort: an option the platform lacks is skipped.
     /// </summary>
+    /// <summary>Whether the main connection is still open (best effort for a dialed stream).</summary>
+    private bool SocketConnected => _tcp is { Connected: true } || _dialed is { CanRead: true };
+
+    /// <summary>Closes the main connection, whichever way it was opened; reads and writes on it then fail.</summary>
+    internal void CloseSocket()
+    {
+        try { _tcp?.Close(); } catch (ObjectDisposedException) { }
+        try { _dialed?.Dispose(); } catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
+    }
+
     internal static void ConfigureKeepAlive(Socket socket, TimeSpan idle)
     {
         if (idle <= TimeSpan.Zero)
@@ -855,7 +884,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
         catch (Exception ex) when (sending.IsCancellationRequested || ex is IOException)
         {
             _sendStop.Cancel();
-            _tcp?.Close();
+            CloseSocket();
             _gateway?.Dispose();
             throw;
         }
@@ -989,7 +1018,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     /// </summary>
     private async Task SayGoodbyeAsync()
     {
-        if (_mcs is null || _serverDisconnected || _sendStop.IsCancellationRequested || _tcp is not { Connected: true })
+        if (_mcs is null || _serverDisconnected || _sendStop.IsCancellationRequested || !SocketConnected)
         {
             return;
         }
@@ -1011,7 +1040,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     {
         await SayGoodbyeAsync().ConfigureAwait(false);
         _sendStop.Cancel();
-        try { _tcp?.Close(); } catch { /* ignore */ }
+        CloseSocket();
         _tcp?.Dispose();
         if (_gateway is { } gateway) { await gateway.DisposeAsync().ConfigureAwait(false); }
         await Task.WhenAll(_tunnelAttempts.Values).ConfigureAwait(false);

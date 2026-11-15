@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using VelaShell.PluginSdk.Network;
 using VelaShell.PluginSdk.Protocols;
 using VelaShell.PluginSdk.Workspaces;
 using VelaShell.Rdp;
@@ -14,7 +15,7 @@ namespace VelaShell.Plugin.Rdp;
 /// </summary>
 internal static class RdpConnector
 {
-    internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct, Action<string>? driveLog = null)
+    internal static async Task<IRdpSession> ConnectAsync(WorkspaceConnectRequest request, RdpSettings settings, Loc loc, CancellationToken ct, Action<string>? driveLog = null, INetworkApi? network = null)
     {
         byte[]? pin = settings.CertificateSha256.Length == 64 ? Convert.FromHexString(settings.CertificateSha256) : null;
         // Connect at the size and scale the view will have (the last view's, recorded when it laid out): starting at
@@ -28,6 +29,9 @@ internal static class RdpConnector
             Transport = request.Tunnel is null && settings.Gateway is null ? settings.Transport : RdpTransportMode.Tcp,
             TcpTunnel = request.Tunnel is not null || settings.Gateway is not null,
             Gateway = settings.Gateway,
+            // The host dials through its own network proxy setting (an SSH tunnel endpoint is loopback, so direct).
+            // Through a proxy only this TCP stream reaches the server, so the library turns UDP off.
+            Dialer = network is null ? null : (host, port, token) => DialAsync(network, host, port, settings.TimeoutSeconds, token),
             RemoteApp = settings.RemoteApp,
             SmartCardRedirection = settings.SmartCardRedirection,
             AdaptiveNetwork = settings.AdaptiveNetwork,
@@ -84,8 +88,29 @@ internal static class RdpConnector
         }
     }
 
+    private static async Task<RdpDialedConnection> DialAsync(INetworkApi network, string host, int port, int timeoutSeconds, CancellationToken ct)
+    {
+        HostTcpConnection connection = await network.ConnectTcpAsync(host, port, new TcpConnectOptions
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds)),
+            KeepAliveIdle = TimeSpan.FromSeconds(30)
+        }, ct).ConfigureAwait(false);
+        return new RdpDialedConnection(connection.Stream, connection.ViaProxy, connection.RemoteEndPoint);
+    }
+
+    /// <summary>The host's proxy failure inside a library exception: its message is already localized and names the proxy.</summary>
+    private static NetworkProxyException? ProxyFailure(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is NetworkProxyException proxy) { return proxy; }
+        }
+        return null;
+    }
+
     internal static Exception Translate(Exception ex, Loc loc) => ex switch
     {
+        _ when ProxyFailure(ex) is { } proxy => new ProtocolConnectionException(proxy.Message, ex),
         ProtocolConnectionException or ProtocolAuthenticationException
             or ProtocolCertificateTrustException or ProtocolUnsupportedException => ex,
         RdpCertificateRejectedException cert => CertificateTrust(cert, loc),

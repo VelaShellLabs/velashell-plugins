@@ -51,6 +51,7 @@ internal sealed class TelnetTerminal(IPluginContext context) : IProtocolTerminal
             config,
             options,
             context.Log,
+            context.Network,
             cancellationToken).ConfigureAwait(false);
     }
 

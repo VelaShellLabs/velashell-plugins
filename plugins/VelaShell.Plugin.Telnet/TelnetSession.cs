@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using System.Threading.Channels;
 using VelaShell.PluginSdk.Logging;
+using VelaShell.PluginSdk.Network;
 using VelaShell.PluginSdk.Protocols;
 
 namespace VelaShell.Plugin.Telnet;
@@ -20,8 +21,7 @@ namespace VelaShell.Plugin.Telnet;
 /// </summary>
 internal sealed class TelnetSession : IProtocolTerminalSession
 {
-    private readonly TcpClient _client;
-    private readonly NetworkStream _stream;
+    private readonly Stream _stream;
     private readonly TelnetNegotiator _negotiator;
     private readonly TelnetConfig _config;
     private readonly IPluginLogger _log;
@@ -34,9 +34,8 @@ internal sealed class TelnetSession : IProtocolTerminalSession
     private Task? _pump;
     private volatile bool _disposed;
 
-    private TelnetSession(TcpClient client, NetworkStream stream, TelnetConfig config, IPluginLogger log)
+    private TelnetSession(Stream stream, TelnetConfig config, IPluginLogger log)
     {
-        _client = client;
         _stream = stream;
         _config = config;
         _log = log;
@@ -49,6 +48,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
     /// <param name="config">协商策略。</param>
     /// <param name="options">终端初始参数。</param>
     /// <param name="log">插件日志。</param>
+    /// <param name="network">宿主的出站网络能力(按宿主代理设置拨号)。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>已就绪的会话。</returns>
     public static async Task<TelnetSession> ConnectAsync(
@@ -57,29 +57,32 @@ internal sealed class TelnetSession : IProtocolTerminalSession
         TelnetConfig config,
         ProtocolTerminalOptions options,
         IPluginLogger log,
+        INetworkApi network,
         CancellationToken cancellationToken)
     {
-        var client = new TcpClient
-        {
-            // Nagle 会把单个按键攒到 40ms 后再发,交互式终端上是肉眼可见的迟滞。
-            NoDelay = true
-        };
+        // 由宿主按「设置 → 网络代理」拨号(直连或经 HTTP / SOCKS5 代理),插件不自己开 socket。
+        // Nagle 会把单个按键攒到 40ms 后再发,交互式终端上是肉眼可见的迟滞:NoDelay 默认开着。
+        HostTcpConnection connection;
         try
         {
-            await client.ConnectAsync(host, port, cancellationToken).ConfigureAwait(false);
+            connection = await network.ConnectTcpAsync(host, port, new TcpConnectOptions { NoDelay = true }, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            client.Dispose();
             throw;
+        }
+        catch (NetworkProxyException ex)
+        {
+            // 宿主给的代理报错已是界面语言,并点名了代理与目标。
+            throw new ProtocolConnectionException(ex.Message, ex);
         }
         catch (Exception ex)
         {
-            client.Dispose();
             throw new ProtocolConnectionException($"{host}:{port} — {ex.Message}", ex);
         }
-        NetworkStream stream = client.GetStream();
-        var session = new TelnetSession(client, stream, config, log);
+        Stream stream = connection.Stream;
+        var session = new TelnetSession(stream, config, log);
         byte[] hello = session._negotiator.BuildInitialRequests(options.Columns, options.Rows);
         try
         {
@@ -162,7 +165,7 @@ internal sealed class TelnetSession : IProtocolTerminalSession
         await _lifetime.CancelAsync().ConfigureAwait(false);
         try
         {
-            _client.Close(); // 唤醒阻塞在读上的泵。
+            _stream.Dispose(); // 唤醒阻塞在读上的泵。
         }
         catch (Exception ex)
         {
@@ -186,7 +189,6 @@ internal sealed class TelnetSession : IProtocolTerminalSession
         }
         _ = _output.Writer.TryComplete();
         _stream.Dispose();
-        _client.Dispose();
         _writeGate.Dispose();
         _lifetime.Dispose();
     }
