@@ -100,6 +100,8 @@ public sealed partial class VncPluginTests
         Assert.AreEqual(15, settings.TimeoutSeconds);
         Assert.IsTrue(settings.CommandAsControl);
         Assert.AreEqual("desktop.example", settings.CertificateHost);
+        Assert.IsFalse(settings.Audio, "audio is opt-in, as in the RDP plugin");
+        Assert.IsFalse(settings.FileTransfer, "servers without UltraVNC file transfer drop the client when it is used");
         // Every declared default parses to the same thing as an empty (pre-existing) connection.
         var declared = VncSettings.Declare(new("en")).Where(static f => f.DefaultValue is not null).ToDictionary(static f => f.Key, static f => f.DefaultValue!);
         Assert.AreEqual(settings, VncSettings.From(Request(declared), new("en")));
@@ -118,6 +120,8 @@ public sealed partial class VncPluginTests
             [VncSettings.EncodingKey] = "zrle",
             [VncSettings.CompressionKey] = "9",
             [VncSettings.MacCommandKey] = "super",
+            [VncSettings.AudioKey] = "true",
+            [VncSettings.FileTransferKey] = "true",
             [VncSettings.TrustedThumbprintKey] = string.Join(":", Enumerable.Repeat("ab", 32))
         }, new WorkspaceTunnelInfo("10.0.0.5", 5901, "bastion")), new("en"));
         Assert.AreEqual(VncSecurity.VeNCrypt, settings.Security);
@@ -129,6 +133,8 @@ public sealed partial class VncPluginTests
         Assert.AreEqual(9, settings.CompressionLevel);
         Assert.IsFalse(settings.CommandAsControl);
         Assert.AreEqual("10.0.0.5", settings.CertificateHost);
+        Assert.IsTrue(settings.Audio);
+        Assert.IsTrue(settings.FileTransfer);
         Assert.AreEqual(new string('A', 0) + string.Concat(Enumerable.Repeat("AB", 32)), settings.CertificateSha256);
     }
 
@@ -138,6 +144,7 @@ public sealed partial class VncPluginTests
     [DataRow(VncSettings.CompressionKey, "10")]
     [DataRow(VncSettings.TimeoutKey, "0")]
     [DataRow(VncSettings.SharedKey, "maybe")]
+    [DataRow(VncSettings.FileTransferKey, "yes")]
     [DataRow(VncSettings.TrustedThumbprintKey, "abcd")]
     public void InvalidValuesNameTheField(string key, string value)
     {
@@ -220,6 +227,7 @@ public sealed partial class VncPluginTests
         StringAssert.Contains(VncConnector.Translate(new VncConnectionException(VncConnectStage.Tls, "handshake failed"), auto, loc).Message, "TLS handshake");
         Assert.IsNull(VncConnector.DisconnectReason(new VncConnectionLostException("reset"), loc));
         Assert.AreEqual(loc["ByeServerClosed"], VncConnector.DisconnectReason(null, loc));
+        Assert.AreEqual(loc["ByeFileTransfer"], VncConnector.DisconnectReason(new VncFileTransferUnsupportedException("x"), loc));
     }
 
     [TestMethod]

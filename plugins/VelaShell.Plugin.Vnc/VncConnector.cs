@@ -34,6 +34,9 @@ internal static class VncConnector
             // The host dials through its own network proxy setting (an SSH tunnel endpoint is loopback, so direct).
             Dialer = network is null ? null : (host, port, token) => DialAsync(network, host, port, settings.TimeoutSeconds, token),
             JpegDecoder = jpeg ?? VncJpeg.Decode,
+            AudioPlayback = settings.Audio,
+            // View only sends nothing to the server, files included.
+            FileTransfer = settings.FileTransfer && !settings.ViewOnly,
             Log = log
         };
 
@@ -99,6 +102,7 @@ internal static class VncConnector
     {
         null => loc["ByeServerClosed"],
         VncConnectionLostException => null,
+        VncFileTransferUnsupportedException => loc["ByeFileTransfer"],
         _ => loc.Format("ByeProtocol", failure.Message)
     };
 

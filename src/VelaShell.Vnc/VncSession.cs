@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
+using VelaShell.Vnc.Audio;
+using VelaShell.Vnc.FileTransfer;
 using VelaShell.Vnc.Graphics;
 using VelaShell.Vnc.Security;
 using VelaShell.Vnc.Wire;
@@ -39,6 +41,12 @@ public sealed class VncSession : IVncSession
     private volatile bool _visible = true, _requestOutstanding, _connected;
     private int _disposed;
     private volatile string? _abortReason;
+    private readonly UltraFileTransfer? _files;
+    private readonly Lock _audioGate = new();
+    private VncAudioPlayer? _audio;
+    private Exception? _audioFailure;
+    private Action<Exception>? _audioHandlers;
+    private const int MaxAudioData = 1024 * 1024;
 
     private VncSession(VncClientOptions options, Stream transport)
     {
@@ -46,7 +54,30 @@ public sealed class VncSession : IVncSession
         _transport = transport;
         _stream = transport;
         _reader = new RfbReader(transport);
+        _files = options.FileTransfer ? new UltraFileTransfer(SendConnectedAsync, options.Log) : null;
     }
+
+    public event Action<Exception>? AudioFailed
+    {
+        add
+        {
+            Exception? failure;
+            lock (_audioGate)
+            {
+                _audioHandlers += value;
+                failure = _audioFailure;
+            }
+            if (failure is not null)
+            {
+                try { value?.Invoke(failure); } catch { /* observers cannot break the session */ }
+            }
+        }
+        remove { lock (_audioGate) { _audioHandlers -= value; } }
+    }
+
+    public bool AudioActive { get; private set; }
+    public IVncFileTransfer? FileTransfer => _files;
+    internal UltraFileTransfer? Files => _files;
 
     public event Action? FrameAvailable;
     public event Action<Exception?>? Disconnected;
@@ -423,6 +454,7 @@ public sealed class VncSession : IVncSession
         list.Add(VncEncoding.CompressLevel0 + Math.Clamp(_options.CompressionLevel, 0, 9));
         list.AddRange([VncEncoding.ExtendedDesktopSize, VncEncoding.DesktopSize, VncEncoding.LastRect, VncEncoding.Cursor,
             VncEncoding.DesktopName, VncEncoding.QemuExtendedKey, VncEncoding.ExtendedClipboard]);
+        if (_options.AudioPlayback) { list.Add(VncEncoding.QemuAudio); }
         return [.. list];
     }
 
@@ -552,13 +584,24 @@ public sealed class VncSession : IVncSession
                         break;
                     case 2: break;   // Bell
                     case 3: await ServerCutTextAsync(ct).ConfigureAwait(false); break;
+                    case UltraFileTransfer.MessageType when _files is not null:
+                        await _files.ReceiveAsync(_reader, ct).ConfigureAwait(false);
+                        break;
                     case 150: break;   // EndOfContinuousUpdates
+                    case 255: await QemuServerMessageAsync(ct).ConfigureAwait(false); break;
                     default: throw new VncProtocolException($"The server sent message type {type}, which this client does not know.");
                 }
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
-        catch (ObjectDisposedException) when (_disposed != 0) { return; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { _files?.Close(null); return; }
+        catch (ObjectDisposedException) when (_disposed != 0) { _files?.Close(null); return; }
+        catch (Exception ex) when (_files?.AccessPending == true && ex is EndOfStreamException or IOException or SocketException && _abortReason is null)
+        {
+            // Closed right after the file-transfer request: the server does not have it (TigerVNC, QEMU) or has it off
+            // (LibVNC drops the client). Not a network failure, so the tab does not reconnect on its own.
+            if (_disposed != 0) { _files.Close(null); return; }
+            failure = new VncFileTransferUnsupportedException("The server closed the connection when file transfer was requested.");
+        }
         catch (Exception) when (_abortReason is { } reason)
         {
             // Abort closed the transport under the read: report the reason as a lost connection, so the tab reconnects.
@@ -578,10 +621,97 @@ public sealed class VncSession : IVncSession
         }
 
         _connected = false;
+        _files?.Close(null);
         if (_disposed == 0)
         {
             try { Disconnected?.Invoke(failure); } catch { /* observers must not break the loop's exit */ }
         }
+    }
+
+    // ---------------------------------------------------------------- QEMU audio
+
+    /// <summary>
+    /// The server confirmed the QEMU Audio pseudo-encoding (a rectangle with encoding -259; QEMU fills in the desktop size,
+    /// which means nothing here): set the format, then enable capture. Only once per connection.
+    /// </summary>
+    private async Task EnableAudioAsync(CancellationToken ct)
+    {
+        if (!_options.AudioPlayback || _audio is not null || _audioFailure is not null) { return; }
+        _audio = new VncAudioPlayer(_options.AudioOutputFactory ?? (() => AudioOutput.Create(_options.Log)), FailAudio, _options.Log);
+        // QEMU audio client message: 255, submessage 1, operation u16 (2 set-format: u8 sample format 3 = S16, u8 channels,
+        // u32 frequency; 0 enable). Samples come little-endian, QEMU's default.
+        AudioFormat format = VncAudioPlayer.Format;
+        await SendAsync(new RfbWriter(10).U8(255).U8(1).U16(2).U8(3).U8(format.Channels).U32(format.SampleRate).ToArray(), ct).ConfigureAwait(false);
+        await SendAsync(new RfbWriter(4).U8(255).U8(1).U16(0).ToArray(), ct).ConfigureAwait(false);
+        AudioActive = true;
+        _options.Log?.Invoke($"VNC {_options.Host}:{_options.Port}: QEMU audio enabled (S16 stereo {format.SampleRate} Hz).");
+        InfoChanged?.Invoke();
+    }
+
+    /// <summary>QEMU server message (255): submessage 1 is audio — operation 0 end, 1 begin, 2 data (u32 length + PCM).</summary>
+    private async Task QemuServerMessageAsync(CancellationToken ct)
+    {
+        int submessage = await _reader.U8Async(ct).ConfigureAwait(false);
+        if (submessage != 1)
+        {
+            throw new VncProtocolException($"The server sent QEMU server message {submessage}, which this client does not know.");
+        }
+
+        int operation = await _reader.U16Async(ct).ConfigureAwait(false);
+        switch (operation)
+        {
+            case 0: _audio?.Flush(); break;
+            case 1: break;
+            case 2:
+                uint length = await _reader.U32Async(ct).ConfigureAwait(false);
+                if (length > MaxAudioData)
+                {
+                    throw new VncProtocolException($"The server sent a {length}-byte audio buffer.");
+                }
+                if (length % (uint)VncAudioPlayer.Format.BlockAlign != 0)
+                {
+                    // Not whole frames: the stream can no longer be played in step, but the desktop is fine.
+                    await _reader.SkipAsync(length, ct).ConfigureAwait(false);
+                    if (_audio is not null) { FailAudio(new VncProtocolException($"The server sent a {length}-byte audio buffer, which is not whole frames.")); }
+                    break;
+                }
+                if (_audio is { } player && _audioFailure is null)
+                {
+                    player.Push(await _reader.BytesAsync((int)length, ct).ConfigureAwait(false));
+                }
+                else
+                {
+                    await _reader.SkipAsync(length, ct).ConfigureAwait(false);
+                }
+                break;
+            default:
+                throw new VncProtocolException($"The server sent QEMU audio operation {operation}, which this client does not know.");
+        }
+    }
+
+    private void FailAudio(Exception error)
+    {
+        Action<Exception>? handlers;
+        lock (_audioGate)
+        {
+            if (_audioFailure is not null) { return; }
+            _audioFailure = error;
+            handlers = _audioHandlers;
+        }
+        AudioActive = false;
+        _options.Log?.Invoke($"VNC {_options.Host}:{_options.Port}: audio playback stopped: {error.Message}");
+        // Stop the server capturing for nobody; the desktop goes on.
+        if (_connected && _disposed == 0)
+        {
+            try
+            {
+                _ = SendAsync(new RfbWriter(4).U8(255).U8(1).U16(1).ToArray(), _lifetime.Token)
+                    .ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            }
+            catch (ObjectDisposedException) { /* disposed meanwhile: nothing left to stop */ }
+        }
+        try { handlers?.Invoke(error); } catch { /* observers cannot break the session */ }
+        try { InfoChanged?.Invoke(); } catch { /* ditto */ }
     }
 
     private async Task FramebufferUpdateAsync(CancellationToken ct)
@@ -618,6 +748,9 @@ public sealed class VncSession : IVncSession
                     break;
                 case VncEncoding.QemuExtendedKey:
                     SupportsScanCodes = true;
+                    break;
+                case VncEncoding.QemuAudio:
+                    await EnableAudioAsync(ct).ConfigureAwait(false);
                     break;
                 case VncEncoding.DesktopName:
                     _desktopName = await StringAsync(ct).ConfigureAwait(false);
@@ -706,6 +839,8 @@ public sealed class VncSession : IVncSession
         {
             try { await receive.ConfigureAwait(false); } catch { /* reported through Disconnected */ }
         }
+        _files?.Close(null);
+        if (_audio is { } audio) { await audio.DisposeAsync().ConfigureAwait(false); }
         _decoder?.Dispose();
         _lifetime.Dispose();
     }

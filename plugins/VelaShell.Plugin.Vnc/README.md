@@ -18,14 +18,16 @@ Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/bl
 | Protocol versions | RFB 3.3, 3.7, 3.8 (Apple's 3.889 is treated as 3.8; 3.4–3.6 as 3.3) |
 | Security | None (1), VNC authentication (2), VeNCrypt 0.2 with X.509 TLS (subtypes 260 None / 261 VNC / 262 Plain), Apple Remote Desktop (30) |
 | Encodings | Raw, CopyRect, RRE, Hextile, ZRLE, Tight (fill, copy / palette / gradient filters, JPEG) |
-| Pseudo-encodings | ExtendedDesktopSize + SetDesktopSize, DesktopSize, Cursor, LastRect, DesktopName, QEMU Extended Key Event, Extended Clipboard, JPEG quality, compression level |
+| Pseudo-encodings | ExtendedDesktopSize + SetDesktopSize, DesktopSize, Cursor, LastRect, DesktopName, QEMU Extended Key Event, QEMU Audio, Extended Clipboard, JPEG quality, compression level |
 | Clipboard | Text both ways: UTF-8 through the extended clipboard (Notify / Request / Provide), Latin-1 ServerCutText / ClientCutText otherwise |
+| Audio | QEMU Audio (QEMU / libvirt consoles): S16 stereo 44.1 kHz through WaveOut / AudioQueue / ALSA |
+| File transfer | UltraVNC file transfer (UltraVNC Server, `x11vnc -ultrafilexfer`): browse, upload, download, new folder, delete, rename |
 | Transport | Host network proxy (`INetworkApi`), host-managed SSH jump session, TCP keep-alive 30 s |
 
 Not supported, deliberately: anonymous-TLS VeNCrypt subtypes 257–259 (anonymous Diffie-Hellman cipher suites,
 which neither SChannel nor .NET's OpenSSL/Apple TLS bindings offer), VeNCrypt Plain without TLS (256, the
-password would travel in the clear), RA2 / RealVNC encryption (5, 6), UltraVNC MS-Logon, file transfer, audio,
-colour depths below 24 bits, TightPNG, Continuous Updates and Fence.
+password would travel in the clear), RA2 / RealVNC encryption (5, 6), UltraVNC MS-Logon, TightVNC's file-transfer protocol,
+transferring whole folders, audio input, colour depths below 24 bits, TightPNG, Continuous Updates and Fence.
 
 ## Security choice
 
@@ -88,6 +90,49 @@ choice never falls back to another type.
   above 100 characters or with line breaks, refused above 2000).
 - **View only** (`viewOnly`) sends no keyboard, pointer or clipboard data and hides the remote-keys button.
 
+## Audio
+
+- **Play remote audio** (`audio`, off by default like RDP's). The client lists the QEMU Audio pseudo-encoding (-259);
+  when the server confirms it (a rectangle with encoding -259 — QEMU fills in the desktop size, which means nothing),
+  it sends set-format (S16, stereo, 44.1 kHz) and enable. Only QEMU / libvirt consoles implement it; others ignore it.
+- Samples are little-endian (QEMU's default). The PCM output is `VelaShell.Rdp`'s, copied into `src/VelaShell.Vnc/Audio/`
+  (plugins cannot share assemblies).
+- The receive loop never blocks on audio: `VncAudioPlayer` gathers 40 ms buffers and keeps at most 8 queued at the
+  device; when the output falls behind, the newest data is dropped (QEMU drops under back-pressure as well).
+- A failing device stops audio only: a status-bar notice (kept as the status tooltip), a disable message to the
+  server, and the desktop goes on. A buffer that is not whole frames stops audio too (skipped, stream in step); one over 1 MiB is a protocol error.
+
+## File transfer
+
+UltraVNC file transfer (RFB message type 7), as UltraVNC Server and LibVNC (`x11vnc -ultrafilexfer`) implement it.
+TigerVNC, QEMU and macOS Screen Sharing have no file transfer.
+
+- **File transfer** (`fileTransfer`, off by default). A server without it closes the connection on message type 7, so
+  the access request only goes out when the user opens the file panel; a close at that moment is reported as
+  `VncFileTransferUnsupportedException` (localized: turn the setting off, or `-ultrafilexfer` on x11vnc) and is not
+  reconnected automatically. View only disables file transfer.
+- Access: AbortFileTransfer with version 2 → FileTransferAccess (1 granted / -1 refused). UltraVNC then sends its
+  protocol version: ≥ 3 → SessionStart, ≥ 4 → Unicode names (0x80 flag in the pad byte, UTF-16 entries) and its block
+  size. LibVNC sends none: 8 KiB blocks, single drive `C:` mapped to `/`.
+- Paths are Windows-style, sent as UTF-8. One operation at a time (no request ids); replies are routed to it and
+  leftovers dropped; after a failed operation the next one waits for 500 ms of quiet first. 30 s per reply; 15 s for
+  access, where no answer counts as refused. Cancellation acts between messages, never mid-write.
+- Download asks for compressed packets; fewer bytes than announced is a failure (LibVNC's header has only a 32-bit size,
+  so more is not). Upload: Offer (`path,MM/DD/YYYY HH:MM` + high size word) → FileAcceptHeader → blocks (compressed
+  when smaller) → EndOfFile. Cancel or a local error sends AbortFileTransfer.
+- New folder / delete / rename through Command / CommandReturn. UltraVNC deletes a folder recursively, LibVNC only an
+  empty one; the confirmation says so.
+- Limits on server data: body 2 MiB, inflated packet 1 MiB, 100,000 entries per folder.
+
+**File panel** (`VncFilePanel`): the folder button at the right of the status bar docks a 320 px panel on the right,
+in the host's geometry (36px header, 26px path bar, 28px rows, 24px status line). The first opening requests access
+and enters the only drive directly. Up / refresh / new folder / upload in the header; download / rename / delete for
+the selection; Enter or double-click opens or downloads, Backspace goes up, Delete deletes; files dropped onto the
+panel upload into the open folder. Confirmations and names are inline. Existing names are confirmed once per batch and
+deleted before uploading (UltraVNC would resume onto the old file). A failed or cancelled download deletes the partial
+local file. Local files come from the host window's `IStorageProvider` pickers (in-process, like the Docker panel);
+the manifest declares `fs.local.read` / `fs.local.write`.
+
 ## Connection lifetime
 
 - A dropped network connection (reset, timeout) reconnects automatically with back-off (1, 2, 4, 8, 15, 30 s; 20
@@ -105,7 +150,9 @@ choice never falls back to another type.
 - **Security** — managed DES and VNC authentication, Apple Remote Desktop, VeNCrypt TLS with pinning (`VncTls`).
 - **Graphics** — `VncFramebuffer` (bounds-checked, dirty region), `RectangleDecoder` (all encodings, persistent
   zlib streams in `ZlibChannel`: one for ZRLE, four for Tight, each rectangle sync-flushed).
-- **VncSession** — handshake, receive loop, input, clipboard (`ExtendedClipboard`), resize.
+- **Audio** — `VncAudioPlayer` and the PCM output (WaveOut / AudioQueue / ALSA), the same source as `VelaShell.Rdp`'s `Audio/`.
+- **FileTransfer** — `UltraFileTransfer` (UltraVNC file transfer, message type 7).
+- **VncSession** — handshake, receive loop, input, clipboard (`ExtendedClipboard`), resize, audio and file-transfer dispatch.
 
 Server data is untrusted: rectangles outside the desktop, desktop sides over 16384, compressed payloads over
 64 MiB, inflated data larger than the rectangle allows, palette indices out of range, runs past a tile and cursors
@@ -128,7 +175,7 @@ dotnet test  tests/VelaShell.Plugin.Vnc.Tests
 
 ## Verification
 
-`tests/VelaShell.Plugin.Vnc.Tests` (79 tests, about 6 s) runs the real `VncSession` against a scripted in-process
+`tests/VelaShell.Plugin.Vnc.Tests` (111 tests, about 8 s) runs the real `VncSession` against a scripted in-process
 RFB server (`FakeVncServer`) that checks the client's bytes:
 
 - Handshake: every version mapping, None / VNC / ARD (the fake server decrypts the credentials) / VeNCrypt
@@ -141,11 +188,18 @@ RFB server (`FakeVncServer`) that checks the client's bytes:
 - Session: incremental requests, keysym vs. QEMU scan-code messages, pointer clamping, Latin-1 and extended
   clipboards in both directions, SetDesktopSize round trip, cursor / desktop name / LastRect, paused updates,
   clean close vs. reset vs. protocol error.
+- Audio: the -259 confirmation, set-format and enable bytes, PCM reaching the output in order, a device failure
+  stopping audio only (and sending disable), malformed buffers, dropping instead of blocking.
+- File transfer, against both LibVNC and UltraVNC behaviour: access, drives and listings, Unicode names and block size,
+  compressed and raw downloads, compressed block uploads, refusals, cancel → abort, commands, timeouts, and a server
+  that closes the connection when asked.
 - Plugin: manifest vs. registration, all five languages complete with matching placeholders, settings parsing,
   exception translation, auto-reconnect rules, headless UI (status bar, input, view-only, remote keys, window
-  matching, clipboard, disconnect card and reconnect), JPEG decoding through Skia, and unloading in a
+  matching, clipboard, disconnect card and reconnect, file panel, audio status), JPEG decoding through Skia, and unloading in a
   collectible load context.
 
 **Not yet verified against real servers.** Before relying on it, connect to at least TigerVNC (`Xvnc` with
 `-SecurityTypes VncAuth,X509Vnc`), x11vnc, a QEMU/libvirt console, and macOS Screen Sharing, and check: login,
-rendering with each preferred encoding, Match window resizing, typing on a non-US layout, clipboard both ways.
+rendering with each preferred encoding, Match window resizing, typing on a non-US layout, clipboard both ways. Audio needs
+a QEMU guest with an audio backend; file transfer needs UltraVNC Server (Windows) and `x11vnc -ultrafilexfer`: browse,
+upload, download, replace, delete, rename, non-ASCII names, cancel.

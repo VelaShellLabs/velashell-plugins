@@ -10,7 +10,7 @@
   "hostMode": "inProcess",
   "license": "MIT",
   "homepage": "https://github.com/VelaShellLabs/velashell-plugins",
-  "permissions": ["network", "clipboard.read", "clipboard.write", "i18n.read"],
+  "permissions": ["network", "clipboard.read", "clipboard.write", "fs.local.read", "fs.local.write", "i18n.read"],
   "contributes": { "workspaces": [{ "id": "velashell.vnc", "displayName": "VNC", "defaultPort": 5900 }] },
   "activationEvents": ["onWorkspace:velashell.vnc"]
 }

@@ -79,6 +79,18 @@ public interface IVncSession : IAsyncDisposable
     /// <summary>The server takes QEMU extended key events, so physical scan codes reach it layout-independently.</summary>
     bool SupportsScanCodes { get; }
 
+    /// <summary>The server confirmed the QEMU Audio extension and its audio is being played.</summary>
+    bool AudioActive { get; }
+
+    /// <summary>
+    /// Audio playback stopped (the output device failed); the desktop stays connected. Raised on a background thread; a
+    /// failure that happened before subscribing is replayed to the new handler.
+    /// </summary>
+    event Action<Exception>? AudioFailed;
+
+    /// <summary>UltraVNC file transfer over this connection, or null when <see cref="VncClientOptions.FileTransfer"/> is off.</summary>
+    IVncFileTransfer? FileTransfer { get; }
+
     /// <summary>
     /// Copies what changed since the last copy into a caller-owned, top-down BGRA32 surface of
     /// <paramref name="width"/>×<paramref name="height"/> pixels with a row pitch of <paramref name="stride"/> bytes.
@@ -108,4 +120,49 @@ public interface IVncSession : IAsyncDisposable
     /// it again requests the changes accumulated meanwhile.
     /// </summary>
     Task SetDisplayUpdatesAsync(bool visible, CancellationToken ct = default);
+}
+
+/// <summary>An entry of a remote directory listing. <see cref="Modified"/> is null when the server gave no time.</summary>
+public sealed record VncRemoteEntry(string Name, bool IsDirectory, long Size, DateTimeOffset? Modified);
+
+/// <summary>A remote drive root such as <c>C:\</c> (LibVNC servers map <c>C:\</c> to <c>/</c>). <see cref="Kind"/> is
+/// 'l' fixed, 'f' removable, 'c' CD-ROM or 'n' network.</summary>
+public sealed record VncRemoteDrive(string Path, char Kind);
+
+/// <summary>
+/// UltraVNC file transfer (RFB message type 7) on the session's connection. Paths are Windows-style (<c>C:\dir\file</c>).
+/// One operation runs at a time; the others wait. Failures are <see cref="VncFileTransferException"/>; cancelling a
+/// transfer aborts it on the server.
+/// </summary>
+public interface IVncFileTransfer
+{
+    /// <summary>Access was granted by <see cref="RequestAccessAsync"/>.</summary>
+    bool IsGranted { get; }
+
+    /// <summary>
+    /// Asks the server for file-transfer permission (once per connection). Returns false when the server refuses; a
+    /// server without file transfer closes the connection instead (<see cref="VncFileTransferUnsupportedException"/>).
+    /// </summary>
+    Task<bool> RequestAccessAsync(CancellationToken ct = default);
+
+    Task<IReadOnlyList<VncRemoteDrive>> ListDrivesAsync(CancellationToken ct = default);
+
+    /// <summary>Lists a directory, folders first; "." and ".." are left out.</summary>
+    Task<IReadOnlyList<VncRemoteEntry>> ListAsync(string directory, CancellationToken ct = default);
+
+    /// <summary>Copies a remote file into <paramref name="destination"/>; returns the bytes received.</summary>
+    Task<long> DownloadAsync(string remotePath, Stream destination, IProgress<long>? progress = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates (or truncates) <paramref name="remotePath"/> from <paramref name="source"/>. An UltraVNC server resumes onto
+    /// an existing file of that name, so delete it first to replace it.
+    /// </summary>
+    Task UploadAsync(Stream source, long length, DateTimeOffset modified, string remotePath, IProgress<long>? progress = null, CancellationToken ct = default);
+
+    Task CreateDirectoryAsync(string path, CancellationToken ct = default);
+
+    /// <summary>Deletes a file or a directory (UltraVNC deletes a directory with its contents; LibVNC only an empty one).</summary>
+    Task DeleteAsync(string path, CancellationToken ct = default);
+
+    Task RenameAsync(string path, string newPath, CancellationToken ct = default);
 }
