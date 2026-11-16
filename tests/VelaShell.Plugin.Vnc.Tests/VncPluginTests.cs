@@ -101,7 +101,11 @@ public sealed partial class VncPluginTests
         Assert.IsTrue(settings.CommandAsControl);
         Assert.AreEqual("desktop.example", settings.CertificateHost);
         Assert.IsFalse(settings.Audio, "audio is opt-in, as in the RDP plugin");
-        Assert.IsFalse(settings.FileTransfer, "servers without UltraVNC file transfer drop the client when it is used");
+        Assert.IsFalse(settings.FileTransfer, "file transfer is opt-in");
+        Assert.IsFalse(settings.AllowUnadvertisedFileTransfer, "legacy connections must retain capability checks");
+        VncClientOptions options = VncConnector.CreateOptions(Request(), settings);
+        Assert.IsFalse(options.FileTransfer);
+        Assert.IsFalse(options.AllowUnadvertisedFileTransfer);
         // Every declared default parses to the same thing as an empty (pre-existing) connection.
         var declared = VncSettings.Declare(new("en")).Where(static f => f.DefaultValue is not null).ToDictionary(static f => f.Key, static f => f.DefaultValue!);
         Assert.AreEqual(settings, VncSettings.From(Request(declared), new("en")));
@@ -145,11 +149,71 @@ public sealed partial class VncPluginTests
     [DataRow(VncSettings.TimeoutKey, "0")]
     [DataRow(VncSettings.SharedKey, "maybe")]
     [DataRow(VncSettings.FileTransferKey, "yes")]
+    [DataRow(VncSettings.AllowUnadvertisedFileTransferKey, "yes")]
     [DataRow(VncSettings.TrustedThumbprintKey, "abcd")]
     public void InvalidValuesNameTheField(string key, string value)
     {
         ProtocolConnectionException ex = Assert.ThrowsExactly<ProtocolConnectionException>(() => VncSettings.From(Request(new() { [key] = value }), new("en")));
         StringAssert.Contains(ex.Message, key);
+    }
+
+    [TestMethod]
+    [DataRow("true", true)]
+    [DataRow("false", false)]
+    [DataRow("", false)]
+    [DataRow("  TRUE  ", true)]
+    public void LegacyFileTransferRequiresAnExplicitBoolean(string raw, bool expected)
+    {
+        VncSettings settings = VncSettings.From(Request(new()
+        {
+            [VncSettings.FileTransferKey] = "true",
+            ["allowUnadvertisedFileTransfer"] = raw
+        }), new("en"));
+        Assert.AreEqual(expected, settings.AllowUnadvertisedFileTransfer);
+    }
+
+    [TestMethod]
+    public void LegacyFileTransferIsAnAdvancedOptInVisibleOnlyForFileTransfer()
+    {
+        foreach (string locale in new[] { "en", "zh-Hans", "zh-Hant", "ja", "ko" })
+        {
+            var loc = new Loc(locale);
+            ProtocolSettingField field = VncSettings.Declare(loc).Single(f => f.Key == "allowUnadvertisedFileTransfer");
+            Assert.AreEqual(ProtocolSettingKind.Boolean, field.Kind);
+            Assert.AreEqual("false", field.DefaultValue);
+            Assert.IsTrue(field.IsAdvanced);
+            Assert.IsNull(field.Page);
+            Assert.AreEqual(loc["AllowUnadvertisedFileTransfer"], field.Label);
+            Assert.AreEqual(loc["AllowUnadvertisedFileTransferHint"], field.Hint);
+            Assert.IsNotNull(field.VisibleWhen);
+            Assert.AreEqual(VncSettings.FileTransferKey, field.VisibleWhen.Key);
+            Assert.AreSequenceEqual(new[] { "true" }, field.VisibleWhen.Values.ToArray());
+            Assert.IsTrue(field.VisibleWhen.IsSatisfiedBy(key => key == VncSettings.FileTransferKey ? "true" : null));
+            Assert.IsFalse(field.VisibleWhen.IsSatisfiedBy(_ => "false"));
+            Assert.IsFalse(field.VisibleWhen.IsSatisfiedBy(_ => null));
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false, false, false, false, false)]
+    [DataRow(true, false, false, true, false)]
+    [DataRow(true, true, false, true, true)]
+    [DataRow(true, true, true, false, false)]
+    [DataRow(false, true, false, false, false)]
+    public void ConnectorMapsFileTransferOnlyWhenEnabledAndNotViewOnly(bool enabled, bool allowLegacy, bool viewOnly,
+        bool expectedTransfer, bool expectedLegacy)
+    {
+        WorkspaceConnectRequest request = Request(new()
+        {
+            [VncSettings.FileTransferKey] = enabled.ToString(),
+            [VncSettings.AllowUnadvertisedFileTransferKey] = allowLegacy.ToString(),
+            [VncSettings.ViewOnlyKey] = viewOnly.ToString()
+        });
+        VncSettings settings = VncSettings.From(request, new("en"));
+        VncClientOptions options = VncConnector.CreateOptions(request, settings);
+        Assert.AreEqual(expectedTransfer, options.FileTransfer);
+        Assert.AreEqual(expectedLegacy, options.AllowUnadvertisedFileTransfer);
+        Assert.AreEqual(allowLegacy, settings.AllowUnadvertisedFileTransfer, "hidden values remain saved but must not bypass effective settings");
     }
 
     // ---- input ----

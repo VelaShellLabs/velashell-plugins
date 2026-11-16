@@ -112,7 +112,10 @@ public sealed class VncSessionTests
     }
 
     [TestMethod]
-    public async Task ExtendedClipboardExchangesUtf8ThroughNotifyRequestProvide()
+    [DataRow(0u)]
+    [DataRow(3u)]
+    [DataRow(1048576u)]
+    public async Task ExtendedClipboardExchangesUtf8ThroughNotifyRequestProvide(uint unsolicitedLimit)
     {
         const uint Caps = 1u << 24, Request = 1u << 25, Notify = 1u << 27, Provide = 1u << 28, Text = 1;
         var go = new TaskCompletionSource();
@@ -121,7 +124,7 @@ public sealed class VncSessionTests
         await using FakeVncServer server = Server(async c =>
         {
             await go.Task;
-            await c.WriteAsync(Extended(Caps | Request | Notify | Provide | Text, U32(1 << 20)));
+            await c.WriteAsync(Extended(Caps | Request | Notify | Provide | Text, U32(unsolicitedLimit)));
             byte[] caps = await c.ExpectAsync(6);
             replies.Add(BinaryPrimitives.ReadUInt32BigEndian(caps.AsSpan(7)));
             await c.WriteAsync(Extended(Notify | Text, []));
@@ -155,6 +158,87 @@ public sealed class VncSessionTests
         Assert.AreEqual(Request | Text, replies[1]);
         Assert.AreEqual(Notify | Text, replies[2]);
         Assert.AreEqual(Provide | Text, replies[3]);
+    }
+
+    [TestMethod]
+    public async Task LateClipboardCapabilitiesReofferOriginalUnicodeText()
+    {
+        var offered = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeVncServer server = Server(async c =>
+        {
+            byte[] legacy = await c.ExpectAsync(6);
+            Assert.AreEqual("??", Encoding.Latin1.GetString(legacy, 7, legacy.Length - 7));
+            await c.WriteAsync(Extended(ExtendedClipboard.Caps | ExtendedClipboard.Request |
+                ExtendedClipboard.Notify | ExtendedClipboard.Provide | ExtendedClipboard.Text, U32(0)));
+            _ = await c.ExpectAsync(6); // client capabilities
+            byte[] notify = await c.ExpectAsync(6);
+            Assert.AreEqual(ExtendedClipboard.Notify | ExtendedClipboard.Text,
+                BinaryPrimitives.ReadUInt32BigEndian(notify.AsSpan(7)));
+            await c.WriteAsync(Extended(ExtendedClipboard.Request | ExtendedClipboard.Text, []));
+            byte[] provide = await c.ExpectAsync(6);
+            using var z = new ZLibStream(new MemoryStream(provide[11..]), CompressionMode.Decompress);
+            byte[] size = new byte[4];
+            z.ReadExactly(size);
+            byte[] text = new byte[BinaryPrimitives.ReadUInt32BigEndian(size)];
+            z.ReadExactly(text);
+            offered.TrySetResult(Encoding.UTF8.GetString(text));
+        });
+        await using VncSession session = await VncHandshakeTests.ConnectAsync(VncHandshakeTests.Options(server.Port));
+        await session.SendClipboardAsync("中文");
+        string received = await offered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.AreEqual("中文\0", received);
+        Assert.IsEmpty(server.Failures);
+    }
+
+    [TestMethod]
+    public async Task OversizedPublicationLeavesPreviousTextAndDesktopIntact()
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provided = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var keyReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeVncServer server = Server(async c =>
+        {
+            await c.WriteAsync(Extended(ExtendedClipboard.Caps | ExtendedClipboard.Request |
+                ExtendedClipboard.Notify | ExtendedClipboard.Provide | ExtendedClipboard.Text, U32(0)));
+            _ = await c.ExpectAsync(6); // client Caps: the extended mode is ready
+            ready.TrySetResult();
+            _ = await c.ExpectAsync(6); // Notify for the valid value
+            await request.Task;
+            await c.WriteAsync(Extended(ExtendedClipboard.Request | ExtendedClipboard.Text, []));
+            byte[] response = await c.ExpectAsync(6);
+            Assert.AreEqual(ExtendedClipboard.Provide | ExtendedClipboard.Text,
+                BinaryPrimitives.ReadUInt32BigEndian(response.AsSpan(7)), "no Notify for the oversized value");
+            using var z = new ZLibStream(new MemoryStream(response[11..]), CompressionMode.Decompress);
+            byte[] size = new byte[4];
+            z.ReadExactly(size);
+            byte[] text = new byte[BinaryPrimitives.ReadUInt32BigEndian(size)];
+            z.ReadExactly(text);
+            provided.TrySetResult(Encoding.UTF8.GetString(text));
+            _ = await c.ExpectAsync(4);
+            keyReceived.TrySetResult();
+        });
+        await using VncSession session = await VncHandshakeTests.ConnectAsync(VncHandshakeTests.Options(server.Port));
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await session.SendClipboardAsync("valid");
+        string oversized = new('中', ExtendedClipboard.MaxText / 3 + 1);
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() => session.SendClipboardAsync(oversized));
+        request.TrySetResult();
+        string received = await provided.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.AreEqual("valid\0", received);
+        await session.KeyAsync('a', 0, true);
+        await keyReceived.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.IsTrue(session.IsConnected);
+        Assert.IsEmpty(server.Failures);
+    }
+
+    [TestMethod]
+    public void OversizedClipboardTextIsRejectedInsteadOfTruncated()
+    {
+        string text = new('中', ExtendedClipboard.MaxText / 3 + 1);
+        var clipboard = new ExtendedClipboard();
+        _ = Assert.ThrowsExactly<ArgumentException>(() => clipboard.ProvideMessage(text));
+        Assert.AreEqual(9, ExtendedClipboard.TextSize("中\n文"), "size includes CRLF normalization and the NUL");
     }
 
     private static byte[] Screens(uint id, int width, int height) =>

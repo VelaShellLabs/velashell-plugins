@@ -13,13 +13,14 @@ using VelaShell.Vnc;
 namespace VelaShell.Plugin.Vnc;
 
 /// <summary>
-/// The file-transfer side panel (UltraVNC file transfer over the desktop's own connection): a remote folder listing with
-/// up / refresh / new folder / upload in the 36px header, download / rename / delete for the selection, and a 24px status
+/// The file-transfer dialog (UltraVNC file transfer over the desktop's own connection): a remote folder listing with
+/// up / refresh / new folder / upload in the 36px toolbar, download / rename / delete for the selection, and a 24px status
 /// line with progress and Cancel. Files dropped onto the panel upload into the open folder. One operation runs at a time,
 /// as the protocol allows. Confirmations and names are asked inline (no dialogs), like the remote-keys confirmations.
 /// </summary>
 internal sealed class VncFilePanel : Border
 {
+    private static readonly System.Buffers.SearchValues<char> InvalidNameChars = System.Buffers.SearchValues.Create("\\/:*?\"<>|");
     private static readonly Geometry FolderIcon = Geometry.Parse("M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z");
     private static readonly Geometry FileIcon = Geometry.Parse("M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4");
     private static readonly Geometry DriveIcon = Geometry.Parse("M22 12H2 M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z M6 16h.01 M10 16h.01");
@@ -31,10 +32,6 @@ internal sealed class VncFilePanel : Border
     private static readonly Geometry PencilIcon = Geometry.Parse("M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z M15 5l4 4");
     private static readonly Geometry TrashIcon = Geometry.Parse("M3 6h18 M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6 M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2 M10 11v6 M14 11v6");
     private static readonly Geometry CloseIcon = Geometry.Parse("M18 6 6 18 M6 6l12 12");
-    private static readonly char[] InvalidNameChars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
-
-    internal const double PanelWidth = 320;
-
     private readonly IVncFileTransfer _files;
     private readonly IPluginContext _context;
     private readonly TextBlock _title = new() { VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeight.SemiBold, Margin = new Thickness(10, 0, 0, 0) };
@@ -52,9 +49,8 @@ internal sealed class VncFilePanel : Border
     private TaskCompletionSource<string?>? _pending;
     private CancellationTokenSource? _transfer;
     private Loc _loc;
-    private string? _directory;
     private IReadOnlyList<VncRemoteEntry> _entries = [];
-    private bool _busy, _granted, _opened, _disposed;
+    private bool _granted, _opened, _disposed;
 
     internal VncFilePanel(IVncFileTransfer files, IPluginContext context, Loc loc, IVncLocalFiles localFiles)
     {
@@ -63,13 +59,15 @@ internal sealed class VncFilePanel : Border
         _loc = loc;
         LocalFiles = localFiles;
         Name = "VncFilePanel";
-        Width = PanelWidth;
-        BorderThickness = new Thickness(1, 0, 0, 0);
-        Token(this, BackgroundProperty, "VelaBgSidebar");
-        Token(this, BorderBrushProperty, "VelaBorderPrimary");
+        ClipToBounds = true;
+        CornerRadius = new CornerRadius(8);
+        BorderThickness = new Thickness(1);
+        Token(this, BackgroundProperty, "VelaBgSurface");
+        Token(this, BorderBrushProperty, "VelaBorderSecondary");
+        Token(this, BoxShadowProperty, "VelaShadowWindow");
 
-        _up = IconButton("VncFilesUp", UpIcon, () => _ = NavigateAsync(_directory is { } d ? ParentOf(d) : null));
-        _refresh = IconButton("VncFilesRefresh", RefreshIcon, () => _ = _granted ? NavigateAsync(_directory) : OpenAsync(retry: true));
+        _up = IconButton("VncFilesUp", UpIcon, () => _ = NavigateAsync(Directory is { } d ? ParentOf(d) : null));
+        _refresh = IconButton("VncFilesRefresh", RefreshIcon, () => _ = _granted ? NavigateAsync(Directory) : OpenAsync(retry: true));
         _newFolder = IconButton("VncFilesNewFolder", FolderPlusIcon, () => _ = NewFolderAsync());
         _upload = IconButton("VncFilesUpload", UploadIcon, () => _ = PickAndUploadAsync());
         _close = IconButton("VncFilesClose", CloseIcon, () => CloseRequested?.Invoke());
@@ -81,13 +79,31 @@ internal sealed class VncFilePanel : Border
         Token(_cancel, TemplatedControlForeground, "VelaTextPrimary");
         Token(_cancel, TemplatedControlFontSize, "VelaFontSize11");
 
-        var header = new DockPanel { Height = 36, LastChildFill = true };
-        var headerButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center, Children = { _up, _refresh, _newFolder, _upload, _close } };
-        DockPanel.SetDock(headerButtons, Dock.Right);
-        header.Children.Add(headerButtons);
-        header.Children.Add(_title);
+        _close.Width = 27;
+        _close.Height = 27;
+        _close.CornerRadius = new CornerRadius(0);
+        var header = new DockPanel { Height = 28, LastChildFill = true };
+        DockPanel.SetDock(_close, Dock.Right);
+        header.Children.Add(_close);
+        var titleIcon = new VncGlyph { Data = FolderIcon, Width = 15, Height = 15, RestToken = "VelaAccent", Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(titleIcon, Dock.Left);
+        TitleBar = new Border
+        {
+            Name = "VncFilesTitleBar",
+            Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.SizeAll),
+            Child = new DockPanel { Children = { titleIcon, _title } }
+        };
+        header.Children.Add(TitleBar);
         Token(_title, TextBlock.ForegroundProperty, "VelaTextPrimary");
-        Token(_title, TextBlock.FontSizeProperty, "VelaFontSize12");
+        Token(_title, TextBlock.FontSizeProperty, "VelaFontSize13");
+        var toolbar = new Border
+        {
+            Height = 36,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(6, 0), VerticalAlignment = VerticalAlignment.Center, Children = { _up, _refresh, _newFolder, _upload } }
+        };
+        Token(toolbar, BorderBrushProperty, "VelaBorderPrimary");
 
         var pathBar = new DockPanel { Height = 26, LastChildFill = true };
         var pathButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center, Children = { _download, _rename, _delete } };
@@ -127,14 +143,14 @@ internal sealed class VncFilePanel : Border
         _list.ItemTemplate = new FuncDataTemplate<object?>((item, _) => item is null ? new Grid() : Row(item));
         _list.Styles.Add(new Style(x => x.OfType<ListBoxItem>())
         {
-            Setters = { new Setter(ListBoxItem.MinHeightProperty, 28d), new Setter(ListBoxItem.PaddingProperty, new Thickness(10, 0)) }
+            Setters = { new Setter(MinHeightProperty, 28d), new Setter(Avalonia.Controls.Primitives.TemplatedControl.PaddingProperty, new Thickness(10, 0)) }
         });
         _list.SelectionChanged += (_, _) => UpdateButtons();
         _list.DoubleTapped += (_, _) => _ = OpenSelectedAsync();
         _list.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter) { _ = OpenSelectedAsync(); e.Handled = true; }
-            else if (e.Key == Key.Back) { _ = NavigateAsync(_directory is { } d ? ParentOf(d) : null); e.Handled = true; }
+            else if (e.Key == Key.Back) { _ = NavigateAsync(Directory is { } d ? ParentOf(d) : null); e.Handled = true; }
             else if (e.Key == Key.Delete) { _ = DeleteSelectedAsync(); e.Handled = true; }
         };
 
@@ -149,10 +165,12 @@ internal sealed class VncFilePanel : Border
 
         var layout = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(header, Dock.Top);
+        DockPanel.SetDock(toolbar, Dock.Top);
         DockPanel.SetDock(pathBorder, Dock.Top);
         DockPanel.SetDock(_prompt, Dock.Top);
         DockPanel.SetDock(footerBorder, Dock.Bottom);
         layout.Children.Add(header);
+        layout.Children.Add(toolbar);
         layout.Children.Add(pathBorder);
         layout.Children.Add(_prompt);
         layout.Children.Add(footerBorder);
@@ -171,11 +189,12 @@ internal sealed class VncFilePanel : Border
     private static readonly AvaloniaProperty TemplatedControlFontSize = Avalonia.Controls.Primitives.TemplatedControl.FontSizeProperty;
 
     internal IVncLocalFiles LocalFiles { get; set; }
+    internal Control TitleBar { get; }
     internal Action? CloseRequested { get; set; }
-    internal string? Directory => _directory;
+    internal string? Directory { get; private set; }
     internal IReadOnlyList<object> Items => _list.ItemsSource as IReadOnlyList<object> ?? [];
     internal string StatusText => _status.Text ?? "";
-    internal bool IsBusy => _busy;
+    internal bool IsBusy { get; private set; }
     internal bool PromptVisible => _prompt.IsVisible;
     internal Task? Operation { get; private set; }
 
@@ -246,13 +265,13 @@ internal sealed class VncFilePanel : Border
     }
 
     internal static bool IsValidName(string name) =>
-        name.Trim().Length > 0 && name.IndexOfAny(InvalidNameChars) < 0 && name is not ("." or "..");
+        name.Trim().Length > 0 && name.AsSpan().IndexOfAny(InvalidNameChars) < 0 && name is not ("." or "..");
 
     internal void ApplyLocale(Loc loc)
     {
         _loc = loc;
         _title.Text = loc["FilesTitle"];
-        _path.Text = _directory ?? loc["FilesDrives"];
+        _path.Text = Directory ?? loc["FilesDrives"];
         ToolTip.SetTip(_up, loc["FilesUp"]);
         ToolTip.SetTip(_refresh, loc["FilesRefresh"]);
         ToolTip.SetTip(_newFolder, loc["FilesNewFolder"]);
@@ -266,6 +285,8 @@ internal sealed class VncFilePanel : Border
         _promptInput.PlaceholderText = loc["FilesNamePlaceholder"];
     }
 
+    internal void FocusDialog() => _ = _close.Focus();
+
     // ------------------------------------------------------------ status
 
     private void ShowStatus(string text, bool error = false)
@@ -278,12 +299,12 @@ internal sealed class VncFilePanel : Border
     private void ShowListing()
     {
         int count = _list.ItemsSource is IReadOnlyList<object> items ? items.Count : 0;
-        ShowStatus(_directory is not null && count == 0 ? _loc["FilesEmpty"] : _loc.Format("FilesItems", count));
+        ShowStatus(Directory is not null && count == 0 ? _loc["FilesEmpty"] : _loc.Format("FilesItems", count));
     }
 
     private void SetBusy(bool busy, bool transfer = false)
     {
-        _busy = busy;
+        IsBusy = busy;
         _list.IsEnabled = !busy;
         _cancel.IsVisible = busy && transfer;
         _progress.IsVisible = busy && transfer;
@@ -293,12 +314,12 @@ internal sealed class VncFilePanel : Border
 
     private void UpdateButtons()
     {
-        bool ready = _granted && !_busy && !_prompt.IsVisible;
+        bool ready = _granted && !IsBusy && !_prompt.IsVisible;
         object? selected = _list.SelectedItem;
-        _up.IsEnabled = ready && _directory is not null;
-        _refresh.IsEnabled = !_busy && !_prompt.IsVisible;
-        _newFolder.IsEnabled = ready && _directory is not null;
-        _upload.IsEnabled = ready && _directory is not null;
+        _up.IsEnabled = ready && Directory is not null;
+        _refresh.IsEnabled = !IsBusy && !_prompt.IsVisible;
+        _newFolder.IsEnabled = ready && Directory is not null;
+        _upload.IsEnabled = ready && Directory is not null;
         _download.IsEnabled = ready && selected is VncRemoteEntry { IsDirectory: false };
         _rename.IsEnabled = ready && selected is VncRemoteEntry;
         _delete.IsEnabled = ready && selected is VncRemoteEntry;
@@ -306,6 +327,7 @@ internal sealed class VncFilePanel : Border
 
     private string Describe(Exception ex, string subject) => ex switch
     {
+        VncFileTransferException { Error: VncFileTransferError.Unsupported } => _loc["FilesUnsupported"],
         VncFileTransferException { Error: VncFileTransferError.Timeout } => _loc["FilesErrorTimeout"],
         VncFileTransferException { Error: VncFileTransferError.Unavailable } => _loc.Format("FilesErrorUnavailable", subject),
         VncFileTransferException { Error: VncFileTransferError.Failed } => _loc.Format("FilesErrorFailed", subject),
@@ -318,7 +340,7 @@ internal sealed class VncFilePanel : Border
     /// <summary>Runs one operation: buttons off, failures shown in the status line (and logged), cancellation reported.</summary>
     private Task RunAsync(Func<CancellationToken, Task> action, string subject, bool transfer = false)
     {
-        if (_busy || _disposed) { return Task.CompletedTask; }
+        if (IsBusy || _disposed) { return Task.CompletedTask; }
         SetBusy(true, transfer);
         _transfer = new CancellationTokenSource();
         Operation = Core(_transfer.Token);
@@ -347,7 +369,7 @@ internal sealed class VncFilePanel : Border
     /// <summary>First showing: ask for access, then list the drives (a single drive — LibVNC's "C:" — opens directly).</summary>
     internal Task OpenAsync(bool retry = false)
     {
-        if ((_opened && !retry) || _busy) { return Operation ?? Task.CompletedTask; }
+        if ((_opened && !retry) || IsBusy) { return Operation ?? Task.CompletedTask; }
         _opened = true;
         ShowStatus(_loc["FilesRequesting"]);
         return RunAsync(async ct =>
@@ -381,7 +403,7 @@ internal sealed class VncFilePanel : Border
             items = [.. _entries];
         }
 
-        _directory = directory;
+        Directory = directory;
         _path.Text = directory ?? _loc["FilesDrives"];
         _list.ItemsSource = items;
         ShowListing();
@@ -389,9 +411,9 @@ internal sealed class VncFilePanel : Border
 
     private Task OpenSelectedAsync() => _list.SelectedItem switch
     {
-        _ when _busy || !_granted => Task.CompletedTask,
+        _ when IsBusy || !_granted => Task.CompletedTask,
         VncRemoteDrive drive => NavigateAsync(drive.Path),
-        VncRemoteEntry { IsDirectory: true } folder when _directory is { } dir => NavigateAsync(dir + folder.Name + "\\"),
+        VncRemoteEntry { IsDirectory: true } folder when Directory is { } dir => NavigateAsync(dir + folder.Name + "\\"),
         VncRemoteEntry { IsDirectory: false } => DownloadSelectedAsync(),
         _ => Task.CompletedTask
     };
@@ -437,7 +459,7 @@ internal sealed class VncFilePanel : Border
 
     private async Task NewFolderAsync()
     {
-        if (_directory is not { } dir || _busy) { return; }
+        if (Directory is not { } dir || IsBusy) { return; }
         if (await AskAsync(_loc["FilesNewFolder"], _loc["FilesOk"], "") is not { Length: > 0 } name) { return; }
         await RunAsync(async ct =>
         {
@@ -448,7 +470,7 @@ internal sealed class VncFilePanel : Border
 
     private async Task RenameSelectedAsync()
     {
-        if (_directory is not { } dir || _list.SelectedItem is not VncRemoteEntry entry || _busy) { return; }
+        if (Directory is not { } dir || _list.SelectedItem is not VncRemoteEntry entry || IsBusy) { return; }
         if (await AskAsync(_loc["FilesRename"], _loc["FilesOk"], entry.Name) is not { Length: > 0 } name || name == entry.Name) { return; }
         await RunAsync(async ct =>
         {
@@ -459,7 +481,7 @@ internal sealed class VncFilePanel : Border
 
     private async Task DeleteSelectedAsync()
     {
-        if (_directory is not { } dir || _list.SelectedItem is not VncRemoteEntry entry || _busy) { return; }
+        if (Directory is not { } dir || _list.SelectedItem is not VncRemoteEntry entry || IsBusy) { return; }
         string question = _loc.Format(entry.IsDirectory ? "FilesConfirmDeleteFolder" : "FilesConfirmDelete", entry.Name);
         if (await AskAsync(question, _loc["FilesDelete"], null) is null) { return; }
         await RunAsync(async ct =>
@@ -471,7 +493,7 @@ internal sealed class VncFilePanel : Border
 
     private async Task DownloadSelectedAsync()
     {
-        if (_directory is not { } dir || _list.SelectedItem is not VncRemoteEntry { IsDirectory: false } entry || _busy) { return; }
+        if (Directory is not { } dir || _list.SelectedItem is not VncRemoteEntry { IsDirectory: false } entry || IsBusy) { return; }
         VncLocalTarget? target;
         try { target = await LocalFiles.PickSaveAsync(_loc["FilesDownload"], entry.Name); }
         catch (Exception ex) when (ex is not OperationCanceledException) { ShowStatus(_loc.Format("FilesErrorLocal", ex.Message), error: true); return; }
@@ -484,7 +506,7 @@ internal sealed class VncFilePanel : Border
             {
                 int percent = entry.Size > 0 ? (int)Math.Min(100, done * 100 / entry.Size) : 0;
                 _progress.Value = percent;
-                if (_busy) { ShowStatus(_loc.Format("FilesDownloading", entry.Name, percent)); }
+                if (IsBusy) { ShowStatus(_loc.Format("FilesDownloading", entry.Name, percent)); }
             });
             bool complete = false;
             try
@@ -508,7 +530,7 @@ internal sealed class VncFilePanel : Border
 
     private async Task PickAndUploadAsync()
     {
-        if (_directory is null || _busy) { return; }
+        if (Directory is null || IsBusy) { return; }
         IReadOnlyList<VncLocalFile> files;
         try { files = await LocalFiles.PickOpenAsync(_loc["FilesUpload"]); }
         catch (Exception ex) when (ex is not OperationCanceledException) { ShowStatus(_loc.Format("FilesErrorLocal", ex.Message), error: true); return; }
@@ -521,8 +543,8 @@ internal sealed class VncFilePanel : Border
     /// </summary>
     internal async Task UploadAsync(IReadOnlyList<VncLocalFile> files, int skippedFolders)
     {
-        if (_busy || !_granted) { return; }
-        if (_directory is not { } dir) { ShowStatus(_loc["FilesPickFolder"], error: true); return; }
+        if (IsBusy || !_granted) { return; }
+        if (Directory is not { } dir) { ShowStatus(_loc["FilesPickFolder"], error: true); return; }
         if (files.Count == 0)
         {
             if (skippedFolders > 0) { ShowStatus(_loc.Format("FilesFoldersSkipped", skippedFolders), error: true); }
@@ -552,7 +574,7 @@ internal sealed class VncFilePanel : Border
                 {
                     int percent = length > 0 ? (int)Math.Min(100, done * 100 / length) : 100;
                     _progress.Value = percent;
-                    if (_busy) { ShowStatus(_loc.Format("FilesUploading", file.Name, index, uploads.Count, percent)); }
+                    if (IsBusy) { ShowStatus(_loc.Format("FilesUploading", file.Name, index, uploads.Count, percent)); }
                 });
                 if (exact.Contains(file.Name)) { await _files.DeleteAsync(dir + file.Name, ct); }
                 else if (existing.Contains(file.Name))
@@ -572,7 +594,7 @@ internal sealed class VncFilePanel : Border
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = _granted && !_busy && _directory is not null && e.DataTransfer.TryGetFiles()?.Length > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        e.DragEffects = _granted && !IsBusy && Directory is not null && e.DataTransfer.TryGetFiles()?.Length > 0 ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 

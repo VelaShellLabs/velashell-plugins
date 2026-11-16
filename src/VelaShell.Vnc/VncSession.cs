@@ -41,7 +41,12 @@ public sealed class VncSession : IVncSession
     private volatile bool _visible = true, _requestOutstanding, _connected;
     private int _disposed;
     private volatile string? _abortReason;
-    private readonly UltraFileTransfer? _files;
+
+    // LibVNC SupportedMessages: two 256-bit maps (client-to-server, then server-to-client).
+    internal const int SupportedMessagesEncoding = unchecked((int)0xFFFE0001);
+    private readonly TaskCompletionSource<bool> _fileTransferCapabilities = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private volatile int _fileTransferSupport; // 0 unknown, 1 advertised, -1 explicitly unsupported
+    internal TimeSpan FileTransferCapabilityTimeout { get; set; } = TimeSpan.FromSeconds(2);
     private readonly Lock _audioGate = new();
     private VncAudioPlayer? _audio;
     private Exception? _audioFailure;
@@ -54,7 +59,7 @@ public sealed class VncSession : IVncSession
         _transport = transport;
         _stream = transport;
         _reader = new RfbReader(transport);
-        _files = options.FileTransfer ? new UltraFileTransfer(SendConnectedAsync, options.Log) : null;
+        Files = options.FileTransfer ? new UltraFileTransfer(SendConnectedAsync, options.Log, EnsureFileTransferSupportedAsync) : null;
     }
 
     public event Action<Exception>? AudioFailed
@@ -76,8 +81,8 @@ public sealed class VncSession : IVncSession
     }
 
     public bool AudioActive { get; private set; }
-    public IVncFileTransfer? FileTransfer => _files;
-    internal UltraFileTransfer? Files => _files;
+    public IVncFileTransfer? FileTransfer => Files;
+    internal UltraFileTransfer? Files { get; }
 
     public event Action? FrameAvailable;
     public event Action<Exception?>? Disconnected;
@@ -455,6 +460,7 @@ public sealed class VncSession : IVncSession
         list.AddRange([VncEncoding.ExtendedDesktopSize, VncEncoding.DesktopSize, VncEncoding.LastRect, VncEncoding.Cursor,
             VncEncoding.DesktopName, VncEncoding.QemuExtendedKey, VncEncoding.ExtendedClipboard]);
         if (_options.AudioPlayback) { list.Add(VncEncoding.QemuAudio); }
+        if (Files is not null) { list.Add(SupportedMessagesEncoding); }
         return [.. list];
     }
 
@@ -478,6 +484,13 @@ public sealed class VncSession : IVncSession
         await _writeGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // Recheck after waiting for the writer: a negative capability may have arrived during a legacy opt-in.
+            if (!message.IsEmpty && message.Span[0] == UltraFileTransfer.MessageType
+                && (_fileTransferSupport < 0 || (_fileTransferSupport == 0 && !_options.AllowUnadvertisedFileTransfer)))
+            {
+                throw new VncFileTransferException(VncFileTransferError.Unsupported,
+                    "The server has not advertised compatible UltraVNC file transfer. No file-transfer request was sent.");
+            }
             await _stream.WriteAsync(message, ct).ConfigureAwait(false);
             await _stream.FlushAsync(ct).ConfigureAwait(false);
         }
@@ -492,6 +505,33 @@ public sealed class VncSession : IVncSession
             throw new InvalidOperationException("The VNC session is not connected.");
         }
         return SendAsync(message, ct);
+    }
+
+    /// <summary>Unknown client messages can terminate RFB; never probe type 7 on an unconfirmed desktop connection.</summary>
+    private async Task EnsureFileTransferSupportedAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed != 0, this);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetime.Token);
+        bool supported;
+        try
+        {
+            supported = await _fileTransferCapabilities.Task.WaitAsync(FileTransferCapabilityTimeout, linked.Token).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // No response is unknown, not proof of support. A legacy override is only for a server the user knows.
+            supported = _fileTransferCapabilities.Task.IsCompletedSuccessfully
+                ? _fileTransferCapabilities.Task.Result : _options.AllowUnadvertisedFileTransfer;
+        }
+        if (!_connected)
+        {
+            throw new VncFileTransferException(VncFileTransferError.Disconnected, "The VNC session ended.");
+        }
+        if (_fileTransferSupport < 0 || (!supported && _fileTransferSupport != 1))
+        {
+            throw new VncFileTransferException(VncFileTransferError.Unsupported,
+                "The server has not advertised compatible UltraVNC file transfer. No file-transfer request was sent; the desktop remains connected.");
+        }
     }
 
     public Task KeyAsync(uint keysym, uint scanCode, bool down, CancellationToken ct = default)
@@ -514,9 +554,10 @@ public sealed class VncSession : IVncSession
     public Task SendClipboardAsync(string text, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(text);
+        int textSize = ExtendedClipboard.TextSize(text);
+        _clipboard.LocalText = text;
         if (_clipboard.Enabled)
         {
-            _clipboard.LocalText = text;
             // Announce and let the server pull it; a server without Notify takes the text at once.
             if ((_clipboard.ServerActions & ExtendedClipboard.Notify) != 0)
             {
@@ -524,6 +565,10 @@ public sealed class VncSession : IVncSession
             }
             if ((_clipboard.ServerActions & ExtendedClipboard.Provide) != 0)
             {
+                if (textSize > _clipboard.ServerMaxText)
+                {
+                    throw new InvalidOperationException("The server cannot receive this clipboard text without requesting it and does not support Notify.");
+                }
                 return SendConnectedAsync(_clipboard.ProvideMessage(text), ct);
             }
         }
@@ -584,8 +629,8 @@ public sealed class VncSession : IVncSession
                         break;
                     case 2: break;   // Bell
                     case 3: await ServerCutTextAsync(ct).ConfigureAwait(false); break;
-                    case UltraFileTransfer.MessageType when _files is not null:
-                        await _files.ReceiveAsync(_reader, ct).ConfigureAwait(false);
+                    case UltraFileTransfer.MessageType when Files is not null:
+                        await Files.ReceiveAsync(_reader, ct).ConfigureAwait(false);
                         break;
                     case 150: break;   // EndOfContinuousUpdates
                     case 255: await QemuServerMessageAsync(ct).ConfigureAwait(false); break;
@@ -593,13 +638,13 @@ public sealed class VncSession : IVncSession
                 }
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { _files?.Close(null); return; }
-        catch (ObjectDisposedException) when (_disposed != 0) { _files?.Close(null); return; }
-        catch (Exception ex) when (_files?.AccessPending == true && ex is EndOfStreamException or IOException or SocketException && _abortReason is null)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { Files?.Close(null); return; }
+        catch (ObjectDisposedException) when (_disposed != 0) { Files?.Close(null); return; }
+        catch (Exception ex) when (Files?.AccessPending == true && ex is EndOfStreamException or IOException or SocketException && _abortReason is null)
         {
             // Closed right after the file-transfer request: the server does not have it (TigerVNC, QEMU) or has it off
             // (LibVNC drops the client). Not a network failure, so the tab does not reconnect on its own.
-            if (_disposed != 0) { _files.Close(null); return; }
+            if (_disposed != 0) { Files.Close(null); return; }
             failure = new VncFileTransferUnsupportedException("The server closed the connection when file transfer was requested.");
         }
         catch (Exception) when (_abortReason is { } reason)
@@ -621,7 +666,8 @@ public sealed class VncSession : IVncSession
         }
 
         _connected = false;
-        _files?.Close(null);
+        _ = _fileTransferCapabilities.TrySetResult(false);
+        Files?.Close(null);
         if (_disposed == 0)
         {
             try { Disconnected?.Invoke(failure); } catch { /* observers must not break the loop's exit */ }
@@ -746,6 +792,14 @@ public sealed class VncSession : IVncSession
                     VncPointer pointer = await RectangleDecoder.CursorAsync(_reader, x, y, width, height, ct).ConfigureAwait(false);
                     PointerChanged?.Invoke(pointer);
                     break;
+                case SupportedMessagesEncoding when Files is not null:
+                    byte[] messages = await _reader.BytesAsync(64, ct).ConfigureAwait(false);
+                    const int fileType = UltraFileTransfer.MessageType;
+                    bool supportsFiles = (messages[fileType / 8] & (1 << (fileType % 8))) != 0
+                        && (messages[32 + fileType / 8] & (1 << (fileType % 8))) != 0;
+                    _fileTransferSupport = supportsFiles ? 1 : -1;
+                    _ = _fileTransferCapabilities.TrySetResult(supportsFiles);
+                    break;
                 case VncEncoding.QemuExtendedKey:
                     SupportsScanCodes = true;
                     break;
@@ -839,7 +893,7 @@ public sealed class VncSession : IVncSession
         {
             try { await receive.ConfigureAwait(false); } catch { /* reported through Disconnected */ }
         }
-        _files?.Close(null);
+        Files?.Close(null);
         if (_audio is { } audio) { await audio.DisposeAsync().ConfigureAwait(false); }
         _decoder?.Dispose();
         _lifetime.Dispose();

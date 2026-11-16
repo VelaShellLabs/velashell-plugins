@@ -84,10 +84,17 @@ public sealed class VncClientOptions
 
     /// <summary>
     /// Enables <see cref="IVncSession.FileTransfer"/> (UltraVNC file transfer, RFB message type 7: UltraVNC Server, x11vnc
-    /// with <c>-ultrafilexfer</c>). Nothing is sent until the caller asks for access; a server without it closes the
-    /// connection at that point (<see cref="VncFileTransferUnsupportedException"/>).
+    /// with <c>-ultrafilexfer</c>). Access is requested only after compatible SupportedMessages capabilities arrive.
+    /// Missing capabilities fail locally, leaving the desktop connected.
     /// </summary>
     public bool FileTransfer { get; init; }
+
+    /// <summary>
+    /// Explicit opt-in for a known compatible legacy UltraVNC server that does not advertise SupportedMessages.
+    /// Never overrides an explicit negative capability. An incompatible server may disconnect the desktop when this
+    /// is enabled; do not enable it for TigerVNC, QEMU or macOS Screen Sharing.
+    /// </summary>
+    public bool AllowUnadvertisedFileTransfer { get; init; }
 
     /// <summary>Test seam: the PCM output used for audio (default: the platform device).</summary>
     internal Func<Audio.IAudioOutput>? AudioOutputFactory { get; init; }

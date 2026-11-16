@@ -13,12 +13,19 @@ public sealed class VncFileTransferTests
 {
     internal readonly record struct Ft(byte Type, byte Param, byte Pad, uint Size, byte[] Body, uint High);
 
-    private static FakeVncServer Server(Func<ServerConnection, Task> body) => new(async (c, index) =>
+    private static FakeVncServer Server(Func<ServerConnection, Task> body, bool advertise = true, bool supported = true) => new(async (c, index) =>
     {
         await c.VersionAsync();
         await c.OfferAsync(1);
         await c.SecurityResultAsync();
-        _ = await c.InitAsync();
+        var (_, encodings) = await c.InitAsync();
+        Assert.Contains(VncSession.SupportedMessagesEncoding, encodings);
+        if (advertise)
+        {
+            byte[] messages = new byte[64];
+            if (supported) { messages[0] = 0x80; messages[32] = 0x80; }
+            await c.WriteAsync(Update(Rect(0, 0, 64, 0, VncSession.SupportedMessagesEncoding, messages)));
+        }
         await body(c);
         await c.HoldAsync();
     });
@@ -172,7 +179,7 @@ public sealed class VncFileTransferTests
     {
         await using FakeVncServer server = Server(async c =>
         {
-            _ = await c.U8Async();   // message type 7, unknown to e.g. TigerVNC, which drops the client
+            _ = await ReadAsync(c);   // a server that advertised support can still reject access by closing
             c.Client.Close();
         });
         await using VncSession session = await ConnectAsync(server);
@@ -182,6 +189,137 @@ public sealed class VncFileTransferTests
         Assert.AreEqual(VncFileTransferError.Disconnected, error.Error);
         Exception? failure = await ended.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.IsInstanceOfType<VncFileTransferUnsupportedException>(failure, "not a lost network connection: no automatic reconnect");
+    }
+
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public async Task UnconfirmedFileTransferDoesNotSendType7OrDisconnect(bool advertise, bool legacyOverride)
+    {
+        var keyReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeVncServer server = Server(async c =>
+        {
+            // ExpectAsync rejects any message type 7. A subsequent key proves the desktop connection still works.
+            byte[] key = await c.ExpectAsync(4);
+            Assert.AreEqual((byte)1, key[0]);
+            keyReceived.TrySetResult();
+        }, advertise: advertise, supported: false);
+        await using VncSession session = await VncHandshakeTests.ConnectAsync(new VncClientOptions
+        {
+            Host = "127.0.0.1",
+            Port = server.Port,
+            FileTransfer = true,
+            AllowUnadvertisedFileTransfer = legacyOverride
+        });
+        session.FileTransferCapabilityTimeout = TimeSpan.FromMilliseconds(100);
+        VncFileTransferException error = await Assert.ThrowsExactlyAsync<VncFileTransferException>(
+            () => session.FileTransfer!.RequestAccessAsync());
+        Assert.AreEqual(VncFileTransferError.Unsupported, error.Error);
+        Assert.IsFalse(session.Files!.AccessPending);
+        Assert.IsTrue(session.IsConnected);
+        await session.KeyAsync('a', 0, true);
+        await keyReceived.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.IsEmpty(server.Failures);
+    }
+
+    [TestMethod]
+    [DataRow(128, 0)]
+    [DataRow(0, 128)]
+    public async Task BothMessageDirectionsAreRequiredEvenWithLegacyOverride(int clientMask, int serverMask)
+    {
+        var keyReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeVncServer server = Server(async c =>
+        {
+            byte[] messages = new byte[64];
+            messages[0] = (byte)clientMask;
+            messages[32] = (byte)serverMask;
+            await c.WriteAsync(Update(Rect(0, 0, 64, 0, VncSession.SupportedMessagesEncoding, messages),
+                Rect(0, 0, 0, 0, -258)));
+            _ = await c.ExpectAsync(4);
+            keyReceived.TrySetResult();
+        }, advertise: false);
+        await using VncSession session = await VncHandshakeTests.ConnectAsync(new VncClientOptions
+        {
+            Host = "127.0.0.1",
+            Port = server.Port,
+            FileTransfer = true,
+            AllowUnadvertisedFileTransfer = true
+        });
+        await Until(() => session.SupportsScanCodes, "the capability bitmap was processed before the marker rectangle");
+        VncFileTransferException error = await Assert.ThrowsExactlyAsync<VncFileTransferException>(
+            () => session.FileTransfer!.RequestAccessAsync());
+        Assert.AreEqual(VncFileTransferError.Unsupported, error.Error);
+        await session.KeyAsync('a', 0, true);
+        await keyReceived.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.IsEmpty(server.Failures);
+    }
+
+    [TestMethod]
+    public async Task ANewNegativeCapabilityBlocksFurtherFileMessages()
+    {
+        var revoke = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var keyReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeVncServer server = Server(async c =>
+        {
+            await GrantAsync(c);
+            await revoke.Task;
+            await c.WriteAsync(Update(Rect(0, 0, 64, 0, VncSession.SupportedMessagesEncoding, new byte[64]),
+                Rect(0, 0, 0, 0, -307, Str("files disabled"))));
+            _ = await c.ExpectAsync(4);
+            keyReceived.TrySetResult();
+        });
+        await using VncSession session = await ConnectAsync(server);
+        bool granted = await session.FileTransfer!.RequestAccessAsync();
+        Assert.IsTrue(granted);
+        revoke.TrySetResult();
+        await Until(() => session.Info.DesktopName == "files disabled", "updated capabilities processed");
+        VncFileTransferException error = await Assert.ThrowsExactlyAsync<VncFileTransferException>(
+            () => session.FileTransfer.ListDrivesAsync());
+        Assert.AreEqual(VncFileTransferError.Unsupported, error.Error);
+        await session.KeyAsync('a', 0, true);
+        await keyReceived.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.IsTrue(session.IsConnected);
+        Assert.IsEmpty(server.Failures);
+    }
+
+    [TestMethod]
+    public async Task ExplicitLegacyOverrideAllowsAnUnadvertisedCompatibleServer()
+    {
+        await using FakeVncServer server = Server(GrantAsync, advertise: false);
+        await using VncSession session = await VncHandshakeTests.ConnectAsync(new VncClientOptions
+        {
+            Host = "127.0.0.1",
+            Port = server.Port,
+            FileTransfer = true,
+            AllowUnadvertisedFileTransfer = true
+        });
+        session.FileTransferCapabilityTimeout = TimeSpan.FromMilliseconds(100);
+        session.Files!.VersionGrace = TimeSpan.FromMilliseconds(10);
+        bool granted = await session.FileTransfer!.RequestAccessAsync();
+        Assert.IsTrue(granted);
+        Assert.IsTrue(session.IsConnected);
+        Assert.IsEmpty(server.Failures);
+    }
+
+    [TestMethod]
+    public async Task CancellingCapabilityWaitSendsNoFileTransferMessage()
+    {
+        var keyReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeVncServer server = Server(async c =>
+        {
+            _ = await c.ExpectAsync(4);
+            keyReceived.TrySetResult();
+        }, advertise: false);
+        await using VncSession session = await ConnectAsync(server);
+        using var cancel = new CancellationTokenSource();
+        Task<bool> access = session.FileTransfer!.RequestAccessAsync(cancel.Token);
+        cancel.Cancel();
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() => access);
+        Assert.IsFalse(session.Files!.AccessPending);
+        await session.KeyAsync('a', 0, true);
+        await keyReceived.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.IsEmpty(server.Failures);
     }
 
     [TestMethod]

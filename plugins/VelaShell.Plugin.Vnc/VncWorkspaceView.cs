@@ -58,13 +58,21 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
     private readonly SelectableTextBlock _overlayDetail = new() { Name = "VncOverlayDetail", TextWrapping = TextWrapping.Wrap };
     private static readonly Geometry FolderIcon = Geometry.Parse(
         "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z");   // Lucide "folder"
-    private readonly Grid _content = new() { ColumnDefinitions = [with("*,Auto")] };
+    private readonly Grid _content = new();
+    private readonly Grid _filesOverlay = new() { Name = "VncFilesOverlay", IsVisible = false };
     private readonly Button _filesButton = new()
     {
-        Name = "VncFilesButton", Width = 22, Height = 20, Padding = new Thickness(0), Margin = new Thickness(0, 0, 4, 0),
-        Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center
+        Name = "VncFilesButton",
+        Width = 22,
+        Height = 20,
+        Padding = new Thickness(0),
+        Margin = new Thickness(0, 0, 4, 0),
+        Background = Brushes.Transparent,
+        BorderThickness = new Thickness(0),
+        CornerRadius = new CornerRadius(4),
+        VerticalAlignment = VerticalAlignment.Center
     };
-    private VncFilePanel? _filePanel;
+    private VncFileDialog? _fileDialog;
     private string? _audioError;
     private Loc _loc;
     private string? _notice, _armedTyping, _disconnectDetail;
@@ -97,6 +105,13 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         };
         AddHandler(KeyDownEvent, (_, e) =>
         {
+            if (_filesOverlay.IsVisible && e.Key == Key.Escape)
+            {
+                if (FilePanel is { PromptVisible: true }) { FilePanel.Answer(null); FilePanel.FocusDialog(); }
+                else { HideFiles(); }
+                e.Handled = true;
+                return;
+            }
             if (QuickBall.IsExpanded && e.Key == Key.Escape) { QuickBall.Collapse(); e.Handled = true; }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); _notice = null; UpdateStatus(); };
@@ -129,9 +144,11 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         };
         _overlay = BuildOverlay();
         SetRow(footer, 1);
-        // The desktop (with the remote-keys ball over it) on the left, the file panel docked on the right when open.
+        // File transfer overlays the desktop so opening it cannot trigger a remote resolution change.
         var desktopArea = new Grid { Children = { scroller, QuickBall } };
+        Token(_filesOverlay, BackgroundProperty, "VelaScrim");
         _content.Children.Add(desktopArea);
+        _content.Children.Add(_filesOverlay);
         Children.Add(_content);
         Children.Add(_overlay);
         Children.Add(footer);
@@ -211,25 +228,36 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         });
     }
 
-    internal VncFilePanel? FilePanel => _filePanel;
+    internal VncFilePanel? FilePanel { get; private set; }
 
     /// <summary>Shows or hides the file panel; the first showing asks the server for file-transfer access.</summary>
     internal void ToggleFiles()
     {
-        if (_session.FileTransfer is not { } files) { return; }
-        if (_filePanel is null)
+        if (!_connected || Volatile.Read(ref _disposed) != 0 || _session.FileTransfer is not { } files) { return; }
+        if (_filesOverlay.IsVisible) { HideFiles(); return; }
+        if (FilePanel is null)
         {
-            _filePanel = new VncFilePanel(files, _context, _loc, new StorageLocalFiles(() => TopLevel.GetTopLevel(this)))
+            FilePanel = new VncFilePanel(files, _context, _loc, new StorageLocalFiles(() => TopLevel.GetTopLevel(this)))
             {
-                CloseRequested = () => { _filePanel?.IsVisible = false; _ = Desktop.Focus(); }
+                CloseRequested = HideFiles
             };
-            SetColumn(_filePanel, 1);
-            _content.Children.Add(_filePanel);
-            _ = _filePanel.OpenAsync();
-            return;
+            KeyboardNavigation.SetTabNavigation(FilePanel, KeyboardNavigationMode.Cycle);
+            _fileDialog = new VncFileDialog(FilePanel);
+            _filesOverlay.Children.Add(_fileDialog);
         }
-        _filePanel.IsVisible = !_filePanel.IsVisible;
-        if (_filePanel.IsVisible) { _ = _filePanel.OpenAsync(); }
+        QuickBall.Collapse();
+        FilePanel.IsVisible = true;
+        _filesOverlay.IsVisible = true;
+        FilePanel.FocusDialog();
+        _ = FilePanel.OpenAsync();
+    }
+
+    private void HideFiles()
+    {
+        _fileDialog?.CancelDrag();
+        _filesOverlay.IsVisible = false;
+        FilePanel?.IsVisible = false;
+        if (_connected) { _ = Desktop.Focus(); }
     }
 
     private static void Token(AvaloniaObject target, AvaloniaProperty property, string token) =>
@@ -415,7 +443,7 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
     {
         _loc = loc;
         QuickBall.ApplyLocale(loc);
-        _filePanel?.ApplyLocale(loc);
+        FilePanel?.ApplyLocale(loc);
         ToolTip.SetTip(_filesButton, loc["FilesButtonTip"]);
         UpdateOverlayLabels();
         UpdateStatus();
@@ -426,7 +454,7 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         _connected = connected;
         _disconnectDetail = connected ? null : detail;
         Desktop.IsEnabled = connected;
-        if (!connected) { QuickBall.Collapse(); ClearNotice(); }
+        if (!connected) { HideFiles(); QuickBall.Collapse(); ClearNotice(); }
         QuickBall.IsVisible = connected && !_settings.ViewOnly;
         _filesButton.IsVisible = connected && _session.FileTransfer is not null;
         _overlay.IsVisible = !connected;
@@ -462,7 +490,7 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
         _session.InfoChanged -= OnInfoChanged;
         _session.AudioFailed -= OnAudioFailed;
-        _filePanel?.Close();
+        FilePanel?.Close();
         _noticeTimer.Stop();
         _statusTimer.Stop();
         _clipboard.Dispose();

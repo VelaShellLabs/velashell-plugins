@@ -31,6 +31,7 @@ internal sealed class UltraFileTransfer : IVncFileTransfer
 
     private readonly Func<byte[], CancellationToken, Task> _send;
     private readonly Action<string>? _log;
+    private readonly Func<CancellationToken, Task> _ensureSupported;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Channel<Message> _inbox = Channel.CreateBounded<Message>(new BoundedChannelOptions(64)
     {
@@ -42,10 +43,11 @@ internal sealed class UltraFileTransfer : IVncFileTransfer
     private volatile bool _active, _granted, _accessPending, _unsettled;
     private volatile int _serverVersion, _blockSize = DefaultBlockSize;
 
-    internal UltraFileTransfer(Func<byte[], CancellationToken, Task> send, Action<string>? log)
+    internal UltraFileTransfer(Func<byte[], CancellationToken, Task> send, Action<string>? log, Func<CancellationToken, Task> ensureSupported)
     {
         _send = send;
         _log = log;
+        _ensureSupported = ensureSupported;
     }
 
     /// <summary>How long to wait for each reply.</summary>
@@ -113,6 +115,7 @@ internal sealed class UltraFileTransfer : IVncFileTransfer
     public Task<bool> RequestAccessAsync(CancellationToken ct = default) => RunAsync(async token =>
     {
         if (_granted) { return true; }
+        await _ensureSupported(token).ConfigureAwait(false);
         _accessPending = true;
         Message reply;
         try
@@ -320,7 +323,7 @@ internal sealed class UltraFileTransfer : IVncFileTransfer
             }
             return await operation(ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not VncFileTransferException { Error: VncFileTransferError.Disconnected or VncFileTransferError.Denied })
+        catch (Exception ex) when (ex is not VncFileTransferException { Error: VncFileTransferError.Disconnected or VncFileTransferError.Denied or VncFileTransferError.Unsupported })
         {
             _unsettled = true;
             throw;
