@@ -48,11 +48,11 @@ internal sealed class Loc(string locale)
         ["ViewOnly"] = ["View only (no keyboard or mouse)", "仅查看（不发送键盘和鼠标）", "僅檢視（不傳送鍵盤和滑鼠）", "表示のみ（キーボードとマウスを送らない）", "보기 전용 (키보드와 마우스 보내지 않음)"],
         ["Clipboard"] = ["Bidirectional clipboard (text)", "双向剪贴板（文本）", "雙向剪貼簿（文字）", "双方向クリップボード（テキスト）", "양방향 클립보드 (텍스트)"],
         ["ClipboardHint"] = [
-            "Enabled by default. The remote desktop can read the text you copy locally and replace your clipboard text. Servers with the extended clipboard exchange Unicode; older servers only Latin-1.",
-            "默认开启。远程桌面可读取你在本机复制的文本，也可替换本地剪贴板文本。支持扩展剪贴板的服务器可交换 Unicode 文本，旧服务器只支持 Latin-1。",
-            "預設開啟。遠端桌面可讀取你在本機複製的文字，也可取代本機剪貼簿文字。支援延伸剪貼簿的伺服器可交換 Unicode 文字，舊伺服器只支援 Latin-1。",
-            "初期設定は有効です。リモート デスクトップはローカルでコピーしたテキストを読み取り、クリップボードのテキストを置き換えられます。拡張クリップボード対応サーバーは Unicode、古いサーバーは Latin-1 のみです。",
-            "기본적으로 켜져 있습니다. 원격 데스크톱이 로컬에서 복사한 텍스트를 읽고 클립보드 텍스트를 바꿀 수 있습니다. 확장 클립보드를 지원하는 서버는 유니코드를, 이전 서버는 Latin-1만 주고받습니다."],
+            "Enabled by default. Text only; files are not copied. The remote desktop can read the text you copy locally and replace your clipboard text. Servers with the extended clipboard exchange Unicode; older servers only Latin-1.",
+            "默认开启。仅同步文本，不复制文件。远程桌面可读取你在本机复制的文本，也可替换本地剪贴板文本。支持扩展剪贴板的服务器可交换 Unicode 文本，旧服务器只支持 Latin-1。",
+            "預設開啟。僅同步文字，不複製檔案。遠端桌面可讀取你在本機複製的文字，也可取代本機剪貼簿文字。支援延伸剪貼簿的伺服器可交換 Unicode 文字，舊伺服器只支援 Latin-1。",
+            "初期設定は有効です。テキストのみを同期し、ファイルはコピーしません。リモート デスクトップはローカルでコピーしたテキストを読み取り、クリップボードのテキストを置き換えられます。拡張クリップボード対応サーバーは Unicode、古いサーバーは Latin-1 のみです。",
+            "기본적으로 켜져 있습니다. 텍스트만 동기화하며 파일은 복사하지 않습니다. 원격 데스크톱이 로컬에서 복사한 텍스트를 읽고 클립보드 텍스트를 바꿀 수 있습니다. 확장 클립보드를 지원하는 서버는 유니코드를, 이전 서버는 Latin-1만 주고받습니다."],
         ["Scaling"] = ["Display size", "显示尺寸", "顯示大小", "表示サイズ", "표시 크기"],
         ["ScalingHint"] = [
             "Match window resizes the remote desktop to the tab when the server allows it (for example TigerVNC) and scales it otherwise.",
@@ -187,11 +187,24 @@ internal sealed class Loc(string locale)
         // ---- file transfer ----
         ["FileTransfer"] = ["File transfer", "文件传输", "檔案傳輸", "ファイル転送", "파일 전송"],
         ["FileTransferHint"] = [
-            "UltraVNC file transfer, offered by UltraVNC Server and by x11vnc started with -ultrafilexfer. Servers without it (TigerVNC, QEMU, macOS) close the connection when the file panel is opened.",
-            "UltraVNC 文件传输，UltraVNC Server 和以 -ultrafilexfer 启动的 x11vnc 支持。不支持的服务器（TigerVNC、QEMU、macOS）会在打开文件面板时断开连接。",
-            "UltraVNC 檔案傳輸，UltraVNC Server 與以 -ultrafilexfer 啟動的 x11vnc 支援。不支援的伺服器（TigerVNC、QEMU、macOS）會在開啟檔案面板時中斷連線。",
-            "UltraVNC のファイル転送です。UltraVNC Server と -ultrafilexfer 付きで起動した x11vnc が対応しています。非対応のサーバー（TigerVNC、QEMU、macOS）はファイルパネルを開いた時点で接続を切断します。",
-            "UltraVNC 파일 전송입니다. UltraVNC Server와 -ultrafilexfer로 시작한 x11vnc가 지원합니다. 지원하지 않는 서버(TigerVNC, QEMU, macOS)는 파일 패널을 열 때 연결을 끊습니다."],
+            "Uses the UltraVNC-specific file-transfer extension in the file panel, not clipboard file copy. UltraVNC Server and x11vnc with -ultrafilexfer support it; TigerVNC does not. By default, server capabilities are checked before any file-transfer request; without declared support, transfer is blocked and the desktop stays connected.",
+            "通过文件面板使用 UltraVNC 专用文件传输扩展，不是剪贴板文件复制。UltraVNC Server 和以 -ultrafilexfer 启动的 x11vnc 支持，TigerVNC 不支持。默认先检查服务器能力；未声明支持时阻止传输请求，保留桌面连接。",
+            "透過檔案面板使用 UltraVNC 專用檔案傳輸擴充，不是剪貼簿檔案複製。UltraVNC Server 與以 -ultrafilexfer 啟動的 x11vnc 支援，TigerVNC 不支援。預設先檢查伺服器能力；未宣告支援時阻止傳輸要求，保留桌面連線。",
+            "ファイルパネルで UltraVNC 専用のファイル転送拡張を使います。クリップボードによるファイルコピーではありません。UltraVNC Server と -ultrafilexfer 付きの x11vnc は対応していますが、TigerVNC は非対応です。既定では転送要求の前にサーバーの対応能力を確認し、対応の宣言がなければ転送を止め、デスクトップの接続を維持します。",
+            "파일 패널에서 UltraVNC 전용 파일 전송 확장을 사용하며, 클립보드 파일 복사가 아닙니다. UltraVNC Server와 -ultrafilexfer로 시작한 x11vnc는 지원하지만 TigerVNC는 지원하지 않습니다. 기본적으로 전송 요청 전에 서버 기능을 확인하며, 지원 선언이 없으면 전송을 차단하고 데스크톱 연결을 유지합니다."],
+        ["AllowUnadvertisedFileTransfer"] = ["Allow confirmed legacy UltraVNC file transfer", "允许已确认兼容的旧版 UltraVNC 文件传输", "允許已確認相容的舊版 UltraVNC 檔案傳輸", "対応確認済みの旧式 UltraVNC ファイル転送を許可", "호환이 확인된 구형 UltraVNC 파일 전송 허용"],
+        ["AllowUnadvertisedFileTransferHint"] = [
+            "Off by default. Enable only after confirming that a legacy UltraVNC or x11vnc server supports UltraVNC file transfer but does not declare its capabilities (x11vnc requires -ultrafilexfer). This may disconnect the desktop. Never enable for TigerVNC. An explicit server declaration of no support still blocks transfer.",
+            "默认关闭。仅在确认旧版 UltraVNC 或 x11vnc 服务器支持 UltraVNC 文件传输、但未声明能力时启用（x11vnc 需开启 -ultrafilexfer）。此选项可能导致桌面断线，TigerVNC 不能启用。服务器明确声明不支持时仍会阻止传输。",
+            "預設關閉。僅在確認舊版 UltraVNC 或 x11vnc 伺服器支援 UltraVNC 檔案傳輸、但未宣告能力時啟用（x11vnc 需開啟 -ultrafilexfer）。此選項可能導致桌面斷線，TigerVNC 不能啟用。伺服器明確宣告不支援時仍會阻止傳輸。",
+            "既定ではオフです。旧式の UltraVNC または x11vnc サーバーが UltraVNC ファイル転送に対応しているものの、能力を宣言しないと確認できた場合のみ有効にしてください（x11vnc は -ultrafilexfer が必要）。デスクトップが切断される可能性があります。TigerVNC では有効にしないでください。サーバーが非対応を明示した場合は転送を引き続き拒否します。",
+            "기본값은 꺼짐입니다. 구형 UltraVNC 또는 x11vnc 서버가 UltraVNC 파일 전송을 지원하지만 기능을 선언하지 않는 것이 확인된 경우에만 켜세요(x11vnc는 -ultrafilexfer 필요). 데스크톱 연결이 끊길 수 있습니다. TigerVNC에서는 켜지 마세요. 서버가 지원하지 않는다고 명시하면 여전히 전송을 차단합니다."],
+        ["FilesUnsupported"] = [
+            "The server has not declared compatible UltraVNC file transfer. Transfer was blocked locally; the desktop connection is preserved. TigerVNC does not support this extension; use a separate SFTP connection for files.",
+            "服务器未声明兼容的 UltraVNC 文件传输能力，已在本地阻止传输，桌面连接保留。TigerVNC 不支持此扩展，请使用单独的 SFTP 连接传输文件。",
+            "伺服器未宣告相容的 UltraVNC 檔案傳輸能力，已在本機阻止傳輸，桌面連線保留。TigerVNC 不支援此擴充，請使用獨立的 SFTP 連線傳輸檔案。",
+            "サーバーは互換性のある UltraVNC ファイル転送能力を宣言していません。転送をローカルで止め、デスクトップの接続を維持しています。TigerVNC はこの拡張に非対応です。ファイルには別の SFTP 接続を使ってください。",
+            "서버가 호환되는 UltraVNC 파일 전송 기능을 선언하지 않았습니다. 로컬에서 전송을 차단했으며 데스크톱 연결은 유지됩니다. TigerVNC는 이 확장을 지원하지 않습니다. 파일은 별도의 SFTP 연결로 전송하세요."],
         ["ByeFileTransfer"] = [
             "The server closed the connection when file transfer was requested: it does not support UltraVNC file transfer or has it turned off. Turn off File transfer for this connection, or enable it on the server (x11vnc: -ultrafilexfer).",
             "请求文件传输时服务器断开了连接：它不支持 UltraVNC 文件传输，或未开启该功能。请在此连接的设置中关闭「文件传输」，或在服务器上开启（x11vnc：-ultrafilexfer）。",

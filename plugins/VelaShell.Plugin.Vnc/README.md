@@ -18,8 +18,8 @@ Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/bl
 | Protocol versions | RFB 3.3, 3.7, 3.8 (Apple's 3.889 is treated as 3.8; 3.4–3.6 as 3.3) |
 | Security | None (1), VNC authentication (2), VeNCrypt 0.2 with X.509 TLS (subtypes 260 None / 261 VNC / 262 Plain), Apple Remote Desktop (30) |
 | Encodings | Raw, CopyRect, RRE, Hextile, ZRLE, Tight (fill, copy / palette / gradient filters, JPEG) |
-| Pseudo-encodings | ExtendedDesktopSize + SetDesktopSize, DesktopSize, Cursor, LastRect, DesktopName, QEMU Extended Key Event, QEMU Audio, Extended Clipboard, JPEG quality, compression level |
-| Clipboard | Text both ways: UTF-8 through the extended clipboard (Notify / Request / Provide), Latin-1 ServerCutText / ClientCutText otherwise |
+| Pseudo-encodings | ExtendedDesktopSize + SetDesktopSize, DesktopSize, Cursor, LastRect, DesktopName, QEMU Extended Key Event, QEMU Audio, Extended Clipboard, SupportedMessages (when file transfer is enabled), JPEG quality, compression level |
+| Clipboard | Text both ways only: UTF-8 through the extended clipboard (Notify / Request / Provide), Latin-1 ServerCutText / ClientCutText otherwise; no file clipboard |
 | Audio | QEMU Audio (QEMU / libvirt consoles): S16 stereo 44.1 kHz through WaveOut / AudioQueue / ALSA |
 | File transfer | UltraVNC file transfer (UltraVNC Server, `x11vnc -ultrafilexfer`): browse, upload, download, new folder, delete, rename |
 | Transport | Host network proxy (`INetworkApi`), host-managed SSH jump session, TCP keep-alive 30 s |
@@ -90,6 +90,16 @@ choice never falls back to another type.
   above 100 characters or with line breaks, refused above 2000).
 - **View only** (`viewOnly`) sends no keyboard, pointer or clipboard data and hides the remote-keys button.
 
+## Text clipboard reliability
+
+Local publication and remote writes share a FIFO queue. Deduplication is committed only after success; a paste-time
+duplicate waits for an in-flight focus publication, and failures remain retryable. Disposal cancels active work and
+prevents queued work from starting (an already-started host call that ignores cancellation cannot be forcibly undone).
+Extended-clipboard Caps sizes limit unsolicited Provide only: a Request receives the full text, never a truncated
+UTF-8 sequence. The protocol entry point rejects text over 20 MiB, including CRLF normalization and the terminating
+NUL, before announcing it. Late Caps re-announce the original Unicode text when Notify is supported. Regression
+cases cover these paths; they have not been executed during this repair.
+
 ## Audio
 
 - **Play remote audio** (`audio`, off by default like RDP's). The client lists the QEMU Audio pseudo-encoding (-259);
@@ -105,12 +115,21 @@ choice never falls back to another type.
 ## File transfer
 
 UltraVNC file transfer (RFB message type 7), as UltraVNC Server and LibVNC (`x11vnc -ultrafilexfer`) implement it.
-TigerVNC, QEMU and macOS Screen Sharing have no file transfer.
+TigerVNC, QEMU and macOS Screen Sharing do not support this extension. For TigerVNC, use a separate SSH/SFTP
+connection to transfer files; this fix adds no automatic SFTP backend. The UltraVNC file panel is separate from
+the clipboard: only bidirectional text clipboard is supported, not copying and pasting files.
 
-- **File transfer** (`fileTransfer`, off by default). A server without it closes the connection on message type 7, so
-  the access request only goes out when the user opens the file panel; a close at that moment is reported as
-  `VncFileTransferUnsupportedException` (localized: turn the setting off, or `-ultrafilexfer` on x11vnc) and is not
-  reconnected automatically. View only disables file transfer.
+- **File transfer** (`fileTransfer`, off by default). When enabled, `VncSession` includes SupportedMessages
+  (`-131071`, `0xFFFE0001`) in SetEncodings and reads the server's two 32-byte bitmaps for client-to-server and
+  server-to-client messages. By default, both bitmaps must advertise message type 7 before an UltraVNC access
+  request is sent. Opening the file panel waits at most 2 seconds for this capability information; absent or
+  explicitly unsupported capabilities raise `VncFileTransferException` with `Unsupported`, shown in the panel
+  while the desktop connection stays open. View only disables file transfer.
+- **Legacy compatibility** (`allowUnadvertisedFileTransfer`, advanced boolean, default `false`, visible only when
+  `fileTransfer=true`). Enable only for an older UltraVNC-compatible server whose file-transfer support has been
+  confirmed but which does not advertise capabilities. It permits an access request without an advertisement,
+  but cannot override an explicit negative advertisement. Misuse can still disconnect the desktop: a server
+  that does not understand message type 7 may close the connection.
 - Access: AbortFileTransfer with version 2 → FileTransferAccess (1 granted / -1 refused). UltraVNC then sends its
   protocol version: ≥ 3 → SessionStart, ≥ 4 → Unicode names (0x80 flag in the pad byte, UTF-16 entries) and its block
   size. LibVNC sends none: 8 KiB blocks, single drive `C:` mapped to `/`.
@@ -124,9 +143,17 @@ TigerVNC, QEMU and macOS Screen Sharing have no file transfer.
   empty one; the confirmation says so.
 - Limits on server data: body 2 MiB, inflated packet 1 MiB, 100,000 entries per folder.
 
-**File panel** (`VncFilePanel`): the folder button at the right of the status bar docks a 320 px panel on the right,
-in the host's geometry (36px header, 26px path bar, 28px rows, 24px status line). The first opening requests access
-and enters the only drive directly. Up / refresh / new folder / upload in the header; download / rename / delete for
+**File dialog** (`VncFilePanel`, positioned by `VncFileDialog`): the folder button at the right of the status bar
+opens a centered overlay, initially 800 x 600 px. Drag the title bar to move it within the desktop area, or drag any
+edge or corner to resize it. It keeps 16 px margins and normally has a minimum size of 400 x 280 px; smaller views
+take priority so the close button remains reachable. Reopening retains the chosen size and position for this session.
+It does not take space from the desktop: opening, moving, resizing, closing and reopening leave the viewport unchanged
+and do not trigger remote resolution changes.
+The dialog uses the host's 28px dialog title bar, followed by a 36px toolbar, 26px path bar, 28px rows and 24px status line.
+The scrim blocks remote mouse input and Tab stays in the dialog. Escape cancels an inline prompt first, otherwise
+it closes the dialog and returns focus to the desktop. Closing hides the dialog without cancelling transfers or
+discarding its state; disconnecting also hides it. The first opening requests access
+and enters the only drive directly. Up / refresh / new folder / upload in the toolbar; download / rename / delete for
 the selection; Enter or double-click opens or downloads, Backspace goes up, Delete deletes; files dropped onto the
 panel upload into the open folder. Confirmations and names are inline. Existing names are confirmed once per batch and
 deleted before uploading (UltraVNC would resume onto the old file). A failed or cancelled download deletes the partial
@@ -175,8 +202,9 @@ dotnet test  tests/VelaShell.Plugin.Vnc.Tests
 
 ## Verification
 
-`tests/VelaShell.Plugin.Vnc.Tests` (111 tests, about 8 s) runs the real `VncSession` against a scripted in-process
-RFB server (`FakeVncServer`) that checks the client's bytes:
+`tests/VelaShell.Plugin.Vnc.Tests` exercises the real `VncSession` against a scripted in-process
+RFB server (`FakeVncServer`) that checks the client's bytes. The suite has not been run for this fix; the
+following describes test scope, not a passing result:
 
 - Handshake: every version mapping, None / VNC / ARD (the fake server decrypts the credentials) / VeNCrypt
   X.509 with a self-signed certificate (trust prompt, then pinned reconnect; Plain credentials inside TLS;
@@ -198,8 +226,18 @@ RFB server (`FakeVncServer`) that checks the client's bytes:
   matching, clipboard, disconnect card and reconnect, file panel, audio status), JPEG decoding through Skia, and unloading in a
   collectible load context.
 
-**Not yet verified against real servers.** Before relying on it, connect to at least TigerVNC (`Xvnc` with
-`-SecurityTypes VncAuth,X509Vnc`), x11vnc, a QEMU/libvirt console, and macOS Screen Sharing, and check: login,
-rendering with each preferred encoding, Match window resizing, typing on a non-US layout, clipboard both ways. Audio needs
-a QEMU guest with an audio backend; file transfer needs UltraVNC Server (Windows) and `x11vnc -ultrafilexfer`: browse,
-upload, download, replace, delete, rename, non-ASCII names, cancel.
+**Observed with the original plugin:** on Ubuntu 24 with TigerVNC 1.13.1, sending message type 7 caused an
+`unknown message type 7` error and disconnected the desktop. This is evidence of the original compatibility
+problem, not validation of the fix. **The fix has not been built, tested or verified with a real client/server**:
+local command execution was unavailable during this update.
+
+Pending regression checks include SupportedMessages advertisement and both 32-byte bitmaps; no type-7 request
+when capabilities are absent after the 2-second wait or explicitly negative; the panel error with the desktop
+still connected; and the legacy option allowing only absent advertisements, never explicit negatives.
+Repeat the TigerVNC scenario with the default settings and with file transfer enabled but the legacy option off.
+Before relying on it, also connect to TigerVNC (`Xvnc` with `-SecurityTypes VncAuth,X509Vnc`), x11vnc, a
+QEMU/libvirt console and macOS Screen Sharing, and check login, rendering with each preferred encoding,
+Match window resizing, typing on a non-US layout and text clipboard both ways. Audio needs a QEMU guest with
+an audio backend; file transfer needs UltraVNC Server (Windows) and `x11vnc -ultrafilexfer`: browse, upload,
+download, replace, delete, rename, non-ASCII names and cancel. Verify the compatibility option separately on a
+confirmed compatible older UltraVNC server that does not advertise capabilities.

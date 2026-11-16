@@ -140,8 +140,9 @@ public interface IVncFileTransfer
     bool IsGranted { get; }
 
     /// <summary>
-    /// Asks the server for file-transfer permission (once per connection). Returns false when the server refuses; a
-    /// server without file transfer closes the connection instead (<see cref="VncFileTransferUnsupportedException"/>).
+    /// Asks the server for file-transfer permission (once per connection). Returns false when the server refuses.
+    /// Missing compatible capabilities fail locally with <see cref="VncFileTransferError.Unsupported"/>; no transfer
+    /// message is sent. Explicit legacy opt-in can still cause an incompatible server to close the desktop connection.
     /// </summary>
     Task<bool> RequestAccessAsync(CancellationToken ct = default);
 

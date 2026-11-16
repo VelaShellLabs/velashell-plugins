@@ -15,10 +15,8 @@ namespace VelaShell.Plugin.Vnc;
 /// </summary>
 internal static class VncConnector
 {
-    internal static async Task<IVncSession> ConnectAsync(WorkspaceConnectRequest request, VncSettings settings, Loc loc,
-        CancellationToken ct, Action<string>? log = null, INetworkApi? network = null, VncJpegDecoder? jpeg = null)
-    {
-        var options = new VncClientOptions
+    internal static VncClientOptions CreateOptions(WorkspaceConnectRequest request, VncSettings settings,
+        Action<string>? log = null, INetworkApi? network = null, VncJpegDecoder? jpeg = null) => new()
         {
             Host = request.Host,
             Port = request.Port,
@@ -37,9 +35,14 @@ internal static class VncConnector
             AudioPlayback = settings.Audio,
             // View only sends nothing to the server, files included.
             FileTransfer = settings.FileTransfer && !settings.ViewOnly,
+            AllowUnadvertisedFileTransfer = settings.AllowUnadvertisedFileTransfer && settings.FileTransfer && !settings.ViewOnly,
             Log = log
         };
 
+    internal static async Task<IVncSession> ConnectAsync(WorkspaceConnectRequest request, VncSettings settings, Loc loc,
+        CancellationToken ct, Action<string>? log = null, INetworkApi? network = null, VncJpegDecoder? jpeg = null)
+    {
+        VncClientOptions options = CreateOptions(request, settings, log, network, jpeg);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try

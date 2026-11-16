@@ -15,8 +15,8 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     private readonly Dictionary<ushort, CacheEntry> _cache = [];
     private readonly HashSet<(ushort Surface, uint Context)> _contexts = [];
     private readonly Queue<byte[]> _responses = new();
-    private byte[] _output, _input = [];
-    private int _width, _height, _position, _cacheBytes, _cacheLimit = SmallCacheBytes, _cacheSlots = 4096;
+    private byte[] _input = [];
+    private int _position, _cacheBytes, _cacheLimit = SmallCacheBytes, _cacheSlots = 4096;
     private long _surfaceBytes;
     private bool _opened, _disposed, _confirmed, _inFrame, _frameReady;
     private uint _version, _capFlags, _frameId, _decodedFrames;
@@ -27,8 +27,8 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     {
         _log = log;
         ValidateDimensions(width, height);
-        _width = width; _height = height;
-        _output = AllocatePixels(width, height);
+        OutputWidth = width; OutputHeight = height;
+        Output = AllocatePixels(width, height);
         _capture = OpenCapture(width, height);
     }
 
@@ -49,9 +49,9 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     internal Action<ushort, byte[]>? CommandObserver { get; set; }
 
     /// <summary>Replay only: the current output buffer (BGRA, <see cref="OutputWidth" /> × <see cref="OutputHeight" />).</summary>
-    internal byte[] Output => _output;
-    internal int OutputWidth => _width;
-    internal int OutputHeight => _height;
+    internal byte[] Output { get; private set; }
+    internal int OutputWidth { get; private set; }
+    internal int OutputHeight { get; private set; }
 
     private FileStream? OpenCapture(int width, int height)
     {
@@ -128,10 +128,10 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         if (!_frameReady) { frame = default; return false; }
         frame = new RdpGfxFrame
         {
-            Pixels = _output,
-            Width = _width,
-            Height = _height,
-            Stride = _width * 4,
+            Pixels = Output,
+            Width = OutputWidth,
+            Height = OutputHeight,
+            Stride = OutputWidth * 4,
             X = _dirty.Left,
             Y = _dirty.Top,
             W = _dirty.Width,
@@ -387,7 +387,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
                 || (long)bottom - top + 1 > Framebuffer.MaxBitmapSide) { throw Error("Invalid monitor rectangle."); }
         }
         _ = reader.Bytes(reader.Remaining);
-        _width = width; _height = height; _output = AllocatePixels(width, height);
+        OutputWidth = width; OutputHeight = height; Output = AllocatePixels(width, height);
         foreach (Surface surface in _surfaces.Values) { surface._dirty = new(0, 0, surface._width, surface._height); }
         _dirty = new(0, 0, width, height); _frameReady = true;
         Log($"graphics reset: {width}x{height}, monitors={monitors}");
@@ -430,8 +430,8 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         Rect source = surface._dirty;
         int left = mapping.X + (int)((long)source.Left * mapping.Width / surface._width);
         int top = mapping.Y + (int)((long)source.Top * mapping.Height / surface._height);
-        int right = Math.Min(_width, mapping.X + (int)(((long)source.Right * mapping.Width + surface._width - 1) / surface._width));
-        int bottom = Math.Min(_height, mapping.Y + (int)(((long)source.Bottom * mapping.Height + surface._height - 1) / surface._height));
+        int right = Math.Min(OutputWidth, mapping.X + (int)(((long)source.Right * mapping.Width + surface._width - 1) / surface._width));
+        int bottom = Math.Min(OutputHeight, mapping.Y + (int)(((long)source.Bottom * mapping.Height + surface._height - 1) / surface._height));
         if (left >= right || top >= bottom) { return; }
         // The desktop output is opaque: an ARGB surface's alpha only matters for RAIL window composition, which this
         // desktop-only pipeline rejects. Servers do clear ARGB surfaces to transparent black (SolidFill 0x00000000,
@@ -442,7 +442,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         {
             for (int y = top; y < bottom; y++)
             {
-                Span<byte> row = _output.AsSpan((y * _width + left) * 4, (right - left) * 4);
+                Span<byte> row = Output.AsSpan((y * OutputWidth + left) * 4, (right - left) * 4);
                 surface._pixels.AsSpan(((y - mapping.Y) * surface._width + left - mapping.X) * 4, (right - left) * 4).CopyTo(row);
                 for (int i = 3; i < row.Length; i += 4) { row[i] = 0xFF; }
             }
@@ -455,7 +455,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
                 for (int x = left; x < right; x++)
                 {
                     int sx = (int)((long)(x - mapping.X) * surface._width / mapping.Width);
-                    Span<byte> pixel = _output.AsSpan((y * _width + x) * 4, 4);
+                    Span<byte> pixel = Output.AsSpan((y * OutputWidth + x) * 4, 4);
                     surface._pixels.AsSpan((sy * surface._width + sx) * 4, 4).CopyTo(pixel);
                     pixel[3] = 0xFF;
                 }
@@ -533,7 +533,7 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
         _disposed = true;
         _capture?.Dispose();
         _codecs.Dispose(); _surfaces.Clear(); _cache.Clear(); _contexts.Clear(); _responses.Clear();
-        _input = []; _output = []; _surfaceBytes = 0; _cacheBytes = 0;
+        _input = []; Output = []; _surfaceBytes = 0; _cacheBytes = 0;
     }
 
     private void Log(string message)

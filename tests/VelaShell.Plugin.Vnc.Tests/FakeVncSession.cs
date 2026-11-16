@@ -36,6 +36,7 @@ internal sealed class FakeVncSession : IVncSession
     internal List<(uint Keysym, uint ScanCode, bool Down)> Keys { get; } = [];
     internal List<(VncButtons Buttons, int X, int Y)> Pointer { get; } = [];
     internal List<string> SentClipboard { get; } = [];
+    internal Func<string, CancellationToken, Task>? ClipboardHandler { get; set; }
     internal List<(int Width, int Height)> Resizes { get; } = [];
     internal List<bool> DisplayUpdates { get; } = [];
 
@@ -82,7 +83,7 @@ internal sealed class FakeVncSession : IVncSession
     public Task SendClipboardAsync(string text, CancellationToken ct = default)
     {
         lock (_gate) { SentClipboard.Add(text); }
-        return Task.CompletedTask;
+        return ClipboardHandler?.Invoke(text, ct) ?? Task.CompletedTask;
     }
 
     public Task RequestResizeAsync(int width, int height, CancellationToken ct = default)

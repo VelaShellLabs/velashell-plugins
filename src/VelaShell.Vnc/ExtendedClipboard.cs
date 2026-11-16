@@ -19,7 +19,8 @@ internal sealed class ExtendedClipboard
     /// <summary>The server sent its capabilities, so the extended messages may be used.</summary>
     internal bool Enabled { get; private set; }
     internal uint ServerActions { get; private set; }
-    internal int ServerMaxText { get; private set; } = MaxText;
+    /// <summary>Maximum unsolicited text size (including NUL); zero means the peer wants to request it.</summary>
+    internal int ServerMaxText { get; private set; }
 
     /// <summary>What we last offered: sent when the server asks for it.</summary>
     internal string? LocalText { get; set; }
@@ -37,8 +38,9 @@ internal sealed class ExtendedClipboard
         var replies = new List<byte[]>();
         if ((flags & Caps) != 0)
         {
-            Enabled = true;
+            Enabled = (flags & Text) != 0;
             ServerActions = flags & 0xFF000000;
+            ServerMaxText = 0;
             int offset = 0;
             for (int format = 0; format < 16; format++)
             {
@@ -49,6 +51,11 @@ internal sealed class ExtendedClipboard
                 offset += 4;
             }
             replies.Add(Message(new RfbWriter(12).U32(Caps | Request | Peek | Notify | Provide | Text).U32(MaxText)));
+            // Focus may have published before Caps arrived, using the lossy Latin-1 fallback. Re-offer the original text.
+            if (Enabled && LocalText is not null && (ServerActions & Notify) != 0)
+            {
+                replies.Add(NotifyMessage(true));
+            }
             return (replies, null);
         }
 
@@ -80,10 +87,21 @@ internal sealed class ExtendedClipboard
 
     internal static byte[] NotifyMessage(bool hasText) => Message(new RfbWriter(4).U32(Notify | (hasText ? Text : 0)));
 
+    /// <summary>Validate before announcing text, so a later Request cannot turn a local size error into a disconnect.</summary>
+    internal static int TextSize(string text)
+    {
+        if (text.Length >= MaxText) { throw new ArgumentException("Clipboard text exceeds the 20 MiB limit.", nameof(text)); }
+        int size = Encoding.UTF8.GetByteCount(text.ReplaceLineEndings("\r\n")) + 1;
+        if (size > MaxText) { throw new ArgumentException("Clipboard text exceeds the 20 MiB limit.", nameof(text)); }
+        return size;
+    }
+
     internal byte[] ProvideMessage(string text)
     {
+        _ = TextSize(text);
         byte[] utf8 = Encoding.UTF8.GetBytes(text.ReplaceLineEndings("\r\n"));
-        int length = Math.Min(utf8.Length, Math.Max(0, Math.Min(ServerMaxText, MaxText) - 1));
+        // Caps sizes limit unsolicited Provide, not replies to Request. Never truncate a requested UTF-8 value.
+        int length = utf8.Length;
         var compressed = new MemoryStream();
         using (var z = new ZLibStream(compressed, CompressionLevel.Fastest, leaveOpen: true))
         {

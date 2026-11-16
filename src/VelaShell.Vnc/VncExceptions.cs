@@ -80,7 +80,10 @@ public enum VncFileTransferError
     Failed,
 
     /// <summary>The session ended while the operation was running.</summary>
-    Disconnected
+    Disconnected,
+
+    /// <summary>The server has not advertised compatible file transfer; no transfer request was sent.</summary>
+    Unsupported
 }
 
 /// <summary>A file-transfer operation failed; the desktop session itself goes on (unless <see cref="Error"/> is Disconnected).</summary>

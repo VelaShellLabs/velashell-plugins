@@ -217,7 +217,7 @@ internal sealed partial class RdpConnection : IAsyncDisposable
     internal static readonly TimeSpan KeepAliveProbeInterval = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// TCP keep-alive after <paramref name="idle"/> of silence. A session whose display updates are paused, or whose
+    /// TCP keep-alive after idle of silence. A session whose display updates are paused, or whose
     /// desktop simply does not change, can be silent for hours, and NAT gateways, firewalls and cloud load balancers
     /// drop idle connections after minutes — without telling either end, so the next click went into a dead socket.
     /// The probes keep such middleboxes' state alive, and a dead path is noticed within about

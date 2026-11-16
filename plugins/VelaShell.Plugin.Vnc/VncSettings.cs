@@ -21,13 +21,14 @@ internal enum VncScaling
 /// <summary>The parsed connection settings of one VNC workspace.</summary>
 internal sealed record VncSettings(VncSecurity Security, bool Shared, bool ViewOnly, bool Clipboard, VncScaling Scaling,
     int? JpegQuality, VncEncodingPreference Encoding, int CompressionLevel, int TimeoutSeconds, bool CommandAsControl,
-    string CertificateHost, string CertificateSha256, bool Audio = false, bool FileTransfer = false)
+    string CertificateHost, string CertificateSha256, bool Audio = false, bool FileTransfer = false,
+    bool AllowUnadvertisedFileTransfer = false)
 {
     internal const string DisplayPage = "display";
     internal const string SecurityKey = "security", SharedKey = "shared", ViewOnlyKey = "viewOnly", ClipboardKey = "clipboard",
         ScalingKey = "scaling", QualityKey = "quality", EncodingKey = "encoding", CompressionKey = "compression",
         TimeoutKey = "timeout", MacCommandKey = "macCommand", JumpKey = "jumpSession", TrustedThumbprintKey = "trustedThumbprint",
-        AudioKey = "audio", FileTransferKey = "fileTransfer";
+        AudioKey = "audio", FileTransferKey = "fileTransfer", AllowUnadvertisedFileTransferKey = "allowUnadvertisedFileTransfer";
 
     /// <summary>JPEG quality per choice (TigerVNC's own defaults: 8 high, 6 medium, 2 low).</summary>
     internal static int? Quality(string choice) => choice switch
@@ -118,7 +119,7 @@ internal sealed record VncSettings(VncSecurity Security, bool Shared, bool ViewO
         string certificateHost = request.Tunnel?.TargetHost ?? request.Host;
         return new(security, Flag(SharedKey, true), Flag(ViewOnlyKey, false), Flag(ClipboardKey, true), scaling, quality, encoding,
             Number(CompressionKey, 2, 0, 9), Number(TimeoutKey, 15, 1, 120), commandAsControl, certificateHost, pin.ToUpperInvariant(),
-            Flag(AudioKey, false), Flag(FileTransferKey, false));
+            Flag(AudioKey, false), Flag(FileTransferKey, false), Flag(AllowUnadvertisedFileTransferKey, false));
     }
 
     /// <summary>The connection form: the everyday switches on the general page, picture tuning on its own page.</summary>
@@ -176,6 +177,16 @@ internal sealed record VncSettings(VncSecurity Security, bool Shared, bool ViewO
             Choices = [new("auto", loc["EncodingAuto"]), new("zrle", "ZRLE"), new("hextile", "Hextile"), new("raw", "Raw")]
         },
         new() { Key = CompressionKey, Label = loc["Compression"], Hint = loc["CompressionHint"], Kind = ProtocolSettingKind.Integer, DefaultValue = "2", Page = DisplayPage },
+        new()
+        {
+            Key = AllowUnadvertisedFileTransferKey,
+            Label = loc["AllowUnadvertisedFileTransfer"],
+            Hint = loc["AllowUnadvertisedFileTransferHint"],
+            Kind = ProtocolSettingKind.Boolean,
+            DefaultValue = "false",
+            IsAdvanced = true,
+            VisibleWhen = new(FileTransferKey, "true")
+        },
         new() { Key = TimeoutKey, Label = loc["Timeout"], Kind = ProtocolSettingKind.Integer, DefaultValue = "15", IsAdvanced = true },
         new()
         {
