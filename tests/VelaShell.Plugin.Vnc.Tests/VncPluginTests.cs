@@ -99,6 +99,7 @@ public sealed partial class VncPluginTests
         Assert.AreEqual(2, settings.CompressionLevel);
         Assert.AreEqual(15, settings.TimeoutSeconds);
         Assert.IsTrue(settings.CommandAsControl);
+        Assert.IsTrue(settings.ContinuousUpdates, "on by default: servers without it ignore the pseudo-encodings");
         Assert.AreEqual("desktop.example", settings.CertificateHost);
         Assert.IsFalse(settings.Audio, "audio is opt-in, as in the RDP plugin");
         Assert.IsFalse(settings.FileTransfer, "file transfer is opt-in");
@@ -124,6 +125,7 @@ public sealed partial class VncPluginTests
             [VncSettings.EncodingKey] = "zrle",
             [VncSettings.CompressionKey] = "9",
             [VncSettings.MacCommandKey] = "super",
+            [VncSettings.ContinuousUpdatesKey] = "false",
             [VncSettings.AudioKey] = "true",
             [VncSettings.FileTransferKey] = "true",
             [VncSettings.TrustedThumbprintKey] = string.Join(":", Enumerable.Repeat("ab", 32))
@@ -136,6 +138,7 @@ public sealed partial class VncPluginTests
         Assert.AreEqual(VncEncodingPreference.Zrle, settings.Encoding);
         Assert.AreEqual(9, settings.CompressionLevel);
         Assert.IsFalse(settings.CommandAsControl);
+        Assert.IsFalse(settings.ContinuousUpdates);
         Assert.AreEqual("10.0.0.5", settings.CertificateHost);
         Assert.IsTrue(settings.Audio);
         Assert.IsTrue(settings.FileTransfer);

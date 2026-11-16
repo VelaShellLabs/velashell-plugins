@@ -99,6 +99,13 @@ internal sealed class Loc(string locale)
         ["MacCommandCtrl"] = ["Send as Ctrl", "按 Ctrl 发送", "以 Ctrl 傳送", "Ctrl として送る", "Ctrl로 보내기"],
         ["MacCommandSuper"] = ["Send as Super / ⌘", "按 Super / ⌘ 发送", "以 Super / ⌘ 傳送", "Super / ⌘ として送る", "Super / ⌘로 보내기"],
         ["Timeout"] = ["Connect timeout (seconds)", "连接超时（秒）", "連線逾時（秒）", "接続タイムアウト（秒）", "연결 제한 시간 (초)"],
+        ["ContinuousUpdates"] = ["Continuous updates", "连续更新", "連續更新", "連続更新", "연속 업데이트"],
+        ["ContinuousUpdatesHint"] = [
+            "Lets servers that support it (TigerVNC) push screen changes as they happen, paced by round-trip fences, instead of waiting for one request per frame — smoother on high-latency links. Other servers ignore it. Turn it off only to troubleshoot.",
+            "让支持的服务器（TigerVNC）在屏幕变化时主动推送，并用往返 Fence 控制节奏，而不是每帧等一次请求——高延迟链路上更流畅。其他服务器会忽略此项。仅在排查问题时关闭。",
+            "讓支援的伺服器（TigerVNC）在畫面變化時主動推送，並用往返 Fence 控制節奏，而不是每幀等一次請求——高延遲連線上更流暢。其他伺服器會忽略此項。僅在排查問題時關閉。",
+            "対応サーバー（TigerVNC）が画面の変化をその都度送信し、往復の Fence で送信ペースを調整します。フレームごとの要求を待たないため、遅延の大きい回線で滑らかになります。非対応のサーバーでは無視されます。問題の切り分け時以外はオンのままにしてください。",
+            "지원하는 서버(TigerVNC)가 화면 변화를 즉시 보내고 왕복 Fence로 속도를 조절합니다. 프레임마다 요청을 기다리지 않으므로 지연이 큰 연결에서 더 부드럽습니다. 지원하지 않는 서버는 무시합니다. 문제를 진단할 때만 끄세요."],
         ["Jump"] = ["SSH jump host (optional)", "SSH 跳板机（可选）", "SSH 跳板（選填）", "SSH 踏み台（任意）", "SSH 점프 호스트 (선택)"],
         ["Pin"] = ["Trusted certificate SHA-256", "已信任证书 SHA-256", "已信任憑證 SHA-256", "信頼済み証明書 SHA-256", "신뢰하는 인증서 SHA-256"],
 

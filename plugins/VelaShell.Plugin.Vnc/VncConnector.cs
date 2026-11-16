@@ -33,6 +33,7 @@ internal static class VncConnector
             Dialer = network is null ? null : (host, port, token) => DialAsync(network, host, port, settings.TimeoutSeconds, token),
             JpegDecoder = jpeg ?? VncJpeg.Decode,
             AudioPlayback = settings.Audio,
+            ContinuousUpdates = settings.ContinuousUpdates,
             // View only sends nothing to the server, files included.
             FileTransfer = settings.FileTransfer && !settings.ViewOnly,
             AllowUnadvertisedFileTransfer = settings.AllowUnadvertisedFileTransfer && settings.FileTransfer && !settings.ViewOnly,

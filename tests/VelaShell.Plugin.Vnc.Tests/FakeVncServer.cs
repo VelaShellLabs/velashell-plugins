@@ -142,6 +142,8 @@ internal sealed class ServerConnection(TcpClient client, CancellationToken stop 
                 4 => await ReadAsync(7),
                 5 => await ReadAsync(5),
                 6 => await CutTextAsync(),
+                150 => await ReadAsync(9),           // EnableContinuousUpdates
+                248 => await FenceAsync(),           // ClientFence
                 251 => await DesktopSizeAsync(),
                 255 => await ReadAsync(11),
                 _ => throw new InvalidDataException($"Unexpected client message {got}")
@@ -155,6 +157,13 @@ internal sealed class ServerConnection(TcpClient client, CancellationToken stop 
         byte[] header = await ReadAsync(7);
         int length = BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(3));
         return [.. header, .. await ReadAsync(Math.Abs(length))];
+    }
+
+    /// <summary>A ClientFence after its type: 3 padding bytes, u32 flags, u8 length, payload.</summary>
+    private async Task<byte[]> FenceAsync()
+    {
+        byte[] header = await ReadAsync(8);
+        return [.. header, .. await ReadAsync(header[7])];
     }
 
     private async Task<byte[]> DesktopSizeAsync()
