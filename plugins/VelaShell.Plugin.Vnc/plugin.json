@@ -1,6 +1,6 @@
 {
   "id": "velashell.vnc",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "displayName": "VNC",
   "description": "Managed VNC (RFB) desktop for Linux, macOS, Windows and virtual-machine consoles: VNC password, VeNCrypt TLS and Apple Remote Desktop security; Tight/ZRLE/Hextile encodings; window-matching resolution, remote cursor, text clipboard and SSH jump hosts.",
   "publisher": "velashell",
