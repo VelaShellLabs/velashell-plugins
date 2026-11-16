@@ -17,6 +17,7 @@ SDK 契约与 `VelaShell.PluginSdk.Build` 在
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
 | [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
 | [VelaShell.Plugin.Telnet](VelaShell.Plugin.Telnet/) | `velashell.telnet` | 是 | 进程内 | RFC 854 Telnet 终端:选项协商 + NAWS + 8 位透明(**终端**协议能力的首个使用者) |
+| [VelaShell.Plugin.Vnc](VelaShell.Plugin.Vnc/) | `velashell.vnc` | 是 | 进程内 | VNC 远程桌面:托管 C# RFB 协议栈(不捆绑原生库),VNC 密码 / VeNCrypt TLS / Apple 远程桌面认证,Tight / ZRLE / Hextile 编码,跟随窗口调整分辨率、远端光标、双向文本剪贴板、SSH 跳板 |
 
 装载模式由 `plugin.json` 的 `hostMode` 决定(`isolated` / `inProcess`,默认进程内)。
 隔离插件跑在独立的 `VelaShell.PluginHost` 进程里(实现在主仓库),崩溃不波及宿主;
@@ -111,11 +112,16 @@ CI 那条泄漏体检原本也只认 `Avalonia*` 与 `VelaShell.PluginSdk.dll`�
 "随包分发"由 csproj 的 `<VelaPluginShip>` 控制(默认 `true`)。设成 `false` 的插件
 本机构建仍会镜像到 `artifacts/plugins/`(以及 `VELASHELL_DEV_APP_DIR` 指定的应用目录),
 装载起来验证插件系统没问题,但它不会被收进分发布局 —— 给开发者读的范例用这一档。
-(当前七个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
+(当前八个插件都是 `true`;示例插件 HelloWorld 已于 2026-08 移除。)
 
 RDP 也使用进程内工作台,帧由 Avalonia 绘制,不嵌入外部 RDP 客户端窗口。它是纯托管插件:
 协议栈在 `src/VelaShell.Rdp/` 下,不依赖原生 RDP 库,可选音频调用系统音频库,和其他插件一样由 `Bundle` / `PackVpx`
 打成单一 `.vpx`、全 RID 通用,没有原生构建前置。详见 [RDP 设计与使用](VelaShell.Plugin.Rdp/README.md)。
+
+VNC 与 RDP 同一种分法:协议栈在 `src/VelaShell.Vnc/` 下(纯托管、UI 无关、不依赖 SDK),插件只管 Avalonia 界面、
+输入与剪贴板;Tight 编码的 JPEG 借宿主的 Skia 解码,库和插件都不带图像编解码器。同样打成单一 `.vpx`、全 RID 通用。
+远程按键悬浮球与断线卡片两边各带一份(`VncQuickBall` 等与 RDP 的同名部件同源):插件互相独立分发,不共享程序集。
+详见 [VNC 设计与使用](VelaShell.Plugin.Vnc/README.md)。
 
 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`
 的插件收成安装包 `plugins/` 那一层的布局:它不再作为 Release 资产上传,只在 CI 与发布流水线里

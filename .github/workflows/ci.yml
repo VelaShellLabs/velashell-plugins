@@ -215,3 +215,13 @@ jobs:
               throw "Missing managed GFX distribution asset: $name"
             }
           }
+
+      # VNC 引擎随 VNC 插件目录分发,且只有一份(别处再出现一份,说明另一个插件也打包了它,两份会并排装载)。
+      - name: Assert the VNC engine is bundled
+        shell: pwsh
+        run: |
+          $engines = @(Get-ChildItem artifacts/plugins-bundle -Recurse -Filter 'VelaShell.Vnc.dll')
+          if ($engines.Count -ne 1) { throw 'Expected one VNC engine in the plugin bundle.' }
+          if (-not (Test-Path (Join-Path $engines[0].DirectoryName 'VelaShell.Plugin.Vnc.dll'))) {
+            throw 'The VNC engine is not beside the VNC plugin.'
+          }
