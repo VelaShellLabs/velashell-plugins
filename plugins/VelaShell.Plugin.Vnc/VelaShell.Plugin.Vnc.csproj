@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Pure-managed VNC (RFB) remote desktop workspace.</Description>
+    <VelaPluginId>velashell.vnc</VelaPluginId>
+    <!-- The desktop control copies frames straight into a locked bitmap through a pointer. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- The pure-managed RFB engine (MIT). Its DLL rides in this plugin's .vpx. -->
+    <ProjectReference Include="..\..\src\VelaShell.Vnc\VelaShell.Vnc.csproj" />
+    <InternalsVisibleTo Include="VelaShell.Plugin.Vnc.Tests" />
+  </ItemGroup>
+</Project>

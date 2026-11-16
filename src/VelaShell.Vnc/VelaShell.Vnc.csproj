@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    VelaShell.Vnc — 纯托管 .NET VNC(RFB 协议)客户端库。
+    与 VelaShell.Rdp 同一种分法:协议栈 + 会话 + 契约,UI 无关,不依赖 VelaShell.PluginSdk。
+    插件引用本库并提供 Avalonia 界面(JPEG 解码也由插件经委托注入,库本身不碰图像库)。
+    不单独出 NuGet 包(随仓库沿用 IsPackable=false),DLL 随插件 .vpx 一起分发。
+  -->
+  <PropertyGroup>
+    <RootNamespace>VelaShell.Vnc</RootNamespace>
+    <AssemblyName>VelaShell.Vnc</AssemblyName>
+    <Description>Managed .NET VNC (RFB 3.3/3.7/3.8) client: None, VNC authentication, VeNCrypt X.509 TLS and Apple Remote Desktop security; Raw, CopyRect, RRE, Hextile, ZRLE and Tight encodings; desktop resizing (ExtendedDesktopSize), rich cursors, QEMU scan codes and the extended (UTF-8) clipboard. No native binaries.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- 公共 API 的 XML 文档尚未补齐,先消掉缺文档告警(CS1591)。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VelaShell.Plugin.Vnc.Tests" />
+    <InternalsVisibleTo Include="VelaShell.Plugin.Vnc" />
+  </ItemGroup>
+
+</Project>

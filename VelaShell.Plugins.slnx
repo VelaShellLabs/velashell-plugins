@@ -17,6 +17,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/VelaShell.Rdp/VelaShell.Rdp.csproj" />
+    <Project Path="src/VelaShell.Vnc/VelaShell.Vnc.csproj" />
   </Folder>
   <Folder Name="/plugins/">
     <File Path="plugins/Directory.Build.props" />
@@ -29,6 +30,7 @@
     <Project Path="plugins/VelaShell.Plugin.S3/VelaShell.Plugin.S3.csproj" />
     <Project Path="plugins/VelaShell.Plugin.Serial/VelaShell.Plugin.Serial.csproj" />
     <Project Path="plugins/VelaShell.Plugin.Telnet/VelaShell.Plugin.Telnet.csproj" />
+    <Project Path="plugins/VelaShell.Plugin.Vnc/VelaShell.Plugin.Vnc.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
@@ -41,5 +43,6 @@
     <Project Path="tests/VelaShell.Plugin.S3.Tests/VelaShell.Plugin.S3.Tests.csproj" />
     <Project Path="tests/VelaShell.Plugin.Serial.Tests/VelaShell.Plugin.Serial.Tests.csproj" />
     <Project Path="tests/VelaShell.Plugin.Telnet.Tests/VelaShell.Plugin.Telnet.Tests.csproj" />
+    <Project Path="tests/VelaShell.Plugin.Vnc.Tests/VelaShell.Plugin.Vnc.Tests.csproj" />
   </Folder>
 </Solution>
