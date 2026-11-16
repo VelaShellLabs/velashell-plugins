@@ -61,7 +61,7 @@ public sealed class VncSecurityTests
     {
         byte[] encrypted = response[..128], clientPublic = response[128..];
         Assert.HasCount(keyLength, clientPublic);
-        BigInteger shared = BigInteger.ModPow(new BigInteger(clientPublic, isUnsigned: true, isBigEndian: true), serverPrivate, prime);
+        var shared = BigInteger.ModPow(new BigInteger(clientPublic, isUnsigned: true, isBigEndian: true), serverPrivate, prime);
         byte[] sharedBytes = shared.ToByteArray(isUnsigned: true, isBigEndian: true);
         byte[] padded = new byte[keyLength];
         sharedBytes.CopyTo(padded, keyLength - sharedBytes.Length);

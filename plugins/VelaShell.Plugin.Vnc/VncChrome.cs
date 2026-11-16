@@ -37,7 +37,7 @@ internal static class VncChrome
     private static IEnumerable<VncGlyph> Glyphs(object? content) => content switch
     {
         VncGlyph glyph => [glyph],
-        Panel panel => panel.Children.SelectMany(child => Glyphs(child)),
+        Panel panel => panel.Children.SelectMany(Glyphs),
         _ => []
     };
 }

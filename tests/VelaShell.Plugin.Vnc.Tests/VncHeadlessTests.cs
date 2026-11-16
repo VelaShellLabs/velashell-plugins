@@ -81,10 +81,10 @@ public sealed class VncHeadlessTests
         Assert.IsNotNull(image);
         Assert.AreEqual((16, 8), (image.Width, image.Height));
         byte[] left = image.Bgra.AsSpan((4 * 16 + 2) * 4, 4).ToArray(), right = image.Bgra.AsSpan((4 * 16 + 13) * 4, 4).ToArray();
-        Assert.IsGreaterThan(200, (int)left[2], "red stays in the R byte");
-        Assert.IsLessThan(60, (int)left[0]);
-        Assert.IsGreaterThan(200, (int)right[0], "blue stays in the B byte");
-        Assert.IsLessThan(60, (int)right[2]);
+        Assert.IsGreaterThan(200, left[2], "red stays in the R byte");
+        Assert.IsLessThan(60, left[0]);
+        Assert.IsGreaterThan(200, right[0], "blue stays in the B byte");
+        Assert.IsLessThan(60, right[2]);
         Assert.IsNull(VncJpeg.Decode([0xFF, 0xD8, 0x00]), "corrupt data is reported, not thrown");
         return Task.CompletedTask;
     });

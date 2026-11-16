@@ -67,7 +67,7 @@ internal sealed class VncWorkspaceProvider : IWorkspaceProvider, IAsyncDisposabl
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
-            VncSettings settings = VncSettings.From(request, Loc);
+            var settings = VncSettings.From(request, Loc);
             IVncSession session = await _factory(request, settings, Loc, linked.Token).ConfigureAwait(false);
             VncWorkspaceDocument? document = null;
             lock (_gate)

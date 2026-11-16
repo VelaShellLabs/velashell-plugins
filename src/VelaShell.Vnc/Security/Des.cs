@@ -90,7 +90,7 @@ internal static class Des
     {
         ulong k = Permute(System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(key), 64, Pc1);   // 56 bits
         uint c = (uint)(k >> 28) & 0x0FFFFFFF, d = (uint)k & 0x0FFFFFFF;
-        var subkeys = new ulong[16];
+        ulong[] subkeys = new ulong[16];
         for (int round = 0; round < 16; round++)
         {
             for (int s = 0; s < Shifts[round]; s++)

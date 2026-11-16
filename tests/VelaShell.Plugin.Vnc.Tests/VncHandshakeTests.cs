@@ -271,7 +271,7 @@ public sealed class VncHandshakeTests
 
         VncCertificateRejectedException rejected = await Assert.ThrowsExactlyAsync<VncCertificateRejectedException>(() => ConnectAsync(Options(server.Port, "pw")));
         Assert.IsFalse(rejected.PinMismatch);
-        using X509Certificate2 offered = X509Certificate2.CreateFromPem(Encoding.ASCII.GetString(rejected.Pem));
+        using var offered = X509Certificate2.CreateFromPem(Encoding.ASCII.GetString(rejected.Pem));
         Assert.AreEqual(certificate.Thumbprint, offered.Thumbprint);
 
         await using VncSession session = await ConnectAsync(Options(server.Port, "pw", pin: SHA256.HashData(certificate.RawData)));

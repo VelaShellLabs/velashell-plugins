@@ -30,7 +30,7 @@ public sealed class VncSessionTests
     public async Task AnUpdateIsPresentedAndTheNextIncrementalRequestFollows()
     {
         byte[]? request = null;
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             await c.WriteAsync(Update(Rect(2, 3, 1, 1, 0, Pixel(255, 0, 0))));
             request = await c.ExpectAsync(3);
@@ -54,7 +54,7 @@ public sealed class VncSessionTests
     {
         var received = new List<byte[]>();
         var go = new TaskCompletionSource();
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             received.Add(await c.ExpectAsync(4));
             await c.WriteAsync(Update(Rect(0, 0, 0, 0, -258)));
@@ -78,7 +78,7 @@ public sealed class VncSessionTests
     public async Task LatinOneClipboardBothWays()
     {
         byte[]? cut = null;
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             byte[] text = Encoding.Latin1.GetBytes("héllo\nwörld");
             await Task.Delay(200);
@@ -118,7 +118,7 @@ public sealed class VncSessionTests
         var go = new TaskCompletionSource();
         var replies = new List<uint>();
         string? provided = null;
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             await go.Task;
             await c.WriteAsync(Extended(Caps | Request | Notify | Provide | Text, U32(1 << 20)));
@@ -164,7 +164,7 @@ public sealed class VncSessionTests
     public async Task SetDesktopSizeRoundTrip()
     {
         byte[]? setSize = null;
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             await c.WriteAsync(Update(Rect(0, 0, 64, 48, -308, Screens(7, 64, 48))));
             setSize = await c.ExpectAsync(251);
@@ -185,7 +185,7 @@ public sealed class VncSessionTests
     [TestMethod]
     public async Task CursorDesktopNameAndLastRect()
     {
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             await Task.Delay(300);   // let the test subscribe first
             byte[] cursor = [.. Pixel(255, 255, 255), .. Pixel(0, 0, 0), 0b1000_0000];
@@ -216,7 +216,7 @@ public sealed class VncSessionTests
     {
         var types = new List<int>();
         var resumed = new TaskCompletionSource();
-        await using var server = Server(async c =>
+        await using FakeVncServer server = Server(async c =>
         {
             await Task.Delay(300);
             await c.WriteAsync(Update(Rect(0, 0, 1, 1, 0, Pixel(1, 2, 3))));
@@ -283,7 +283,7 @@ public sealed class VncSessionTests
     [TestMethod]
     public async Task AnAbortFromTheInputQueueIsALostConnection()
     {
-        await using var server = Server(static _ => Task.CompletedTask);
+        await using FakeVncServer server = Server(static _ => Task.CompletedTask);
         await using VncSession session = await VncHandshakeTests.ConnectAsync(VncHandshakeTests.Options(server.Port));
         var ended = new TaskCompletionSource<Exception?>();
         session.Disconnected += failure => ended.TrySetResult(failure);
@@ -296,7 +296,7 @@ public sealed class VncSessionTests
     [TestMethod]
     public async Task AnUnknownServerMessageIsAProtocolError()
     {
-        await using var server = Server(async c => { await Task.Delay(300); await c.WriteAsync([77]); });
+        await using FakeVncServer server = Server(async c => { await Task.Delay(300); await c.WriteAsync([77]); });
         await using VncSession session = await VncHandshakeTests.ConnectAsync(VncHandshakeTests.Options(server.Port));
         var ended = new TaskCompletionSource<Exception?>();
         session.Disconnected += failure => ended.TrySetResult(failure);

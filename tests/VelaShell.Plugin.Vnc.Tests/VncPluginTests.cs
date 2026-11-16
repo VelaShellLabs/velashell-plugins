@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -88,7 +89,7 @@ public sealed partial class VncPluginTests
     [TestMethod]
     public void DefaultsAreTheSecureResponsiveProfile()
     {
-        VncSettings settings = VncSettings.From(Request(), new("en"));
+        var settings = VncSettings.From(Request(), new("en"));
         Assert.AreEqual(VncSecurity.Auto, settings.Security);
         Assert.IsTrue(settings.Shared);
         Assert.IsFalse(settings.ViewOnly);
@@ -100,14 +101,14 @@ public sealed partial class VncPluginTests
         Assert.IsTrue(settings.CommandAsControl);
         Assert.AreEqual("desktop.example", settings.CertificateHost);
         // Every declared default parses to the same thing as an empty (pre-existing) connection.
-        Dictionary<string, string> declared = VncSettings.Declare(new("en")).Where(static f => f.DefaultValue is not null).ToDictionary(static f => f.Key, static f => f.DefaultValue!);
+        var declared = VncSettings.Declare(new("en")).Where(static f => f.DefaultValue is not null).ToDictionary(static f => f.Key, static f => f.DefaultValue!);
         Assert.AreEqual(settings, VncSettings.From(Request(declared), new("en")));
     }
 
     [TestMethod]
     public void ChoicesParseAndTheTunnelTargetNamesTheCertificate()
     {
-        VncSettings settings = VncSettings.From(Request(new()
+        var settings = VncSettings.From(Request(new()
         {
             [VncSettings.SecurityKey] = "VeNCrypt",
             [VncSettings.SharedKey] = "false",
@@ -226,7 +227,7 @@ public sealed partial class VncPluginTests
     {
         using var key = System.Security.Cryptography.ECDsa.Create();
         var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=vnc.test", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
-        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        using X509Certificate2 certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         byte[] pem = Encoding.ASCII.GetBytes(certificate.ExportCertificatePem());
         var trust = (ProtocolCertificateTrustException)VncConnector.Translate(new VncCertificateRejectedException(pem, pinMismatch: true), VncSettings.From(Request(), new("en")), new("en"));
         Assert.AreEqual("CN=vnc.test", trust.Subject);
@@ -302,7 +303,7 @@ public sealed partial class VncPluginTests
     {
         using var context = new TestPluginContext { PluginId = "velashell.vnc" };
         var sessions = new List<FakeVncSession>();
-        var provider = Provider(context, sessions);
+        VncWorkspaceProvider provider = Provider(context, sessions);
         IWorkspaceDocument a = await provider.OpenAsync(Request()), b = await provider.OpenAsync(Request());
         await provider.DisposeAsync();
         Assert.AreEqual(ProtocolSessionState.Closed, a.Status.State);

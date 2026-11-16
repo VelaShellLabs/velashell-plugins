@@ -34,7 +34,7 @@ internal static class AppleRemoteDesktop
         }
 
         byte[] secretBytes = privateKey ?? RandomNumberGenerator.GetBytes(keyLength);
-        var x = new BigInteger(secretBytes, isUnsigned: true, isBigEndian: true) % (p - 2) + 1;
+        BigInteger x = new BigInteger(secretBytes, isUnsigned: true, isBigEndian: true) % (p - 2) + 1;
         byte[] publicKey = Fixed(BigInteger.ModPow(generator, x, p), keyLength);
         byte[] shared = Fixed(BigInteger.ModPow(y, x, p), keyLength);
         byte[] aesKey = MD5.HashData(shared);

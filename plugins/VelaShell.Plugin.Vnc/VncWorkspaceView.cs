@@ -80,8 +80,11 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         Desktop.PublishClipboard = () => _clipboard.PublishLocalAsync();
         Desktop.OperationFailed = () => { _failed = true; UpdateStatus(); };
         session.InfoChanged += OnInfoChanged;
-        QuickBall = new VncQuickBall(QuickActions(), loc) { Folded = () => { _armedTyping = null; _ = Desktop.Focus(); } };
-        QuickBall.IsVisible = !settings.ViewOnly;
+        QuickBall = new VncQuickBall(QuickActions(), loc)
+        {
+            Folded = () => { _armedTyping = null; _ = Desktop.Focus(); },
+            IsVisible = !settings.ViewOnly
+        };
         AddHandler(KeyDownEvent, (_, e) =>
         {
             if (QuickBall.IsExpanded && e.Key == Key.Escape) { QuickBall.Collapse(); e.Handled = true; }

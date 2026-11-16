@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
 using VelaShell.Vnc.Graphics;
@@ -345,7 +346,7 @@ public sealed class VncSession : IVncSession
             }
 
             _stage = VncConnectStage.Tls;
-            var tls = await VncTls.AuthenticateAsync(_transport, _options.CertificateHost ?? _options.Host, _options.CertificatePin, ct).ConfigureAwait(false);
+            SslStream tls = await VncTls.AuthenticateAsync(_transport, _options.CertificateHost ?? _options.Host, _options.CertificatePin, ct).ConfigureAwait(false);
             _stream = tls;
             _reader.Rebase(tls);
             _tls = true;
@@ -428,7 +429,7 @@ public sealed class VncSession : IVncSession
     private byte[] SetEncodings()
     {
         int[] encodings = Encodings();
-        var w = new RfbWriter(4 + encodings.Length * 4).U8(2).Zeros(1).U16(encodings.Length);
+        RfbWriter w = new RfbWriter(4 + encodings.Length * 4).U8(2).Zeros(1).U16(encodings.Length);
         foreach (int encoding in encodings) { w.S32(encoding); }
         return w.ToArray();
     }
@@ -535,7 +536,7 @@ public sealed class VncSession : IVncSession
     private async Task ReceiveLoopAsync()
     {
         CancellationToken ct = _lifetime.Token;
-        Exception? failure = null;
+        Exception? failure;
         try
         {
             while (true)

@@ -263,8 +263,16 @@ internal sealed class ManagedRdpGfx : IRdpGfxBackend
     /// <summary>RDPGFX_CODECID names (MS-RDPEGFX 2.2.1.4.1).</summary>
     private static string CodecName(ushort codec) => codec switch
     {
-        0 => "uncompressed", 3 => "RemoteFX", 8 => "ClearCodec", 9 => "RemoteFX Progressive", 10 => "Planar",
-        11 => "AVC420", 12 => "Alpha", 14 => "AVC444", 15 => "AVC444v2", _ => "unknown"
+        0 => "uncompressed",
+        3 => "RemoteFX",
+        8 => "ClearCodec",
+        9 => "RemoteFX Progressive",
+        10 => "Planar",
+        11 => "AVC420",
+        12 => "Alpha",
+        14 => "AVC444",
+        15 => "AVC444v2",
+        _ => "unknown"
     };
 
     private void WireToSurface(ref Reader reader, bool progressive)

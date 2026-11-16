@@ -104,7 +104,7 @@ internal sealed class RectangleDecoder(VncFramebuffer framebuffer, VncJpegDecode
 
     private async ValueTask HextileAsync(RfbReader reader, int x, int y, int width, int height, CancellationToken ct)
     {
-        const int RawTile = 1, BackgroundSpecified = 2, ForegroundSpecified = 4, AnySubrects = 8, SubrectsColoured = 16;
+        const int rawTile = 1, backgroundSpecified = 2, foregroundSpecified = 4, anySubrects = 8, subrectsColoured = 16;
         uint background = 0, foreground = 0;
         uint[] tile = new uint[16 * 16];
         byte[] raw = new byte[16 * 16 * 4];
@@ -116,33 +116,33 @@ internal sealed class RectangleDecoder(VncFramebuffer framebuffer, VncJpegDecode
             {
                 int tw = Math.Min(16, width - tx), th = Math.Min(16, height - ty);
                 byte mask = await reader.U8Async(ct).ConfigureAwait(false);
-                if ((mask & RawTile) != 0)
+                if ((mask & rawTile) != 0)
                 {
                     await reader.ReadAsync(raw.AsMemory(0, tw * th * 4), ct).ConfigureAwait(false);
                     framebuffer.Blit(x + tx, y + ty, tw, th, raw, tw * 4);
                     continue;
                 }
 
-                if ((mask & BackgroundSpecified) != 0)
+                if ((mask & backgroundSpecified) != 0)
                 {
                     await reader.ReadAsync(pixel, ct).ConfigureAwait(false);
                     background = Pixel(pixel);
                 }
 
-                if ((mask & ForegroundSpecified) != 0)
+                if ((mask & foregroundSpecified) != 0)
                 {
                     await reader.ReadAsync(pixel, ct).ConfigureAwait(false);
                     foreground = Pixel(pixel);
                 }
 
-                int count = (mask & AnySubrects) != 0 ? await reader.U8Async(ct).ConfigureAwait(false) : 0;
+                int count = (mask & anySubrects) != 0 ? await reader.U8Async(ct).ConfigureAwait(false) : 0;
                 if (count == 0)
                 {
                     framebuffer.Fill(x + tx, y + ty, tw, th, background);
                     continue;
                 }
 
-                bool coloured = (mask & SubrectsColoured) != 0;
+                bool coloured = (mask & subrectsColoured) != 0;
                 int size = coloured ? 6 : 2;
                 await reader.ReadAsync(subrects.AsMemory(0, count * size), ct).ConfigureAwait(false);
                 Array.Fill(tile, background | 0xFF000000, 0, tw * th);
@@ -201,23 +201,23 @@ internal sealed class RectangleDecoder(VncFramebuffer framebuffer, VncJpegDecode
                         framebuffer.Fill(x + tx, y + ty, tw, th, Cpixel(ref r));
                         continue;
                     case >= 2 and <= 16:
-                    {
-                        for (int i = 0; i < sub; i++) { palette[i] = Cpixel(ref r); }
-                        int bits = sub == 2 ? 1 : sub <= 4 ? 2 : 4, mask = (1 << bits) - 1;
-                        for (int row = 0; row < th; row++)
                         {
-                            int shift = 8, current = 0;
-                            for (int column = 0; column < tw; column++)
+                            for (int i = 0; i < sub; i++) { palette[i] = Cpixel(ref r); }
+                            int bits = sub == 2 ? 1 : sub <= 4 ? 2 : 4, mask = (1 << bits) - 1;
+                            for (int row = 0; row < th; row++)
                             {
-                                if (shift == 8) { current = r.U8(); shift = 0; }
-                                shift += bits;
-                                int index = (current >> (8 - shift)) & mask;
-                                if (index >= sub) { throw new VncProtocolException("A ZRLE palette index is out of range."); }
-                                tile[row * tw + column] = palette[index];
+                                int shift = 8, current = 0;
+                                for (int column = 0; column < tw; column++)
+                                {
+                                    if (shift == 8) { current = r.U8(); shift = 0; }
+                                    shift += bits;
+                                    int index = (current >> (8 - shift)) & mask;
+                                    if (index >= sub) { throw new VncProtocolException("A ZRLE palette index is out of range."); }
+                                    tile[row * tw + column] = palette[index];
+                                }
                             }
+                            break;
                         }
-                        break;
-                    }
                     case 128:
                         for (int i = 0; i < pixels;)
                         {
@@ -229,20 +229,20 @@ internal sealed class RectangleDecoder(VncFramebuffer framebuffer, VncJpegDecode
                         }
                         break;
                     case >= 130:
-                    {
-                        int size = sub - 128;
-                        for (int i = 0; i < size; i++) { palette[i] = Cpixel(ref r); }
-                        for (int i = 0; i < pixels;)
                         {
-                            int index = r.U8(), run = 1;
-                            if ((index & 128) != 0) { index &= 127; run = RunLength(ref r); }
-                            if (index >= size) { throw new VncProtocolException("A ZRLE palette index is out of range."); }
-                            if (run > pixels - i) { throw new VncProtocolException("A ZRLE run overflows its tile."); }
-                            tile.AsSpan(i, run).Fill(palette[index]);
-                            i += run;
+                            int size = sub - 128;
+                            for (int i = 0; i < size; i++) { palette[i] = Cpixel(ref r); }
+                            for (int i = 0; i < pixels;)
+                            {
+                                int index = r.U8(), run = 1;
+                                if ((index & 128) != 0) { index &= 127; run = RunLength(ref r); }
+                                if (index >= size) { throw new VncProtocolException("A ZRLE palette index is out of range."); }
+                                if (run > pixels - i) { throw new VncProtocolException("A ZRLE run overflows its tile."); }
+                                tile.AsSpan(i, run).Fill(palette[index]);
+                                i += run;
+                            }
+                            break;
                         }
-                        break;
-                    }
                     default:
                         throw new VncProtocolException($"ZRLE subencoding {sub} is not defined.");
                 }
@@ -337,15 +337,15 @@ internal sealed class RectangleDecoder(VncFramebuffer framebuffer, VncJpegDecode
                 dataSize = width * height * 3;
                 break;
             case 1:
-            {
-                int colours = await reader.U8Async(ct).ConfigureAwait(false) + 1;
-                if (colours < 2) { throw new VncProtocolException("A Tight palette has fewer than two colours."); }
-                byte[] rgb = await reader.BytesAsync(colours * 3, ct).ConfigureAwait(false);
-                palette = new uint[colours];
-                for (int i = 0; i < colours; i++) { palette[i] = Tpixel(rgb.AsSpan(i * 3)); }
-                dataSize = colours == 2 ? (width + 7) / 8 * height : width * height;
-                break;
-            }
+                {
+                    int colours = await reader.U8Async(ct).ConfigureAwait(false) + 1;
+                    if (colours < 2) { throw new VncProtocolException("A Tight palette has fewer than two colours."); }
+                    byte[] rgb = await reader.BytesAsync(colours * 3, ct).ConfigureAwait(false);
+                    palette = new uint[colours];
+                    for (int i = 0; i < colours; i++) { palette[i] = Tpixel(rgb.AsSpan(i * 3)); }
+                    dataSize = colours == 2 ? (width + 7) / 8 * height : width * height;
+                    break;
+                }
             default:
                 throw new VncProtocolException($"Tight filter {filter} is not defined.");
         }
@@ -362,18 +362,18 @@ internal sealed class RectangleDecoder(VncFramebuffer framebuffer, VncJpegDecode
                 for (int i = 0; i < pixels.Length; i++) { pixels[i] = Tpixel(raw.AsSpan(i * 3)); }
                 break;
             case 1 when palette.Length == 2:
-            {
-                int rowBytes = (width + 7) / 8;
-                for (int row = 0; row < height; row++)
                 {
-                    for (int column = 0; column < width; column++)
+                    int rowBytes = (width + 7) / 8;
+                    for (int row = 0; row < height; row++)
                     {
-                        int bit = (raw[row * rowBytes + column / 8] >> (7 - column % 8)) & 1;
-                        pixels[row * width + column] = palette[bit];
+                        for (int column = 0; column < width; column++)
+                        {
+                            int bit = (raw[row * rowBytes + column / 8] >> (7 - column % 8)) & 1;
+                            pixels[row * width + column] = palette[bit];
+                        }
                     }
+                    break;
                 }
-                break;
-            }
             case 1:
                 for (int i = 0; i < pixels.Length; i++)
                 {
