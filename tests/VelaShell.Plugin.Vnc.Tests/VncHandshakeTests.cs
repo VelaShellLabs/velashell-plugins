@@ -13,8 +13,11 @@ namespace VelaShell.Plugin.Vnc.Tests;
 public sealed class VncHandshakeTests
 {
     internal static VncClientOptions Options(int port, string password = "", VncSecurity security = VncSecurity.Auto, string username = "",
-        byte[]? pin = null) => new()
+        byte[]? pin = null, bool audio = false, bool fileTransfer = false, Func<VelaShell.Vnc.Audio.IAudioOutput>? audioOutput = null) => new()
         {
+            AudioPlayback = audio,
+            FileTransfer = fileTransfer,
+            AudioOutputFactory = audioOutput,
             Host = "127.0.0.1",
             Port = port,
             Password = password,

@@ -63,3 +63,35 @@ public sealed class VncProtocolException(string message, Exception? inner = null
 
 /// <summary>The network connection dropped (as opposed to a protocol failure): connecting again is worth trying.</summary>
 public sealed class VncConnectionLostException(string message, Exception? inner = null) : Exception(message, inner);
+
+/// <summary>Why a file-transfer operation failed (UltraVNC file transfer).</summary>
+public enum VncFileTransferError
+{
+    /// <summary>The server refused file transfer for this session (disabled, or a view-only session).</summary>
+    Denied,
+
+    /// <summary>The server did not answer in time.</summary>
+    Timeout,
+
+    /// <summary>The server could not open, list or create the path.</summary>
+    Unavailable,
+
+    /// <summary>The server reported a failed command or aborted a transfer.</summary>
+    Failed,
+
+    /// <summary>The session ended while the operation was running.</summary>
+    Disconnected
+}
+
+/// <summary>A file-transfer operation failed; the desktop session itself goes on (unless <see cref="Error"/> is Disconnected).</summary>
+public sealed class VncFileTransferException(VncFileTransferError error, string message, Exception? inner = null) : Exception(message, inner)
+{
+    public VncFileTransferError Error { get; } = error;
+}
+
+/// <summary>
+/// The server closed the connection right after file transfer was requested: it does not implement UltraVNC file
+/// transfer (unknown message type 7), or a LibVNC server has it disabled and drops the client. Reported through
+/// <see cref="IVncSession.Disconnected"/>; connecting again works, with file transfer left alone.
+/// </summary>
+public sealed class VncFileTransferUnsupportedException(string message) : Exception(message);

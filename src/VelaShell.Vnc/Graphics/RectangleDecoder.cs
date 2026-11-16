@@ -9,7 +9,7 @@ internal static class VncEncoding
 {
     internal const int Raw = 0, CopyRect = 1, Rre = 2, Hextile = 5, Tight = 7, Zrle = 16;
     internal const int JpegQuality0 = -32, CompressLevel0 = -256;
-    internal const int DesktopSize = -223, LastRect = -224, Cursor = -239, QemuExtendedKey = -258,
+    internal const int DesktopSize = -223, LastRect = -224, Cursor = -239, QemuExtendedKey = -258, QemuAudio = -259,
         DesktopName = -307, ExtendedDesktopSize = -308;
     internal const int ExtendedClipboard = unchecked((int)0xC0A1E5CE);
 

@@ -76,6 +76,22 @@ public sealed class VncClientOptions
     public VncDialer? Dialer { get; init; }
     public VncJpegDecoder? JpegDecoder { get; init; }
 
+    /// <summary>
+    /// Plays the server's audio through the default output device (QEMU Audio extension: QEMU / libvirt consoles). Other
+    /// servers ignore the request; a failing output device stops audio only, never the desktop.
+    /// </summary>
+    public bool AudioPlayback { get; init; }
+
+    /// <summary>
+    /// Enables <see cref="IVncSession.FileTransfer"/> (UltraVNC file transfer, RFB message type 7: UltraVNC Server, x11vnc
+    /// with <c>-ultrafilexfer</c>). Nothing is sent until the caller asks for access; a server without it closes the
+    /// connection at that point (<see cref="VncFileTransferUnsupportedException"/>).
+    /// </summary>
+    public bool FileTransfer { get; init; }
+
+    /// <summary>Test seam: the PCM output used for audio (default: the platform device).</summary>
+    internal Func<Audio.IAudioOutput>? AudioOutputFactory { get; init; }
+
     /// <summary>Diagnostic lines (never contains credentials).</summary>
     public Action<string>? Log { get; init; }
 }

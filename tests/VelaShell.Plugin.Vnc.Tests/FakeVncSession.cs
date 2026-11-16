@@ -28,6 +28,10 @@ internal sealed class FakeVncSession : IVncSession
     public string LastEncoding { get; set; } = "Tight";
     public bool CanResize { get; set; }
     public bool SupportsScanCodes { get; set; }
+    public bool AudioActive { get; set; }
+    public IVncFileTransfer? FileTransfer { get; set; }
+    public event Action<Exception>? AudioFailed;
+    internal void FailAudio(Exception error) => AudioFailed?.Invoke(error);
     internal int DisposeCount { get; private set; }
     internal List<(uint Keysym, uint ScanCode, bool Down)> Keys { get; } = [];
     internal List<(VncButtons Buttons, int X, int Y)> Pointer { get; } = [];

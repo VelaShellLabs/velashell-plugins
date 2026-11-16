@@ -56,6 +56,16 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
     private readonly TextBlock _overlayTitle = new() { HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
     private readonly Border _detailBox = new();
     private readonly SelectableTextBlock _overlayDetail = new() { Name = "VncOverlayDetail", TextWrapping = TextWrapping.Wrap };
+    private static readonly Geometry FolderIcon = Geometry.Parse(
+        "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z");   // Lucide "folder"
+    private readonly Grid _content = new() { ColumnDefinitions = [with("*,Auto")] };
+    private readonly Button _filesButton = new()
+    {
+        Name = "VncFilesButton", Width = 22, Height = 20, Padding = new Thickness(0), Margin = new Thickness(0, 0, 4, 0),
+        Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center
+    };
+    private VncFilePanel? _filePanel;
+    private string? _audioError;
     private Loc _loc;
     private string? _notice, _armedTyping, _disconnectDetail;
     private bool _connected = true, _failed, _reconnecting, _overlayError, _errorCopied;
@@ -94,7 +104,16 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         _statusTimer.Tick += (_, _) => UpdateStatus();
         _statusTimer.Start();
 
-        var footer = new Border { Name = "VncStatusBar", Height = 24, BorderThickness = new Thickness(0, 1, 0, 0), Child = _status, ClipToBounds = true };
+        session.AudioFailed += OnAudioFailed;
+        _filesButton.Content = new VncGlyph { Data = FolderIcon, Width = 13, Height = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        VncChrome.AddIconButtonStyles(_filesButton, "VelaTextSecondary", "VelaTextPrimary");
+        _filesButton.IsVisible = session.FileTransfer is not null;
+        _filesButton.Click += (_, _) => ToggleFiles();
+        var statusBar = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(_filesButton, Dock.Right);
+        statusBar.Children.Add(_filesButton);
+        statusBar.Children.Add(_status);
+        var footer = new Border { Name = "VncStatusBar", Height = 24, BorderThickness = new Thickness(0, 1, 0, 0), Child = statusBar, ClipToBounds = true };
         Token(footer, Border.BackgroundProperty, "VelaBgSidebar");
         Token(footer, Border.BorderBrushProperty, "VelaBorderPrimary");
         Token(_status, TextBlock.ForegroundProperty, "VelaTextSecondary");
@@ -110,8 +129,10 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         };
         _overlay = BuildOverlay();
         SetRow(footer, 1);
-        Children.Add(scroller);
-        Children.Add(QuickBall);
+        // The desktop (with the remote-keys ball over it) on the left, the file panel docked on the right when open.
+        var desktopArea = new Grid { Children = { scroller, QuickBall } };
+        _content.Children.Add(desktopArea);
+        Children.Add(_content);
         Children.Add(_overlay);
         Children.Add(footer);
         ApplyLocale(loc);
@@ -177,6 +198,39 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
     }
 
     private void OnInfoChanged() => Dispatcher.UIThread.Post(() => { if (Volatile.Read(ref _disposed) == 0) { UpdateStatus(); } });
+
+    /// <summary>Audio stopped (the output device failed): say so once, keep it in the status tooltip; the desktop goes on.</summary>
+    private void OnAudioFailed(Exception failure)
+    {
+        _context.Log.Warn($"VNC audio playback stopped: {failure.Message}");
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (Volatile.Read(ref _disposed) != 0) { return; }
+            _audioError = failure.Message;
+            ShowNotice(_loc.Format("AudioFailed", failure.Message));
+        });
+    }
+
+    internal VncFilePanel? FilePanel => _filePanel;
+
+    /// <summary>Shows or hides the file panel; the first showing asks the server for file-transfer access.</summary>
+    internal void ToggleFiles()
+    {
+        if (_session.FileTransfer is not { } files) { return; }
+        if (_filePanel is null)
+        {
+            _filePanel = new VncFilePanel(files, _context, _loc, new StorageLocalFiles(() => TopLevel.GetTopLevel(this)))
+            {
+                CloseRequested = () => { _filePanel?.IsVisible = false; _ = Desktop.Focus(); }
+            };
+            SetColumn(_filePanel, 1);
+            _content.Children.Add(_filePanel);
+            _ = _filePanel.OpenAsync();
+            return;
+        }
+        _filePanel.IsVisible = !_filePanel.IsVisible;
+        if (_filePanel.IsVisible) { _ = _filePanel.OpenAsync(); }
+    }
 
     private static void Token(AvaloniaObject target, AvaloniaProperty property, string token) =>
         target[!property] = new DynamicResourceExtension(token);
@@ -361,6 +415,8 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
     {
         _loc = loc;
         QuickBall.ApplyLocale(loc);
+        _filePanel?.ApplyLocale(loc);
+        ToolTip.SetTip(_filesButton, loc["FilesButtonTip"]);
         UpdateOverlayLabels();
         UpdateStatus();
     }
@@ -372,6 +428,7 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         Desktop.IsEnabled = connected;
         if (!connected) { QuickBall.Collapse(); ClearNotice(); }
         QuickBall.IsVisible = connected && !_settings.ViewOnly;
+        _filesButton.IsVisible = connected && _session.FileTransfer is not null;
         _overlay.IsVisible = !connected;
         if (!connected && !_reconnecting)
         {
@@ -394,14 +451,18 @@ internal sealed class VncWorkspaceView : Grid, IAsyncDisposable
         parts.Add($"RFB {info.ProtocolVersion}");
         parts.Add(info.Tls ? info.Security + " · TLS" : info.Security);
         if (_session.LastEncoding.Length > 0) { parts.Add(_session.LastEncoding); }
+        if (_session.AudioActive) { parts.Add(_loc["AudioStatus"]); }
         if (_settings.ViewOnly) { parts.Add(_loc["ViewOnlyStatus"]); }
         _status.Text = string.Join(" · ", parts.Where(static p => p.Length > 0));
+        ToolTip.SetTip(_status, _audioError is { } audioError ? _loc.Format("AudioFailed", audioError) : null);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
         _session.InfoChanged -= OnInfoChanged;
+        _session.AudioFailed -= OnAudioFailed;
+        _filePanel?.Close();
         _noticeTimer.Stop();
         _statusTimer.Stop();
         _clipboard.Dispose();

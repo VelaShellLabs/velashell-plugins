@@ -17,7 +17,7 @@ SDK 契约与 `VelaShell.PluginSdk.Build` 在
 | [VelaShell.Plugin.S3](VelaShell.Plugin.S3/) | `velashell.s3` | 是 | 进程内 | S3 兼容对象存储:协议 + 桶管理器 + 对象检视器(协议能力域的首个使用者) |
 | [VelaShell.Plugin.Serial](VelaShell.Plugin.Serial/) | `velashell.serial` | 是 | 进程内 | RS-232 / USB 转串口终端:端口热插拔枚举、换行归一化、发送节流、Break 与 DTR/RTS |
 | [VelaShell.Plugin.Telnet](VelaShell.Plugin.Telnet/) | `velashell.telnet` | 是 | 进程内 | RFC 854 Telnet 终端:选项协商 + NAWS + 8 位透明(**终端**协议能力的首个使用者) |
-| [VelaShell.Plugin.Vnc](VelaShell.Plugin.Vnc/) | `velashell.vnc` | 是 | 进程内 | VNC 远程桌面:托管 C# RFB 协议栈(不捆绑原生库),VNC 密码 / VeNCrypt TLS / Apple 远程桌面认证,Tight / ZRLE / Hextile 编码,跟随窗口调整分辨率、远端光标、双向文本剪贴板、SSH 跳板 |
+| [VelaShell.Plugin.Vnc](VelaShell.Plugin.Vnc/) | `velashell.vnc` | 是 | 进程内 | VNC 远程桌面:托管 C# RFB 协议栈(不捆绑原生库),VNC 密码 / VeNCrypt TLS / Apple 远程桌面认证,Tight / ZRLE / Hextile 编码,跟随窗口调整分辨率、远端光标、双向文本剪贴板、QEMU 音频、UltraVNC 文件传输、SSH 跳板 |
 
 装载模式由 `plugin.json` 的 `hostMode` 决定(`isolated` / `inProcess`,默认进程内)。
 隔离插件跑在独立的 `VelaShell.PluginHost` 进程里(实现在主仓库),崩溃不波及宿主;
@@ -121,6 +121,7 @@ RDP 也使用进程内工作台,帧由 Avalonia 绘制,不嵌入外部 RDP 客�
 VNC 与 RDP 同一种分法:协议栈在 `src/VelaShell.Vnc/` 下(纯托管、UI 无关、不依赖 SDK),插件只管 Avalonia 界面、
 输入与剪贴板;Tight 编码的 JPEG 借宿主的 Skia 解码,库和插件都不带图像编解码器。同样打成单一 `.vpx`、全 RID 通用。
 远程按键悬浮球与断线卡片两边各带一份(`VncQuickBall` 等与 RDP 的同名部件同源):插件互相独立分发,不共享程序集。
+QEMU 音频的 PCM 输出(WaveOut / AudioQueue / ALSA)同样与 `src/VelaShell.Rdp/Audio/` 同源,复制在 `src/VelaShell.Vnc/Audio/`。
 详见 [VNC 设计与使用](VelaShell.Plugin.Vnc/README.md)。
 
 [`build/PluginBundle.proj`](../build/PluginBundle.proj) 的 `Bundle` 目标把 `VelaPluginShip=true`

@@ -9,8 +9,10 @@
   <PropertyGroup>
     <RootNamespace>VelaShell.Vnc</RootNamespace>
     <AssemblyName>VelaShell.Vnc</AssemblyName>
-    <Description>Managed .NET VNC (RFB 3.3/3.7/3.8) client: None, VNC authentication, VeNCrypt X.509 TLS and Apple Remote Desktop security; Raw, CopyRect, RRE, Hextile, ZRLE and Tight encodings; desktop resizing (ExtendedDesktopSize), rich cursors, QEMU scan codes and the extended (UTF-8) clipboard. No native binaries.</Description>
+    <Description>Managed .NET VNC (RFB 3.3/3.7/3.8) client: None, VNC authentication, VeNCrypt X.509 TLS and Apple Remote Desktop security; Raw, CopyRect, RRE, Hextile, ZRLE and Tight encodings; desktop resizing (ExtendedDesktopSize), rich cursors, QEMU scan codes, the extended (UTF-8) clipboard, QEMU audio and UltraVNC file transfer. No native binaries.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- Audio/ 下的 PCM 输出(WaveOut / AudioQueue / ALSA)与 VelaShell.Rdp 同一份实现,经 LibraryImport 调系统库。 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- 公共 API 的 XML 文档尚未补齐,先消掉缺文档告警(CS1591)。 -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
