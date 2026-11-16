@@ -77,6 +77,13 @@ public sealed class VncClientOptions
     public VncJpegDecoder? JpegDecoder { get; init; }
 
     /// <summary>
+    /// Continuous Updates with Fence (TigerVNC): the server pushes changes as they happen instead of waiting for one
+    /// request per frame, paced by fence round trips. Servers without them ignore both pseudo-encodings; off falls back
+    /// to one FramebufferUpdateRequest per update.
+    /// </summary>
+    public bool ContinuousUpdates { get; init; } = true;
+
+    /// <summary>
     /// Plays the server's audio through the default output device (QEMU Audio extension: QEMU / libvirt consoles). Other
     /// servers ignore the request; a failing output device stops audio only, never the desktop.
     /// </summary>

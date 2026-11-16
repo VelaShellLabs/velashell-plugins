@@ -39,6 +39,9 @@ public sealed class VncSession : IVncSession
     private string _desktopName = "";
     private uint _screenId, _screenFlags;
     private volatile bool _visible = true, _requestOutstanding, _connected;
+    private const uint FenceBlockBefore = 1u << 0, FenceBlockAfter = 1u << 1, FenceRequest = 1u << 31;
+    private readonly SemaphoreSlim _updateGate = new(1, 1);   // orders the update-flow state changes and their messages
+    private volatile bool _continuousSupported, _continuous, _continuousEverOn;
     private int _disposed;
     private volatile string? _abortReason;
 
@@ -460,6 +463,7 @@ public sealed class VncSession : IVncSession
         list.AddRange([VncEncoding.ExtendedDesktopSize, VncEncoding.DesktopSize, VncEncoding.LastRect, VncEncoding.Cursor,
             VncEncoding.DesktopName, VncEncoding.QemuExtendedKey, VncEncoding.ExtendedClipboard]);
         if (_options.AudioPlayback) { list.Add(VncEncoding.QemuAudio); }
+        if (_options.ContinuousUpdates) { list.AddRange([VncEncoding.Fence, VncEncoding.ContinuousUpdates]); }
         if (Files is not null) { list.Add(SupportedMessagesEncoding); }
         return [.. list];
     }
@@ -596,12 +600,30 @@ public sealed class VncSession : IVncSession
 
     public async Task SetDisplayUpdatesAsync(bool visible, CancellationToken ct = default)
     {
-        _visible = visible;
-        if (visible && _connected && !_requestOutstanding)
+        await _updateGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await RequestUpdateAsync(incremental: true, ct).ConfigureAwait(false);
+            _visible = visible;
+            if (!_connected) { return; }
+            if (!visible)
+            {
+                // Stop the server pushing to a hidden tab; it keeps tracking what changes and sends that once re-enabled.
+                if (_continuous) { await SetContinuousAsync(false, ct).ConfigureAwait(false); }
+            }
+            else if (_continuousSupported && _options.ContinuousUpdates)
+            {
+                if (!_continuous) { await SetContinuousAsync(true, ct).ConfigureAwait(false); }
+            }
+            else if (!_requestOutstanding)
+            {
+                await RequestUpdateAsync(incremental: true, ct).ConfigureAwait(false);
+            }
         }
+        finally { _ = _updateGate.Release(); }
     }
+
+    /// <summary>The server pushes updates on its own (Continuous Updates are on).</summary>
+    public bool ContinuousUpdatesActive => _continuous;
 
     public VncFrameCopy CopyFrame(Span<byte> destination, int stride, int width, int height, bool full = false) =>
         _framebuffer.CopyTo(destination, stride, width, height, full);
@@ -632,7 +654,8 @@ public sealed class VncSession : IVncSession
                     case UltraFileTransfer.MessageType when Files is not null:
                         await Files.ReceiveAsync(_reader, ct).ConfigureAwait(false);
                         break;
-                    case 150: break;   // EndOfContinuousUpdates
+                    case 150: await EndOfContinuousUpdatesAsync(ct).ConfigureAwait(false); break;
+                    case 248: await ServerFenceAsync(ct).ConfigureAwait(false); break;
                     case 255: await QemuServerMessageAsync(ct).ConfigureAwait(false); break;
                     default: throw new VncProtocolException($"The server sent message type {type}, which this client does not know.");
                 }
@@ -782,6 +805,7 @@ public sealed class VncSession : IVncSession
                     break;   // ends the update (below): its rectangle count was 0xFFFF
                 case VncEncoding.DesktopSize:
                     _framebuffer.Resize(width, height);
+                    await FollowResizeAsync(ct).ConfigureAwait(false);
                     pixels = true;
                     break;
                 case VncEncoding.ExtendedDesktopSize:
@@ -818,7 +842,89 @@ public sealed class VncSession : IVncSession
         }
 
         if (pixels) { FrameAvailable?.Invoke(); }
-        if (_visible) { await RequestUpdateAsync(incremental: true, ct).ConfigureAwait(false); }
+        await RequestNextAsync(ct).ConfigureAwait(false);
+    }
+
+    // ---------------------------------------------------------------- continuous updates and fences
+
+    /// <summary>
+    /// After an update: with continuous updates the server pushes the next one itself; otherwise ask for it. The first
+    /// update after the server confirmed continuous updates turns them on for the whole desktop (as the TigerVNC viewer does).
+    /// </summary>
+    private async Task RequestNextAsync(CancellationToken ct)
+    {
+        await _updateGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!_visible || _continuous) { return; }
+            if (_continuousSupported && _options.ContinuousUpdates)
+            {
+                await SetContinuousAsync(true, ct).ConfigureAwait(false);
+                return;
+            }
+            await RequestUpdateAsync(incremental: true, ct).ConfigureAwait(false);
+        }
+        finally { _ = _updateGate.Release(); }
+    }
+
+    /// <summary>EnableContinuousUpdates (150): on/off flag, then the area (always the whole desktop here).</summary>
+    private async Task SetContinuousAsync(bool enable, CancellationToken ct)
+    {
+        await SendAsync(new RfbWriter(10).U8(150).U8(enable ? 1 : 0).U16(0).U16(0)
+            .U16(_framebuffer.Width).U16(_framebuffer.Height).ToArray(), ct).ConfigureAwait(false);
+        bool first = enable && !_continuousEverOn;
+        _continuous = enable;
+        _continuousEverOn |= enable;
+        if (enable) { _requestOutstanding = false; }
+        if (first) { _options.Log?.Invoke($"VNC {_options.Host}:{_options.Port}: continuous updates on."); }
+    }
+
+    /// <summary>The desktop changed size: continuous updates cover the old area until told the new one.</summary>
+    private async Task FollowResizeAsync(CancellationToken ct)
+    {
+        await _updateGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_continuous) { await SetContinuousAsync(true, ct).ConfigureAwait(false); }
+        }
+        finally { _ = _updateGate.Release(); }
+    }
+
+    /// <summary>
+    /// EndOfContinuousUpdates (150, no payload). The first one answers SetEncodings and says the server has the
+    /// extension (TigerVNC only offers it to a client that also takes fences). Later ones confirm a disable — or, if
+    /// the server ended continuous updates on its own, fall back to requesting updates.
+    /// </summary>
+    private async Task EndOfContinuousUpdatesAsync(CancellationToken ct)
+    {
+        await _updateGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            _continuousSupported = true;
+            if (_continuous)
+            {
+                _continuous = false;
+                if (_visible && !_requestOutstanding) { await RequestUpdateAsync(incremental: true, ct).ConfigureAwait(false); }
+            }
+        }
+        finally { _ = _updateGate.Release(); }
+    }
+
+    /// <summary>
+    /// ServerFence (248): 3 padding bytes, u32 flags, u8 length, payload (at most 64 bytes). A request is answered at
+    /// once with the same payload; messages are handled strictly in order, so BlockBefore / BlockAfter hold by
+    /// construction and are kept, SyncNext and Request are cleared (as the TigerVNC viewer answers). TigerVNC's server
+    /// measures its round trips with these to pace continuous updates.
+    /// </summary>
+    private async Task ServerFenceAsync(CancellationToken ct)
+    {
+        await _reader.SkipAsync(3, ct).ConfigureAwait(false);
+        uint flags = await _reader.U32Async(ct).ConfigureAwait(false);
+        int length = await _reader.U8Async(ct).ConfigureAwait(false);
+        byte[] payload = await _reader.BytesAsync(length, ct).ConfigureAwait(false);
+        if ((flags & FenceRequest) == 0 || length > 64) { return; }   // an answer to us (we send none), or malformed
+        uint answer = flags & (FenceBlockBefore | FenceBlockAfter);
+        await SendAsync(new RfbWriter(9 + length).U8(248).Zeros(3).U32(answer).U8(length).Bytes(payload).ToArray(), ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -841,6 +947,7 @@ public sealed class VncSession : IVncSession
         if (status == 0)
         {
             _framebuffer.Resize(width, height);
+            await FollowResizeAsync(ct).ConfigureAwait(false);
         }
         else if (reason == 1)
         {

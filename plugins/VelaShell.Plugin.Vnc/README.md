@@ -18,7 +18,7 @@ Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/bl
 | Protocol versions | RFB 3.3, 3.7, 3.8 (Apple's 3.889 is treated as 3.8; 3.4–3.6 as 3.3) |
 | Security | None (1), VNC authentication (2), VeNCrypt 0.2 with X.509 TLS (subtypes 260 None / 261 VNC / 262 Plain), Apple Remote Desktop (30) |
 | Encodings | Raw, CopyRect, RRE, Hextile, ZRLE, Tight (fill, copy / palette / gradient filters, JPEG) |
-| Pseudo-encodings | ExtendedDesktopSize + SetDesktopSize, DesktopSize, Cursor, LastRect, DesktopName, QEMU Extended Key Event, QEMU Audio, Extended Clipboard, SupportedMessages (when file transfer is enabled), JPEG quality, compression level |
+| Pseudo-encodings | ExtendedDesktopSize + SetDesktopSize, DesktopSize, Cursor, LastRect, DesktopName, QEMU Extended Key Event, QEMU Audio, Extended Clipboard, SupportedMessages (when file transfer is enabled), Continuous Updates + Fence, JPEG quality, compression level |
 | Clipboard | Text both ways only: UTF-8 through the extended clipboard (Notify / Request / Provide), Latin-1 ServerCutText / ClientCutText otherwise; no file clipboard |
 | Audio | QEMU Audio (QEMU / libvirt consoles): S16 stereo 44.1 kHz through WaveOut / AudioQueue / ALSA |
 | File transfer | UltraVNC file transfer (UltraVNC Server, `x11vnc -ultrafilexfer`): browse, upload, download, new folder, delete, rename |
@@ -27,7 +27,8 @@ Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/bl
 Not supported, deliberately: anonymous-TLS VeNCrypt subtypes 257–259 (anonymous Diffie-Hellman cipher suites,
 which neither SChannel nor .NET's OpenSSL/Apple TLS bindings offer), VeNCrypt Plain without TLS (256, the
 password would travel in the clear), RA2 / RealVNC encryption (5, 6), UltraVNC MS-Logon, TightVNC's file-transfer protocol,
-transferring whole folders, audio input, colour depths below 24 bits, TightPNG, Continuous Updates and Fence.
+transferring whole folders, audio input, colour depths below 24 bits, TightPNG, Open H.264 (encoding 50: the common
+servers do not send it; only neatvnc built with it and an FFmpeg / V4L2 encoder does).
 
 ## Security choice
 
@@ -61,9 +62,17 @@ choice never falls back to another type.
 - A desktop within a few device pixels of the view is drawn exactly 1:1 on the pixel grid with no filtering;
   only a real mismatch is resampled (high quality).
 - Frames are decoded on the receive thread into a BGRA framebuffer that keeps the union of changed rectangles;
-  `CopyFrame` copies only that into the locked `WriteableBitmap`. The next incremental update is requested as
-  soon as one has been decoded. A hidden tab or minimized window stops requesting updates; showing it again
-  requests what changed meanwhile (the server tracks it). Frame posts use Input priority.
+  `CopyFrame` copies only that into the locked `WriteableBitmap`. Frame posts use Input priority.
+- **Continuous updates** (`continuousUpdates`, advanced, on): the client lists Continuous Updates (-313) and Fence
+  (-312). Once the server confirms with EndOfContinuousUpdates (150) — TigerVNC only does for a fence-capable
+  client — the next update turns them on for the whole desktop (EnableContinuousUpdates 150), and the server
+  pushes changes itself instead of waiting for one request per frame (as the TigerVNC viewer does). Server fence
+  requests (248) are answered at once with the payload, keeping BlockBefore / BlockAfter (messages are handled in
+  order) and clearing SyncNext / Request; TigerVNC paces its pushes by these round trips. A resize re-sends the
+  area; a server ending them on its own gets requests again. Without the extension (or with the setting off) the
+  next incremental update is requested as soon as one has been decoded.
+- A hidden tab or minimized window receives no updates (continuous updates off, or no request); showing it again
+  re-enables them (or requests one), and the server sends what changed meanwhile — no full refresh.
 - **Picture quality** (`quality`): High (JPEG 8, default) / Medium (6) / Low (2) / Lossless (no JPEG). JPEG
   rectangles are decoded by the host's Skia through Avalonia's `Bitmap` (`VncJpeg`), so neither the plugin nor
   the library ships a codec. **Preferred encoding** (`encoding`) and **Compression level** (`compression`,
@@ -216,6 +225,10 @@ following describes test scope, not a passing result:
 - Session: incremental requests, keysym vs. QEMU scan-code messages, pointer clamping, Latin-1 and extended
   clipboards in both directions, SetDesktopSize round trip, cursor / desktop name / LastRect, paused updates,
   clean close vs. reset vs. protocol error.
+- Continuous updates and fences: both pseudo-encodings asked for unless turned off, enable for the whole desktop
+  after the server's confirmation and no further requests, requests without it, fence answers (payload echoed,
+  BlockBefore / BlockAfter kept, SyncNext / Request cleared, non-requests ignored), re-enable on resize, off when
+  hidden and on again when shown, and falling back to requests when the server ends them.
 - Audio: the -259 confirmation, set-format and enable bytes, PCM reaching the output in order, a device failure
   stopping audio only (and sending disable), malformed buffers, dropping instead of blocking.
 - File transfer, against both LibVNC and UltraVNC behaviour: access, drives and listings, Unicode names and block size,
