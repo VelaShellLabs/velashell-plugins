@@ -109,9 +109,28 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 2. 全量测试 + 构建;
 3. 打包并**逐个核对签名**(未签名或签名不自洽就直接失败,不会挂上去);
 4. 产出并挂到该 Release 的下载列表:
-   - **每个插件一份 `.vpx`(已签名)** —— 从 Release 下载后即可手工安装,或推进插件商店;
+   - **每个插件一份 `.vpx`(已签名)** —— 从 Release 下载后即可手工安装;
    - `SHA256SUMS.txt`;
-5. 开一个 `chore/version-<版本>` 的 PR 把版本号回写 `main`,等你手动合。
+5. 把同一批 `.vpx` **推进插件商店**(`publish-market` 任务,见下文「推进插件商店」);
+6. 开一个 `chore/version-<版本>` 的 PR 把版本号回写 `main`,等你手动合。
+
+### 推进插件商店
+
+`publish-market` 任务用商店的**可信发布**:不存任何商店密钥,由 GitHub 为这次运行签发 OIDC 令牌,
+商店核对令牌来自本仓库的 `release.yml`、环境 `market`。包推进去后照常进隔离区检测,通过后自动发布。
+做法与第三方插件作者一样,见 velashell-docs 的
+[打包与发布 §5.4](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/publishing.md)。
+
+启用(一次性):
+
+1. 每个插件的**首个版本**先登录商店手动上传(可信发布不认领新 id);
+2. 商店「我的插件 → 可信发布」登记:仓库 `VelaShellLabs/velashell-plugins`、工作流 `release.yml`、环境 `market`,
+   「同时登记到」勾上全部插件;
+3. 仓库 Settings → Environments → `market`:限定只允许 `v*` 标签部署;
+4. 仓库变量 `MARKET_TRUSTED_PUBLISHING` 设为 `true`。没设时该任务直接跳过,Release 资产不受影响。
+   可选变量 `MARKET_URL`(默认 `https://market.easilynet.top`)、`MARKET_OIDC_AUDIENCE`(默认 `velashell-market`)。
+
+新增插件时重复第 1、2 步。重跑同一标签是安全的:已发布的版本商店返回 409,任务当成功处理。
 
 本地也可以先跑一遍:
 
