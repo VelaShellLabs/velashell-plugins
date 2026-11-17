@@ -14,6 +14,30 @@
 	</PropertyGroup>
 
 	<!--
+	  Release 输出目录里不放 .pdb 与 API 文档 .xml。
+
+	  为什么在输出目录这一层做:SDK 的 PackVpx 把**整个 $(TargetDir)** 原样打进 .vpx,
+	  这里不收,调试符号与文档注释就跟着进包、推进 Release 与插件商店(实测 8 个插件合计约 4.6MB,
+	  Mongo 一个就 2.3MB)。它们对最终用户没有用处。
+	  PackVpx 是 SDK 包里的目标,本仓库改不了它的收集方式;让输出目录本身干净,
+	  PackVpx、GetVelaPluginPayload、artifacts/plugins 暂存三条路一次全对。
+
+	  · CopyOutputSymbolsToOutputDirectory / CopyDocumentationFileToOutputDirectory:
+	    插件**自己的** pdb 与 xml 照常生成(留在 obj/,文档注释的编译告警照常生效),只是不复制到 bin/;
+	  · AllowedReferenceRelatedFileExtensions:被引用工程(VelaShell.Rdp、VelaShell.Vnc 等)的
+	    pdb / xml 不再随引用一起带进来。留空会回落到 MSBuild 的默认值(含 .pdb;.xml),
+	    所以显式写出默认清单去掉这两项后的样子。
+
+	  只管 Release:Debug 构建要镜像进本机宿主(VelaDevAppDir)挂调试器,pdb 得在。
+	  代价:Release 包里的插件抛异常时,堆栈不带源码行号。
+	-->
+	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
+		<CopyOutputSymbolsToOutputDirectory>false</CopyOutputSymbolsToOutputDirectory>
+		<CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>
+		<AllowedReferenceRelatedFileExtensions>.pri;.dll.config;.exe.config</AllowedReferenceRelatedFileExtensions>
+	</PropertyGroup>
+
+	<!--
 	  注:EnableDynamicLoading 与 plugin.json 进输出目录这两件事,**不在这里做**。
 	  它们由 VelaShell.PluginSdk.Build 包的 build/VelaShell.PluginSdk.Build.props 提供 ——
 	  拆库之前本仓库有 SDK 源码,这里自己铺;现在第一方插件与第三方插件走同一个包,
