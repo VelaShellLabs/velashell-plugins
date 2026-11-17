@@ -429,6 +429,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     {
         base.OnGotFocus(e);
         SetRemoteAppFocus(true);
+        UpdateKeyboardHook();
         if (PublishClipboard is { } publish)
         {
             PublishOnFocus(publish);
@@ -438,6 +439,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     {
         ReleaseInput();
         SetRemoteAppFocus(false);
+        UpdateKeyboardHook();
         base.OnLostFocus(e);
     }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -451,6 +453,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         _topLevel?.ScalingChanged += OnScalingChanged;
         _attached = true;
         UpdatePresentation();
+        UpdateKeyboardHook();
     }
 
     private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -458,6 +461,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (e.Property == Window.WindowStateProperty)
         {
             UpdatePresentation();
+            UpdateKeyboardHook();   // the "full screen only" mode follows the window state
         }
     }
 
@@ -507,10 +511,12 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     {
         ReleaseInput();
         SetRemoteAppFocus(false);
+        UpdateKeyboardHook();
     }
     private void OnWindowActivated(object? sender, EventArgs e)
     {
         if (IsFocused) { SetRemoteAppFocus(true); }
+        UpdateKeyboardHook();
         // Returning from another application can retain keyboard focus on this desktop.
         if (IsFocused && IsEffectivelyVisible && IsEffectivelyEnabled && PublishClipboard is { } publish)
         {
@@ -526,6 +532,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         _topLevel?.ScalingChanged -= OnScalingChanged;
         _window = null; _topLevel = null; ReleaseInput();
         _attached = false;
+        UpdateKeyboardHook();
         UpdatePresentation();
         base.OnDetachedFromVisualTree(e);
     }
@@ -544,7 +551,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
         if (e.Key is Key.ImeProcessed or Key.DeadCharProcessed
             || !shortcut && (RdpInput.IsTextKey(e) || !string.IsNullOrEmpty(_preedit)))
         { base.OnKeyDown(e); return; }
-        if (code == 0) { base.OnKeyDown(e); return; }
+        if (code == 0 || IsLocalWindowsKey(e, platform)) { base.OnKeyDown(e); return; }
         _ = _keys.Add(code);
         bool paste = RdpInput.IsPaste(e.PhysicalKey, e.KeyModifiers, platform);
         Queue(async () =>
@@ -762,6 +769,7 @@ internal sealed partial class RdpDesktopControl : Control, IAsyncDisposable
     {
         if (_disposed != 0) { await _inputPump; return; }
 
+        RemoveKeyboardHook();   // releases captured keys while the input queue still accepts them
         _window?.Activated -= OnWindowActivated;
         _window?.Deactivated -= OnWindowDeactivated;
         _window?.PropertyChanged -= OnWindowPropertyChanged;

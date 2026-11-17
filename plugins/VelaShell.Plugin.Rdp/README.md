@@ -55,6 +55,17 @@ also supported. Other management/cache attributes remain unsupported. No PIN/APD
 This grants card-operation access to the remote environment, not smart-card NLA login.
 Protocol tests use fake cards; real cards and RDS interoperability still need validation.
 
+## Windows key combinations (Windows hosts)
+
+**Windows key combinations** on **Experience** (`windowsKeys`) works like mstsc's "Apply Windows key combinations":
+`remote` (default), `fullscreen` (only while the host window is full screen) or `local`. To send them to the remote,
+a `WH_KEYBOARD_LL` hook exists only while the desktop is focused in the active, foreground window; it swallows Win
+and every key pressed while Win is held, Alt+Tab, Alt+Esc, Ctrl+Esc and Ctrl+Shift+Esc and sends their scan codes,
+so a lone Win no longer opens the Start menu on both computers (issue #174). Everything else keeps the ordinary
+Avalonia path. Otherwise the Windows key stays local and is not forwarded. Ctrl+Alt+Del and Win+L cannot be hooked;
+use the remote-keys button. macOS (Command is sent as Ctrl) and Linux do not declare the setting.
+`VELA_RDP_KEYBOARD_HOOK_TEST=1` runs the real-hook SendInput test on an interactive Windows desktop.
+
 ## Remote audio playback
 
 Enable **Remote audio** on **Experience** (`audio`, off by default), then reconnect. `rdpsnd`

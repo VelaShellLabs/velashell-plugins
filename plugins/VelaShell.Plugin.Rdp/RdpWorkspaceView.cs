@@ -79,7 +79,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
         this[!BackgroundProperty] = new DynamicResourceExtension("VelaBgPage");
         Desktop = new(session, settings.Width, settings.Height)
         {
-            DesktopSizeChanged = UpdateStatus
+            DesktopSizeChanged = UpdateStatus,
+            WindowsKeys = settings.WindowsKeys
         };
         _clipboard = new(session, context, Desktop, settings.Clipboard);
         Desktop.PublishClipboard = () => _clipboard.PublishLocalAsync();
@@ -126,8 +127,8 @@ internal sealed class RdpWorkspaceView : Grid, IAsyncDisposable
     internal RdpQuickBall QuickBall { get; }
 
     /// <summary>
-    /// What the floating button offers: combinations the local OS keeps for itself (there is no global keyboard
-    /// hook, so pressing them on the local keyboard never reaches the remote) plus typing the clipboard as text.
+    /// What the floating button offers: combinations the local OS keeps for itself (Ctrl+Alt+Del and Win+L always; on
+    /// macOS and Linux, and on Windows with Windows keys set to stay local, the rest too) plus typing the clipboard.
     /// Inner ring: the most used; outer ring: the Windows-key shortcuts.
     /// </summary>
     private IEnumerable<RdpQuickAction> QuickActions()

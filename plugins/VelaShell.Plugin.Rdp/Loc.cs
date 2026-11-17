@@ -81,6 +81,16 @@ internal sealed class Loc(string locale)
         ["Timeout"] = ["Connect timeout (seconds)", "连接超时（秒）", "連線逾時（秒）", "接続タイムアウト（秒）", "연결 제한 시간 (초)"],
         ["Transport"] = ["Transport", "网络传输", "網路傳輸", "トランスポート", "네트워크 전송"],
         ["TransportAuto"] = ["Auto (TCP + UDP)", "自动（TCP + UDP）", "自動（TCP + UDP）", "自動 (TCP + UDP)", "자동 (TCP + UDP)"],
+        ["WindowsKeys"] = ["Windows key combinations", "Windows 组合键", "Windows 組合鍵", "Windows キーの組み合わせ", "Windows 키 조합"],
+        ["WindowsKeysHint"] = [
+            "Where Win, Win+key, Alt+Tab and Ctrl+Esc go while the remote desktop has focus. Ctrl+Alt+Del and Win+L always stay on this computer; use the remote-keys button for them.",
+            "远程桌面获得焦点时，Win、Win+其他键、Alt+Tab、Ctrl+Esc 交给哪一端。Ctrl+Alt+Del 与 Win+L 始终由本机处理，请用远程按键悬浮球发送。",
+            "遠端桌面取得焦點時，Win、Win+其他鍵、Alt+Tab、Ctrl+Esc 交給哪一端。Ctrl+Alt+Del 與 Win+L 一律由本機處理，請用遠端按鍵懸浮球傳送。",
+            "リモート デスクトップにフォーカスがあるとき、Win、Win+キー、Alt+Tab、Ctrl+Esc をどちらに送るか。Ctrl+Alt+Del と Win+L は常にこのコンピューターで処理されます。リモート キー ボタンから送信してください。",
+            "원격 데스크톱에 포커스가 있을 때 Win, Win+키, Alt+Tab, Ctrl+Esc를 어느 쪽에서 처리할지 정합니다. Ctrl+Alt+Del과 Win+L은 항상 이 컴퓨터에서 처리되므로 원격 키 버튼으로 보내세요."],
+        ["WindowsKeysRemote"] = ["On the remote computer", "远程计算机", "遠端電腦", "リモート コンピューター", "원격 컴퓨터"],
+        ["WindowsKeysFullScreen"] = ["Only when the window is full screen", "仅在窗口全屏时", "僅在視窗全螢幕時", "ウィンドウが全画面のときのみ", "창이 전체 화면일 때만"],
+        ["WindowsKeysLocal"] = ["On this computer", "本地计算机", "本機電腦", "このコンピューター", "이 컴퓨터"],
         ["TransportHint"] = [
             "Try reliable and lossy UDP for supported dynamic channels. Setup failure keeps TCP. SSH jump and RD Gateway connections use TCP only.",
             "为支持的动态通道尝试可靠及不可靠 UDP；建立失败保留 TCP。SSH 跳板与 RD Gateway 连接仅使用 TCP。",
