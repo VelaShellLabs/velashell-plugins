@@ -66,8 +66,9 @@
 
 	<!-- 发布期契约:由 build/PluginBundle.proj 调用,返回"该随应用分发的文件 + 它在安装包
 	     plugins/ 下的相对路径"。VelaPluginShip=false 的插件返回空集 —— 于是它整个不进发行产物。
-	     排除 pdb/xml:调试符号与文档注释对最终用户没有意义,也别撑大包体
-	     (Windows/便携版发布后还会再扫一遍删 pdb,这里先不产出更省事)。 -->
+	     排除 pdb/xml:调试符号与文档注释对最终用户没有意义,也别撑大包体。
+	     Release 输出目录里本来就没有它们了(见 plugins/Directory.Build.props),这里的 Exclude
+	     留作兜底:有人用 Debug 跑这个目标时也不会带进去。 -->
 	<Target Name="GetVelaPluginPayload" DependsOnTargets="Build" Returns="@(VelaPluginPayload)">
 		<ItemGroup Condition="'$(VelaPluginShip)' == 'true' and '$(VelaPluginId)' != ''">
 			<_VelaPluginPayloadFile Include="$(TargetDir)**\*" Exclude="$(TargetDir)**\*.pdb;$(TargetDir)**\*.xml" />
