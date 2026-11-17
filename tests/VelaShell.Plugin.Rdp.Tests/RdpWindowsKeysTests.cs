@@ -98,10 +98,13 @@ public sealed partial class RdpWindowsKeysTests
     [TestMethod]
     public void ScanCodesMatchTheAvaloniaKeyPath()
     {
-        Assert.AreEqual(RdpInput.ScanCode(Avalonia.Input.PhysicalKey.MetaLeft), RdpWindowsKeyCapture.Code(0x5b, 0, 0), "Injected Win without scan code");
-        Assert.AreEqual(RdpInput.ScanCode(Avalonia.Input.PhysicalKey.MetaRight), RdpWindowsKeyCapture.Code(0x5c, 0x5c, Ext));
-        Assert.AreEqual(RdpInput.ScanCode(Avalonia.Input.PhysicalKey.ArrowLeft), RdpWindowsKeyCapture.Code(VkLeft, 0x4b, Ext));
-        Assert.AreEqual(RdpInput.ScanCode(Avalonia.Input.PhysicalKey.Tab), RdpWindowsKeyCapture.Code(VkTab, 0x0f, 0));
+        // The hook only runs on Windows, so compare with the Windows mapping: on a macOS test host the default
+        // overload sends Command (MetaLeft) as Ctrl.
+        static uint Windows(Avalonia.Input.PhysicalKey key) => RdpInput.ScanCode(key, RdpInput.KeyboardPlatform.Windows);
+        Assert.AreEqual(Windows(Avalonia.Input.PhysicalKey.MetaLeft), RdpWindowsKeyCapture.Code(0x5b, 0, 0), "Injected Win without scan code");
+        Assert.AreEqual(Windows(Avalonia.Input.PhysicalKey.MetaRight), RdpWindowsKeyCapture.Code(0x5c, 0x5c, Ext));
+        Assert.AreEqual(Windows(Avalonia.Input.PhysicalKey.ArrowLeft), RdpWindowsKeyCapture.Code(VkLeft, 0x4b, Ext));
+        Assert.AreEqual(Windows(Avalonia.Input.PhysicalKey.Tab), RdpWindowsKeyCapture.Code(VkTab, 0x0f, 0));
     }
 
     [TestMethod]
