@@ -28,7 +28,8 @@
 #        仓库 VelaShellLabs/velashell-plugins、工作流 release.yml、环境 market;
 #      · 每个插件的**首个版本**已手动上传过(可信发布只给已有插件发新版本,不认领新 id)。
 #    可选变量:MARKET_URL(默认 https://market.easilynet.top)、MARKET_OIDC_AUDIENCE(默认 velashell-market)。
-#    建议在仓库 Settings → Environments → market 里限定只允许 v* 标签部署。
+#    建议在仓库 Settings → Environments → market 里限定只允许发版标签部署:本仓库的标签是
+#    不带 v 的 2.1.9 这种,规则写 [0-9]*.[0-9]*.[0-9]*(写成 v* 会把所有发版都挡在外面)。
 #
 # 📌 版本号不用手工改:标签解析出来之后,流水线**第一件事**就是跑
 #    scripts/Set-Version.ps1,把该版本写进 Directory.Build.props、README 版本横幅,

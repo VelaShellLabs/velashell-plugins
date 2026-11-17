@@ -126,7 +126,8 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 1. 每个插件的**首个版本**先登录商店手动上传(可信发布不认领新 id);
 2. 商店「我的插件 → 可信发布」登记:仓库 `VelaShellLabs/velashell-plugins`、工作流 `release.yml`、环境 `market`,
    「同时登记到」勾上全部插件;
-3. 仓库 Settings → Environments → `market`:限定只允许 `v*` 标签部署;
+3. 仓库 Settings → Environments → `market` → Deployment branches and tags 选 Selected branches and tags,
+   添加**标签**规则 `[0-9]*.[0-9]*.[0-9]*`(本仓库的发版标签是不带 `v` 的 `2.1.9` 这种;写成 `v*` 会把所有发版都挡住);
 4. 仓库变量 `MARKET_TRUSTED_PUBLISHING` 设为 `true`。没设时该任务直接跳过,Release 资产不受影响。
    可选变量 `MARKET_URL`(默认 `https://market.easilynet.top`)、`MARKET_OIDC_AUDIENCE`(默认 `velashell-market`)。
 
