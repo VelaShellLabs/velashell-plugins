@@ -304,7 +304,6 @@ public sealed class RdpHeadlessTests
     [TestMethod]
     [DataRow(Key.C, PhysicalKey.C, KeyModifiers.Control, "c", 0x2e)]
     [DataRow(Key.F4, PhysicalKey.F4, KeyModifiers.Alt, null, 0x3e)]
-    [DataRow(Key.D, PhysicalKey.D, KeyModifiers.Meta, "d", 0x20)]
     [DataRow(Key.Enter, PhysicalKey.Enter, KeyModifiers.None, null, 0x1c)]
     [DataRow(Key.Back, PhysicalKey.Backspace, KeyModifiers.None, null, 0x0e)]
     [DataRow(Key.Left, PhysicalKey.ArrowLeft, KeyModifiers.None, null, 0x14b)]
@@ -317,6 +316,45 @@ public sealed class RdpHeadlessTests
         desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
         await desktop.DisposeAsync();
         Assert.AreSequenceEqual([((uint)code, true), ((uint)code, false)], session.Keys);
+    });
+
+    [TestMethod]
+    [DataRow(Key.LWin, PhysicalKey.MetaLeft, KeyModifiers.Meta, null)]
+    [DataRow(Key.D, PhysicalKey.D, KeyModifiers.Meta, "d")]
+    public void WindowsKeyChordsTakeTheHookPathOnWindowsHosts(Key key, PhysicalKey physicalKey, KeyModifiers modifiers, string? symbol) => Run(async () =>
+    {
+        // Issue #174: on a Windows host the shell acts on Win before the application, so forwarding it from the
+        // ordinary key path as well opened the Start menu (or ran Win+D) on both sides. There only the low-level
+        // hook sends it; elsewhere Win/Command keeps its physical scan-code pair.
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600);
+        var down = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol };
+        desktop.RaiseEvent(down);
+        desktop.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = key, PhysicalKey = physicalKey, KeyModifiers = modifiers, KeySymbol = symbol });
+        await desktop.DisposeAsync();
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.IsFalse(down.Handled);
+            Assert.IsEmpty(session.Keys);
+        }
+        else
+        {
+            uint code = RdpInput.ScanCode(physicalKey);
+            Assert.AreSequenceEqual([(code, true), (code, false)], session.Keys);
+        }
+    });
+
+    [TestMethod]
+    public void HeadlessDesktopNeverInstallsTheKeyboardHook() => Run(async () =>
+    {
+        // The hook needs a real foreground HWND; a headless window has none, so focus alone must not install it.
+        var session = new FakeRdpSession();
+        await using var desktop = new RdpDesktopControl(session, 800, 600) { WindowsKeys = RdpWindowsKeys.Remote };
+        var window = new Window { Content = desktop, Width = 800, Height = 600 };
+        window.Show();
+        _ = desktop.Focus();
+        Assert.IsFalse(desktop.CapturesWindowsKeys);
+        window.Close();
     });
 
     [TestMethod]

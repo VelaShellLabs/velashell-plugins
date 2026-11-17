@@ -37,6 +37,14 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
     internal RdpTransportMode Transport { get; init; } = RdpTransportMode.Auto;
     internal bool AdaptiveNetwork { get; init; } = true;
     internal const string TransportKey = "transport", AdaptiveNetworkKey = "adaptiveNetwork";
+
+    /// <summary>
+    /// Where Windows key combinations go while the desktop is focused (<c>remote</c> / <c>fullscreen</c> / <c>local</c>),
+    /// on the experience page. Declared on Windows hosts only: elsewhere no shell competes for the Windows key, and a
+    /// value synced from Windows is still parsed but has no effect.
+    /// </summary>
+    internal RdpWindowsKeys WindowsKeys { get; init; } = RdpWindowsKeys.Remote;
+    internal const string WindowsKeysKey = "windowsKeys";
     internal const string PortsKey = "ports";
     internal const string TrustedThumbprintKey = "trustedThumbprint";
 
@@ -67,9 +75,9 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
 
     /// <summary>
     /// COM/LPT ports (overlapped Win32 I/O), printers (Winspool), the camera (Media Foundation) and portable devices
-    /// (WPD) have Windows backends only. Elsewhere their fields are not declared, and settings saved on Windows (for
-    /// example synced to a Mac) are ignored rather than failing the connection. Smart cards, drives, clipboard and
-    /// audio work on every platform and are unaffected.
+    /// (WPD) have Windows backends only, and only a Windows host needs the Windows-keys choice. Elsewhere their fields
+    /// are not declared, and settings saved on Windows (for example synced to a Mac) are ignored rather than failing the
+    /// connection. Smart cards, drives, clipboard and audio work on every platform and are unaffected.
     /// </summary>
     internal static bool WindowsDevicesAvailable => OperatingSystem.IsWindows();
 
@@ -284,6 +292,13 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
                 _ => throw new ProtocolConnectionException(loc.Format("Invalid", TransportKey))
             },
             AdaptiveNetwork = Flag(AdaptiveNetworkKey, true),
+            WindowsKeys = request.GetString(WindowsKeysKey).Trim().ToLowerInvariant() switch
+            {
+                "" or "remote" => RdpWindowsKeys.Remote,
+                "fullscreen" => RdpWindowsKeys.FullScreen,
+                "local" => RdpWindowsKeys.Local,
+                _ => throw new ProtocolConnectionException(loc.Format("Invalid", WindowsKeysKey))
+            },
             Ports = devices ? ParsePorts(request.GetString(PortsKey), loc) : [],
             Printers = devices ? LocalPrinters.Selected(request, loc, enumeratePrinters ?? WindowsPrinterCatalog.GetPrinters) : [],
             Camera = devices ? LocalCameras.Selected(request, loc, enumerateCameras ?? RdpCameraDevices.Enumerate) : null,
@@ -455,6 +470,19 @@ internal sealed record RdpSettings(string Domain, int Width, int Height, int Tim
             Page = ExperiencePage,
             Choices = [new("auto", loc["TransportAuto"]), new("tcp", "TCP")]
         });
+        if (devices)
+        {
+            fields.Add(new()
+            {
+                Key = WindowsKeysKey,
+                Label = loc["WindowsKeys"],
+                Hint = loc["WindowsKeysHint"],
+                Kind = ProtocolSettingKind.Choice,
+                DefaultValue = "remote",
+                Page = ExperiencePage,
+                Choices = [new("remote", loc["WindowsKeysRemote"]), new("fullscreen", loc["WindowsKeysFullScreen"]), new("local", loc["WindowsKeysLocal"])]
+            });
+        }
         fields.Add(new()
         {
             Key = AdaptiveNetworkKey,
