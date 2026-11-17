@@ -20,6 +20,16 @@
 #   注意它与**强名称密钥**(工具链仓库的 STRONG_NAME_KEY)是两回事:那把钥匙签的是 SDK
 #   契约程序集(宿主已签名,不能引用未签名程序集),本仓库不产出程序集包,不参与那条约束。
 #
+# 🏪 推进插件商店(publish-market 任务):用**可信发布** —— 不存任何商店密钥,由 GitHub 为这次运行
+#    签发 OIDC 令牌,商店核对令牌里的仓库 / 工作流 / 环境与插件拥有者登记的是否一致。
+#    启用前提(缺一不可,否则这个任务直接跳过,不影响 Release 资产):
+#      · 仓库变量 MARKET_TRUSTED_PUBLISHING = true;
+#      · 商店已开启可信发布,且每个插件都已在商店「我的插件 → 可信发布」里登记:
+#        仓库 VelaShellLabs/velashell-plugins、工作流 release.yml、环境 market;
+#      · 每个插件的**首个版本**已手动上传过(可信发布只给已有插件发新版本,不认领新 id)。
+#    可选变量:MARKET_URL(默认 https://market.easilynet.top)、MARKET_OIDC_AUDIENCE(默认 velashell-market)。
+#    建议在仓库 Settings → Environments → market 里限定只允许 v* 标签部署。
+#
 # 📌 版本号不用手工改:标签解析出来之后,流水线**第一件事**就是跑
 #    scripts/Set-Version.ps1,把该版本写进 Directory.Build.props、README 版本横幅,
 #    以及**每个 plugins/*/plugin.json 的 version**。发布成功后由 sync-main 任务开一个
@@ -234,6 +244,76 @@ jobs:
         if: always()
         shell: pwsh
         run: Remove-Item velashell-signing.pem -Force -ErrorAction SilentlyContinue
+
+  # ── 推进插件商店(可信发布)──────────────────────────────────────────────────
+  # 单独一个 job:只有它需要 id-token 权限,publish 那个持有签名私钥的 job 不该同时能向外换令牌。
+  # 用的是 publish 挂到 Release 上的同一批 .vpx(经 artifact 传过来,逐字节相同,签名已核对过)。
+  #
+  # 每个包单独换一次令牌:令牌只活几分钟,包多、商店慢时一枚令牌撑不到最后一个。
+  # 商店返回 202 = 已进隔离区(检测通过后自动发布);409 = 该版本已发布 —— 重跑同一标签时
+  # 正是这种情况,当成功处理。其余任何失败都记下来,全部跑完再整体判红,不因一个插件挡住其他插件。
+  publish-market:
+    needs: publish
+    if: ${{ !inputs.dryRun && vars.MARKET_TRUSTED_PUBLISHING == 'true' }}
+    runs-on: ubuntu-latest
+    # 令牌里会带上 environment=market,商店登记时填了环境就只认这里来的运行。
+    environment: market
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: plugin-release-assets
+          path: dist
+
+      - name: Upload packages to the market
+        shell: bash
+        env:
+          MARKET_URL: ${{ vars.MARKET_URL || 'https://market.easilynet.top' }}
+          AUDIENCE: ${{ vars.MARKET_OIDC_AUDIENCE || 'velashell-market' }}
+          TAG: ${{ needs.publish.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          packages=(dist/*.vpx)
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::error::artifact 里没有 .vpx。"
+            exit 1
+          fi
+
+          # 版本说明取 Release 正文(统一发布列车,所有插件共用同一段)。
+          # 不从事件载荷取:workflow_dispatch 补跑时没有它。
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > release-notes.md || : > release-notes.md
+
+          failed=()
+          for vpx in "${packages[@]}"; do
+            name=$(basename "$vpx")
+            token=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r .value)
+            if [ -z "$token" ] || [ "$token" = "null" ]; then
+              echo "::error::$name:申请 OIDC 令牌失败(job 需要 permissions: id-token: write)。"
+              failed+=("$name"); continue
+            fi
+            echo "::add-mask::$token"
+
+            status=$(curl -sS -o response.json -w '%{http_code}' --max-time 600 \
+              -H "Authorization: Bearer $token" \
+              -F "file=@$vpx" -F "releaseNotes=<release-notes.md" \
+              "$MARKET_URL/api/uploads/trusted") || status=000
+            body=$(cat response.json 2>/dev/null || true)
+            case "$status" in
+              202) echo "✅ $name → 已进隔离区,检测通过后自动发布。" ;;
+              409) echo "::notice::$name 该版本商店里已发布,跳过。" ;;
+              *)   echo "::error::$name 上传失败(HTTP $status):$body"; failed+=("$name") ;;
+            esac
+          done
+
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::${#failed[@]} 个包没能推进商店:${failed[*]}。Release 资产不受影响;403 时检查商店上该插件是否登记了可信发布者(仓库/工作流 release.yml/环境 market),404 时先手动上传首个版本。"
+            exit 1
+          fi
 
   # ── 把版本号回写 main(以 PR 的形式)────────────────────────────────────────
   # 上面那个 Stamp 步骤只改了 runner 上的工作区 —— 资产已经挂上去了,但仓库里的
