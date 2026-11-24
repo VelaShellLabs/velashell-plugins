@@ -9,8 +9,8 @@
     <PackageReference Include="MSTest.TestAdapter" />
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="VelaShell.PluginSdk.Testing" />
-    <!-- SDK 包把 Avalonia 设成 ExcludeAssets="runtime"(运行时由宿主共享),这份排除会沿
-         ProjectReference 传到这里 —— 测试宿主要扮演装载方,得显式提供运行时那份。 -->
+    <!-- 测试宿主扮演装载方,所以这里保留 Avalonia 的运行时资产；插件项目本身则显式
+         排除 runtime 资产,由真实宿主提供共享程序集。 -->
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Headless" />
     <PackageReference Include="Avalonia.Themes.Fluent" />

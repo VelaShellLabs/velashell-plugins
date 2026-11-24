@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- The published 2.2 SDK brings Avalonia transitively; pin it to the target host until
+       the SDK release that removes that legacy dependency is available. Central pinning
+       controls a transitive package only; it does not add an Avalonia reference. -->
+  <PropertyGroup>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>

@@ -11,8 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 契约程序集 + Avalonia + AXAML 编译器 + 清单校验 + PackVpx,一个包全到位。 -->
+    <!-- 契约程序集、清单校验与 PackVpx;下面的直接引用提供目标宿主的 Avalonia/AXAML 编译资产。 -->
     <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- Compile-time Avalonia assets come from the target host; runtime assets stay excluded. -->
+    <PackageReference Include="Avalonia" ExcludeAssets="runtime" />
     <!-- Redis 客户端(MIT,与本仓库 AGPL-3.0 + 商业双许可相容)。**随插件目录分发**,
          由插件 ALC 按 deps.json 隔离解析 —— 不用 Redis 的用户,安装包里不必带它。
          已知边界:多路复用连接不提供 MONITOR 与阻塞类命令(BLPOP 等);

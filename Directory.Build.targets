@@ -8,52 +8,46 @@
 	</Target>
 
 	<!--
-	  Avalonia 版本与 SDK 锁的一致性核对。
-
-	  拆库之后 Avalonia 版本的**权威在 velashell-plugin-sdk** —— VelaShell.PluginSdk.Build
-	  用精确区间 [x.y.z] 锁给插件工程,VelaShell.PluginSdk 再把同一个值经 buildTransitive
-	  导出成 $(VelaSdkPinnedAvaloniaVersion)。本仓库 Directory.Packages.props 里的
-	  Avalonia* 只服务于**测试工程**(测试宿主要扮演装载方,得显式提供运行时那份)。
-
-	  两边漂了会怎样:测试里 Avalonia 是 A 版、插件编译期看到的是 B 版,headless 会话里
-	  控件类型对不上 —— 而这个现象与"插件装进真宿主后炸掉"长得一模一样,排查时很容易
-	  怀疑到插件代码上去。所以在构建期直接拦住,给一句人话。
-
-	  升 SDK 的动作因此是两步:在 VS 的 NuGet 包管理器里升 VelaShell.PluginSdk.Build,
-	  然后按这里的报错把 Directory.Packages.props 的三个 Avalonia* 跟上。
-
-	  ⚠️ 基准直接从 CPM 的 PackageVersion 上读回来,不再在 Directory.Build.props 里
-	     另存一份属性副本 —— Version="$(...)" 会让包管理器认不出这条依赖。
+	  Target-host alignment. Avalonia ownership lives with the host release, not the SDK.
+	  Test projects use these central package versions as their runtime host; UI plugins
+	  provide compile-only references and the SDK/this check validates resolved assets.
 	-->
-	<Target Name="VerifyAvaloniaMatchesSdk" BeforeTargets="BeforeBuild"
-	        Condition="'$(VelaSdkPinnedAvaloniaVersion)' != ''">
+	<Target Name="VerifyTargetHostAvaloniaPackages" BeforeTargets="BeforeBuild">
 		<PropertyGroup>
 			<_VelaAvaloniaPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia')->'%(Version)')</_VelaAvaloniaPin>
-		</PropertyGroup>
-		<Error Condition="'$(_VelaAvaloniaPin)' != '' and '$(VelaSdkPinnedAvaloniaVersion)' != '$(_VelaAvaloniaPin)'"
-		       Code="VELAP1000"
-		       Text="Avalonia 版本与 SDK 锁的不一致:VelaShell.PluginSdk $(VelaSdkPackageVersion) 锁的是 $(VelaSdkPinnedAvaloniaVersion),而本仓库 Directory.Packages.props 里的 Avalonia 是 $(_VelaAvaloniaPin)。把 Directory.Packages.props 里三个 Avalonia* 都改成 $(VelaSdkPinnedAvaloniaVersion)。" />
-	</Target>
-
-	<!--
-	  AvaloniaEdit 版本与 SDK 锁的一致性核对(随 Docker 面板插件从独立仓库并入)。
-
-	  它走自己的版本线,由 SDK 单独导出一个权威值 $(VelaSdkPinnedAvaloniaEditVersion)。
-	  程序集名 AvaloniaEdit 同样命中宿主 PluginAssemblyLoadContext 的 SharedPrefixes("Avalonia"),
-	  运行时一律回落到宿主那份 —— 于是版本漂了**在本仓库一个测试都不会红**:
-	  要等用户装上插件、打开一个 compose.yaml 才炸,而那时离根因已经非常远。
-	  上面那条 VELAP1000 核的是测试工程的 Avalonia,拦不住这一路。
-
-	  没有插件引 AvaloniaEdit 时这一条为空、跳过 —— 那是合法状态(不同于 Avalonia:
-	  测试工程必须有它)。所以这里不像 VELAP1000 那样对"读不到"也判红。
-	-->
-	<Target Name="VerifyAvaloniaEditMatchesSdk" BeforeTargets="BeforeBuild"
-	        Condition="'$(VelaSdkPinnedAvaloniaEditVersion)' != ''">
-		<PropertyGroup>
+			<_VelaAvaloniaHeadlessPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia.Headless')->'%(Version)')</_VelaAvaloniaHeadlessPin>
+			<_VelaAvaloniaThemesPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia.Themes.Fluent')->'%(Version)')</_VelaAvaloniaThemesPin>
+			<_VelaAvaloniaSkiaPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia.Skia')->'%(Version)')</_VelaAvaloniaSkiaPin>
 			<_VelaAvaloniaEditPin>@(PackageVersion->WithMetadataValue('Identity','Avalonia.AvaloniaEdit')->'%(Version)')</_VelaAvaloniaEditPin>
 		</PropertyGroup>
-		<Error Condition="'$(_VelaAvaloniaEditPin)' != '' and '$(VelaSdkPinnedAvaloniaEditVersion)' != '$(_VelaAvaloniaEditPin)'"
+		<Error Condition="'$(_VelaAvaloniaPin)' == '' or '$(_VelaAvaloniaPin)' != '$(VelaAvaloniaVersion)'"
+		       Code="VELAP1000"
+		       Text="The test host Avalonia package is '$(_VelaAvaloniaPin)', but the target-host version is '$(VelaAvaloniaVersion)'." />
+		<Error Condition="'$(_VelaAvaloniaHeadlessPin)' != '' and '$(_VelaAvaloniaHeadlessPin)' != '$(VelaAvaloniaVersion)'"
+		       Code="VELAP1000"
+		       Text="Avalonia.Headless '$(_VelaAvaloniaHeadlessPin)' does not match target-host Avalonia '$(VelaAvaloniaVersion)'." />
+		<Error Condition="'$(_VelaAvaloniaThemesPin)' != '' and '$(_VelaAvaloniaThemesPin)' != '$(VelaAvaloniaVersion)'"
+		       Code="VELAP1000"
+		       Text="Avalonia.Themes.Fluent '$(_VelaAvaloniaThemesPin)' does not match target-host Avalonia '$(VelaAvaloniaVersion)'." />
+		<Error Condition="'$(_VelaAvaloniaSkiaPin)' != '' and '$(_VelaAvaloniaSkiaPin)' != '$(VelaAvaloniaVersion)'"
+		       Code="VELAP1000"
+		       Text="Avalonia.Skia '$(_VelaAvaloniaSkiaPin)' does not match target-host Avalonia '$(VelaAvaloniaVersion)'." />
+		<Error Condition="'$(_VelaAvaloniaEditPin)' != '' and '$(_VelaAvaloniaEditPin)' != '$(VelaAvaloniaEditVersion)'"
 		       Code="VELAP1001"
-		       Text="AvaloniaEdit 版本与 SDK 锁的不一致:VelaShell.PluginSdk $(VelaSdkPackageVersion) 锁的是 $(VelaSdkPinnedAvaloniaEditVersion),而本仓库 Directory.Packages.props 里的 Avalonia.AvaloniaEdit 是 $(_VelaAvaloniaEditPin)。程序集名 AvaloniaEdit 命中装载器的 &quot;Avalonia&quot; 前缀,运行时一律回落到宿主那份 —— 版本漂了要等用户打开 compose.yaml 才炸。把它改成 $(VelaSdkPinnedAvaloniaEditVersion)。" />
+		       Text="Avalonia.AvaloniaEdit '$(_VelaAvaloniaEditPin)' does not match target-host AvaloniaEdit '$(VelaAvaloniaEditVersion)'." />
+	</Target>
+
+	<Target Name="VerifyResolvedTargetHostAvalonia" AfterTargets="ResolveAssemblyReferences"
+	        Condition="'$(VelaSkipAvaloniaVersionCheck)' != 'true'">
+		<ItemGroup>
+			<_VelaAvaloniaReference Include="@(ReferencePath)" Condition="'%(ReferencePath.NuGetPackageId)' == 'Avalonia'" />
+			<_VelaAvaloniaEditReference Include="@(ReferencePath)" Condition="'%(ReferencePath.NuGetPackageId)' == 'Avalonia.AvaloniaEdit'" />
+		</ItemGroup>
+		<Error Condition="'@(_VelaAvaloniaReference)' != '' and '%(_VelaAvaloniaReference.NuGetPackageVersion)' != '$(VelaAvaloniaVersion)'"
+		       Code="VELAP1000"
+		       Text="This project resolves Avalonia %(_VelaAvaloniaReference.NuGetPackageVersion), but its target host uses $(VelaAvaloniaVersion)." />
+		<Error Condition="'@(_VelaAvaloniaEditReference)' != '' and '%(_VelaAvaloniaEditReference.NuGetPackageVersion)' != '$(VelaAvaloniaEditVersion)'"
+		       Code="VELAP1001"
+		       Text="This project resolves AvaloniaEdit %(_VelaAvaloniaEditReference.NuGetPackageVersion), but its target host uses $(VelaAvaloniaEditVersion)." />
 	</Target>
 </Project>
