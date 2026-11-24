@@ -6,6 +6,7 @@
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.Serial.dll",
   "apiLevel": 2,
+  "minHostVersion": "1.8.9",
   // 用到的最高一档 SDK 面是 2.0.4 的 PluginIcon(经 ProtocolDescriptor.Icon 自报页签图标);
   // 最早钉它是为了 SDK 1.5 的协议表单新面(NoEndpoint / DynamicChoice / IProtocolChoiceSource /
   // HostKind)。不声明的话,在老宿主上是**运行期** TypeLoadException / MissingMethodException ——

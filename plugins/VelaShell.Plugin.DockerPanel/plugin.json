@@ -7,6 +7,7 @@
   "author": "Joe",
   "entry": "VelaShell.Plugin.DockerPanel.dll",
   "apiLevel": 2,
+  "minHostVersion": "1.8.9",
   // 面板走 Docker Engine 的 HTTP API,而这条 API 的载体是一个 unix socket。
   // SDK 1.2 的 IRemoteTunnelApi 才提供到远端 socket 的**裸字节双工流**;
   // 1.1 的远程执行只有"整段 UTF-8 解码"与"按 \n 切行"两种文本形态,

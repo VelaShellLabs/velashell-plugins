@@ -6,6 +6,7 @@
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.S3.dll",
   "apiLevel": 2,
+  "minHostVersion": "1.8.9",
   // 用到的最高一档 SDK 面是 2.1.3 的 IProtocolChecksum(协议实现兼实现它,交出对象存着的校验和);
   // 再往下一档是 2.0.4 的 PluginIcon(经 ProtocolDescriptor.Icon 自报页签图标,桶管理器 / 对象检视器窗口
   // 经 PanelOptions.Icon 报标题栏图标)。apiLevel 表达不了这一档(它只在**破坏性**变更时才动),

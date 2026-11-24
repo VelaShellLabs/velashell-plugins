@@ -6,6 +6,7 @@
   "publisher": "velashell",
   "entry": "VelaShell.Plugin.Vnc.dll",
   "apiLevel": 2,
+  "minHostVersion": "1.8.9",
   "minSdkVersion": "2.2.0",
   "hostMode": "inProcess",
   "license": "MIT",
