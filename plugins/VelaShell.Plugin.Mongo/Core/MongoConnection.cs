@@ -324,11 +324,17 @@ internal sealed partial class MongoConnection : IAsyncDisposable
         try
         {
             var builder = new MongoUrlBuilder(uri);
-            if (!string.IsNullOrEmpty(builder.Password))
+            if (builder.Username is not { Length: > 0 } username)
             {
-                builder.Password = "****";
+                return builder.ToString();
             }
-            return builder.ToString();
+
+            // 保留可辨认的账号,查询参数仍交给驱动脱敏。
+            string userInfo = Uri.EscapeDataString(username) + (builder.Password is null ? "@" : ":****@");
+            builder.Username = null;
+            builder.Password = null;
+            string endpoint = builder.ToString();
+            return endpoint.Insert(endpoint.IndexOf("://", StringComparison.Ordinal) + 3, userInfo);
         }
         catch (Exception)
         {
