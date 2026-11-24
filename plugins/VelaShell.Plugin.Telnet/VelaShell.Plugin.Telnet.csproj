@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- The published 2.2 SDK brings Avalonia transitively; pin it to the target host until
+         the SDK release that removes that legacy dependency is available. Central pinning
+         controls a transitive package only; it does not add an Avalonia reference. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <Description>VelaShell Telnet 插件:RFC 854 Telnet 终端(选项协商 + NAWS + TERMINAL-TYPE + 8 位透明),以终端协议能力接入宿主的终端标签。</Description>
     <!-- 与 plugin.json 的 id 一致;驱动构建后复制到应用输出的 plugins/<目录名>/。 -->
     <VelaPluginId>velashell.telnet</VelaPluginId>

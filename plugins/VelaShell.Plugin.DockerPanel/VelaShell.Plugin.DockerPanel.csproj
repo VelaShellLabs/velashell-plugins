@@ -11,10 +11,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 契约程序集 + Avalonia + AXAML 编译器 + 清单校验 + PackVpx,一个包全到位。
+    <!-- 契约程序集、清单校验与 PackVpx;下面的直接引用提供目标宿主的 Avalonia/AXAML 编译资产。
          Docker 那一侧**没有任何随包分发的第三方依赖** —— 远端是 Docker 自带的 HTTP API,
          本地只用 BCL 的 System.Text.Json。 -->
     <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- Compile-time Avalonia assets come from the target host; runtime assets stay excluded. -->
+    <PackageReference Include="Avalonia" ExcludeAssets="runtime" />
     <!--
          唯一的第三方件,而且**只在编译期**。
 
@@ -24,13 +26,12 @@
 
          程序集名 AvaloniaEdit 命中宿主 PluginAssemblyLoadContext 的 SharedPrefixes("Avalonia"),
          运行时一律回落到宿主那一份(版本须与宿主一致)—— 复制过去反而会变成两份类型。
-         版本由 SDK 导出的权威值核对(见根 Directory.Build.targets 的 VELAP1001)。
+         版本由 VelaAvaloniaEditVersion 声明并由根 Directory.Build.targets 核对。
          本插件 hostMode 是 inProcess(plugin.json 里写清了理由),这条回落成立。
 
-         ⚠️ ExcludeAssets="runtime" **必须显式写在这里**,尽管 plugins/README.md 说"不要写"。
-         那条纪律的前提是"插件不直接引 Avalonia 包" —— 本仓库前四个插件都不引,于是
-         SDK 包的 VelaExcludeSharedRuntimeAssets 处理它自己那条引用就够了。
-         DockerPanel 是**第一个直接引 Avalonia.* 包的插件**,而那条 target 拦不住由它带进来的
+         ⚠️ ExcludeAssets="runtime" **必须显式写在这里**。UI 插件的直接 Avalonia 引用都只
+         提供编译资产,而 SDK 包的 VelaExcludeSharedRuntimeAssets 不能替代这条项目声明。
+         DockerPanel 还直接引用 AvaloniaEdit,而那条 target 拦不住由它带进来的
          **传递依赖**:去掉这里的 ExcludeAssets,AvaloniaEdit→Avalonia→MicroCom.Runtime 里的
          MicroCom.Runtime.dll 会落进插件目录(2026-09-11 并库时实测)。
          它不以 "Avalonia" 打头,既躲过装载器的共享前缀(插件会加载自己那一份),

@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- The published 2.2 SDK brings Avalonia transitively; pin it to the target host until
+         the SDK release that removes that legacy dependency is available. Central pinning
+         controls a transitive package only; it does not add an Avalonia reference. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <Description>VelaShell 串口插件:RS-232 / USB 转串口终端(端口热插拔枚举、波特率/校验/流控制、换行归一化、本地回显、发送节流、Break 与 DTR/RTS 控制),以终端协议能力接入宿主的终端标签。</Description>
     <!-- 与 plugin.json 的 id 一致;驱动构建后复制到应用输出的 plugins/<目录名>/。 -->
     <VelaPluginId>velashell.serial</VelaPluginId>

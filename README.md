@@ -71,10 +71,10 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 
 等 SDK 发版。SDK 的版本是 `Directory.Packages.props` 里 `VelaShell.PluginSdk.Build` 与
 `VelaShell.PluginSdk.Testing` 两行的字面量(同一个号),包只从 nuget.org 来 —— 本仓库没有
-`nuget.config`、没有本地源,也没有能用 `-p:` 覆盖的 SDK 版本属性。包发布之后把这两行一起抬上去,
-再按 `VELAP1000` / `VELAP1001` 的报错把测试工程的 `Avalonia*` 跟上。在那之前用到新面的插件编译不过
-是预期内的;不要在 sdk 仓库 `dotnet pack` 本地包来凑(本地包未签名、版本号也不归下游定,
-见 sdk 仓库的 AGENTS.md)。
+`nuget.config`、没有本地源,也没有能用 `-p:` 覆盖的 SDK 版本属性。包发布之后把这两行一起抬上去；
+目标宿主的 Avalonia/AvaloniaEdit 版本则由本仓库的 `VelaAvaloniaVersion` /
+`VelaAvaloniaEditVersion` 与中央包版本共同维护。不要在 sdk 仓库 `dotnet pack` 本地包来凑
+(本地包未签名、版本号也不归下游定,见 sdk 仓库的 AGENTS.md)。
 
 ## 版本号:一趟统一列车
 
@@ -178,12 +178,12 @@ dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=
 
 ## 与宿主的硬约束
 
-**Avalonia 版本必须与宿主一致**。这个版本号的权威在 velashell-plugin-sdk:
-`VelaShell.PluginSdk.Build` 用精确区间 `[x.y.z]` 锁给插件工程,
-`VelaShell.PluginSdk` 再把同一个值经 `buildTransitive` 导出成
-`VelaSdkPinnedAvaloniaVersion`。本仓库 `Directory.Packages.props` 里的 `Avalonia*` 只服务于测试工程
-(测试宿主要扮演装载方),由 `Directory.Build.targets` 的 `VerifyAvaloniaMatchesSdk`
-在构建期与 SDK 锁的值核对 —— 漂了当场报 `VELAP1000`,而不是等用户装上插件才炸。
+**Avalonia 版本必须与宿主一致**。版本号由目标宿主发布线拥有：本仓库的
+`VelaAvaloniaVersion` 与 `VelaAvaloniaEditVersion` 分别声明 `12.2.0` 与 `12.0.0`，
+并由 `Directory.Build.targets` 同时核对测试宿主的中央包版本和项目解析出的实际引用。
+构建 UI 的插件必须直接引用 `Avalonia`（以及需要时的 `Avalonia.AvaloniaEdit`），并设置
+`ExcludeAssets="runtime"`；宿主提供运行时程序集，插件只携带编译与 AXAML 资产。
+版本漂移会在构建期报 `VELAP1000`/`VELAP1001`，而不是等用户装上插件才炸。
 
 ## 许可
 

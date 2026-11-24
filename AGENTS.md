@@ -54,7 +54,7 @@ dotnet build build/PluginBundle.proj -c Release -t:PackAllVpx -p:VelaSigningKey=
 SDK 的版本是 `Directory.Packages.props` 里 `VelaShell.PluginSdk.Build` 与 `VelaShell.PluginSdk.Testing`
 两行的**字面量**(同一个号),包只从 nuget.org 来:本仓库没有 `nuget.config`(064cee7 已删),
 也没有 `VelaSdkVersion` 属性,`-p:` 覆盖不了它。插件要用 SDK 里还没发布的契约时,
-等 SDK 发版之后把这两行一起抬上去,再按 `VELAP1000` / `VELAP1001` 的报错把测试工程的 Avalonia* 跟上;
+等 SDK 发版之后把这两行一起抬上去;目标宿主的 Avalonia/AvaloniaEdit 版本由本仓库的 `VelaAvaloniaVersion` / `VelaAvaloniaEditVersion` 和 `Directory.Packages.props` 维护,构建期按 `VELAP1000` / `VELAP1001` 核对。Serial/Telnet 及其测试对已发布的旧 `.Build` 只启用中央传递版本钉住,不添加 Avalonia 直接依赖;待 SDK 移除旧传递依赖后可删掉这层桥;
 在那之前用到新面的插件编译不过是预期内的,`plugin.json` 的 `minSdkVersion` 也等包发布了再改。
 **不要**为了先编过去到 sdk 仓库 `dotnet pack` 本地包、加本地源,或把版本指到一个还不存在的号 ——
 见 sdk 仓库 AGENTS.md「版本号不归你定」。`.Build` 发版前的端到端验证由 sdk 仓库自己的

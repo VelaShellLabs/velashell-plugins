@@ -9,10 +9,8 @@
     <PackageReference Include="MSTest.TestAdapter" />
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="VelaShell.PluginSdk.Testing" />
-    <!-- SDK 包把 Avalonia 设成 ExcludeAssets="runtime"(运行时由宿主共享),这份排除会沿
-         ProjectReference 传到这里 —— 于是测试输出目录里没有 Avalonia.Base.dll。
-         而 Ui/Mvvm.cs 的 RaisePropertyChanged 引用了 Dispatcher,JIT 编译该方法就要解析它,
-         不显式引一次就是运行期 FileNotFoundException(与 S3 测试项目同一条注记)。 -->
+    <!-- 测试宿主必须显式带运行时 Avalonia；插件项目本身排除 runtime 资产，避免把宿主
+         的共享程序集复制到插件目录。Ui/Mvvm.cs 的 Dispatcher 路径需要这份运行时资产。 -->
     <PackageReference Include="Avalonia" />
     <!-- 面板的 headless 装载测试:AXAML 真装载一次,样式选择器/模板/索引器绑定
          这些编译期看不出的问题才会暴露。 -->
