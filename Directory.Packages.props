@@ -51,13 +51,13 @@
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发(连同它带的
          MongoDB.Bson / DnsClient / SharpCompress / Snappier / ZstdSharp)。
          测试工程也引它:种数据与清理走同一个驱动,版本集中管才不会两边各说各话。 -->
-    <PackageVersion Include="MongoDB.Driver" Version="3.14.0" />
+    <PackageVersion Include="MongoDB.Driver" Version="3.14.1" />
   </ItemGroup>
   <ItemGroup Label="S3 插件">
     <!-- Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。
          测试工程也要引它(环回服务器要按收到的原始请求行重算 SigV4),
          集中管版本正是为了这两处永远一致。 -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.1.0.1" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.1.2" />
   </ItemGroup>
   <ItemGroup Label="串口插件">
     <!-- MIT,微软自家维护,Windows / Linux / macOS 的 RID 原生包齐全。
@@ -70,7 +70,7 @@
     <PackageVersion Include="System.IO.Ports" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup Label="RDP 托管图形解码">
-    <PackageVersion Include="ManagedCodecs.H264" Version="0.18.0" />
+    <PackageVersion Include="ManagedCodecs.H264" Version="0.19.0" />
   </ItemGroup>
   <ItemGroup Label="RDP 托管 DTLS">
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.8.0-beta.349" />
