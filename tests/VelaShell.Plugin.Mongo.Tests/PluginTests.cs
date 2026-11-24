@@ -218,7 +218,17 @@ public sealed class PluginTests
     {
         string redacted = MongoConnection.RedactUri("mongodb://ops:secret@10.0.0.1:27017/shop");
         Assert.IsFalse(redacted.Contains("secret", StringComparison.Ordinal));
-        Assert.IsTrue(redacted.Contains("ops", StringComparison.Ordinal));
+        Assert.Contains("ops:****@", redacted);
+    }
+
+    [TestMethod]
+    public void RedactUri_PreservesEscapedUsernameButNotProxyCredentials()
+    {
+        string redacted = MongoConnection.RedactUri(
+            "mongodb://ops%40team@db/shop?proxyHost=proxy&proxyUsername=tunneluser&proxyPassword=tunnelsecret");
+        Assert.StartsWith("mongodb://ops%40team@db/shop?", redacted);
+        Assert.IsFalse(redacted.Contains("tunneluser", StringComparison.Ordinal));
+        Assert.IsFalse(redacted.Contains("tunnelsecret", StringComparison.Ordinal));
     }
 
     /// <summary>选服超时背后的真正原因是认证失败:失败卡片要说「认证失败」,给「编辑连接」去改口令。</summary>
