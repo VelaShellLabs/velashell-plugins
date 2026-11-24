@@ -11,8 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 契约程序集 + Avalonia + AXAML 编译器 + 清单校验 + PackVpx,一个包全到位。 -->
+    <!-- 契约程序集、清单校验与 PackVpx;下面的直接引用提供目标宿主的 Avalonia/AXAML 编译资产。 -->
     <PackageReference Include="VelaShell.PluginSdk.Build" />
+    <!-- Compile-time Avalonia assets come from the target host; runtime assets stay excluded. -->
+    <PackageReference Include="Avalonia" ExcludeAssets="runtime" />
     <!-- S3 客户端(Apache-2.0,与本仓库 AGPL-3.0 + 商业双许可相容)。
          **随插件目录分发**,由插件 ALC 按 deps.json 隔离解析 —— 这正是插件化最实在的一笔:
          不用 S3 的用户,安装包里不必带这两个各约 1 MB 的程序集,进程里也永不装载它们。

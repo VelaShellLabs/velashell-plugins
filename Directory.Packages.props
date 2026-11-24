@@ -14,34 +14,28 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="VelaShell 插件 SDK(源码在 VelaShellLabs/velashell-plugin-sdk,.Build 与 .Testing 同版本、同一次发布)">
-    <!-- 插件工程只需要这一个包:契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、
-         plugin.json 处理、清单编译期校验与 `dotnet build -t:PackVpx` 都随它到位。
-         所以下面**没有** Avalonia 的条目给插件用 —— 插件不该自己声明 Avalonia。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.2.0" />
+    <!-- 插件工程需要这个包提供契约程序集、plugin.json 处理、清单编译期校验与
+         `dotnet build -t:PackVpx`;UI 插件的 Avalonia/AXAML 编译资产由下方目标宿主条目拥有。 -->
+    <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.2.1" />
     <!-- 测试替身:TestPluginContext 与各能力的内存实现,不起宿主即可测插件逻辑。 -->
-    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.2.0" />
+    <PackageVersion Include="VelaShell.PluginSdk.Testing" Version="2.2.1" />
   </ItemGroup>
-  <ItemGroup Label="Avalonia(仅测试工程用:测试宿主扮演装载方,要提供运行时那份)">
-    <!-- ⚠️ 必须与 VelaShell.PluginSdk.Build 锁给插件工程的那一版**完全相同** ——
-         Directory.Build.targets 的 VerifyAvaloniaMatchesSdk 在构建期拿 SDK 包导出的
-         权威值核对这里(VELAP1000),漂了就红。升 SDK 之后按它的报错把这三行跟上。
-         插件工程**不该**出现在这里:Avalonia 由 VelaShell.PluginSdk.Build 用精确区间锁给它们。 -->
-    <PackageVersion Include="Avalonia" Version="12.1.6" />
-    <PackageVersion Include="Avalonia.Headless" Version="12.1.6" />
+  <ItemGroup Label="Avalonia target-host compile/test assets">
+    <!-- These are the target host's shared versions. UI plugins reference the compile
+         assets directly with runtime excluded; test projects supply the runtime assets. -->
+    <PackageVersion Include="Avalonia" Version="$(VelaAvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Headless" Version="$(VelaAvaloniaVersion)" />
     <!-- 菜单等控件的模板由主题提供:没有它 MenuItem 无模板、不可命中,真实点击测不了。 -->
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(VelaAvaloniaVersion)" />
     <!-- 真渲染(Skia)的 headless 截图:MongoDB 插件的界面回归要拿像素和设计稿比,
          UseHeadlessDrawing 那条假绘制路径给不出位图。同样只服务于测试工程,版本随上面三个一起走。 -->
-    <PackageVersion Include="Avalonia.Skia" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Skia" Version="$(VelaAvaloniaVersion)" />
   </ItemGroup>
   <ItemGroup Label="Docker 面板与 MongoDB 插件">
-    <!-- MIT。**只在编译期** —— 程序集名 AvaloniaEdit 命中装载器的 "Avalonia" 前缀,
-         运行时一律回落到宿主那份,因此版本必须与宿主一致。权威值同样来自 SDK 包
-         (VelaSdkPinnedAvaloniaEditVersion),由 Directory.Build.targets 的
-         VerifyAvaloniaEditMatchesSdk 在构建期核对(VELAP1001)。
-         漂了**在本仓库一个测试都不会红**:要等用户装上插件、打开一个 compose.yaml 才炸。
-         MongoDB 插件的查询编辑器 / JSON 视图同样只在编译期引它;它的测试工程要自己带运行时那份(测试宿主扮演装载方)。 -->
-    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
+    <!-- MIT. AvaloniaEdit is compile-only because the host supplies the shared assembly.
+         Its target-host version is declared by VelaAvaloniaEditVersion and checked against
+         the resolved references during the build. Test projects provide the runtime copy. -->
+    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="$(VelaAvaloniaEditVersion)" />
   </ItemGroup>
   <ItemGroup Label="Redis 插件">
     <!-- MIT,与本仓库 AGPL-3.0 + 商业双许可相容。随插件目录分发。 -->

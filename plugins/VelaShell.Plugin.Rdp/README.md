@@ -354,7 +354,7 @@ Uses the repository's .NET 11, SDK and Avalonia settings, adding the pure-manage
 to open a clipboard file for local→remote transfer without blocking on a FIFO or following a
 symlink; Windows source files use the .NET file API.
 
-Avalonia 12.1.4 supports delayed values via `DataTransferItem.Set(format, Func<T>)`, but its
+Avalonia 12.2.0 supports delayed values via `DataTransferItem.Set(format, Func<T>)`, but its
 public file format is `IStorageItem`; application format identifiers are transformed and cannot
 express native FileContents `FORMATETC.lindex` plus `TYMED_ISTREAM`. The Windows adapter therefore
 implements OLE `IDataObject` with `FileGroupDescriptorW`, indexed `FileContents` streams and copy

@@ -45,8 +45,9 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 > 处把一帧劈成两半 —— 那不是慢一点,是**数据静默损坏**。`apiLevel` 表达不了这一档
 > (它只在**破坏性**变更时才动),所以另钉 `minSdkVersion`。
 >
-> 它也是本仓库**唯一直接引 Avalonia.\* 包**的插件(`Avalonia.AvaloniaEdit`,用于
-> compose.yaml / .env 的语法高亮)。这一条有个反直觉的后果,见下一节最后那段。
+> 它也是本仓库**直接引 Avalonia 包**的插件之一(`Avalonia.AvaloniaEdit`,用于
+> compose.yaml / .env 的语法高亮);其他带 UI 的插件直接引用目标宿主的 `Avalonia`。
+> 这些引用都只提供编译资产,运行时由宿主共享。相关的版本与装载约束见下一节。
 
 > **串口插件是 SDK 1.5 连接表单三件新面的驱动者与首个使用者**:
 > `ProtocolFeatures.NoEndpoint`(收起端口栏)、`ProtocolSettingKind.DynamicChoice` +
@@ -72,23 +73,23 @@ Telnet 与串口同理。Docker 面板的理由是另一条:它要把一个原�
 </ItemGroup>
 ```
 
-就这一行 —— 契约程序集、与宿主版本一致的 Avalonia(含 AXAML 编译器)、`plugin.json`
-进输出目录、清单编译期校验、`dotnet build -t:PackVpx`,全都随这个包到位。
-版本号不写在这里:本仓库开了**中央包管理**,所有 NuGet 版本集中在根
-[`Directory.Packages.props`](../Directory.Packages.props)。
+就这一行 —— 契约程序集、`plugin.json` 进输出目录、清单编译期校验、
+`dotnet build -t:PackVpx`,全都随这个包到位。Avalonia 不再由 SDK 拥有版本:
+本仓库开了**中央包管理**,目标宿主版本集中在根
+[`Directory.Packages.props`](../Directory.Packages.props)，并通过
+`VelaAvaloniaVersion` / `VelaAvaloniaEditVersion` 声明。
 
-**不要**在插件里声明 `Avalonia` 的 `PackageReference`:SDK 包已经用精确区间
-`[x.y.z]` 锁死了它(必须与宿主一致,否则跨 ALC 的控件类型对不上),自己再写一条
-只会引来版本漂移。同理也不要写 `ExcludeAssets="runtime"` —— SDK 包的
-`VelaExcludeSharedRuntimeAssets` 已经按装载器的判定口径(`VelaShell.PluginSdk`
-与 `Avalonia*` 前缀)把共享程序集的运行时资产排掉了。
+构建 Avalonia UI 或 AXAML 的插件必须显式引用目标宿主的 `Avalonia` 编译资产，
+并写 `ExcludeAssets="runtime"`。这样 AXAML 编译器和类型在本地可用，运行时程序集仍由宿主
+提供；不构建 UI 的插件不需要添加这条依赖。版本漂移会被根 `Directory.Build.targets`
+在构建期拦截，避免跨 ALC 的控件类型不兼容。
 
 ### 例外:确实需要某个 `Avalonia.*` 包时,`ExcludeAssets="runtime"` 必须自己写
 
-上一段那条"不要写 `ExcludeAssets`"的前提是**插件不直接引 Avalonia 包** ——
-Redis、S3、Telnet、串口这四个插件都不引,SDK 包处理它自己那条引用就够了。
-
-DockerPanel 与 MongoDB 都要 `Avalonia.AvaloniaEdit`(compose.yaml 高亮;查询编辑器 / JSON 视图 / 管道阶段的高亮、补全与诊断),于是撞上了另一面:
+`Avalonia` 本身以及 `Avalonia.AvaloniaEdit` 都要显式写 `ExcludeAssets="runtime"`。
+Redis、S3、VNC、DockerPanel 与 MongoDB 都构建 Avalonia UI；前四者直接引用
+`Avalonia`，后两者还引用 `Avalonia.AvaloniaEdit`(compose.yaml 高亮;查询编辑器 / JSON
+视图 / 管道阶段的高亮、补全与诊断),于是撞上了另一面:
 `VelaExcludeSharedRuntimeAssets` 排得掉 `Avalonia.AvaloniaEdit` 自己的运行时资产,
 **排不掉它带进来的传递依赖**。去掉那条 `ExcludeAssets`,
 `AvaloniaEdit → Avalonia → MicroCom.Runtime` 里的 `MicroCom.Runtime.dll`

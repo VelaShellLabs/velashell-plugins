@@ -41,16 +41,21 @@
     Directory.Packages.props 的 PackageVersion 上,用 VS 的 NuGet 包管理器直接升即可。
 
     两条相关纪律:
-      · 插件工程只引 VelaShell.PluginSdk.Build 一个包(契约 + 与宿主一致的 Avalonia +
-        AXAML 编译器 + plugin.json 处理 + 清单校验 + -t:PackVpx 全随它到位),
-        本仓库的第一方插件与第三方插件走**完全同一条路径**;
-      · Avalonia 只出现在**测试工程**(测试宿主扮演装载方,得提供运行时那份),
-        版本必须与 SDK 锁的一致 —— Directory.Build.targets 的 VerifyAvaloniaMatchesSdk
-        在构建期核对(VELAP1000)。
+      · 插件工程只引 VelaShell.PluginSdk.Build 作为契约、清单校验与 -t:PackVpx 的构建包;
+        UI 插件另行直接引用目标宿主的 Avalonia 编译与 AXAML 资产;
+      · 构建 UI 的插件必须直接引用目标宿主的 Avalonia 编译资产,并排除 runtime 资产。
+        Avalonia 及 AvaloniaEdit 的版本由下面的目标宿主属性声明,构建期同时核对
+        测试宿主的中央包版本和实际解析引用。
 
     SDK 只从 nuget.org 来,本仓库没有 nuget.config、也没有本地源:要用还没发布的契约,
     等 SDK 发版后抬 Directory.Packages.props(见 AGENTS.md「构建与打包」)。
   -->
+
+  <PropertyGroup>
+    <!-- Target-host package versions; the SDK intentionally does not own these pins. -->
+    <VelaAvaloniaVersion Condition="'$(VelaAvaloniaVersion)' == ''">12.2.0</VelaAvaloniaVersion>
+    <VelaAvaloniaEditVersion Condition="'$(VelaAvaloniaEditVersion)' == ''">12.0.0</VelaAvaloniaEditVersion>
+  </PropertyGroup>
 
   <PropertyGroup>
   	<Authors>joesdu</Authors>
