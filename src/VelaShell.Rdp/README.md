@@ -5,7 +5,7 @@ Optional audio playback uses the system's WinMM, AudioToolbox or ALSA libraries.
 into a standalone, UI-agnostic library so it can be reused on its own.
 
 Released under the **MIT License** (see [LICENSE](LICENSE)) alongside the
-[velashell-plugins](https://github.com/VelaShellLabs/velashell-plugins) repository.
+[velashell-plugins](https://github.com/VelaShell/velashell-plugins) repository.
 Adapted codec algorithms and bundled managed dependencies retain the notices in
 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 

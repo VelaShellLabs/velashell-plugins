@@ -9,7 +9,7 @@ owns the Avalonia view, input and clipboard integration. The split and the works
 Behaviour follows RFC 6143 (RFB 3.8) and the community protocol registry (rfbproto) for the extensions
 listed below.
 
-Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/VNC远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/vnc-plugin-design-and-use.md).
+Full design and use: [中文](https://github.com/VelaShell/velashell-docs/blob/main/zh/host/VNC远程桌面插件设计与使用.md) · [English](https://github.com/VelaShell/velashell-docs/blob/main/en/host/vnc-plugin-design-and-use.md).
 
 ## What it does
 

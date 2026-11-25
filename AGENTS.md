@@ -5,7 +5,7 @@
 ## 一、开工前必读:velashell-docs
 
 VelaShell 生态的**全部文档**集中在一个仓库:
-**[VelaShellLabs/velashell-docs](https://github.com/VelaShellLabs/velashell-docs)**。
+**[VelaShell/velashell-docs](https://github.com/VelaShell/velashell-docs)**。
 本仓库**不放** `docs/`、`docs-en/` —— 设计手册、开发规范与开发文档都在那边。
 
 **在动任何代码之前**,先把下表中与你要改的部分相关的几篇读掉。跳过这一步直接改,
@@ -13,14 +13,14 @@ VelaShell 生态的**全部文档**集中在一个仓库:
 
 | 位置 | 内容 |
 | --- | --- |
-| [`zh/host/`](https://github.com/VelaShellLabs/velashell-docs/tree/main/zh/host) | 宿主分层架构与依赖方向、工程化重构蓝图、交互与界面规格、快捷键参考、设置项审计,以及 SFTP / FTP / Telnet / 串口 / Redis / S3 / 系统密钥链等可行性调研 |
-| [`zh/plugins/`](https://github.com/VelaShellLabs/velashell-docs/tree/main/zh/plugins) | 插件系统设计蓝图 01–15(进程模型、IPC 协议、权限系统、UI 扩展、威胁模型、路线图)与[进度总览 STATUS](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/plugins/STATUS.md) |
-| [`zh/sdk/`](https://github.com/VelaShellLabs/velashell-docs/tree/main/zh/sdk) | 插件契约 SDK 参考、SDK 仓库的发版流程 |
-| [`zh/cli/`](https://github.com/VelaShellLabs/velashell-docs/tree/main/zh/cli) | `vela-plugin` 命令行手册、CLI 仓库的发版流程 |
-| [`zh/templates/`](https://github.com/VelaShellLabs/velashell-docs/tree/main/zh/templates) | 插件开发指南、打包与发布、模板仓库的发版流程 |
+| [`zh/host/`](https://github.com/VelaShell/velashell-docs/tree/main/zh/host) | 宿主分层架构与依赖方向、工程化重构蓝图、交互与界面规格、快捷键参考、设置项审计,以及 SFTP / FTP / Telnet / 串口 / Redis / S3 / 系统密钥链等可行性调研 |
+| [`zh/plugins/`](https://github.com/VelaShell/velashell-docs/tree/main/zh/plugins) | 插件系统设计蓝图 01–15(进程模型、IPC 协议、权限系统、UI 扩展、威胁模型、路线图)与[进度总览 STATUS](https://github.com/VelaShell/velashell-docs/blob/main/zh/plugins/STATUS.md) |
+| [`zh/sdk/`](https://github.com/VelaShell/velashell-docs/tree/main/zh/sdk) | 插件契约 SDK 参考、SDK 仓库的发版流程 |
+| [`zh/cli/`](https://github.com/VelaShell/velashell-docs/tree/main/zh/cli) | `vela-plugin` 命令行手册、CLI 仓库的发版流程 |
+| [`zh/templates/`](https://github.com/VelaShell/velashell-docs/tree/main/zh/templates) | 插件开发指南、打包与发布、模板仓库的发版流程 |
 
-英文镜像在 [`en/`](https://github.com/VelaShellLabs/velashell-docs/tree/main/en),与 `zh/` 同构。
-[仓库首页](https://github.com/VelaShellLabs/velashell-docs)有按「我想做什么」组织的快速入口表。
+英文镜像在 [`en/`](https://github.com/VelaShell/velashell-docs/tree/main/en),与 `zh/` 同构。
+[仓库首页](https://github.com/VelaShell/velashell-docs)有按「我想做什么」组织的快速入口表。
 
 ## 二、涉及文档的改动一律同步到 velashell-docs
 
@@ -62,15 +62,15 @@ SDK 的版本是 `Directory.Packages.props` 里 `VelaShell.PluginSdk.Build` 与 
 
 ### 写插件之前必须读的
 
-- [开发指南](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/dev-guide.md) —— 清单、生命周期、能力 API、隔离模式、测试、性能纪律
-- [SDK 参考](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/sdk/sdk-reference.md) —— 契约表面与能力域一览
-- [权限系统](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/plugins/06-permission-system.md)与[威胁模型](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/plugins/12-security-threat-model.md) —— 申请任何敏感能力前
+- [开发指南](https://github.com/VelaShell/velashell-docs/blob/main/zh/templates/dev-guide.md) —— 清单、生命周期、能力 API、隔离模式、测试、性能纪律
+- [SDK 参考](https://github.com/VelaShell/velashell-docs/blob/main/zh/sdk/sdk-reference.md) —— 契约表面与能力域一览
+- [权限系统](https://github.com/VelaShell/velashell-docs/blob/main/zh/plugins/06-permission-system.md)与[威胁模型](https://github.com/VelaShell/velashell-docs/blob/main/zh/plugins/12-security-threat-model.md) —— 申请任何敏感能力前
 
 各插件的设计取证也在 velashell-docs:Redis 见
-[`zh/host/Redis客户端插件化调研与设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Redis客户端插件化调研与设计.md),
-S3 见 [`zh/host/S3协议插件化设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/S3协议插件化设计.md),
-Telnet / 串口见 [`zh/host/Telnet与串口可行性调研.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/Telnet与串口可行性调研.md),
-MongoDB 见 [`zh/host/MongoDB工作台插件设计.md`](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/MongoDB工作台插件设计.md)。
+[`zh/host/Redis客户端插件化调研与设计.md`](https://github.com/VelaShell/velashell-docs/blob/main/zh/host/Redis客户端插件化调研与设计.md),
+S3 见 [`zh/host/S3协议插件化设计.md`](https://github.com/VelaShell/velashell-docs/blob/main/zh/host/S3协议插件化设计.md),
+Telnet / 串口见 [`zh/host/Telnet与串口可行性调研.md`](https://github.com/VelaShell/velashell-docs/blob/main/zh/host/Telnet与串口可行性调研.md),
+MongoDB 见 [`zh/host/MongoDB工作台插件设计.md`](https://github.com/VelaShell/velashell-docs/blob/main/zh/host/MongoDB工作台插件设计.md)。
 **改了这些插件的设计取舍,要回写对应那篇。**
 
 Docker 面板是个例外:它从独立仓库 `VelaShell.Plugin.DockerPanel` 并进来(2026-09-11),
@@ -138,4 +138,4 @@ Assert.AreSequenceEqual(content, downloaded);
 
 ### 提交约束
 
-- **所有提交信息与 PR 描述都不要附加 Claude Code 等 AI 工具的作者信息** —— 不加 `Co-Authored-By: Claude …` 行,也不加 `🤖 Generated with Claude Code` 之类的署名。VelaShellLabs 下所有仓库一致适用。
+- **所有提交信息与 PR 描述都不要附加 Claude Code 等 AI 工具的作者信息** —— 不加 `Co-Authored-By: Claude …` 行,也不加 `🤖 Generated with Claude Code` 之类的署名。VelaShell 下所有仓库一致适用。

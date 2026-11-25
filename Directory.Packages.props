@@ -13,7 +13,7 @@
     <!-- 传递依赖被直接引用时报错,免得哪天某个包不再传递它就悄悄断了。 -->
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-  <ItemGroup Label="VelaShell 插件 SDK(源码在 VelaShellLabs/velashell-plugin-sdk,.Build 与 .Testing 同版本、同一次发布)">
+  <ItemGroup Label="VelaShell 插件 SDK(源码在 VelaShell/velashell-plugin-sdk,.Build 与 .Testing 同版本、同一次发布)">
     <!-- 插件工程需要这个包提供契约程序集、plugin.json 处理、清单编译期校验与
          `dotnet build -t:PackVpx`;UI 插件的 Avalonia/AXAML 编译资产由下方目标宿主条目拥有。 -->
     <PackageVersion Include="VelaShell.PluginSdk.Build" Version="2.2.1" />

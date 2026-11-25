@@ -60,7 +60,7 @@
   <PropertyGroup>
   	<Authors>joesdu</Authors>
   	<RepositoryType>git</RepositoryType>
-  	<RepositoryUrl>https://github.com/VelaShellLabs/velashell-plugins</RepositoryUrl>
+    <RepositoryUrl>https://github.com/VelaShell/velashell-plugins</RepositoryUrl>
   	<GenerateAssemblyConfigurationAttribute>True</GenerateAssemblyConfigurationAttribute>
   	<GenerateAssemblyCompanyAttribute>True</GenerateAssemblyCompanyAttribute>
   	<GenerateAssemblyProductAttribute>True</GenerateAssemblyProductAttribute>
