@@ -10,7 +10,7 @@
   "minSdkVersion": "2.2.0",
   "hostMode": "inProcess",
   "license": "MIT",
-  "homepage": "https://github.com/VelaShellLabs/velashell-plugins",
+  "homepage": "https://github.com/VelaShell/velashell-plugins",
   "permissions": ["network", "clipboard.read", "clipboard.write", "fs.local.read", "fs.local.write", "i18n.read"],
   "contributes": { "workspaces": [{ "id": "velashell.rdp", "displayName": "RDP", "defaultPort": 3389 }] },
   "activationEvents": ["onWorkspace:velashell.rdp"]

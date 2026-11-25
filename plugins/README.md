@@ -2,9 +2,9 @@
 
 本目录存放官方维护的插件,每个插件一个子目录(独立 csproj)。
 SDK 契约与 `VelaShell.PluginSdk.Build` 在
-[VelaShellLabs/velashell-plugin-sdk](https://github.com/VelaShellLabs/velashell-plugin-sdk),
-开发文档在 [velashell-docs](https://github.com/VelaShellLabs/velashell-docs)
-([开发指南](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/dev-guide.md)、[SDK 参考](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/sdk/sdk-reference.md))。
+[VelaShell/velashell-plugin-sdk](https://github.com/VelaShell/velashell-plugin-sdk),
+开发文档在 [velashell-docs](https://github.com/VelaShell/velashell-docs)
+([开发指南](https://github.com/VelaShell/velashell-docs/blob/main/zh/templates/dev-guide.md)、[SDK 参考](https://github.com/VelaShell/velashell-docs/blob/main/zh/sdk/sdk-reference.md))。
 
 ## 现有插件
 

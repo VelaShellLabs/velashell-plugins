@@ -10,9 +10,9 @@ Redis、MongoDB、S3、Telnet、串口、Docker 面板、RDP 远程桌面、VNC 
 | 仓库 | 管什么 |
 | --- | --- |
 | [joesdu/VelaShell](https://github.com/joesdu/VelaShell) | 主程序(宿主) |
-| [VelaShellLabs/velashell-plugin-sdk](https://github.com/VelaShellLabs/velashell-plugin-sdk) | 契约程序集、测试替身与构建包(同版本、同一次发布):`VelaShell.PluginSdk`、`VelaShell.PluginSdk.Testing`、`VelaShell.PluginSdk.Build` |
-| [VelaShellLabs/velashell-plugin-cli](https://github.com/VelaShellLabs/velashell-plugin-cli) | 命令行:`vela-plugin` |
-| [VelaShellLabs/velashell-plugin-templates](https://github.com/VelaShellLabs/velashell-plugin-templates) | `dotnet new` 模板:`VelaShell.Plugin.Templates` |
+| [VelaShell/velashell-plugin-sdk](https://github.com/VelaShell/velashell-plugin-sdk) | 契约程序集、测试替身与构建包(同版本、同一次发布):`VelaShell.PluginSdk`、`VelaShell.PluginSdk.Testing`、`VelaShell.PluginSdk.Build` |
+| [VelaShell/velashell-plugin-cli](https://github.com/VelaShell/velashell-plugin-cli) | 命令行:`vela-plugin` |
+| [VelaShell/velashell-plugin-templates](https://github.com/VelaShell/velashell-plugin-templates) | `dotnet new` 模板:`VelaShell.Plugin.Templates` |
 | **本仓库** | 第一方插件本身(AI 插件除外,见下) |
 
 本仓库的插件与第三方插件走**完全同一条路径** —— 从 nuget.org 引用
@@ -119,12 +119,12 @@ dotnet build plugins/VelaShell.Plugin.Redis -t:PackVpx     # 落 bin/vpx/*.vpx
 `publish-market` 任务用商店的**可信发布**:不存任何商店密钥,由 GitHub 为这次运行签发 OIDC 令牌,
 商店核对令牌来自本仓库的 `release.yml`、环境 `market`。包推进去后照常进隔离区检测,通过后自动发布。
 做法与第三方插件作者一样,见 velashell-docs 的
-[打包与发布 §5.4](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/templates/publishing.md)。
+[打包与发布 §5.4](https://github.com/VelaShell/velashell-docs/blob/main/zh/templates/publishing.md)。
 
 启用(一次性):
 
 1. 每个插件的**首个版本**先登录商店手动上传(可信发布不认领新 id);
-2. 商店「我的插件 → 可信发布」登记:仓库 `VelaShellLabs/velashell-plugins`、工作流 `release.yml`、环境 `market`,
+2. 商店「我的插件 → 可信发布」登记:仓库 `VelaShell/velashell-plugins`、工作流 `release.yml`、环境 `market`,
    「同时登记到」勾上全部插件;
 3. 仓库 Settings → Environments → `market` → Deployment branches and tags 选 Selected branches and tags,
    添加**标签**规则 `[0-9]*.[0-9]*.[0-9]*`(本仓库的发版标签是不带 `v` 的 `2.1.9` 这种;写成 `v*` 会把所有发版都挡住);

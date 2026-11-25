@@ -7,7 +7,7 @@ MS-RDPBCGR / MS-RDPELE / MS-RDPECLIP / MS-RDPEDISP / MS-RDPEFS / MS-RDPEA this p
 references that library and owns only the Avalonia view and input/clipboard integration; no
 external RDP window is launched.
 
-Full design and use: [中文](https://github.com/VelaShellLabs/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShellLabs/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
+Full design and use: [中文](https://github.com/VelaShell/velashell-docs/blob/main/zh/host/RDP远程桌面插件设计与使用.md) · [English](https://github.com/VelaShell/velashell-docs/blob/main/en/host/rdp-plugin-design-and-use.md).
 
 ## Managed GFX and H.264
 
