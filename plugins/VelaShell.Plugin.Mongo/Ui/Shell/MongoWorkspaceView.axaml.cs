@@ -18,10 +18,9 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
 
     /// <summary>用给定的视图模型初始化。</summary>
     /// <param name="viewModel">视图模型。</param>
-    internal MongoWorkspaceView(MongoWorkspaceViewModel viewModel)
+    internal MongoWorkspaceView(MongoWorkspaceViewModel viewModel) : this()
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-        InitializeComponent();
         DataContext = viewModel;
         viewModel.ViewServices = this;
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
@@ -34,6 +33,7 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
     {
         _viewModel = null!;
         InitializeComponent();
+        _ = new DialogMovement(DialogArea, DialogFrame, DialogGrip, DialogResizeGrip);
     }
 
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)

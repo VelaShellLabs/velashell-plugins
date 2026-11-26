@@ -75,7 +75,7 @@ Navicat 式的对象树与大图标工具栏,补齐 Compass 的聚合管道、Sc
   日期不再给"现在"那一条文字候选。设计稿没有月历这一块,外观按令牌自定:`Calendar` / `CalendarItem` /
   `CalendarDayButton` / `CalendarButton` 四个**按类型作键**的主题(MongoStyles),一格 30×26、行距 28,
   今天 = `VelaAccent` 描边、选中 = `VelaAccentDim` 底;时刻框与两颗按钮是 `MongoTextBox` / `MongoOutlineButton` / `MongoPillButton`。
-  文档编辑器里的日历按钮弹的也是同一套(插件里任何 `new Calendar()` 都自动用它)。
+  时刻框独占一行，支持 `HH:mm:ss.fff`（MongoDB 毫秒精度），按钮在下一行，不弹二级时钟；可直接输入，或点到时、分、秒、毫秒后用 ↑/↓ 或滚轮微调。「应用」或在时刻框回车才回写表单。拖动编辑窗口右下角可调整大小。
 - **筛选框的 Enter**:补全弹层开着时是「接受补全」,关着才是「查找」。筛选框在编辑区上另挂了隧道处理器,
   而同一元素上的隧道处理器按**注册的逆序**调用 —— 它比 `CodeEditor` 自己的先拿到 Enter,所以要先看 `CodeEditor.IsCompletionOpen`。
 - **新建索引**(设计稿 07b,`DesignIndexesView` + `DesignTabViewModel.NewIndex.cs`):Navicat 设计表的做法 —— 点「新建索引」后索引页下半部分

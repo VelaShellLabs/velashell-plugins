@@ -17,7 +17,7 @@ namespace VelaShell.Plugin.Mongo.Bson;
 public static partial class BsonText
 {
     /// <summary>网格日期列的格式(本地时间,与设计稿一致)。</summary>
-    public const string DateFormat = "yyyy-MM-dd HH:mm:ss";
+    public const string DateFormat = "yyyy-MM-dd HH:mm:ss.fff";
 
     /// <summary>
     /// 网格单元格文本。字符串不加引号(列头已标了类型),数值按类型给千分位,

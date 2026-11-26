@@ -1,4 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using MongoDB.Driver;
 using VelaShell.Plugin.Mongo.Core;
@@ -66,6 +69,53 @@ public sealed class ConnectionManagementTests
             Assert.AreEqual("新建 MongoDB 连接", dialog.Title);
             Assert.AreEqual(1020d, dialog.Width);
             Assert.AreEqual("mongo", dialog.Name, "名字先给一个能用的,用户改不改都能存");
+        }
+        finally
+        {
+            window.Close();
+            shell.Dispose();
+        }
+    });
+
+    [TestMethod]
+    public void Dragging_dialog_and_nested_confirmation_keeps_separate_positions() => Screens.OnUi(static async () =>
+    {
+        using var context = new TestPluginContext();
+        (MongoWorkspaceViewModel shell, MongoWorkspaceView view, Window window) = await OpenEmptyAsync(context);
+        try
+        {
+            shell.NewConnectionCommand.Execute(null);
+            await Screens.PumpAsync(3);
+            Border frame = view.FindControl<Border>("DialogFrame")!;
+            Control grip = view.FindControl<Control>("DialogGrip")!;
+            Point Origin() => frame.TranslatePoint(default, window)!.Value;
+            void Drag(Vector by)
+            {
+                Point start = grip.TranslatePoint(new Point(20, 12), window)!.Value;
+                window.MouseDown(start, MouseButton.Left);
+                window.MouseMove(start + by, RawInputModifiers.LeftMouseButton);
+                window.MouseUp(start + by, MouseButton.Left);
+            }
+            Point origin = Origin();
+            using var frameImage = Screens.Capture(window, "connection-dialog-chrome");
+            Assert.IsNotNull(frameImage);
+            Drag(new(50, 15));
+            Point moved = Origin();
+            Assert.AreEqual(origin + new Vector(50, 15), moved);
+
+            Task<bool> result = shell.ConfirmAsync(new() { Title = "Confirm", Message = "Continue?", ConfirmLabel = "OK" });
+            await Screens.PumpAsync(3);
+            Point centered = Origin();
+            Assert.AreEqual((window.Bounds.Width - frame.Bounds.Width) / 2, centered.X, 1);
+            Drag(new(-2000, -2000));
+            Assert.AreEqual(new Point(0, 0), Origin());
+            Button close = frame.GetVisualDescendants().OfType<Button>().Single(static b => b.Classes.Contains("dialog-close"));
+            Point at = close.TranslatePoint(new Point(10, 10), window)!.Value;
+            window.MouseDown(at, MouseButton.Left);
+            window.MouseUp(at, MouseButton.Left);
+            Assert.IsFalse(await result.WaitAsync(TimeSpan.FromSeconds(3)));
+            await Screens.PumpAsync(3);
+            Assert.AreEqual(moved, Origin());
         }
         finally
         {

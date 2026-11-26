@@ -77,7 +77,7 @@ public sealed class InlineEditingTests
         StagedEdit edit = tab.Staging.EditOf(row.Id)!;
         DateTime staged = LocalOf(edit.Find("createdAt")!.Value!);
         Assert.AreEqual(new DateTime(2026, 2, 14), staged.Date);
-        Assert.AreEqual(new TimeSpan(original.Hour, original.Minute, original.Second), staged.TimeOfDay, "the time of day is kept");
+        Assert.AreEqual(original.TimeOfDay, staged.TimeOfDay, "the time of day is kept");
 
         // 只改时刻:时刻框里写 8:05,点「应用」。写错了不关、不写。
         tab.BeginCellEdit(row.CellOf(createdAt)!);
@@ -89,7 +89,7 @@ public sealed class InlineEditingTests
         content = (StackPanel)grid.DatePicker!.Content!;
         DockPanel bar = content.Children.OfType<DockPanel>().Single();
         TextBox time = bar.Children.OfType<TextBox>().Single();
-        Button apply = ((StackPanel)bar.Children[0]).Children.OfType<Button>().Last();
+        Button apply = content.Children.OfType<StackPanel>().Single().Children.OfType<Button>().Last();
         time.Text = "25:99";
         apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         await Screens.PumpAsync(5);

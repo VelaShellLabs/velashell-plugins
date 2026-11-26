@@ -221,7 +221,7 @@ public static class BsonEdit
     public static bool TryParseDate(string text, out DateTime utc)
     {
         string trimmed = Unwrap(Unwrap(text.Trim(), "ISODate"), "new Date");
-        string[] localFormats = ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd", "yyyy/MM/dd HH:mm:ss", "yyyy/MM/dd"];
+        string[] localFormats = ["yyyy-MM-dd HH:mm:ss.FFF", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd", "yyyy/MM/dd HH:mm:ss", "yyyy/MM/dd"];
         if (DateTime.TryParseExact(trimmed, localFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out DateTime local))
         {
             utc = local.ToUniversalTime();
