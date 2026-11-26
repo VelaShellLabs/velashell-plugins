@@ -651,16 +651,95 @@ public sealed class DocumentEditorTests
     });
 
     [TestMethod]
-    public void Picking_a_day_keeps_the_time_of_day() => Screens.OnUi(static () =>
+    public void Date_and_time_picker_applies_local_time_to_the_document_only_on_confirmation() => Screens.OnUi(static async () =>
     {
-        DocumentEditorDialogViewModel vm = Open(new DocEditorWorkspace(), document: Order());
-        DocumentEditorRow created = Row(vm, "createdAt");
-        string time = created.Text[11..];
-        created.PickDate(new DateTime(2026, 10, 1));
-        Assert.AreEqual("2026-10-01 " + time, created.Text);
-        vm.RecomputeNow();
-        Assert.AreEqual(DocumentEditorRowState.Modified, created.State);
-        return Task.CompletedTask;
+        var vm = Open(new DocEditorWorkspace(), document: Order());
+        DocumentEditorRow row = Row(vm, "createdAt");
+        var anchor = new Button();
+        var window = new Window { Width = 700, Height = 600, Content = anchor };
+        var theme = new Uri("avares://VelaShell.Plugin.Mongo/Ui/MongoStyles.axaml");
+        window.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(theme) { Source = theme });
+        window.Show();
+        try
+        {
+            await Screens.PumpAsync(3);
+            foreach (bool changeDay in new[] { false, true })
+            {
+                string before = row.Text;
+                Flyout flyout = DatePickFlyout.Show(anchor, Zh, before, text => row.Text = text, applyTogether: true);
+                var panel = (StackPanel)flyout.Content!;
+                Calendar calendar = panel.Children.OfType<Calendar>().Single();
+                await Screens.PumpAsync(3);
+                TextBox clock = panel.GetVisualDescendants().OfType<TextBox>().Single();
+                Button apply = panel.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, Zh["Common_Apply"]));
+                Assert.IsTrue(calendar.Bounds.Width > 0);
+                Assert.AreEqual(calendar.Bounds.Width, panel.Bounds.Width, "the footer must not widen the calendar");
+                Assert.IsTrue(clock.TranslatePoint(new Point(0, clock.Bounds.Height), panel)!.Value.Y <= apply.TranslatePoint(default, panel)!.Value.Y);
+                Assert.IsTrue(clock.Bounds.Width > 140, "milliseconds fit without horizontal scrolling");
+                DateTime day = calendar.SelectedDate!.Value;
+                if (changeDay)
+                {
+                    Assert.AreEqual("23:58:00.233", clock.Text, "reopening retains milliseconds");
+                    day = day.AddDays(2);
+                    calendar.SelectedDate = day;
+                }
+                else
+                {
+                    clock.Text = "23:58:59.2334";
+                    apply.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                    Assert.IsTrue(flyout.IsOpen, "sub-millisecond input must not be silently truncated");
+                    clock.Text = "23:58:59.232";
+                    clock.CaretIndex = 10;
+                    clock.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Up });
+                    Assert.AreEqual("23:58:59.233", clock.Text);
+                    clock.CaretIndex = 7;
+                    clock.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Up });
+                    Assert.AreEqual("23:58:00.233", clock.Text, "stepping seconds preserves milliseconds");
+                }
+                Assert.AreEqual(before, row.Text);
+                apply.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                vm.RecomputeNow();
+                Assert.AreEqual((day.Date + new TimeSpan(0, 23, 58, 0, 233)).ToUniversalTime(), vm.BuildDocument()["createdAt"].ToUniversalTime());
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [TestMethod]
+    public void Dragging_editor_corner_resizes_without_moving_the_opposite_corner() => Screens.OnUi(static async () =>
+    {
+        using var context = new TestPluginContext();
+        using var shell = new MongoWorkspaceViewModel(Zh, context, new MongoStore(context));
+        var view = new MongoWorkspaceView(shell);
+        var window = new Window { Width = 1440, Height = 836, Content = view };
+        window.Show();
+        try
+        {
+            var vm = Open(new DocEditorWorkspace(), document: Order());
+            shell.ShowDialog(vm);
+            await Screens.PumpAsync(5);
+            Border frame = view.FindControl<Border>("DialogFrame")!;
+            Control grip = view.FindControl<Control>("DialogResizeGrip")!;
+            Point origin = frame.TranslatePoint(default, window)!.Value;
+            foreach (Vector delta in new[] { new Vector(-80, -60), new Vector(120, 90) })
+            {
+                Size before = frame.Bounds.Size;
+                Point at = grip.TranslatePoint(new Point(6, 6), window)!.Value;
+                window.MouseDown(at, Avalonia.Input.MouseButton.Left);
+                window.MouseMove(at + delta, Avalonia.Input.RawInputModifiers.LeftMouseButton);
+                window.MouseUp(at + delta, Avalonia.Input.MouseButton.Left);
+                await Screens.PumpAsync(3);
+                Assert.AreEqual(new Size(before.Width + delta.X, before.Height + delta.Y), frame.Bounds.Size);
+                Assert.AreEqual(origin, frame.TranslatePoint(default, window)!.Value);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
     });
 
     // ── 视图上的交互:拖动排序、粘贴、快捷键、字段名补全、芯片追加 ───────────

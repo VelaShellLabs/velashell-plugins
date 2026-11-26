@@ -49,6 +49,9 @@ internal abstract class DialogViewModel : ObservableObject
     /// <summary>标题栏图标颜色令牌。</summary>
     public virtual string IconToken => "VelaAccent";
 
+    /// <summary>是否显示右下角缩放手柄。</summary>
+    public virtual bool CanResize => false;
+
     /// <summary>对话框宽度。</summary>
     public virtual double Width => 640;
 

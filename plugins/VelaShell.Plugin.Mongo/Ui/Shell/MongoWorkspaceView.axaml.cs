@@ -33,7 +33,7 @@ public sealed partial class MongoWorkspaceView : UserControl, IViewServices
     {
         _viewModel = null!;
         InitializeComponent();
-        _ = new DialogMovement(DialogArea, DialogFrame, DialogGrip);
+        _ = new DialogMovement(DialogArea, DialogFrame, DialogGrip, DialogResizeGrip);
     }
 
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)

@@ -431,22 +431,6 @@ public sealed partial class DocumentEditorDialogView : UserControl
         {
             return;
         }
-        DateTime day = row.LocalDate ?? DateTime.Now;
-        var calendar = new Calendar
-        {
-            SelectionMode = CalendarSelectionMode.SingleDate,
-            SelectedDate = day.Date,
-            DisplayDate = day.Date
-        };
-        var flyout = new Flyout { Content = calendar, Placement = PlacementMode.BottomEdgeAlignedLeft };
-        calendar.SelectedDatesChanged += (_, _) =>
-        {
-            if (calendar.SelectedDate is { } picked)
-            {
-                row.PickDate(picked);
-                flyout.Hide();
-            }
-        };
-        flyout.ShowAt(button);
+        _ = DatePickFlyout.Show(button, row.Loc, row.Text, text => row.Text = text, applyTogether: true);
     }
 }

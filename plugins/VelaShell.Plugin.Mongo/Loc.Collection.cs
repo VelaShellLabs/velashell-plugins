@@ -93,8 +93,9 @@ public sealed partial class Loc
         // ── 右键菜单 ──
         // ── 日期选择弹层(内联编辑日期字段时编辑框右边的日历按钮) ──
         ("Cw_DateTime", "Time", "时间"),
+        ("Cw_TimeAdjustHint", "Local time, millisecond precision · Click a part and use ↑/↓ or the scroll wheel to adjust", "本地时间，精确到毫秒 · 点击时、分、秒或毫秒，用 ↑/↓ 或滚轮微调"),
         ("Cw_DateNow", "Now", "现在"),
-        ("Cw_DateBadTime", "Write the time as HH:mm or HH:mm:ss", "时间写成 HH:mm 或 HH:mm:ss"),
+        ("Cw_DateBadTime", "Use HH:mm, HH:mm:ss or HH:mm:ss.fff (up to 3 fractional digits)", "请输入 HH:mm、HH:mm:ss 或 HH:mm:ss.fff，小数最多 3 位"),
 
         ("Cw_MenuEditValue", "Edit value", "编辑值"),
         ("Cw_MenuChangeType", "Change type", "修改类型"),

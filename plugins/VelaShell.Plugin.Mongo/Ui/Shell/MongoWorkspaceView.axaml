@@ -478,6 +478,10 @@
                 </DockPanel>
               </Border>
               <ContentControl Grid.Row="1" Content="{Binding}" ContentTemplate="{x:Static ui:ViewLocator.Instance}" />
+              <Border x:Name="DialogResizeGrip" Grid.Row="1" Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                      Background="Transparent" Cursor="BottomRightCorner" IsVisible="{Binding CanResize}" ToolTip.Tip="{Binding Loc[Doc_Resize]}">
+                <Path Data="M 2,11 L 11,2 M 7,11 L 11,7" Stroke="{DynamicResource VelaTextTertiary}" StrokeThickness="1" />
+              </Border>
             </Grid>
           </Border>
         </Border>

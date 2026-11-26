@@ -116,10 +116,21 @@ internal sealed class DocumentEditorDialogViewModel : DialogViewModel
     public override string IconKey => "Mongo.file-pen-line";
 
     /// <inheritdoc />
-    public override double Width => 1100;
+    public override double Width => _width;
+    private double _width = 1100;
 
     /// <inheritdoc />
-    public override double Height => 708;
+    public override double Height => _height;
+    private double _height = 708;
+
+    /// <inheritdoc />
+    public override bool CanResize => true;
+
+    internal void ResizeTo(double width, double height)
+    {
+        SetProperty(ref _width, width, nameof(Width));
+        SetProperty(ref _height, height, nameof(Height));
+    }
 
     /// <summary>有未保存的修改时 Esc 不关(误触一下就丢掉一屏编辑,代价太大)。</summary>
     public override bool CanCloseWithEscape => !_dirty && !IsBusy;

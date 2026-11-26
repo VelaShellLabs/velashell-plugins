@@ -666,20 +666,9 @@ internal sealed class DocumentEditorRow : ObservableObject
             }
             DateTime utc = date.ToUniversalTime();
             DateTime local = utc.ToLocalTime();
-            string time = utc.ToString(utc.Second == 0 ? "HH:mm" : "HH:mm:ss", CultureInfo.InvariantCulture) + "Z";
+            string time = utc.ToString(utc.Millisecond != 0 ? "HH:mm:ss.fff" : utc.Second == 0 ? "HH:mm" : "HH:mm:ss", CultureInfo.InvariantCulture) + "Z";
             return "= " + (utc.Date == local.Date ? time : utc.ToString("yyyy-MM-dd'T'", CultureInfo.InvariantCulture) + time);
         }
-    }
-
-    /// <summary>日期部分(日历弹层用,本地)。</summary>
-    internal DateTime? LocalDate => _value is BsonDateTime date && date.IsValidDateTime ? date.ToUniversalTime().ToLocalTime() : null;
-
-    /// <summary>日历里选了一天:保留时刻,换日期。</summary>
-    internal void PickDate(DateTime day)
-    {
-        DateTime current = LocalDate ?? DateTime.Now;
-        var picked = new DateTime(day.Year, day.Month, day.Day, current.Hour, current.Minute, current.Second, DateTimeKind.Local);
-        Text = picked.ToString(BsonText.DateFormat, CultureInfo.InvariantCulture);
     }
 
     /// <summary>「+」按钮的提示:容器加子项,标量加同级。</summary>

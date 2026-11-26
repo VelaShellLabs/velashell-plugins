@@ -16,8 +16,9 @@ internal sealed class DialogMovement
     private readonly ConditionalWeakTable<DialogViewModel, TranslateTransform> _positions = new();
     private IPointer? _pointer;
     private Point _last;
+    private Rect _startBounds;
 
-    public DialogMovement(Panel area, Border frame, Control grip)
+    public DialogMovement(Panel area, Border frame, Control grip, Control resizeGrip)
     {
         (_area, _frame, _grip) = (area, frame, grip);
         frame.DataContextChanged += (_, _) =>
@@ -27,29 +28,34 @@ internal sealed class DialogMovement
         };
         frame.SizeChanged += (_, _) => Move(default);
         area.SizeChanged += (_, _) => Move(default);
-        grip.PointerPressed += OnPressed;
-        grip.PointerMoved += OnMoved;
-        grip.PointerReleased += (_, e) =>
+        foreach (Control handle in new[] { grip, resizeGrip })
         {
-            if (e.Pointer == _pointer && !e.GetCurrentPoint(grip).Properties.IsLeftButtonPressed)
+            handle.PointerPressed += OnPressed;
+            handle.PointerMoved += OnMoved;
+            handle.PointerReleased += (_, e) =>
             {
-                EndDrag();
-                e.Handled = true;
-            }
-        };
-        grip.PointerCaptureLost += (_, _) => _pointer = null;
-        grip.DetachedFromVisualTree += (_, _) => EndDrag();
+                if (e.Pointer == _pointer && !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed)
+                {
+                    EndDrag();
+                    e.Handled = true;
+                }
+            };
+            handle.PointerCaptureLost += (_, _) => _pointer = null;
+            handle.DetachedFromVisualTree += (_, _) => EndDrag();
+        }
     }
 
     private void OnPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_pointer is not null || !e.GetCurrentPoint(_grip).Properties.IsLeftButtonPressed)
+        if (sender is not Control handle || _pointer is not null || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed
+            || _frame.TranslatePoint(default, _area) is not { } origin)
         {
             return;
         }
         _last = e.GetPosition(_area);
+        _startBounds = new Rect(origin, _frame.Bounds.Size);
         _pointer = e.Pointer;
-        e.Pointer.Capture(_grip);
+        e.Pointer.Capture(handle);
         e.Handled = true;
     }
 
@@ -60,8 +66,23 @@ internal sealed class DialogMovement
             return;
         }
         Point next = e.GetPosition(_area);
-        Move(next - _last);
-        _last = next;
+        Vector delta = next - _last;
+        if (sender != _grip && _frame.DataContext is DocumentEditorDialogViewModel editor && _frame.RenderTransform is TranslateTransform offset)
+        {
+            double maxWidth = Math.Max(0, _area.Bounds.Width - _startBounds.X);
+            double maxHeight = Math.Max(0, _area.Bounds.Height - _startBounds.Y);
+            double width = Math.Clamp(_startBounds.Width + delta.X, Math.Min(860, maxWidth), maxWidth);
+            double height = Math.Clamp(_startBounds.Height + delta.Y, Math.Min(400, maxHeight), maxHeight);
+            editor.ResizeTo(width, height);
+            // 卡片的布局是居中的:补偿中心的移动,让拖动期间左上角停在原处。
+            offset.X = _startBounds.X - (_area.Bounds.Width - width) / 2;
+            offset.Y = _startBounds.Y - (_area.Bounds.Height - height) / 2;
+        }
+        else
+        {
+            Move(delta);
+            _last = next;
+        }
         e.Handled = true;
     }
 
@@ -79,10 +100,7 @@ internal sealed class DialogMovement
 
     private void EndDrag()
     {
-        if (_pointer?.Captured == _grip)
-        {
-            _pointer.Capture(null);
-        }
+        _pointer?.Capture(null);
         _pointer = null;
     }
 }
