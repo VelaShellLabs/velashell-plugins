@@ -29,7 +29,7 @@ public sealed class CodeEditor : UserControl
     private readonly DecorationRenderer _decorations;
     private readonly MarkerMargin _markers;
     private readonly Popup _popup;
-    private readonly CompletionPopupView _popupView;
+    private CompletionPopupView? PopupView => _popup.Child as CompletionPopupView;
     private readonly EventHandler<ResourcesChangedEventArgs> _onAppResourcesChanged;
     private CompletionSession? _session;
     private CancellationTokenSource? _completionRequest;
@@ -152,27 +152,14 @@ public sealed class CodeEditor : UserControl
         Editor.TextArea.AddHandler(KeyDownEvent, OnEditorKeyDown, RoutingStrategies.Tunnel);
         Editor.TextArea.LostFocus += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (_popupView?.IsKeyboardFocusWithin != true && !Editor.TextArea.IsKeyboardFocusWithin)
+            if (PopupView?.IsKeyboardFocusWithin != true && !Editor.TextArea.IsKeyboardFocusWithin)
             {
                 ClosePopup();
             }
         });
 
-        // DataContext 显式置空:弹层挂在本控件下面,不设就继承宿主视图的视图模型(集合标签、检查器…),
-        // 而弹层的编译绑定按 CompletionSession 转型 —— 每个编辑框一出现就是一串绑定错误。打开时才换成补全会话。
-        _popupView = new CompletionPopupView { DataContext = null };
-        _popupView.ItemClicked += item =>
-        {
-            if (_session is not null)
-            {
-                _session.Selected = item;
-                Accept();
-                _ = Editor.TextArea.Focus();
-            }
-        };
         _popup = new Popup
         {
-            Child = _popupView,
             PlacementTarget = Editor.TextArea.TextView,
             Placement = PlacementMode.AnchorAndGravity,
             PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.BottomLeft,
@@ -493,7 +480,7 @@ public sealed class CodeEditor : UserControl
                 }
                 else
                 {
-                    _popupView.Reveal(_session.Selected);
+                    PopupView?.Reveal(_session.Selected);
                 }
                 return;
             }
@@ -536,22 +523,22 @@ public sealed class CodeEditor : UserControl
         {
             case Key.Down:
                 _session.Move(1);
-                _popupView.Reveal(_session.Selected);
+                PopupView?.Reveal(_session.Selected);
                 e.Handled = true;
                 break;
             case Key.Up:
                 _session.Move(-1);
-                _popupView.Reveal(_session.Selected);
+                PopupView?.Reveal(_session.Selected);
                 e.Handled = true;
                 break;
             case Key.PageDown:
                 _session.Move(8);
-                _popupView.Reveal(_session.Selected);
+                PopupView?.Reveal(_session.Selected);
                 e.Handled = true;
                 break;
             case Key.PageUp:
                 _session.Move(-8);
-                _popupView.Reveal(_session.Selected);
+                PopupView?.Reveal(_session.Selected);
                 e.Handled = true;
                 break;
             case Key.Enter or Key.Tab:
@@ -606,7 +593,25 @@ public sealed class CodeEditor : UserControl
             return;
         }
         _session = session;
-        _popupView.DataContext = session;
+        // 只读 JSON 卡片和从未触发补全的编辑框不创建候选列表、详情栏及其样式树。
+        if (PopupView is not { } view)
+        {
+            view = new CompletionPopupView { DataContext = session };
+            view.ItemClicked += item =>
+            {
+                if (_session is not null)
+                {
+                    _session.Selected = item;
+                    Accept();
+                    _ = Editor.TextArea.Focus();
+                }
+            };
+            _popup.Child = view;
+        }
+        else
+        {
+            view.DataContext = session;
+        }
         PlacePopup();
         _popup.IsOpen = true;
     }
@@ -636,6 +641,10 @@ public sealed class CodeEditor : UserControl
         _completionRequest?.Cancel();
         _session = null;
         _popup.IsOpen = false;
+        if (PopupView is { } view)
+        {
+            view.DataContext = null;
+        }
     }
 
     private string CurrentPrefix()

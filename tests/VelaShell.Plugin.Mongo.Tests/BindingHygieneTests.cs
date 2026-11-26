@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Logging;
 using Avalonia.VisualTree;
 using VelaShell.Plugin.Mongo.Ui;
@@ -44,6 +46,45 @@ public sealed class BindingHygieneTests
             await Screens.PumpAsync(5);
         }
     }
+
+    [TestMethod]
+    public void Editor_loads_completion_content_only_for_matches_and_reuses_it() => Screens.OnUi(static async () =>
+    {
+        var editor = new CodeEditor();
+        var window = new Window { Width = 600, Height = 400, Content = editor };
+        var theme = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml");
+        window.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(theme) { Source = theme });
+        try
+        {
+            window.Show();
+            editor.FocusEditor();
+            await Screens.PumpAsync(3);
+            Popup popup = editor.GetVisualDescendants().OfType<Popup>().Single();
+            popup.ShouldUseOverlayLayer = true;
+            editor.CompletionProvider = _ => Task.FromResult<CompletionSet?>(null);
+            editor.RequestCompletion();
+            Assert.IsNull(popup.Child);
+
+            editor.CompletionProvider = _ => Task.FromResult<CompletionSet?>(new()
+            {
+                ReplaceOffset = 0, ReplaceLength = 0, Items = [new() { Label = "find" }]
+            });
+            editor.RequestCompletion();
+            Assert.IsTrue(popup.IsOpen);
+            Control? first = popup.Child;
+            Assert.IsNotNull(first);
+            editor.Editor.TextArea.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+            Assert.IsFalse(popup.IsOpen);
+            editor.RequestCompletion();
+            Assert.AreSame(first, popup.Child);
+            editor.Editor.TextArea.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Tab });
+            Assert.AreEqual("find", editor.Text);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 
     [TestMethod]
     public void Walking_the_main_screens_raises_no_binding_errors() => Screens.OnUi(async () =>
