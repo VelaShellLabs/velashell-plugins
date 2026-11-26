@@ -7,9 +7,9 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
     internal const int MaxPayload = 768; // Leaves room for a worst-case selective ACK vector and FEC prefix.
     private sealed class Sent(byte[] payload, long now)
     {
-        internal readonly byte[] Payload = payload;
-        internal long Time = now;
-        internal int Retries;
+        internal readonly byte[] _payload = payload;
+        internal long _time = now;
+        internal int _retries;
     }
     private readonly Dictionary<uint, Sent> _sent = [];
     private readonly Dictionary<uint, byte[]> _pending = [];
@@ -20,7 +20,7 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
     private readonly List<byte[]> _fecSend = [];
     private uint _fecStart;
     private readonly uint _initial = initial;
-    private uint _source = initial, _coded = initial, _acked = initial;
+    private uint _source = initial, _coded = initial, _acked = unchecked(initial - 1);
     private uint _next, _highest, _ackFloor, _peerInitial;
     private int _window;
     private double _cwnd = 4, _threshold = 32;
@@ -50,10 +50,11 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
             { throw new RdpProtocolException("RDP-UDP SYN-ACK mismatch."); }
             if (!Established)
             {
-                _next = unchecked(packet.InitialSequence + 1);
-                _highest = _ackFloor = _peerInitial = packet.InitialSequence;
-                _ = _received.Add(_highest);
-                _history.Enqueue(_highest);
+                // The advertised initial sequence is the first Source/Coded sequence, not a
+                // handshake packet. Start delivery at it and track the preceding sequence as the ACK baseline.
+                _next = packet.InitialSequence;
+                _highest = _ackFloor = unchecked(packet.InitialSequence - 1);
+                _peerInitial = packet.InitialSequence;
                 _window = packet.Window;
                 Established = true;
             }
@@ -81,11 +82,11 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
                         newer++;
                         if (_sent.Remove(sequence, out Sent? sent))
                         {
-                            if (sent.Retries == 0) { RttMilliseconds = RttMilliseconds * .875 + Math.Max(1, now - sent.Time) * .125; }
+                            if (sent._retries == 0) { RttMilliseconds = RttMilliseconds * .875 + Math.Max(1, now - sent._time) * .125; }
                             _cwnd = Math.Min(Capacity, _cwnd + (_cwnd < _threshold ? 1 : 1 / _cwnd));
                         }
                     }
-                    else if (newer >= 3 && _sent.TryGetValue(sequence, out Sent? missing) && now - missing.Time >= RttMilliseconds)
+                    else if (newer >= 3 && _sent.TryGetValue(sequence, out Sent? missing) && now - missing._time >= RttMilliseconds)
                     {
                         Reduce(now);
                         if (lossy) { _ = _sent.Remove(sequence); }
@@ -146,7 +147,8 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
     {
         if (payload.Length > MaxPayload) { throw new ArgumentOutOfRangeException(nameof(payload)); }
         if (!Established || _sent.Count >= Math.Min(_window, Math.Floor(_cwnd)) || RdpUdpPacket.Distance(_source, _acked) >= _window) { return null; }
-        uint sequence = _source = unchecked(_source + 1);
+        uint sequence = _source;
+        _source = unchecked(_source + 1);
         _sent.Add(sequence, new(payload, now));
         PacketsSent++;
         var output = new List<byte[]> { Data(sequence, payload, now).Encode() };
@@ -157,10 +159,12 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
             if (_fecSend.Count == 4)
             {
                 byte index = unchecked((byte)(sequence + 1));
+                uint coded = _coded;
+                _coded = unchecked(_coded + 1);
                 RdpUdpPacket fec = Ack(now) with
                 {
                     Flags = RdpUdpFlags.Ack | RdpUdpFlags.Data | RdpUdpFlags.Fec | RdpUdpFlags.AckOfAcks,
-                    CodedSequence = unchecked(++_coded),
+                    CodedSequence = coded,
                     SourceSequence = _fecStart,
                     FecRange = 3,
                     FecIndex = index,
@@ -181,7 +185,7 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
         long timeout = (long)Math.Max(500, 2 * RttMilliseconds);
         foreach ((uint sequence, Sent sent) in _sent.ToArray())
         {
-            if (now - sent.Time < timeout) { continue; }
+            if (now - sent._time < timeout) { continue; }
             Reduce(now);
             if (lossy) { _ = _sent.Remove(sequence); }
             else { output.Add(Retransmit(sequence, sent, now)); }
@@ -213,10 +217,10 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
 
     private byte[] Retransmit(uint sequence, Sent sent, long now)
     {
-        if (sent.Retries >= 4) { throw new IOException("RDP-UDP retransmit limit exceeded."); }
-        sent.Time = now;
-        sent.Retries++;
-        return Data(sequence, sent.Payload, now).Encode();
+        if (sent._retries >= 4) { throw new IOException("RDP-UDP retransmit limit exceeded."); }
+        sent._time = now;
+        sent._retries++;
+        return Data(sequence, sent._payload, now).Encode();
     }
 
     private RdpUdpPacket Data(uint sequence, byte[] payload, long now)
@@ -224,7 +228,9 @@ internal sealed class RdpUdpState(bool lossy, uint initial)
         RdpUdpPacket packet = Ack(now);
         RdpUdpFlags flags = packet.Flags | RdpUdpFlags.Data;
         if (_cwr) { flags |= RdpUdpFlags.CongestionReset; _cwr = false; _cwrSequence = sequence; }
-        return packet with { Flags = flags, CodedSequence = unchecked(++_coded), SourceSequence = sequence, Payload = payload };
+        uint coded = _coded;
+        _coded = unchecked(_coded + 1);
+        return packet with { Flags = flags, CodedSequence = coded, SourceSequence = sequence, Payload = payload };
     }
 
     private RdpUdpPacket Ack(long now)

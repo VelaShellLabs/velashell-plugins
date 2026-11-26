@@ -36,6 +36,18 @@ public sealed class RdpUdpTests
     }
 
     [TestMethod]
+    public void FirstSourceAndCodedSequencesUseAdvertisedInitial()
+    {
+        (RdpUdpState? a, RdpUdpState? b) = Pair(a: 100, b: 500);
+        byte[] wire = a.Send([1], 1)!.Single();
+        RdpUdpPacket packet = RdpUdpPacket.Decode(wire);
+        Assert.AreEqual(100u, packet.SourceSequence);
+        Assert.AreEqual(100u, packet.CodedSequence);
+        Deliver(a, b, [wire], 2);
+        Assert.AreSequenceEqual(new byte[] { 1 }, b.Read()!);
+    }
+
+    [TestMethod]
     public void ReliableReordersRetransmitsAndSuppressesDuplicatesAcrossSequenceWrap()
     {
         (RdpUdpState? a, RdpUdpState? b) = Pair(a: uint.MaxValue - 1, b: uint.MaxValue - 1);
@@ -45,7 +57,7 @@ public sealed class RdpUdpTests
         Assert.IsNull(b.Read());
         List<byte[]> retry = a.Tick(600);
         Assert.HasCount(1, retry);
-        Assert.AreEqual(uint.MaxValue, RdpUdpPacket.Decode(retry[0]).SourceSequence);
+        Assert.AreEqual(uint.MaxValue - 1, RdpUdpPacket.Decode(retry[0]).SourceSequence);
         Deliver(a, b, retry, 620);
         Assert.AreSequenceEqual(new byte[] { 1 }, b.Read()!);
         Assert.AreSequenceEqual(new byte[] { 2 }, b.Read()!);
